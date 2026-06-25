@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c1953caa6dee324cb263712f600be59, type: 3}
+  m_Name: PlayerFallen_Minotaur_01
+  m_EditorClassIdentifier: 
+  unitId: 7
+  displayName: Fallen_Minotaur_01
+  portrait: {fileID: -3354924866470422771, guid: c1dd6567b2c334f429620b47c793e468, type: 3}
+  runtimePrefab: {fileID: 3714723400034043003, guid: ef47f3c006a8da14f9de186f78578e07, type: 3}
+  visualPrefab: {fileID: 2946989359822449562, guid: 27654fc2e74bc38469bb56b8bd9f3b42, type: 3}
+  uiVisualScale: {x: 165, y: 165, z: 165}
+  requiredLevelIndex: 1
+  requiredStageIndexWithinLevel: 2
+  baseStats: {fileID: 11400000, guid: 36f4fadb00418b04fba95f87e3d935cc, type: 2}
+  startsDeployed: 0
+  classType: 0

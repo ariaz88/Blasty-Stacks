@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c1953caa6dee324cb263712f600be59, type: 3}
+  m_Name: PlayerFallen_Angels_02
+  m_EditorClassIdentifier: 
+  unitId: 6
+  displayName: Fallen_Angels_02
+  portrait: {fileID: -2629138569536655042, guid: e20a174a6ec8cd848811d6de877a5ea0, type: 3}
+  runtimePrefab: {fileID: 1837303420772731226, guid: 559c232744ca19b4a9e8214953e11d51, type: 3}
+  visualPrefab: {fileID: 1577502023061052, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  uiVisualScale: {x: 106, y: 106, z: 106}
+  requiredLevelIndex: 1
+  requiredStageIndexWithinLevel: 1
+  baseStats: {fileID: 11400000, guid: 30124a22015869c40a51b79c4df9ba49, type: 2}
+  startsDeployed: 0
+  classType: 0

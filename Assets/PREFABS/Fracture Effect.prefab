@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &7104662118556657764
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2019207929567295193}
+  - component: {fileID: 5591838801012301660}
+  m_Layer: 0
+  m_Name: Fracture Effect
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2019207929567295193
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7104662118556657764}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5591838801012301660
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7104662118556657764}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d03e8f2dc02d8ca4bb66b77159741c33, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  originalObject: {fileID: 0}
+  fracturedObject: {fileID: 3301563375752467252, guid: 6b113d64ed2cddd4c9ba40472528d9ae, type: 3}
+  explosionVFX: {fileID: 0}
+  explosionMinForce: 1
+  explosionMaxForce: 2
+  explosionForceRadius: 1
+  explosionUpwardsModifier: 2
+  explosionForceMode: 1
+  fragScaleFactor: 0.5
+  shrinkDelay: 2
+  blueColor: {r: 0.1764706, g: 0.4901961, b: 0.7843138, a: 1}
+  crimsonColor: {r: 0.8196079, g: 0.28627452, b: 0.23137257, a: 0}
+  greenColor: {r: 0.1764706, g: 0.7843138, b: 0.57254905, a: 0}
+  lavenderColor: {r: 0.7686275, g: 0.6117647, b: 0.8117648, a: 0}
+  midPinkColor: {r: 0.9490197, g: 0.30588236, b: 0.6, a: 0}
+  orangeColor: {r: 0.8980393, g: 0.5411765, b: 0.24313727, a: 0}
+  pinkColor: {r: 0.93725497, g: 0.48627454, b: 0.7568628, a: 0}
+  purpleColor: {r: 0.62352943, g: 0.43137258, b: 0.76470596, a: 0}
+  redColor: {r: 0.7843138, g: 0.1764706, b: 0.3921569, a: 0}
+  yellowColor: {r: 0.9490197, g: 0.7568628, b: 0.30588236, a: 0}
+  defaultFragmentColor: {r: 0.1764706, g: 0.4901961, b: 0.7843138, a: 1}

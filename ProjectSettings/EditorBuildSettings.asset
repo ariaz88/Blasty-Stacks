@@ -1,0 +1,79 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 0
+    path: Assets/Scenes/SampleScene.unity
+    guid: 8c9cfa26abfee488c85f1582747f6a02
+  - enabled: 1
+    path: Assets/Scenes/StarterScene.unity
+    guid: 3c374080aafac1441810de255bd0c711
+  - enabled: 1
+    path: Assets/Scenes/MenuScene.unity
+    guid: 53c5255fa0ccfed40a5a538794592669
+  - enabled: 1
+    path: Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_1.unity
+    guid: 8c05a1ed36135024e9c9a0d57323fa11
+  - enabled: 1
+    path: Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_2.unity
+    guid: 214bdb1ad75d7094eab476b3eaf6e97a
+  - enabled: 1
+    path: Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_3.unity
+    guid: 23e5b3f77cc61174db513590abfe48e9
+  - enabled: 1
+    path: Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_4.unity
+    guid: ebb76ffd6a2170c49b69f29a622f533d
+  - enabled: 1
+    path: Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_5.unity
+    guid: 51cfcbfedbab9cd4cbde5c16ae13f580
+  - enabled: 1
+    path: Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_6.unity
+    guid: 512ef7bb3e0d612448c443664755c3ea
+  - enabled: 1
+    path: Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_7.unity
+    guid: f0d8ea4724dc3db4db7e4d11da4d3f0f
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_8.unity
+    guid: 988d22a6eb969b34eaa25b91af14cfe5
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_9.unity
+    guid: dd688186f8e295b4abbde6250c938ff3
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_10.unity
+    guid: 615c0ae0b8e8bdf4197ab5c6a97687e0
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_11.unity
+    guid: 540e916558d7d9349ba7f21bf61af58b
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_12.unity
+    guid: 6197d2f7bdc45da4f854b5d3db97285e
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_13.unity
+    guid: 7205df1056e612f46824df869f087c9e
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_14.unity
+    guid: 367fb0cc5015cb242939ec8c6288d953
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_15.unity
+    guid: 9044c4822ccc4a94ea4a6b8eb0042995
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_16.unity
+    guid: 3327a83174560a240a00ce3a456ba337
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_17.unity
+    guid: 23e0978a4b9c573439656dd9b4d4b084
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_18.unity
+    guid: a093a796e8dbb3841989d3b68607b26a
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_19.unity
+    guid: ef30acc884452134d98c3b1266c2f0c6
+  - enabled: 0
+    path: Assets/Scenes/Level_1_Stage_20.unity
+    guid: 684334d315c7bc8428037ce5d18e2bdd
+  m_configObjects:
+    com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
+  m_UseUCBPForAssetBundles: 0

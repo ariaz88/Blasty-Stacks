@@ -1,0 +1,780 @@
+fileFormatVersion: 2
+guid: 1111d67b3f4ca824a971af4239aad713
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -6698454084223113967
+    second: UI_Skull-Pattern_BG-Overlay_0
+  - first:
+      213: 349835216354009631
+    second: UI_Skull-Pattern_BG-Overlay_1
+  - first:
+      213: 2336595650214559130
+    second: UI_Skull-Pattern_BG-Overlay_2
+  - first:
+      213: -5150108415065152715
+    second: UI_Skull-Pattern_BG-Overlay_3
+  - first:
+      213: 5937260976030993337
+    second: UI_Skull-Pattern_BG-Overlay_4
+  - first:
+      213: -6049914873592129398
+    second: UI_Skull-Pattern_BG-Overlay_5
+  - first:
+      213: -8762102199332692885
+    second: UI_Skull-Pattern_BG-Overlay_6
+  - first:
+      213: 9160388599062015284
+    second: UI_Skull-Pattern_BG-Overlay_7
+  - first:
+      213: 3182828494002811715
+    second: UI_Skull-Pattern_BG-Overlay_8
+  - first:
+      213: 7602356174122281815
+    second: UI_Skull-Pattern_BG-Overlay_9
+  - first:
+      213: 7227312908026505838
+    second: UI_Skull-Pattern_BG-Overlay_10
+  - first:
+      213: -9153307722045260647
+    second: UI_Skull-Pattern_BG-Overlay_11
+  - first:
+      213: 3238467449689032196
+    second: UI_Skull-Pattern_BG-Overlay_12
+  - first:
+      213: -3937333322741854893
+    second: UI_Skull-Pattern_BG-Overlay_13
+  - first:
+      213: -5308325222601505158
+    second: UI_Skull-Pattern_BG-Overlay_14
+  - first:
+      213: -5773492266502837849
+    second: UI_Skull-Pattern_BG-Overlay_15
+  - first:
+      213: -2201983037586065811
+    second: UI_Skull-Pattern_BG-Overlay_16
+  - first:
+      213: 2243198686631700170
+    second: UI_Skull-Pattern_BG-Overlay_17
+  - first:
+      213: 2882675715319664255
+    second: UI_Skull-Pattern_BG-Overlay_18
+  - first:
+      213: -324389949175834248
+    second: UI_Skull-Pattern_BG-Overlay_19
+  - first:
+      213: -1047117265159985175
+    second: UI_Skull-Pattern_BG-Overlay_20
+  - first:
+      213: -5570764967140946523
+    second: UI_Skull-Pattern_BG-Overlay_21
+  - first:
+      213: -6334987490004580218
+    second: UI_Skull-Pattern_BG-Overlay_22
+  - first:
+      213: -4621646398796080631
+    second: UI_Skull-Pattern_BG-Overlay_23
+  - first:
+      213: -8631146330977787011
+    second: UI_Skull-Pattern_BG-Overlay_24
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_0
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 1125
+        height: 2436
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 115ed95108f4a03a0800000000000000
+      internalID: -6698454084223113967
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_1
+      rect:
+        serializedVersion: 2
+        x: 632
+        y: 2337
+        width: 229
+        height: 99
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f12e3b8964ddad400800000000000000
+      internalID: 349835216354009631
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_2
+      rect:
+        serializedVersion: 2
+        x: 974
+        y: 2139
+        width: 151
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a9df2c23d514d6020800000000000000
+      internalID: 2336595650214559130
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_3
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 2029
+        width: 74
+        height: 46
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 533aa45dea32788b0800000000000000
+      internalID: -5150108415065152715
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_4
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 1861
+        width: 128
+        height: 191
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9bbcd179663656250800000000000000
+      internalID: 5937260976030993337
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_5
+      rect:
+        serializedVersion: 2
+        x: 436
+        y: 2000
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a88503ee9726a0ca0800000000000000
+      internalID: -6049914873592129398
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_6
+      rect:
+        serializedVersion: 2
+        x: 241
+        y: 1663
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b6c1b1b2972c66680800000000000000
+      internalID: -8762102199332692885
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_7
+      rect:
+        serializedVersion: 2
+        x: 779
+        y: 1700
+        width: 346
+        height: 317
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 43d21a3a5ec302f70800000000000000
+      internalID: 9160388599062015284
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_8
+      rect:
+        serializedVersion: 2
+        x: 47
+        y: 1326
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3437706e6adab2c20800000000000000
+      internalID: 3182828494002811715
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_9
+      rect:
+        serializedVersion: 2
+        x: 584
+        y: 1465
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 75b6e8e49aef08960800000000000000
+      internalID: 7602356174122281815
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_10
+      rect:
+        serializedVersion: 2
+        x: 927
+        y: 1267
+        width: 198
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e6ae3834cc29c4460800000000000000
+      internalID: 7227312908026505838
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_11
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 1156
+        width: 28
+        height: 39
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 99cf6a38f1be8f080800000000000000
+      internalID: -9153307722045260647
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_12
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 997
+        width: 82
+        height: 183
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4064163ccf851fc20800000000000000
+      internalID: 3238467449689032196
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_13
+      rect:
+        serializedVersion: 2
+        x: 390
+        y: 1128
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 35dc9af2438cb59c0800000000000000
+      internalID: -3937333322741854893
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_14
+      rect:
+        serializedVersion: 2
+        x: 195
+        y: 790
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a764792b55a0556b0800000000000000
+      internalID: -5308325222601505158
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_15
+      rect:
+        serializedVersion: 2
+        x: 733
+        y: 930
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7a922a57f5f60efa0800000000000000
+      internalID: -5773492266502837849
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_16
+      rect:
+        serializedVersion: 2
+        x: 1075
+        y: 750
+        width: 50
+        height: 187
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d663f3b081cf071e0800000000000000
+      internalID: -2201983037586065811
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_17
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 453
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ac62e4d0251712f10800000000000000
+      internalID: 2243198686631700170
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_18
+      rect:
+        serializedVersion: 2
+        x: 538
+        y: 592
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f7e064e3a42510820800000000000000
+      internalID: 2882675715319664255
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_19
+      rect:
+        serializedVersion: 2
+        x: 881
+        y: 394
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 879daa65f098f7bf0800000000000000
+      internalID: -324389949175834248
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_20
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 170
+        width: 35
+        height: 129
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9e7e5fb2564e771f0800000000000000
+      internalID: -1047117265159985175
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_21
+      rect:
+        serializedVersion: 2
+        x: 343
+        y: 255
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5ad8f5e07caa0b2b0800000000000000
+      internalID: -5570764967140946523
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_22
+      rect:
+        serializedVersion: 2
+        x: 686
+        y: 57
+        width: 230
+        height: 215
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 688cbb9217a9518a0800000000000000
+      internalID: -6334987490004580218
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_23
+      rect:
+        serializedVersion: 2
+        x: 148
+        y: 0
+        width: 230
+        height: 133
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 90adb4a361d9cdfb0800000000000000
+      internalID: -4621646398796080631
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: UI_Skull-Pattern_BG-Overlay_24
+      rect:
+        serializedVersion: 2
+        x: 1032
+        y: 0
+        width: 93
+        height: 74
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d7327a94422083880800000000000000
+      internalID: -8631146330977787011
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 06a78657dd90ab64ab645db7ceb7aeec
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      UI_Skull-Pattern_BG-Overlay_0: -6698454084223113967
+      UI_Skull-Pattern_BG-Overlay_1: 349835216354009631
+      UI_Skull-Pattern_BG-Overlay_10: 7227312908026505838
+      UI_Skull-Pattern_BG-Overlay_11: -9153307722045260647
+      UI_Skull-Pattern_BG-Overlay_12: 3238467449689032196
+      UI_Skull-Pattern_BG-Overlay_13: -3937333322741854893
+      UI_Skull-Pattern_BG-Overlay_14: -5308325222601505158
+      UI_Skull-Pattern_BG-Overlay_15: -5773492266502837849
+      UI_Skull-Pattern_BG-Overlay_16: -2201983037586065811
+      UI_Skull-Pattern_BG-Overlay_17: 2243198686631700170
+      UI_Skull-Pattern_BG-Overlay_18: 2882675715319664255
+      UI_Skull-Pattern_BG-Overlay_19: -324389949175834248
+      UI_Skull-Pattern_BG-Overlay_2: 2336595650214559130
+      UI_Skull-Pattern_BG-Overlay_20: -1047117265159985175
+      UI_Skull-Pattern_BG-Overlay_21: -5570764967140946523
+      UI_Skull-Pattern_BG-Overlay_22: -6334987490004580218
+      UI_Skull-Pattern_BG-Overlay_23: -4621646398796080631
+      UI_Skull-Pattern_BG-Overlay_24: -8631146330977787011
+      UI_Skull-Pattern_BG-Overlay_3: -5150108415065152715
+      UI_Skull-Pattern_BG-Overlay_4: 5937260976030993337
+      UI_Skull-Pattern_BG-Overlay_5: -6049914873592129398
+      UI_Skull-Pattern_BG-Overlay_6: -8762102199332692885
+      UI_Skull-Pattern_BG-Overlay_7: 9160388599062015284
+      UI_Skull-Pattern_BG-Overlay_8: 3182828494002811715
+      UI_Skull-Pattern_BG-Overlay_9: 7602356174122281815
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

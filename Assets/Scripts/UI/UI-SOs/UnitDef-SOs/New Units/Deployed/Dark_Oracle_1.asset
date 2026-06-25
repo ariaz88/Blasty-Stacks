@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c1953caa6dee324cb263712f600be59, type: 3}
+  m_Name: Dark_Oracle_1
+  m_EditorClassIdentifier: 
+  unitId: 2
+  displayName: Dark_Oracle_1
+  portrait: {fileID: 8366473505960718593, guid: bb9677cfcf89f36408c4084928ef5c0c, type: 3}
+  runtimePrefab: {fileID: 9103145304014492134, guid: 749db0c85ec2c614d99743a766147b41, type: 3}
+  visualPrefab: {fileID: 1299439090171625055, guid: 7ed760b00eb3fc547aff637ae070438f, type: 3}
+  uiVisualScale: {x: 108, y: 108, z: 108}
+  requiredLevelIndex: 1
+  requiredStageIndexWithinLevel: 1
+  baseStats: {fileID: 11400000, guid: e01ea87e5ecffb24eb897f9c2bb5ea96, type: 2}
+  startsDeployed: 1
+  classType: 0

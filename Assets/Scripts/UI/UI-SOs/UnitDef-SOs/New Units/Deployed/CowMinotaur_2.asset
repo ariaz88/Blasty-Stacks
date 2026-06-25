@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c1953caa6dee324cb263712f600be59, type: 3}
+  m_Name: CowMinotaur_2
+  m_EditorClassIdentifier: 
+  unitId: 4
+  displayName: Minotaur_2
+  portrait: {fileID: -7410146176168980320, guid: efbc8781e9fd0ef4a82ba9751cb8cfa2, type: 3}
+  runtimePrefab: {fileID: 4281222280046510142, guid: dd5a8909401413048a7e1aae50444fb3, type: 3}
+  visualPrefab: {fileID: 5304625963501853163, guid: e980ed2252c47414ab60d3490b03b12c, type: 3}
+  uiVisualScale: {x: 123, y: 123, z: 123}
+  requiredLevelIndex: 1
+  requiredStageIndexWithinLevel: 1
+  baseStats: {fileID: 11400000, guid: 976ebb38815dadb4cb878fe40fd7ab44, type: 2}
+  startsDeployed: 1
+  classType: 0

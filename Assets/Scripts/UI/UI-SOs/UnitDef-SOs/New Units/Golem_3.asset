@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c1953caa6dee324cb263712f600be59, type: 3}
+  m_Name: Golem_3
+  m_EditorClassIdentifier: 
+  unitId: 5
+  displayName: Minotaur_2
+  portrait: {fileID: 4711520723927674112, guid: bfa368c58a5cfe945ac5d9f9fa49a73a, type: 3}
+  runtimePrefab: {fileID: 6167488140509188185, guid: f35ba5f07c100cc45876b3ff0408c747, type: 3}
+  visualPrefab: {fileID: 1632069410589986, guid: 94173491ae3b65e4eabb8cf331a0b0eb, type: 3}
+  uiVisualScale: {x: 115, y: 115, z: 115}
+  requiredLevelIndex: 1
+  requiredStageIndexWithinLevel: 1
+  baseStats: {fileID: 11400000, guid: 2a74c9f84a4bb2b46803e1f0ffeeeba2, type: 2}
+  startsDeployed: 0
+  classType: 0

@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89536873bacdfe04db882361d6892376, type: 3}
+  m_Name: Spawner1
+  m_EditorClassIdentifier: 
+  levelNumber: 1
+  startDelay: 1
+  targetStageDuration: 90
+  waves:
+  - name: 1
+    delayBeforeWave: 0.5
+    formation: 0
+    spawnMin: {x: -2.43, y: 4.98}
+    spawnMax: {x: 2.2, y: 6.44}
+    gridColumns: 4
+    minSlotSpacing: {x: 0.7, y: 0.5}
+    rowYOffset: 0.3
+    secondRowDelay: 0.3
+    entries:
+    - enemyPrefab: {fileID: 5743877368873523975, guid: 5cc9d0a4268dd494c989172f0476235e, type: 3}
+      statsBase: {fileID: 11400000, guid: 5d198a687dfd43544ab087faba8474da, type: 2}
+      count: 4
+      row: 0
+      unitLevel: 0
+    concurrencyCap: 0

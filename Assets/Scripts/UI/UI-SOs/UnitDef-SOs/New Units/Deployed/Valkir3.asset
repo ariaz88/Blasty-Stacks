@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c1953caa6dee324cb263712f600be59, type: 3}
+  m_Name: Valkir3
+  m_EditorClassIdentifier: 
+  unitId: 1
+  displayName: Valkir3
+  portrait: {fileID: -4224019939383970310, guid: 6a744e2c2c67ed747b3454a0ca9a1ba1, type: 3}
+  runtimePrefab: {fileID: 5051905532455708016, guid: 840cad743df0cbb4089aceb91948fb91, type: 3}
+  visualPrefab: {fileID: 6143473185507645034, guid: ee806aa7e908d8d4bb92646e7eee140c, type: 3}
+  uiVisualScale: {x: 108, y: 108, z: 108}
+  requiredLevelIndex: 1
+  requiredStageIndexWithinLevel: 1
+  baseStats: {fileID: 11400000, guid: 36f4fadb00418b04fba95f87e3d935cc, type: 2}
+  startsDeployed: 1
+  classType: 0

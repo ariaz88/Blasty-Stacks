@@ -1,0 +1,71 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &1905434173500023183
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4462253144244950683}
+  - component: {fileID: 2974061298826028992}
+  m_Layer: 0
+  m_Name: Reg_Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4462253144244950683
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1905434173500023183}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.11007415, y: 0.25973704, z: 4840.8984}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2974061298826028992
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1905434173500023183}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b28c62b1f1053b24aa62e9c74220ee28, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  xpSlider: {fileID: 0}
+  levelCounterText: {fileID: 0}
+  initialThreshold: 1
+  skillPool:
+  - {fileID: 11400000, guid: 13d55cc2ec712e5428b0dc8b21b34b07, type: 2}
+  - {fileID: 11400000, guid: 683b3bb5232b8794f88ea79f897d4cc8, type: 2}
+  - {fileID: 11400000, guid: c3e622f258556b1429043be5046fec55, type: 2}
+  levelUpOverlay: {fileID: 0}
+  skillSelectPanel: {fileID: 0}
+  cardSlots:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  offensiveSlots:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  defensiveSlots:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
