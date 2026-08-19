@@ -116,12 +116,12 @@ TextureImporter:
       name: Minotaur_01_Idle_000_0
       rect:
         serializedVersion: 2
-        x: 215
-        y: 39
-        width: 437
-        height: 391
-      alignment: 0
-      pivot: {x: 0, y: 0}
+        x: 138
+        y: 37
+        width: 510
+        height: 450
+      alignment: 9
+      pivot: {x: 0.48411044, y: 0.50490296}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -134,11 +134,33 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
+    - serializedVersion: 2
+      name: Minotaur_01_Idle_000_1
+      rect:
+        serializedVersion: 2
+        x: 140
+        y: 212
+        width: 7
+        height: 28
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 41006d3016f6e7a43a4d77020656e894
+      internalID: -2040603014
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 9c99530bfd731b147b40290f0cad0376
     internalID: 0
     vertices: []
     indices: 
@@ -149,6 +171,7 @@ TextureImporter:
       entries: []
     nameFileIdTable:
       Minotaur_01_Idle_000_0: -3354924866470422771
+      Minotaur_01_Idle_000_1: -2040603014
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
