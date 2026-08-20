@@ -42,6 +42,13 @@ public class BattleStartController : MonoBehaviour
     [Tooltip("Hide the BATTLE button once the battle has started.")]
     [SerializeField] private bool hideButtonAfterBattleStarts = true;
 
+    [Header("Testing")]
+    [Tooltip("TEST MODE (ON while developing): the daily allowance is kept in memory " +
+             "only and never written to the save file, so every Play session starts " +
+             "with a full allowance. TURN THIS OFF FOR RELEASE, otherwise the 24h cap " +
+             "resets every time the app restarts.")]
+    [SerializeField] private bool doNotPersistAllowance = true;
+
     /// <summary>True once this stage's battle phase has been released.</summary>
     public bool BattleStarted { get; private set; }
 
@@ -53,6 +60,10 @@ public class BattleStartController : MonoBehaviour
 
     private void Awake()
     {
+        // Set before anything reads the allowance, so the very first query
+        // already goes to the in-memory store rather than the save file.
+        BattleEnergyService.SessionOnly = doNotPersistAllowance;
+
         if (!battleButton) battleButton = GetComponent<Button>();
         if (!enemySpawner) enemySpawner = FindObjectOfType<EnemySpawner>(true);
 

@@ -14,10 +14,9 @@ directly - they call AdManager.Instance and receive plain C# callbacks. This
 keeps the SDK dependency confined to one file and lets the rest of the project
 compile with or without the plugin installed.
 
-COMPILE GUARD - IMPORTANT
--------------------------
-  The GoogleMobileAds SDK is NOT in Packages/manifest.json yet. Every line that
-  touches the SDK is wrapped in:
+COMPILE GUARD - NOW ACTIVE (installed 2026-08-20)
+-------------------------------------------------
+  Every line that touches the SDK is wrapped in:
 
       #if GOOGLE_MOBILE_ADS ... #endif
 
@@ -26,11 +25,20 @@ COMPILE GUARD - IMPORTANT
   immediately calls onAdUnavailable so callers never hang waiting for a
   callback that will not arrive.
 
-  To turn it on:
-    1. Add the package + com.google.external-dependency-manager to
-       Packages/manifest.json (see the /ads command reference for versions).
-    2. Add GOOGLE_MOBILE_ADS to Project Settings > Player > Scripting Define
-       Symbols for Android and iOS.
+  The SDK IS NOW INSTALLED and the define IS NOW SET, for Android, iOS AND
+  Standalone (Standalone included so the editor can exercise the code path at
+  all - the editor's active build target is StandaloneWindows64).
+
+  Packages/manifest.json:
+    com.google.ads.mobile                  git, v11.2.0
+    com.google.external-dependency-manager git, v1.2.187
+
+  NOTE both are GIT urls. EDM4U is normally pulled from Google's scoped
+  registry (https://unityregistry-pa.googleapis.com), but that registry was
+  unreachable from this machine and the resolve failed with "Package
+  [com.google.external-dependency-manager@1.2.187] cannot be found". The git
+  url is the working equivalent. If you ever restore the scoped registry,
+  drop the git url for EDM4U at the same time - do not keep both.
 
 INSPECTOR FIELDS
 ----------------
@@ -58,6 +66,15 @@ INSPECTOR FIELDS
 
   Banner
     showBannerAfterInitialize (bool, default false)
+        Shows the banner as soon as the SDK reports initialized. Turn ON if you
+        want the banner up everywhere; leave OFF and let AdBannerSlot request
+        it per-scene instead.
+    bannerSizeMode (BannerSizeMode, default AnchoredAdaptive)
+        AnchoredAdaptive = full-device-width banner whose height the SDK picks
+        for the device/orientation. This is Google's recommendation and it is
+        what makes the banner fill the reserved strip on tall phones.
+        Standard = the legacy fixed 320x50.
+    bannerAnchor (BannerAnchor, default Bottom)  Bottom or Top of the screen.
 
 PUBLIC STATE
 ------------
@@ -65,6 +82,9 @@ PUBLIC STATE
   IsInitialized         set once MobileAds.Initialize reports back
   IsRewardedAdReady     true while a loaded rewarded ad is held
   IsInterstitialReady   true while a loaded interstitial is held
+  IsBannerVisible       true once a banner has loaded AND is on screen
+  BannerHeightPixels    height of the loaded banner in SCREEN PIXELS, 0 when
+                        none is loaded. Only meaningful after OnBannerLoaded.
 
 EVENTS
 ------
@@ -75,6 +95,10 @@ EVENTS
                                       should grey out when no ad is available
   OnAdOpened() / OnAdClosed()         full-screen content opened/closed; useful
                                       for pausing gameplay or audio
+  OnBannerLoaded(float heightPixels)  a banner loaded; arg is its height in
+                                      screen pixels, for sizing the reserved UI
+                                      strip (see AdBannerSlot)
+  OnBannerFailed()                    banner failed and retries are exhausted
 
 FLOW
 ----
@@ -108,9 +132,28 @@ FLOW
       was available, so a "continue after the ad" flow never stalls.
 
   Banner
-      ShowBanner() lazily constructs a bottom-anchored AdSize.Banner BannerView
-      and loads it; HideBanner() hides without destroying; DestroyBanner()
-      tears it down and is also called from OnDestroy.
+      ShowBanner() lazily constructs the BannerView using ResolveAdSize() +
+      ResolveAdPosition(), hooks its events, loads it, and shows it. Calling it
+      again on an existing view just re-shows it.
+      HideBanner() hides without destroying and clears IsBannerVisible.
+      DestroyBanner() tears the view down, clears IsBannerVisible and
+      BannerHeightPixels, and is also called from OnDestroy.
+
+      OnBannerAdLoaded  -> resets the retry counter, sets IsBannerVisible and
+                           BannerHeightPixels from GetHeightInPixels(), fires
+                           OnBannerLoaded(height).
+      OnBannerAdLoadFailed -> clears IsBannerVisible; retries by REBUILDING the
+                           view (ReloadBanner destroys then re-shows) because
+                           the SDK cannot re-load a failed BannerView. After
+                           maxLoadRetries it gives up and fires OnBannerFailed.
+
+      ResolveAdSize()     AnchoredAdaptive ->
+                          AdSize.GetCurrentOrientationAnchoredAdaptiveBanner
+                          AdSizeWithWidth(AdSize.FullWidth); else AdSize.Banner.
+      ResolveAdPosition() maps the BannerAnchor enum to AdPosition. The project
+                          keeps its own enum so the serialized fields do not
+                          depend on an SDK type - that is what lets the class
+                          still compile with the define off.
 
   ScheduleRetry(ref retryCount, loader) / RetryAfterDelay(loader)
       WaitForSecondsRealtime so retries still tick while Time.timeScale is 0
@@ -135,7 +178,11 @@ CALLING CONVENTION
 
 HOW IT CONNECTS
 ---------------
-  Nothing calls this yet. The intended consumers are:
+  - AdBannerSlot (Assets/Scripts/Core/Ads/) is the banner consumer: it reserves
+    the on-screen strip, calls ShowBanner/HideBanner with scene lifetime, and
+    listens to OnBannerLoaded/OnBannerFailed to size that strip.
+
+  The remaining intended consumers are:
     - RevivePanel  (watch an ad instead of spending a gem to revive)
     - WinPanel / LosePanel  (double-rewards, retry)
     - CurrencyManager  (the reward callback should route through AddGems /
@@ -155,3 +202,17 @@ NOTES
     the project stores design-time config.
   - The Editor shows a grey placeholder "test ad" panel; real creatives only
     appear on a device with internet.
+  - THE BANNER IS A NATIVE OVERLAY, not a Unity UI element. The SDK draws it on
+    top of the Unity view and it pushes nothing out of the way. Anything at the
+    bottom of the Canvas will be COVERED unless a strip is reserved for it -
+    that is the entire job of AdBannerSlot.
+  - App IDs live in Assets/GoogleMobileAds/Resources/GoogleMobileAdsSettings
+    .asset, NOT on this component (which only holds the per-placement ad unit
+    ids). They are currently Google's TEST app ids:
+        Android  ca-app-pub-3940256099942544~3347511713
+        iOS      ca-app-pub-3940256099942544~1458002511
+    An Android build with an empty/invalid app id CRASHES ON STARTUP, which is
+    why they are filled in even for development.
+  - SHIP CHECKLIST for this file: set useTestIds = false, fill androidIds /
+    iosIds with the real unit ids, and replace the app ids in
+    GoogleMobileAdsSettings with the real ones from the AdMob console.

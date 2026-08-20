@@ -40,6 +40,13 @@ INSPECTOR FIELDS
     hideButtonAfterBattleStarts  (bool, default ON) deactivates the button
                          GameObject once the battle begins
 
+  Testing
+    doNotPersistAllowance (bool, default ON) TEST MODE. Pushed into
+                         BattleEnergyService.SessionOnly in Awake. While ON the
+                         daily allowance is memory-only, so every Play session
+                         starts with a full 25 and nothing is written to the
+                         save file. TURN OFF FOR RELEASE.
+
 RUNTIME STATE
 -------------
   BattleStarted   (bool, public get) true once this stage's battle phase has
@@ -53,8 +60,10 @@ EVENTS
 FLOW
 ----
   Awake()
-      Resolves the two refs if they were left empty and logs an error for each
-      one it still could not find.
+      FIRST pushes doNotPersistAllowance into BattleEnergyService.SessionOnly,
+      before anything can read the allowance, so the very first query already
+      hits the in-memory store. Then resolves the two refs if they were left
+      empty and logs an error for each one it still could not find.
 
   OnEnable()
       Adds OnBattleButtonPressed to battleButton.onClick IN CODE, subscribes to
@@ -97,9 +106,11 @@ NOTES
   - This component does NOT gate PlayerWaveManager. Hero waves still spawn and
     release on puzzle matches exactly as before; only the enemy side waits for
     BATTLE. That is a separate, still-open change.
-  - The allowance is global and persistent, so pressing Replay / reloading the
-    scene does not refund a battle. That is intentional: the cap is per 24h
-    across the whole game, not per scene.
+  - The allowance is global, so pressing Replay / reloading the scene does not
+    refund a battle. That is intentional: the cap is per 24h across the whole
+    game, not per scene. NOTE this only holds ACROSS APP RESTARTS while
+    doNotPersistAllowance is OFF; during the current test phase it is ON, so
+    each Play session starts fresh.
   - There is a TODO in OnBattleButtonPressed where the "not enough energy"
     popup or rewarded-ad offer should be hooked once the energy economy is
     written.

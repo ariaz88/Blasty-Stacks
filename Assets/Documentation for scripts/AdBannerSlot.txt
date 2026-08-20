@@ -1,0 +1,102 @@
+================================================================================
+  AdBannerSlot.cs
+  Path : Assets/Scripts/Core/Ads/AdBannerSlot.cs
+  Type : MonoBehaviour   [RequireComponent(typeof(RectTransform))]
+  Layer: Core / Ads
+  Scenes: goes on "Canvas /Ads Banner panel" in Level_1_Stage_0
+================================================================================
+
+PURPOSE
+-------
+Reserves the strip of screen the AdMob banner occupies, and requests the banner
+for as long as this object is enabled.
+
+WHY IT IS NEEDED
+----------------
+The AdMob banner is a NATIVE OVERLAY. The SDK draws it on top of the Unity view;
+it is not a Unity UI element and it does not push anything out of the way. With
+no reserved strip beneath it, the banner simply covers whatever sits at the
+bottom of the Canvas - in this project, the Feature Panel with the BATTLE
+button. This component keeps a correctly-sized hole for it.
+
+Nothing appears in the Editor Game view, because the native overlay does not
+exist there. The authored placeholder image stands in for it; on device the real
+banner lands exactly over this strip.
+
+INSPECTOR FIELDS
+----------------
+  Behaviour
+    showBannerOnEnable    (bool, default ON)  ask AdManager to show the banner
+                          in OnEnable
+    hideBannerOnDisable   (bool, default ON)  hide it again in OnDisable, so the
+                          banner does not linger over a menu scene
+
+  Reserved Height
+    matchRealBannerHeight (bool, default ON)  resize this RectTransform's height
+                          to the REAL banner height once it loads. OFF keeps the
+                          hand-authored height.
+    fallbackHeight        (float, default 0) canvas-unit height used before a
+                          banner loads and after a permanent failure. 0 means
+                          "keep whatever height was authored in the Inspector",
+                          which is captured in Awake as authoredHeight.
+
+  Placeholder
+    placeholderVisual     (GameObject, optional) editor / no-fill stand-in.
+                          Hidden once a real banner is confirmed on screen,
+                          shown again if the banner permanently fails.
+
+FLOW
+----
+  Awake()
+      Caches the RectTransform and parent Canvas, and records authoredHeight
+      from rect.rect.height (correct under any anchor setup, unlike sizeDelta).
+      It does NOT resize anything, so the strip you authored is left alone until
+      a real banner height arrives.
+
+  ApplyHeight(canvasUnits)
+      Uses rect.SetSizeWithCurrentAnchors(Vertical, h), NOT sizeDelta. The panel
+      is STRETCHED (anchorMin 0,0 -> anchorMax 1,1), and on a stretched rect
+      sizeDelta.y is an OFFSET FROM THE PARENT'S HEIGHT, not an absolute height
+      - writing a height into it would blow the layout apart. Ignores values <= 0.
+
+  OnEnable()
+      Warns and returns if AdManager.Instance is null - AdManager is a
+      DontDestroyOnLoad singleton booted from the menu scene, so playing a
+      gameplay scene DIRECTLY means there is none. The strip is still reserved,
+      just no banner is requested.
+      Otherwise subscribes to OnBannerLoaded / OnBannerFailed, calls ShowBanner
+      if showBannerOnEnable, and immediately handles the already-loaded case
+      (IsBannerVisible true) since a banner may still be up from a prior scene.
+
+  OnDisable()
+      Unsubscribes both handlers and hides the banner if hideBannerOnDisable.
+
+  HandleBannerLoaded(heightPixels)
+      Hides the placeholder and resizes the strip to the real height.
+
+  HandleBannerFailed()
+      Restores the placeholder and the fallback height, so the layout does not
+      jump when there is no fill or no network.
+
+  PixelsToCanvasUnits(pixels)
+      Divides by Canvas.scaleFactor. The Canvas here uses a CanvasScaler with a
+      1125x2436 reference resolution, so a RAW PIXEL height would be the wrong
+      size in UI space - this conversion is not optional.
+
+HOW IT CONNECTS
+---------------
+  - AdManager.ShowBanner / HideBanner / IsBannerVisible / BannerHeightPixels,
+    plus its OnBannerLoaded / OnBannerFailed events.
+  - Sits on the "Ads Banner panel" RectTransform under "Canvas " in the
+    gameplay scene, directly below the Feature Panel.
+
+NOTES
+-----
+  - Subscribing in OnEnable and unsubscribing in OnDisable (rather than
+    Awake/OnDestroy) is deliberate: the banner should follow this object's
+    enabled state, so hiding the panel hides the ad.
+  - It only ever changes sizeDelta.y. Anchoring, position and width stay exactly
+    as authored, so this cannot fight the layout you set up by hand.
+  - If AdManager is missing the component degrades quietly to "reserve the strip
+    and do nothing", which is the right behaviour for testing a gameplay scene
+    on its own.

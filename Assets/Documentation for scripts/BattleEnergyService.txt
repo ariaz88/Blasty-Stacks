@@ -46,6 +46,25 @@ EVENTS
                        invoked inside a try/catch, so one bad listener cannot
                        break the others.
 
+TEST MODE
+---------
+  SessionOnly  (static bool, set from BattleStartController.doNotPersistAllowance
+               in its Awake)
+      ON  = the allowance lives in the in-memory _sessionState only and is
+            NEVER written to the save file, so every Play session starts with a
+            full allowance. This is the current development setting.
+      OFF = normal behaviour, the allowance goes through SaveSystem.
+
+      It exists because GameStartManager - which wipes the whole save on every
+      run (Awake hardcodes resetBool = true) - is NOT present in the gameplay
+      scenes. It arrives via DontDestroyOnLoad from the menu scene, so pressing
+      Play directly on a stage would otherwise persist the count across runs.
+
+      State and Persist() are the only two places that branch on it; every
+      other method is written against them and needs no changes.
+
+      >> TURN THIS OFF FOR RELEASE. <<
+
 QUERIES  (all of these expire the window first, via RefreshWindow)
 ---------------------------------------------------------------
   BattlesUsed                   battles started in the current window
@@ -80,6 +99,16 @@ MUTATIONS
 
 INTERNALS
 ---------
+  State  ->  SaveData.BattleEnergyState
+      The working store. Returns the lazily-created in-memory _sessionState
+      when SessionOnly is ON, otherwise SaveSystem.GetBattleEnergy().
+
+  Persist(windowStartUtc, battlesUsed, energy)
+      The single write path, used by Consume / AddEnergy / ResetAllowance /
+      ClearWindow. Writes to memory in SessionOnly mode, otherwise calls
+      SaveSystem.SetBattleEnergy. Nothing else in this class talks to
+      SaveSystem directly.
+
   RefreshWindow()
       Clears the window when 24h have elapsed. Also clears it when the saved
       timestamp is unparseable but battlesUsed > 0, so a corrupt save can never

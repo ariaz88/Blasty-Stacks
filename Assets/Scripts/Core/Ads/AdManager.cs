@@ -38,8 +38,20 @@ public class AdManager : MonoBehaviour
     [Min(0f)] [SerializeField] private float retryDelaySeconds = 5f;
     [Min(0)] [SerializeField] private int maxLoadRetries = 3;
 
+    /// <summary>Where the native banner overlay is pinned on screen.</summary>
+    public enum BannerAnchor { Bottom, Top }
+
+    /// <summary>
+    /// Standard = fixed 320x50. Adaptive = anchored adaptive banner, sized to the
+    /// device width - this is what Google recommends and what makes the banner
+    /// fill the reserved strip properly on tall phones.
+    /// </summary>
+    public enum BannerSizeMode { AnchoredAdaptive, Standard }
+
     [Header("Banner")]
     [SerializeField] private bool showBannerAfterInitialize = false;
+    [SerializeField] private BannerSizeMode bannerSizeMode = BannerSizeMode.AnchoredAdaptive;
+    [SerializeField] private BannerAnchor bannerAnchor = BannerAnchor.Bottom;
 
     // Google's official test units — safe in development, never ship with these.
     private static readonly AdUnitIds TestAndroid = new AdUnitIds
@@ -302,15 +314,43 @@ public class AdManager : MonoBehaviour
 
     #region Banner
 
+    /// <summary>True once a banner has actually loaded and is on screen.</summary>
+    public bool IsBannerVisible { get; private set; }
+
+    /// <summary>
+    /// Height of the loaded banner in SCREEN PIXELS, or 0 when none is loaded.
+    /// Use this to size the reserved UI strip so the native overlay never covers
+    /// gameplay UI. Only meaningful after OnBannerLoaded.
+    /// </summary>
+    public float BannerHeightPixels { get; private set; }
+
+    /// <summary>Raised when a banner loads. Arg = its height in screen pixels.</summary>
+    public event Action<float> OnBannerLoaded;
+
+    /// <summary>Raised when a banner fails to load, after retries are exhausted.</summary>
+    public event Action OnBannerFailed;
+
+    private int bannerRetries;
+
+    /// <summary>
+    /// Creates (if needed) and shows the bottom banner. The banner is a NATIVE
+    /// OVERLAY drawn by the SDK on top of the Unity view - it is not a Unity UI
+    /// element, which is why nothing appears in the Game view in the editor
+    /// unless the SDK's placeholder is active.
+    /// </summary>
     public void ShowBanner()
     {
 #if GOOGLE_MOBILE_ADS
         if (bannerView == null)
         {
-            bannerView = new BannerView(ActiveIds.banner, AdSize.Banner, AdPosition.Bottom);
+            bannerView = new BannerView(ActiveIds.banner, ResolveAdSize(), ResolveAdPosition());
+            HookBannerEvents(bannerView);
             bannerView.LoadAd(new AdRequest());
         }
+
         bannerView.Show();
+#else
+        Debug.LogWarning("[AdManager] ShowBanner ignored - GOOGLE_MOBILE_ADS is not defined.", this);
 #endif
     }
 
@@ -319,6 +359,7 @@ public class AdManager : MonoBehaviour
 #if GOOGLE_MOBILE_ADS
         bannerView?.Hide();
 #endif
+        IsBannerVisible = false;
     }
 
     public void DestroyBanner()
@@ -327,7 +368,61 @@ public class AdManager : MonoBehaviour
         bannerView?.Destroy();
         bannerView = null;
 #endif
+        IsBannerVisible = false;
+        BannerHeightPixels = 0f;
     }
+
+#if GOOGLE_MOBILE_ADS
+    private AdSize ResolveAdSize()
+    {
+        if (bannerSizeMode == BannerSizeMode.Standard) return AdSize.Banner;
+
+        // Anchored adaptive: the SDK picks the right height for this device
+        // width and orientation.
+        return AdSize.GetCurrentOrientationAnchoredAdaptiveBannerAdSizeWithWidth(
+            AdSize.FullWidth);
+    }
+
+    private AdPosition ResolveAdPosition()
+    {
+        return bannerAnchor == BannerAnchor.Top ? AdPosition.Top : AdPosition.Bottom;
+    }
+
+    private void HookBannerEvents(BannerView view)
+    {
+        view.OnBannerAdLoaded += () =>
+        {
+            bannerRetries = 0;
+            IsBannerVisible = true;
+            BannerHeightPixels = view.GetHeightInPixels();
+
+            Debug.Log($"[AdManager] Banner loaded ({view.GetWidthInPixels()}x{BannerHeightPixels} px).", this);
+            OnBannerLoaded?.Invoke(BannerHeightPixels);
+        };
+
+        view.OnBannerAdLoadFailed += error =>
+        {
+            Debug.LogWarning($"[AdManager] Banner load failed: {error}", this);
+            IsBannerVisible = false;
+
+            if (bannerRetries >= maxLoadRetries)
+            {
+                OnBannerFailed?.Invoke();
+                return;
+            }
+
+            bannerRetries++;
+            StartCoroutine(RetryAfterDelay(ReloadBanner));
+        };
+    }
+
+    /// <summary>Rebuilds the banner from scratch - the SDK cannot re-load a failed view.</summary>
+    private void ReloadBanner()
+    {
+        DestroyBanner();
+        ShowBanner();
+    }
+#endif
 
     #endregion
 

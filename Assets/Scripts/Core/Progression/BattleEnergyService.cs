@@ -40,7 +40,42 @@ public static class BattleEnergyService
     /// <summary>Raised whenever the used count or energy changes, so UI can refresh.</summary>
     public static event Action OnAllowanceChanged;
 
-    private static SaveData.BattleEnergyState State => SaveSystem.GetBattleEnergy();
+    /// <summary>
+    /// TEST MODE. While true the allowance is held in memory only and is never
+    /// written to the save file, so every Play session starts with a full
+    /// allowance. Set from BattleStartController's inspector flag.
+    ///
+    /// This exists because GameStartManager - which wipes the save on every run
+    /// - is NOT in the gameplay scenes; it arrives via DontDestroyOnLoad from
+    /// the menu scene. Pressing Play directly on a stage would therefore
+    /// persist the count. TURN THIS OFF FOR RELEASE.
+    /// </summary>
+    public static bool SessionOnly { get; set; }
+
+    private static SaveData.BattleEnergyState _sessionState;
+
+    private static SaveData.BattleEnergyState State =>
+        SessionOnly
+            ? (_sessionState ??= new SaveData.BattleEnergyState())
+            : SaveSystem.GetBattleEnergy();
+
+    /// <summary>
+    /// Single write path. Goes to memory in SessionOnly mode, otherwise through
+    /// SaveSystem so it lands in the save file.
+    /// </summary>
+    private static void Persist(string windowStartUtc, int battlesUsed, int energy)
+    {
+        if (!SessionOnly)
+        {
+            SaveSystem.SetBattleEnergy(windowStartUtc, battlesUsed, energy);
+            return;
+        }
+
+        var state = State;
+        state.windowStartUtc = windowStartUtc ?? "";
+        state.battlesUsed = Mathf.Max(0, battlesUsed);
+        state.energy = Mathf.Max(0, energy);
+    }
 
     // ---------------- Queries ----------------
 
@@ -119,7 +154,7 @@ public static class BattleEnergyService
             energy = Mathf.Max(0, energy - Mathf.Max(0, energyCost));
 
         // battlesUsed keeps counting past dailyLimit so UI can show the overrun.
-        SaveSystem.SetBattleEnergy(windowStart, State.battlesUsed + 1, energy);
+        Persist(windowStart, State.battlesUsed + 1, energy);
         RaiseChanged();
 
         return result;
@@ -130,14 +165,14 @@ public static class BattleEnergyService
     {
         if (amount == 0) return;
 
-        SaveSystem.SetBattleEnergy(State.windowStartUtc, State.battlesUsed, Mathf.Max(0, State.energy + amount));
+        Persist(State.windowStartUtc, State.battlesUsed, Mathf.Max(0, State.energy + amount));
         RaiseChanged();
     }
 
     /// <summary>Debug/testing helper: clears the window so the full allowance is available again.</summary>
     public static void ResetAllowance()
     {
-        SaveSystem.SetBattleEnergy("", 0, State.energy);
+        Persist("", 0, State.energy);
         RaiseChanged();
     }
 
@@ -170,7 +205,7 @@ public static class BattleEnergyService
 
     private static void ClearWindow()
     {
-        SaveSystem.SetBattleEnergy("", 0, State.energy);
+        Persist("", 0, State.energy);
     }
 
     private static bool TryGetWindowStart(out DateTime startUtc)

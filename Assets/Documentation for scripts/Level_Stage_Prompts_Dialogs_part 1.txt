@@ -1,0 +1,258 @@
+================================================================================
+  Level_Stage_Prompts_Dialogs_part 1
+  Date : 2026-08-20
+  Scope: Redesign of the gameplay stage flow (puzzle-first), battle gate,
+         move budget, and AdMob banner integration.
+  Read this if you are a NEW SESSION continuing this work.
+================================================================================
+
+
+0. THE BIG PICTURE - WHAT THE USER IS CHANGING
+----------------------------------------------
+The game used to run the puzzle and the combat at the same time: the level
+loaded, EnemySpawner immediately started sending waves, and every puzzle match
+threw a group of heroes off the gate into the field.
+
+The user is replacing that with a PUZZLE-FIRST flow:
+
+  1. The stage opens showing only the board + the player gate. No enemies.
+  2. The player rearranges pieces on the board, limited to N moves.
+  3. Nothing enters combat until the player presses the BATTLE button.
+  4. Only then does the enemy spawner start.
+
+New screen layout, bottom to top:
+  - Ads banner strip (very bottom)
+  - Feature Panel (hammer / refresh / potion / BATTLE button with energy cost)
+  - Puzzle board
+  - Player gate (with the 1000 HP bar)
+  - Battlefield area (top)
+
+The ENEMY GATE is no longer visible on screen - the user disabled EnemyCastle
+in the scene.
+
+
+1. THE SCENE
+------------
+Working scene: Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_0.unity
+(The user first duplicated it as "Level_1_Stage_01" then renamed it to
+"Level_1_Stage_0". Do not look for the _01 name, it is deleted.)
+
+It is NOT in Build Settings yet - the user said they will add it later.
+
+Objects the USER authored in that scene (not by Claude):
+  Canvas /Feature Panel        -> children: Posion, Battel, Battery, Hammer
+  Canvas /Feature Panel/Battel/Battle   -> the BATTLE Button
+  Canvas /Ads Banner panel     -> child "Ads txt" (placeholder text)
+  Jump pos 1 / 2 / 3           -> root objects at y = 8.96 / 7.82 / 6.68
+  Jump positions               -> an EMPTY root object at y = 8.01, nothing
+                                  is parented to it
+
+Camera: orthographic size 12.18 at (0,0,-10).
+Canvas: CanvasScaler, reference resolution 1125x2436, match = height.
+
+
+2. WHAT WAS ACTUALLY IMPLEMENTED (3 changes)
+--------------------------------------------
+
+CHANGE 1 - Enemy spawner gated behind the BATTLE button
+  EnemySpawner got a "waitForBattleStart" checkbox. When ON, the spawner does
+  nothing at level load; a new public StartBattle() is the only way to begin.
+  It is idempotent, so double-clicking BATTLE cannot start two wave loops.
+  The flag DEFAULTS TO OFF, which is deliberate: Level_1_Stage_1..20 were
+  authored before the field existed, so they deserialize it as false and keep
+  their original auto-start behaviour. Only the new scene ticks it ON.
+
+  A new component BattleStartController drives the BATTLE button: it charges
+  the allowance (below), then calls EnemySpawner.StartBattle().
+
+CHANGE 2 - 25 battles per 24 hours (global)
+  New static service BattleEnergyService. Rules:
+    - 25 free battles inside a ROLLING 24h window.
+    - The window opens on the FIRST battle, not at midnight, so it does not
+      depend on the device timezone.
+    - The allowance is GLOBAL - shared by every stage, not per scene. Reloading
+      a stage does not refund a battle.
+    - Past the free 25, a battle costs ENERGY.
+
+  ENERGY IS A PLACEHOLDER, as the user requested. Nothing grants energy yet, so
+  in practice the player is blocked until the window resets. When the real
+  economy is written it only needs to call AddEnergy(); nothing else changes.
+
+  TEST MODE (currently ON): BattleStartController has a
+  "doNotPersistAllowance" flag, default ON, which puts the allowance in memory
+  only so every Play session starts with a full 25 and NOTHING is written to
+  the save file. THIS MUST BE TURNED OFF FOR RELEASE.
+
+  Why that flag exists: GameStartManager wipes the whole save on every run
+  (its Awake hardcodes resetBool = true), but GameStartManager is NOT in the
+  gameplay scenes - it arrives via DontDestroyOnLoad from StarterScene. So
+  pressing Play directly on a stage would otherwise persist the count.
+
+CHANGE 3 - Move budget on the board
+  New component PuzzleMoveBudget with a "movesAllowed" number (0 = unlimited).
+  Reference image: "BATTLE BEGINS IN 8 MOVES".
+
+  DEFINITION OF A MOVE (exactly as the user specified):
+    A move counts ONLY when a piece is picked up and dropped on a DIFFERENT
+    cell. Tapping a piece and releasing it where it already sat does NOT count.
+    A drag the board refused does NOT count either, because the piece slides
+    back and the anchor is unchanged.
+    BoardInputController implements this by remembering the anchor at pickup
+    and comparing it at release.
+
+  When the budget is spent the board stops accepting NEW pickups (an in-flight
+  drag still finishes). Running out of moves does NOT auto-start the battle -
+  the player still has to press BATTLE.
+
+  IMPORTANT DESIGN DECISION: the budget lives on the SCENE, not on LevelConfig.
+  There are only TWO LevelConfig assets (Spawner1.asset / Spawner2.asset) and
+  they are shared by all 20 stage scenes, so a value there would not be
+  per-level. Each stage IS its own scene, so the scene is the correct per-level
+  home. If a real per-stage config table is ever built, that field is the one
+  place to re-source.
+
+
+3. ADMOB BANNER - WHAT WAS INSTALLED AND CONFIGURED
+---------------------------------------------------
+The project already had a well-written AdManager facade, but the SDK was never
+installed, so every AdMob call sat behind a GOOGLE_MOBILE_ADS define that was
+never set - meaning ShowBanner() did literally nothing.
+
+Installed and configured:
+  - Added com.google.ads.mobile (v11.2.0) and
+    com.google.external-dependency-manager (v1.2.187) to Packages/manifest.json.
+    BOTH ARE GIT URLS. EDM4U is normally taken from Google's scoped registry
+    (unityregistry-pa.googleapis.com) but that registry was UNREACHABLE from
+    this machine and resolution failed. The git url is the working equivalent.
+    If the scoped registry is ever restored, drop the git url for EDM4U at the
+    same time - do not keep both.
+  - Set the GOOGLE_MOBILE_ADS scripting define for Android, iOS AND Standalone.
+    Standalone was included on purpose: the editor's active build target is
+    StandaloneWindows64, so without it the whole ad code path stays compiled
+    out and cannot be tested at all.
+  - Created Assets/GoogleMobileAds/Resources/GoogleMobileAdsSettings.asset and
+    filled in Google's TEST app ids. An Android build with an empty app id
+    CRASHES ON STARTUP, which is why they are set even in development.
+  - link.xml is NOT needed - the package ships its own.
+
+Upgraded the banner in AdManager:
+  - It now uses an ANCHORED ADAPTIVE banner (full device width, SDK-chosen
+    height) instead of the legacy fixed 320x50, plus load/fail events, retry by
+    rebuilding the view, and a BannerHeightPixels property.
+
+New component AdBannerSlot, placed on "Ads Banner panel":
+  - The AdMob banner is a NATIVE OVERLAY. The SDK draws it on top of the Unity
+    view; it is not a Unity UI element and it pushes nothing out of the way.
+    Without a reserved strip it simply COVERS the Feature Panel and the BATTLE
+    button. Reserving that strip is this component's whole job.
+  - It requests the banner while its scene is active and resizes the strip to
+    the real banner height once it loads.
+  - NOTHING SHOWS IN THE EDITOR GAME VIEW - the native overlay does not exist
+    there. The placeholder text stands in for it. This is expected, and the
+    user already knew it.
+
+AdManager placement: the user asked for it in Assets/Scenes/StarterScene.unity,
+which is the boot scene (it already holds GameStartManager, CurrencyManager and
+MenuLoader). It survives into gameplay via DontDestroyOnLoad.
+
+
+4. TWO BUGS FOUND AND FIXED ALONG THE WAY
+-----------------------------------------
+BUG A - SaveSystem migration recursion (PRE-EXISTING, not introduced here)
+  LoadInternal() called Save() during its version migration, but Save() reads
+  the Data property and the cache was still null at that moment, so Data called
+  LoadInternal() again. The saveDepth > 10 guard stopped the stack overflow,
+  but the migration then NEVER PERSISTED - so it re-ran and logged
+  "[SaveSystem] Recursion guard: Skipping save" on EVERY launch.
+  Fixed by publishing the cache immediately before saving. Those two lines must
+  not be reordered. The save file is now correctly at version 2.
+  The doc file had already flagged this as a known latent bug; it is now marked
+  fixed.
+
+BUG B - AdBannerSlot resized a stretched RectTransform wrongly (self-inflicted,
+  caught before it shipped)
+  "Ads Banner panel" uses STRETCH anchors (0,0 -> 1,1) with sizeDelta.y of
+  -2302.38, giving a real height of 133.62 canvas units. On a stretched rect,
+  sizeDelta.y is an OFFSET FROM THE PARENT'S HEIGHT, not an absolute height, so
+  writing a height into it would have blown the layout apart. Now it uses
+  SetSizeWithCurrentAnchors, which is correct under any anchor setup.
+
+
+5. STILL OPEN / NOT DONE
+------------------------
+  - PlayerWaveManager is NOT gated. Heroes still spawn on the gate and jump into
+    the field on every puzzle match during the puzzle phase. The user was asked
+    whether this should also wait for BATTLE; not yet answered.
+  - The user's sketch shows FOUR numbered jump lines, but only THREE "Jump pos"
+    objects exist, and "Jump positions" is an empty object with nothing
+    parented to it. Unresolved.
+  - The jump lanes are not wired to anything yet. PlayerWaveManager.JumpThenSwitch
+    currently makes heroes jump IN PLACE with no destination - that is the hook
+    where the lanes belong.
+  - EnemyCastle is disabled, but heroes and enemies still target the enemy gate.
+    Needs a decision.
+  - Android applicationIdentifier is NOT set (only Standalone
+    "com.DefaultCompany.2D-URP" exists). A real package name is required before
+    a production AdMob build, because it must match the AdMob console entry.
+  - Level_1_Stage_0 is not in Build Settings (user will add it).
+  - SESSIONS.md has not been updated for this session yet.
+
+  RELEASE CHECKLIST carried over:
+    [ ] BattleStartController > doNotPersistAllowance = OFF
+    [ ] AdManager > useTestIds = OFF, real ad unit ids filled in
+    [ ] GoogleMobileAdsSettings > real app ids from the AdMob console
+    [ ] Android package name set
+
+
+6. MANUAL INSPECTOR STEPS THE USER STILL HAS TO DO
+--------------------------------------------------
+  1. EnemySpawner  -> tick "Wait For Battle Start".
+  2. Add BattleStartController to the BATTLE button object
+     (Canvas /Feature Panel/Battel/Battle). Both of its refs auto-resolve.
+     Optionally drag the cost label into "Energy Cost Text".
+  3. LEAVE the Battle button's OnClick list EMPTY. The listener is added in
+     code; wiring it in both places would charge the allowance twice per press.
+  4. Add PuzzleMoveBudget to any object in the scene and set "Moves Allowed"
+     (e.g. 8). BoardInputController finds it automatically.
+  (AdBannerSlot and AdManager were already attached by Claude.)
+
+
+7. ENVIRONMENT CHANGE MADE OUTSIDE THE PROJECT
+----------------------------------------------
+JAVA_HOME was pointing at Unity 2021.3.42f1, which is NOT INSTALLED on this
+machine (only 2021.3.26f1 and 6000.3.21f1 are). That is the classic cause of
+"Resolution Failed" in the EDM4U Android Resolver. With the user's approval it
+was repointed to the 6000.3.21f1 OpenJDK as a persistent USER environment
+variable. UNITY MUST BE RESTARTED for it to take effect.
+
+
+8. HOW THINGS WERE VERIFIED
+---------------------------
+Everything was checked live in the running Unity Editor rather than assumed:
+  - Compilation was confirmed after every batch of edits; the console ended at
+    ZERO errors.
+  - The allowance logic was exercised end to end with a deliberately tiny limit
+    of 2, and returned allowed / allowed / blocked exactly as intended.
+  - Test mode was proven to leave the save file byte-identical while the
+    in-memory counter still advanced.
+  - The AdMob package resolution, the presence of the SDK types, and the
+    existence of the adaptive-banner API in v11.2.0 were each confirmed
+    directly.
+  - The panel's real resolved height (133.62) was read from the live scene,
+    which is what exposed the stretched-anchor bug.
+
+NOT verified: nothing has been run on a physical device, and no Android build
+has been produced. The banner has never actually been seen on a phone.
+
+
+9. CONVENTIONS THIS PROJECT ENFORCES (do not skip)
+--------------------------------------------------
+  - Every live script has a matching .txt in "Assets/Documentation for scripts/".
+    A PostToolUse hook reminds you after each edit. All docs touched in this
+    session were updated, including new ones for the new scripts.
+  - SESSIONS.md is the cross-session log; read it first, append at the end.
+  - Numbered duplicate methods (Save/Save1, RunLevel/RunLevel1, SpawnOneAt1..5)
+    are dead leftovers, NOT overloads. Always grep for the live call site before
+    changing behaviour.
+  - All persistence goes through SaveSystem. Never touch PlayerPrefs directly
+    for save data.
