@@ -1,0 +1,60 @@
+================================================================================
+  BucketStatRow.cs
+  Path : Assets/Scripts/UI/Units/BucketStatRow.cs
+  Type : MonoBehaviour
+  Layer: UI / Units
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+One row in a roster bucket list: a unit's portrait, name, level and stat
+numbers, with a divider line and a clickable icon that reports back which unit
+(and which bucket it was clicked from) was selected.
+
+FIELDS
+------
+  portrait  (Image)
+  nameText, levelText, hpText, atkText, defText, cpText, coinsText  (TMP_Text)
+  lineBetweenRows  (GameObject, public)  the divider image between rows
+  iconButton  (Button)  the clickable portrait/icon
+
+RUNTIME STATE
+-------------
+  _unitId       (int)
+  _bucketType   (BucketHeader.BucketType)
+  _onClicked    (Action<int, BucketHeader.BucketType>)
+
+METHODS
+-------
+  SetDividerVisible(bool)   toggles lineBetweenRows - used to hide the divider
+                            on the last row of a list
+
+  Bind(icon, displayName, level, hp, atk, def, cp, coins)
+      Pure display setter: writes every field, formatting numeric stats with
+      "N0" (thousands separators, no decimals). Every target is null-checked.
+
+  Initialize(unitId, bucketType, onClicked)
+      Stores which unit/bucket this row represents and the click callback,
+      then wires iconButton to HandleClick (clearing old listeners first, so
+      row reuse in a pooled list does not stack duplicate callbacks).
+
+  HandleClick()
+      Logs the click (including an explicit error log if _onClicked is somehow
+      null - a debug aid), then invokes the callback with (_unitId,
+      _bucketType).
+
+HOW IT CONNECTS
+---------------
+  - UnitsPanelController creates/binds these rows per bucket and supplies the
+    click callback, typically to open the UnitDetailView for that unit.
+
+NOTES
+-----
+  - Bind() and Initialize() are two SEPARATE calls (not combined into one) -
+    the caller must remember to call both. Bind sets only the display data;
+    Initialize sets only the identity/click wiring. This split likely exists
+    because display data can be refreshed frequently (e.g. after a stat change)
+    without needing to re-wire the click handler each time.
+  - The Debug.Log on every click is verbose for a shipping build; consider
+    gating it behind a debug flag.

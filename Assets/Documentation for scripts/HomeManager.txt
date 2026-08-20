@@ -1,0 +1,254 @@
+================================================================================
+  HomeManager.cs
+  Path : Assets/Scripts/UI/Home/HomeManager.cs
+  Type : MonoBehaviour
+  Layer: UI / Home
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+The stage-select screen controller: owns the current level/stage selection
+(exposed statically for other systems to read), builds and refreshes the stage
+card strip, drives the animated progress bar, loads the chosen stage's scene,
+records stage results after a win, shows locked-stage toasts, and - critically
+- is where the "new character available, claim it" flow is actually triggered
+after returning from a win.
+
+STATIC STATE  (globally readable)
+--------------------------------------
+  CurrentLevelId          (int, default 1)
+  CurrentStage1Based       (int, default 1)
+  PendingSelectStage1Based (int, default -1, "none queued")
+  SharedRewardConfig       (StageRewardConfig)  made available globally so the
+                           gameplay scene's WinPanel can use the SAME config
+                           this screen uses for stage-card reward previews
+  _lastShownUnlockedCount  (private, static)  remembers the progress-bar value
+                           across scene reloads so re-entering Home can animate
+                           FROM the last shown value rather than snapping
+
+INSPECTOR FIELDS  (grouped)
+------------------------------
+  Progress UI: progressFillImage, progressText, progressGlow (a child of the
+    Fill that visually tracks the end of the bar), glowTrailingOffset/
+    glowLeftPadding/glowRightPadding, progressAnimDuration (0.45),
+    progressEase (OutCubic)
+  Level Config: levelId (min 1, default 1), stagesPerLevel (min 1, default 20)
+  Pager & Content: pager (HomeCardsPager), contentRoot
+  Start Button: startButton, startLockedOverlay, startLabel
+  Stage Label: stageTitle
+  Scene Loading: sceneNamePattern (default "Level_{0}_Stage_{1}")
+  Locked Stage Toast: lockedToastPrefab, toastCanvasParent, lockedStageText
+    ("You haven't reached this stage yet."), shakeRepeats/shakeDuration/
+    shakeStrength (declared, see NOTES), toastDuration, plus the same
+    rise/fade/gray toast tuning parameters seen in UnitDetailView/RevivePanel
+    (toastRisePixels, toastFadeStartPixels, toastStartYOffset,
+    toastFadeInDuration, toastRiseDuration, toastRiseEase, toastStartColor,
+    toastEndColor, toastGrayAt, toastGrayColor, toastFadeOutAt)
+  stageRewardConfig  (StageRewardConfig)  the source assigned to
+    SharedRewardConfig on enable
+
+RUNTIME STATE
+-------------
+  pendingUnlockedUnitIds  (List<int>)  units that HAVE reached their unlock
+    requirement but are not yet unlocked, computed fresh each visit
+
+LIFECYCLE
+---------
+  Awake()   caches StagesPerLevelStatic from the Inspector value.
+
+  Start()
+      Calls CachePendingCharacterUnlocks() immediately, then starts
+      CheckNewCharacterUnlocksDelayed() - THIS is the entry point for the
+      "new hero unlocked" popup flow (see below).
+
+  OnEnable()  (the live version, called every time Home is (re)shown)
+      Publishes SharedRewardConfig. Aborts with an error if pager/contentRoot
+      are unassigned. Ensures the save record exists for this level
+      (SaveSystem.EnsureLevel). Builds the card strip and initializes card
+      titles (InitializeStageCards). Resolves which stage index to select:
+      PREFERS PendingSelectStage1Based if one was queued (consuming it),
+      clamped to the currently unlocked range; otherwise keeps the pager's
+      current index, similarly clamped. Jumps the pager to that index WITHOUT
+      animation (a fresh screen entry should not visibly scroll). Syncs the
+      static CurrentLevelId/CurrentStage1Based. Re-wires
+      pager.OnIndexChanged -> HandleSelectionChanged (unhooking first to avoid
+      double subscription) and startButton -> LoadSelectedStage. Refreshes all
+      card visuals and the header/start-button state for the current
+      selection. Finally computes the progress bar's target fill (highest
+      unlocked + 1, clamped) and animates from the LAST shown value (unless
+      this is the very first time this session, in which case it snaps
+      without animation) - this is what makes the progress bar visibly fill up
+      when the player returns to Home after clearing a new stage.
+
+  OnDisable()   unsubscribes pager.OnIndexChanged.
+
+NEW CHARACTER UNLOCK FLOW  (the actual live trigger for unit unlocking)
+-----------------------------------------------------------------------------
+  CachePendingCharacterUnlocks()  (the live version)
+      Resolves GameStartManager.Instance.ProgressionService and calls its
+      GetReachableButLockedUnits() - a READ-ONLY scan that does NOT itself
+      mutate the model (see PlayerProgressionService's own doc). If any are
+      found, stores them in pendingUnlockedUnitIds AND pushes them into the
+      static GameState queue (Core/SaveLoad/GameState.cs).
+
+  CheckNewCharacterUnlocksDelayed()  [coroutine]
+      Waits 0.5s (letting the screen finish appearing), then if
+      GameState.HasAny(), pops ONE unit id and calls ShowNewCharacterPanel -
+      i.e. only ONE claim popup is shown per Home visit even if multiple units
+      became eligible; the rest remain queued in GameState for the next visit
+      that calls CachePendingCharacterUnlocks again (which OVERWRITES the
+      queue with a fresh scan each time, so leftover queued ids from a
+      previous visit are effectively replaced, not drained one-per-visit as
+      the 0.5s-delay-then-pop-one pattern alone might suggest).
+
+  ShowNewCharacterPanel(unitId)
+      Finds NewCharacterStats via FindObjectOfType(true) (search includes
+      inactive objects, since the popup starts hidden), activates it, and
+      calls Show(unitId).
+
+  !! THIS IS THE ACTUAL AUTOMATIC UNLOCK-ELIGIBILITY TRIGGER IN THE PROJECT:
+  !! per findings recorded in UnitsPanelController's and
+  !! PlayerProgressionService's own docs, the OTHER two candidate "auto-unlock
+  !! on stage progress" code paths (UnitsPanelController.
+  !! HandleLevelStageChanged/ProcessRequirementUnlocks, and
+  !! PlayerProgressionService.ProcessStageUnlocks itself) are never invoked
+  !! anywhere in the project. THIS class's Start() -> CachePendingCharacterUnlocks
+  !! -> GetReachableButLockedUnits() -> NewCharacterStats popup -> Claim button
+  !! -> ProgressionService.UnlockUnit() chain is what actually runs every time
+  !! the player returns to the Home screen, and IS how units end up unlocked
+  !! during normal play. The two dead paths appear to be an earlier or
+  !! alternate design (auto-unlock silently into the Undeployed bucket) that
+  !! was superseded by this explicit "look, a new hero, tap Claim" popup
+  !! design - worth confirming with the design owner which behaviour is
+  !! actually intended before touching either system.
+
+STAGE SELECTION
+------------------
+  QueueSelectStage1Based(stage1Based)  [static]  sets PendingSelectStage1Based,
+    floored at 1 - called by WinPanel after a win to make Home land on the
+    NEXT stage automatically.
+
+  NotifyStageWon(hp01)  [static]
+      Converts the player's HP percent into a star count via Hp01ToStars,
+      calls SaveSystem.RecordStageResult(levelId, stageIndex, stars) - THIS is
+      where a win actually gets persisted as stars, separate from and prior to
+      WinPanel's own reward-claiming flow - then queues the NEXT stage for
+      selection. Called by LevelGameManager.OnEnemyGateDestroyed BEFORE
+      WinPanel.Show is even invoked (per LevelGameManager's own doc).
+
+  Hp01ToStars(hp01)  [static, private]
+      >= 0.999 -> 3, >= 0.5 -> 2, > 0 -> 1, else -> 0. Note this is a
+      SEPARATE, independently-implemented tiering from WinPanel's own
+      CalculateHpCase (>= 0.9999 -> 3, >= 0.5 -> 2, else -> 1) - the two use
+      slightly different epsilons and Hp01ToStars additionally distinguishes
+      "0 stars" (a technical loss/incomplete stage, hp01 <= 0) from WinPanel's
+      hpCase, which never produces 0 since WinPanel.Show is only called on an
+      actual WIN (hp01 always > 0 in that context). They agree in practice
+      because they are called at different times for different purposes, but
+      they are NOT literally the same function.
+
+CARD MANAGEMENT
+-------------------
+  InitializeStageCards()
+      For every child of contentRoot: ensures a StageCard component exists
+      (adding one if the prefab somehow lacks it - defensive), sets its
+      stageIndex to its sibling position, and titles it "STAGE {levelId}-{n}".
+
+  HandleSelectionChanged(selectedIndex)
+      Updates stageTitle, computes whether the selected stage is within the
+      unlocked range, and updates startButton.interactable /
+      startLockedOverlay / startLabel accordingly.
+
+  RefreshAllVisuals()
+      For every StageCard: sets locked state (index > highestUnlocked) and
+      star count from SaveSystem.GetStars.
+
+LOADING A STAGE
+------------------
+  LoadSelectedStage()  (the live version)
+      Refuses if the selected index is beyond the unlocked range. Syncs the
+      static selectors, and IF LevelManager.Instance exists, computes the
+      GLOBAL stage index ((levelId-1)*stagesPerLevel + stage) and calls
+      LevelManager.Instance.SetStage(globalStage, loadScene: false) - keeping
+      LevelManager's own tracking in sync BEFORE loading the scene manually via
+      string.Format(sceneNamePattern, levelId, stage) and SceneManager.LoadScene.
+
+  ReportStageResult_1Based(stage1Based, castleHpPercent)
+      An ALTERNATIVE entry point (not called from within this file - intended
+      for a caller such as an additively-loaded Home instance, per its own
+      comment) that refreshes visuals and re-animates the progress bar without
+      going through the full OnEnable path.
+
+REWARD PREVIEW
+------------------
+  TryGetStageRewardPreview(stageIndex0Based, out reward) -> bool
+      Returns false if SharedRewardConfig is missing. Otherwise calls
+      StageRewardCalculator.GetRewardForStageAndHpCase with hpCase HARD-CODED
+      TO 1.
+      !! COMMENT/CODE MISMATCH: the method's own doc comment says "assuming
+      !! best case (hpCase = 3, i.e., full HP / 3 stars)", but the code
+      !! actually passes hpCase = 1 - the WORST tier, not the best. Combined
+      !! with StageRewardCalculator's ACCUMULATING behaviour (documented in
+      !! its own file: hpCase 3 sums r1+r2+r3, not just r3), this preview
+      !! significantly UNDER-represents the true best-case reward a card could
+      !! advertise - potentially by more than half, using the default tier
+      !! multipliers. Worth fixing to hpCase = 3 if the intent (per the
+      !! comment) really is a best-case preview.
+
+PROGRESS BAR ANIMATION
+--------------------------
+  UpdateProgressUI(fromUnlockedCount, toUnlockedCount, animate)  (the live
+    version)
+      Computes fill fractions from both counts over StagesPerLevelStatic (or
+      the Inspector fallback). Without animation: snaps fillAmount and the
+      label, positions the glow. WITH animation: kills any in-flight tween on
+      progressFillImage, snaps to the FROM value first, then DOTweens
+      fillAmount to the TO value over progressAnimDuration/progressEase,
+      updating the "{n}/{total}" label and the glow position EVERY FRAME via
+      OnUpdate (deriving the currently-displayed integer count by
+      inverse-lerping the live fill value between the from/to fractions, so
+      the label counts up smoothly in sync with the bar rather than jumping).
+
+  PositionProgressGlow(fill01)  (the live version)
+      Positions the child progressGlow RectTransform at the end of the VISIBLE
+      fill, working entirely in the Fill Image's own local rect space
+      (respecting its pivot and width) so padding/9-slice scaling is handled
+      correctly. Detects and compensates for a right-originating fill
+      (flips fill01 to 1-fill01 in that case). Applies glowTrailingOffset to
+      pull the glow slightly inside the fill edge (clamped so it can never
+      sit ahead of or behind the fill boundaries), and hides the glow object
+      entirely when the fill is effectively empty.
+
+HOW IT CONNECTS
+---------------
+  - HomeCardsPager owns the actual scroll/paging mechanics; HomeManager reacts
+    to its OnIndexChanged event and drives it via JumpToIndex.
+  - StageCard is built/refreshed per child of contentRoot.
+  - SaveSystem is the source of truth for highestUnlocked/stars per stage.
+  - LevelManager is kept in sync with the chosen stage before loading it.
+  - StageRewardCalculator / StageRewardConfig / WinPanel.RewardValues - shared
+    with WinPanel via the static SharedRewardConfig.
+  - GameStartManager.ProgressionService drives the new-unit-unlock check;
+    NewCharacterStats is the popup that lets the player claim it.
+  - GameState (the static cross-scene queue) carries pending unlock ids.
+
+NOTES
+-----
+  - Two large dead numbered siblings remain: OnEnable1() (the config-only
+    version, missing all the pager/card/progress-bar setup the live OnEnable
+    performs) and CachePendingCharacterUnlocks1() (an EXTENSIVELY logged
+    earlier implementation that manually replicated
+    PlayerProgressionService.GetReachableButLockedUnits' logic inline with a
+    long chain of Debug.Log calls per unit - superseded by the live version's
+    single delegated call to the service). Also ShowLockedStageToast1/2 (two
+    earlier toast implementations) and PositionProgressGlow1 (an earlier, less
+    carefully clamped glow-positioning function) sit unused beside their live
+    counterparts.
+  - shakeRepeats/shakeDuration/shakeStrength are declared in the Locked Stage
+    Toast section but not referenced by the live ShowLockedStageToast (which
+    uses only the rise/fade/gray animation, no shake) - leftover fields from
+    an earlier toast design that included a shake effect.
+  - LoadSelectedStage1() (a numbered sibling not listed among the toast
+    duplicates) is an earlier version that never synced LevelManager before
+    loading the scene - the live LoadSelectedStage adds that step.

@@ -1,0 +1,126 @@
+================================================================================
+  HudCurrencyView.cs
+  Path : Assets/Scripts/UI/HUD/HudCurrencyView.cs
+  Type : MonoBehaviour - singleton
+  Layer: UI / HUD
+  Scenes: MenuScene + all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+Two responsibilities bundled into one HUD-owning class: (1) keeps the coins/
+gems/heroXP labels in sync with CurrencyManager, and (2) owns a SEPARATE,
+COMPONENT-LEVEL pause system distinct from GameplayPause - one that disables
+individual gameplay scripts and Rigidbody2D simulation rather than setting
+Time.timeScale to 0. It also manages panel-visibility/z-order interactions
+between the HUD, the bucket-stats popup, the deploy swap panel, and the main
+menu panel.
+
+INSPECTOR FIELDS
+----------------
+  Currency UI: coinsText, gemsText, heroXpText, pauseButton
+  Main HUD root: mainCanvas, hudCanvasGroup
+  Panels that affect HUD: bucketStatsPanelRoot, bucketStatsCanvas,
+    swapPanelRoot, mainMenuPanelRoot, unitsDetailPanelRoot
+
+SINGLETON
+---------
+  Instance  guard-and-destroy in Awake (no DontDestroyOnLoad - a fresh instance
+            is expected per scene, consistent with LevelGameManager's pattern)
+
+RUNTIME STATE
+-------------
+  isGameplayPaused (bool, public read via IsGameplayPaused)
+
+LIFECYCLE
+---------
+  Awake()
+      Singleton guard. Falls back to FindObjectOfType<Canvas>() if mainCanvas
+      is unassigned. Resolves bucketStatsCanvas from bucketStatsPanelRoot if
+      not explicitly set.
+
+  OnEnable() / OnDisable()
+      Subscribes/unsubscribes CurrencyManager.OnCurrencyChanged. On subscribe,
+      immediately calls HandleCurrencyChanged for all three currencies with
+      delta 0 - forcing an initial label refresh rather than waiting for the
+      next actual change.
+
+  HandleCurrencyChanged(currency, newValue, delta)
+      Switches on the currency name string and writes the matching label.
+
+THE COMPONENT-LEVEL PAUSE SYSTEM
+-------------------------------------
+  IsGameplayPaused  (public bool)
+  ToggleGameplayPause() / PauseGameplay() / ResumeGameplay()
+      Thin wrappers around SetGameplayPaused(bool).
+
+  SetGameplayPaused(paused)  - the actual mechanism
+      No-ops if the state is unchanged. Otherwise, for EVERY relevant system
+      currently in the scene (found via FindObjectOfType/FindObjectsOfType,
+      not cached):
+        - EnemySpawner.enabled = !paused
+        - PlayerWaveManager.enabled = !paused
+        - BoardInputController.enabled = !paused
+        - every PlayerManager: component.enabled = !paused; its Rigidbody2D
+          is zeroed and simulation-disabled while paused, re-simulated when
+          resumed; its child Animator's speed is set to 0 (paused) or 1
+        - every EnemyManager: identical treatment (component disable +
+          Rigidbody2D simulation toggle + Animator speed)
+      !! THIS IS A SECOND, INDEPENDENT PAUSE MECHANISM from
+      !! Core/SaveLoad/GameplayPause.cs (which sets Time.timeScale globally).
+      !! The two are used DELIBERATELY in different situations, not
+      !! redundantly: per LevelGameManager's own doc, a WIN explicitly avoids
+      !! the global Time.timeScale pause so reward UI animations can keep
+      !! running smoothly, and instead calls
+      !! PlayerManager.HandleGateDestroyed -> HudCurrencyView.Instance?.
+      !! PauseGameplay() - THIS is that call, and this method is what actually
+      !! implements "stop gameplay motion without stopping UI animation" by
+      !! disabling components individually rather than freezing all of time.
+      !! A LOSS/REVIVE, by contrast, calls GameplayPause.SetPaused(true)
+      !! (global timeScale=0) because the whole screen genuinely needs to
+      !! freeze there. Knowing both exist - and which situation uses which -
+      !! matters if either pause path is ever modified, since a fix applied to
+      !! only one of them will not affect the other.
+      - The commented-out "roguelite Manager" line hints that RogueliteManager
+        was once (or is meant to be) included in this same disable/enable
+        sweep but currently is not - RogueliteManager's own level-up pause
+        uses yet a THIRD mechanism (its own isPaused flag + Time.timeScale, see
+        its own doc), so there are effectively multiple overlapping pause
+        concepts across the project.
+
+PANEL VISIBILITY / Z-ORDER
+-------------------------------
+  LateUpdate()   calls HandleBucketStatsOrder() and HandlePanelsVisibility()
+                 every frame.
+
+  HandleBucketStatsOrder()
+      While bucketStatsPanelRoot is active, forces its Canvas to override
+      sorting and render 5 above mainCanvas's own sorting order - guaranteeing
+      the stats popup always draws on top regardless of hierarchy order.
+      Clears the override when the panel closes.
+
+  HandlePanelsVisibility()  (the live version)
+      Computes swapOpen (deploy overlay active) and detailOpen (units detail
+      panel active). Hides the HUD CanvasGroup (alpha/interactable/
+      blocksRaycasts) ONLY while the swap panel is open. Hides mainMenuPanelRoot
+      while EITHER the swap panel OR the units detail view is open.
+
+HOW IT CONNECTS
+---------------
+  - CurrencyManager.OnCurrencyChanged drives the label text.
+  - PlayerManager.HandleGateDestroyed calls PauseGameplay() on a win.
+  - Referenced (Instance) from WinPanel/PlayerWaveManager contexts wherever
+    "is gameplay currently paused" needs checking (e.g.
+    EnemySpawner.IsGameplayPaused via HudCurrencyView.Instance).
+
+NOTES
+-----
+  - Two dead numbered siblings, HandleSwapPanelVisibility1 and
+    HandleSwapPanelVisibility2, remain - progressively earlier versions that
+    handled fewer cases (1 only toggles the HUD; 2 adds MainMenu hiding but
+    without the unitsDetailPanelRoot condition the live
+    HandlePanelsVisibility adds).
+  - SetGameplayPaused re-scans the whole scene with FindObjectOfType /
+    FindObjectsOfType every time pause state toggles rather than caching
+    references - acceptable since pausing is an infrequent, not per-frame,
+    event.

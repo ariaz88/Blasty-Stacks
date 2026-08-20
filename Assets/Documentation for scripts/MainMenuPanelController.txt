@@ -1,0 +1,153 @@
+================================================================================
+  MainMenuPanelController.cs
+  Path : Assets/Scripts/UI/Managers/MainMenuPanelController.cs
+  Type : MonoBehaviour
+  Layer: UI / Managers
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+The top-level tab switcher for the main menu: Home / Units / Test, with an
+Instagram-Reels-style horizontal slide-and-fade transition between whichever
+panel is currently showing and the one being switched to, plus a small/big
+button-swap for the tab icons themselves. "Test" is not a real screen - tapping
+it just shows a "Coming Soon" toast.
+
+INSPECTOR FIELDS
+----------------
+  Panels: homePanel, unitsPanel, testPanel  (GameObject roots)
+  Main Buttons (small/inactive): homeButton, unitsButton, testButton
+  Selected Visual Buttons (big): homeSelectedButton, unitsSelectedButton,
+    testSelectedButton  - each tab has TWO button GameObjects, only one of
+    which is active at a time (the "selected, big" version vs the "unselected,
+    small" version), rather than one button whose sprite changes
+  homeButtonOffsetX (float, default -20)  how far the (inactive) Home button
+    nudges when Test is selected - purely a layout polish detail
+  Slide Settings: slideDuration (0.15-1.0, default 0.35), slideEase (OutCubic),
+    fadeDuringSlide (bool, default true), fadeDuration (0-1, default 0.25),
+    extraSlidePadding (float, default 60 - extra travel distance added to the
+    panel width so the outgoing/incoming panels start further off-screen than
+    strictly necessary, avoiding any visible edge peeking in during the slide)
+  Coming Soon Toast Settings: lockedToastPrefab, toastCanvasParent,
+    toastStartColor, toastGrayColor, lockedStageText (default "Coming Soon"),
+    plus the same rise/fade/gray timing parameters seen in every other toast
+    implementation in this project (toastStartYOffset, toastRisePixels,
+    toastRiseDuration, toastRiseEase, toastFadeInDuration, toastGrayAt,
+    toastFadeOutAt)
+
+RUNTIME STATE
+-------------
+  homeButtonDefaultAnchoredPos  (Vector2, cached in Start)
+  private enum MenuTab { Home = 0, Units = 1, Test = 2 }
+  currentTab  (MenuTab, default Home)
+  isAnimating (bool)
+
+LIFECYCLE
+---------
+  Start()
+      Caches the Home button's default anchored position (for the nudge
+      effect), calls PreparePanelsForAnimation() to lay out all three panels
+      according to currentTab, then SelectMenu(Home, animate: false) so the
+      screen opens already showing Home with no visible slide.
+
+PUBLIC BUTTON HOOKS
+-----------------------
+  ShowHomePanel()  -> SelectMenu(Home, animate: true)
+  ShowUnitsPanel() -> SelectMenu(Units, animate: true)
+  ShowTestPanel()  -> ShowLockedStageToast anchored at testButton - Test has
+    no real panel transition, it only ever shows the "Coming Soon" toast
+
+THE CORE TRANSITION
+------------------------
+  SelectMenu(target, animate)
+      No-ops while already animating. Updates the small/big button visuals and
+      the Home-button nudge for the target tab regardless of whether a real
+      transition happens. If target == currentTab, just re-asserts that only
+      the current panel is active/interactive (a "make sure nothing is stale"
+      call) and returns.
+
+      Otherwise: resolves both panels' RectTransforms and CanvasGroups
+      (creating a CanvasGroup via RequireCanvasGroup if one is missing).
+      Computes each tab's SPATIAL index via GetSpatialIndex - NOTE: spatial
+      order is Units=0, Home=1, Test=2, which is DIFFERENT from the MenuTab
+      enum's declaration order (Home=0, Units=1, Test=2). This means Units
+      slides in from the LEFT of Home and Test from the RIGHT, even though in
+      the enum Units is declared before Home - a deliberate re-mapping, not an
+      oversight, but worth knowing if a fourth tab is ever added since its
+      spatial position must be assigned explicitly here too.
+      delta = toSpatial - fromSpatial determines slide direction. Both panels
+      are activated, made non-interactable during the transition, and (if
+      fadeDuringSlide) the outgoing panel starts fully opaque while the
+      incoming one starts fully transparent.
+
+      If animate is false: SNAPS both panels directly to their final
+      positions/alphas, deactivates the outgoing panel, re-enables
+      interaction on the incoming one, and updates currentTab - used only for
+      the very first Start() call.
+
+      If animate is true: sets isAnimating, builds a DOTween Sequence joining
+      four tweens simultaneously - outgoing panel slides to -delta*panelWidth,
+      incoming panel slides to 0 (center), and (if fading) both CanvasGroups
+      cross-fade over min(fadeDuration, slideDuration). On completion:
+      deactivates the outgoing panel, re-enables interaction on the incoming
+      one, updates currentTab, and clears isAnimating.
+
+  PositionPanelsForCurrent(center, instant, setActiveOnlyForCurrent)
+      Repositions ALL THREE panels relative to whichever tab is 'center':
+      the center panel goes to X=0, the others go to
+      (theirSpatialIndex - centerSpatialIndex) * panelWidth - maintaining the
+      invariant that non-current panels always sit exactly one panel-width to
+      the correct side, ready to slide in. Called both to lay things out
+      initially (PreparePanelsForAnimation) and to re-settle everything after
+      a transition completes.
+
+BUTTON / NUDGE VISUALS
+---------------------------
+  UpdateButtonVisuals(tab)   toggles each tab's small-vs-big button pair based
+                             on which tab is selected
+  NudgeInactiveHomeWhenTest(tab)
+      Tweens the Home button (0.2s, OutQuad) to an offset position ONLY while
+      Test is the target tab, and back to its default position otherwise - a
+      small layout accommodation, presumably because the Test button's
+      "selected" state visually crowds the Home button in that specific
+      configuration.
+
+COMING SOON TOAST
+---------------------
+  ShowLockedStageToast(anchorParent)
+      An exact copy of the same rise/gray/fade DOTween-sequence toast pattern
+      documented in full detail in HomeManager's and UnitDetailView's own
+      files - spawn under the anchor, pop in, rise, gray out partway, fade out
+      near the end, then destroy. See either of those files for the full
+      mechanics; the implementation here is functionally identical.
+
+UTILITIES
+------------
+  PreparePanelsForAnimation()
+      Activates all three panel GameObjects (so their RectTransforms/
+      CanvasGroups can be manipulated) then calls PositionPanelsForCurrent
+      with setActiveOnlyForCurrent: true, which deactivates the two
+      non-current panels again after positioning them correctly - a
+      "briefly wake everything up to measure/place it, then put the
+      non-current ones back to sleep" pattern.
+  GetPanelRT(tab)          resolves the RectTransform for a tab's panel
+  RequireCanvasGroup(rt)   gets-or-adds a CanvasGroup
+  SetCGInteractable(cg, on)  sets both interactable and blocksRaycasts together
+
+HOW IT CONNECTS
+---------------
+  - homePanel/unitsPanel likely host HomeManager/UnitsPanelController
+    respectively as children, though this class has no direct reference to
+    either - it only manipulates their root GameObjects/RectTransforms.
+
+NOTES
+-----
+  - IndexOf(tab) is declared ((int)tab, i.e. the ENUM order) but never
+    actually called anywhere in the file - dead helper, distinct from and not
+    to be confused with GetSpatialIndex (the one that actually matters for
+    layout).
+  - This file no longer contains any numbered duplicate classes (all six that
+    used to live here - MainMenuPanelController1 through 6 - were removed in
+    the 2026-08-20 duplicate-class cleanup, reducing the file from roughly
+    1,000 lines to under 300).

@@ -1,0 +1,145 @@
+================================================================================
+  DebugStageManager.cs
+  Path : Assets/Scripts/Debug/DebugStageManager.cs
+  Type : MonoBehaviour  [DisallowMultipleComponent] [DefaultExecutionOrder(-1000)]
+         + a nested [CustomEditor] class (Editor-only, #if UNITY_EDITOR)
+  Layer: Debug
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+A designer/QA tool: lets you preconfigure "the player has already cleared
+stages 1..N with these star ratings, and stage N+1 is the next playable one"
+entirely from the Inspector BEFORE pressing Play, then applies that exact save
+state automatically the moment Play Mode starts. Useful for jumping straight
+into testing a specific late-game stage without manually grinding through
+earlier ones each time.
+
+[DefaultExecutionOrder(-1000)] ensures this applies its save state extremely
+early, before most other Awake/Start/OnEnable calls that might read from
+SaveSystem.
+
+INSPECTOR FIELDS
+----------------
+  Target Level
+    levelId          (int, min 1, default 1)
+    stagesPerLevel    (int, min 1, default 20)
+    currentUnlockedStage_1Based  (int, min 1)  the stage that becomes the NEXT
+      PLAYABLE one; every stage BEFORE it is marked completed per the star plan
+  Apply Behavior
+    applyOnEnterPlay  (bool, default true)  auto-apply when Play begins
+    homeManager       (UnityEngine.Object, optional)  a loosely-typed
+      reference used purely for reflection (see TryRefreshHomeUI)
+
+TYPES
+-----
+  enum StarAward { None=0, OneStar=1, TwoStars=2, ThreeStars=3 }
+      Named to match the actual clear conditions (OneStar = HP>0 and <50%,
+      TwoStars = HP>=50% and <100%, ThreeStars = full HP) for designer clarity.
+  class StageStarPlan { stageNumber_1Based (hidden), award (StarAward) }
+      One entry per stage in the level.
+
+RUNTIME/SERIALIZED STATE
+-----------------------------
+  starPlanForAllStages  (List<StageStarPlan>, private SerializeField)  kept at
+    length == stagesPerLevel at all times (see OnValidate); the custom editor
+    only DISPLAYS the entries before currentUnlockedStage_1Based, but the full
+    list is always maintained underneath so re-raising currentUnlocked later
+    reuses whatever was previously configured for those stages.
+  _appliedThisPlay  (private bool)  one-shot guard so re-entering OnEnable
+    during the same Play session (e.g. a domain reload without a full stop)
+    does not re-apply repeatedly.
+
+EDITOR-TIME UPKEEP
+----------------------
+  OnValidate()
+      Clamps stagesPerLevel >= 1 and currentUnlockedStage_1Based into
+      [1, stagesPerLevel]. Resizes starPlanForAllStages to exactly
+      stagesPerLevel entries (appending fresh OneStar-default entries if grown,
+      truncating if shrunk), and re-numbers every entry's stageNumber_1Based to
+      match its list position - keeps the serialized plan self-consistent
+      every time any of these fields changes in the Inspector.
+
+APPLYING THE PLAN
+---------------------
+  OnEnable()
+      If in Play mode, applyOnEnterPlay is set, and not already applied this
+      session: calls ApplyPlan() and sets the guard.
+
+  ApplyPlan()  (public, also callable from the custom editor's button)
+      In the Editor, warns and refuses if not currently in Play mode (the plan
+      only makes sense to apply against a live SaveSystem cache). Otherwise:
+      1. SaveSystem.EnsureLevel(levelId, stagesPerLevel) - gets or creates the
+         level record.
+      2. RESETS its stars array to all zero (either reallocating if the
+         length is wrong, or Array.Clear if it already matches) - a full wipe
+         of that level's star history before reapplying the plan.
+      3. targetIndex0 = clamp(currentUnlockedStage_1Based - 1, ...) - the
+         0-based index of the next playable stage.
+      4. For every stage from 1 up to (but not including) the next playable
+         one: reads its configured StarAward from starPlanForAllStages and
+         writes it into lvl.stars, clamped 0-3.
+      5. Sets lvl.highestUnlocked = targetIndex0 directly - this is the field
+         SaveSystem/HomeManager actually use to gate which stages are playable,
+         so this single assignment is what "unlocks" everything up to the
+         target stage.
+      6. Calls SaveSystem.Save() to persist immediately.
+      7. Calls TryRefreshHomeUI() to poke the Home screen if one is assigned
+         and currently active.
+      Logs a summary line.
+
+  TryRefreshHomeUI()
+      Uses REFLECTION (not a typed reference) to look for a public
+      RefreshFromSave() method on the assigned homeManager object first,
+      falling back to RefreshAllVisuals() if that is not found, invoking
+      whichever exists with no arguments. Because homeManager is typed as a
+      generic UnityEngine.Object rather than HomeManager directly, this tool
+      works even if HomeManager's public API changes shape, at the cost of
+      silently doing nothing if NEITHER method name exists on whatever is
+      assigned - no error, no warning.
+
+  GetPlan() -> IReadOnlyList<StageStarPlan>
+      Exposes the full plan read-only, consumed only by the custom editor
+      below.
+
+CUSTOM EDITOR  (#if UNITY_EDITOR, nested class DebugStageManagerEditor)
+------------------------------------------------------------------------------
+  [CustomEditor(typeof(DebugStageManager))]
+  OnInspectorGUI()
+      Draws the header fields normally (levelId, stagesPerLevel,
+      currentUnlockedStage_1Based, applyOnEnterPlay, homeManager). Then draws a
+      DYNAMIC section: only the star-plan rows for stages 1 through
+      (currentUnlocked - 1) are shown as a compact "Stage N: [dropdown]" list
+      (stages at or past the current-unlocked point are hidden, since their
+      stars do not matter - they have not been "cleared" yet in the plan).
+      Shows an info box instead if there are no previous stages to configure.
+      Draws an "Apply Now (Play Mode)" button, disabled via
+      EditorGUI.DisabledScope unless the Editor is actually in Play mode - so
+      the tool cannot be misapplied against a save cache that does not exist
+      yet. Ends with a static help box explaining the workflow in three
+      bullet points.
+
+HOW IT CONNECTS
+---------------
+  - Writes directly into SaveSystem's cached SaveData via EnsureLevel/Save -
+    the exact same persistence path every other save-affecting system uses,
+    so its effects are indistinguishable from genuine play progress afterward.
+  - Optionally pokes a HomeManager-shaped object via reflection to refresh
+    visuals immediately without requiring a scene reload.
+
+NOTES
+-----
+  - This is purely a development/QA tool - it is placed under Debug/ and only
+    lives in MenuScene, not any gameplay scene, and has no player-facing
+    exposure.
+  - A large block of a THIRD, much older design ("Minimal debug helper to mark
+    a stage as completed with 1/2/3 stars...") remains commented out at the
+    very end of the file after the #endif - dead documentation of an earlier,
+    simpler tool concept that predates this Inspector-driven plan system.
+  - Applying the plan performs a FULL WIPE of the target level's star array
+    before reapplying - running this tool on a level with real (non-debug)
+    player progress would destroy that progress, which is exactly the
+    intended behaviour for a testing tool but worth remembering if it is ever
+    left enabled (applyOnEnterPlay = true) on a build that somehow ships with
+    this component still active.

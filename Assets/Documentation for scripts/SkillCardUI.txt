@@ -1,0 +1,66 @@
+================================================================================
+  SkillCardUI.cs
+  Path : Assets/Scripts/Roguelite/SkillCardUI.cs
+  Type : MonoBehaviour
+  Layer: Roguelite
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+Displays ONE skill card in the level-up selection overlay (three of these are
+shown at once) and reports back which card the player clicked.
+
+INSPECTOR FIELDS
+----------------
+  firstUI         (GameObject, optional)  extra UI shown only on a skill's very
+                  first appearance
+  iconImage       (Image)
+  nameText, descriptionText  (TextMeshProUGUI)
+  starsContainer  (Transform)  parent of the pip/star row showing pick count
+  starImages      (Image[])  individual star pips
+  newRibbon       (GameObject)  a "NEW" badge shown on first pick
+
+RUNTIME STATE
+-------------
+  skillData   (SkillData)  which skill this card currently represents
+  onSelected  (Action<SkillData>)  callback invoked on click
+
+LIFECYCLE
+---------
+  Awake()  finds a Button component on this object and wires OnClick to it.
+
+METHODS
+-------
+  Init(SkillData data, int timesSelected, Action<SkillData> callback)
+      Stores the data and callback, then picks the icon: evolvedIcon once
+      timesSelected >= 5, else normalIcon. Sets name/description text. Then
+      branches by timesSelected:
+        0        -> show firstUI and the NEW ribbon, hide the star row entirely
+                    (first time this skill has ever been offered)
+        1..5     -> hide firstUI/ribbon, show the star row, and activate exactly
+                    timesSelected star images (a simple pip counter)
+        6+       -> hide everything except the (already-set) evolved icon - the
+                    "fully evolved" display state
+
+  OnClick()
+      Invokes onSelected(skillData) - the callback RogueliteManager supplied
+      when populating this slot.
+
+HOW IT CONNECTS
+---------------
+  - RogueliteManager.ShowSkillSelection calls Init on each of the (usually 3)
+    cardSlots with a randomly chosen skill and the player's current pick count
+    for it.
+  - RogueliteManager.OnSkillChosen is the callback that fires when a card is
+    clicked.
+
+NOTES
+-----
+  - The evolved-icon threshold used HERE for the icon swap is ">= 5" (i.e. the
+    6th pick, since timesSelected is the count BEFORE this pick is applied),
+    while RogueliteManager's own AddSkillToList uses "> 5" for the SAME
+    decision when updating the sidebar icon after a pick. The two comparisons
+    are subtly different operators applied to values that are offset by one
+    call, but they are intended to agree on "evolved at the 6th pick" - worth
+    double-checking visually if the evolve threshold is ever changed.

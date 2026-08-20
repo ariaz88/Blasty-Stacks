@@ -1,0 +1,115 @@
+================================================================================
+  PlayerStatsApplier.cs
+  Path : Assets/Scripts/Roguelite/PlayerStatsApplier.cs
+  Type : MonoBehaviour
+  Layer: Roguelite
+  Scenes: all 9 build scenes
+================================================================================
+
+PURPOSE
+-------
+Computes ONE spawned player unit's live stats: base stats (from its
+UnitDefinitionSO) multiplied by the growth curve for its SAVED upgrade level.
+This is the bridge between the meta-progression (persistent unit levels, stored
+in PlayerUnitsModel/SaveSystem) and the in-battle UnitStatsRuntime that combat
+actually reads. It also listens for upgrade events so an ALREADY-SPAWNED unit's
+stats update live if the player upgrades it mid-run (uncommon, but supported).
+
+INSPECTOR FIELDS
+----------------
+  unitsDatabase      (UnitsDatabaseSO, private SerializeField)
+  progressionConfig  (ProgressionConfigSO, private SerializeField)
+  unitId             (int, public, default 0)  WHICH unit's saved level/stats
+                     this applier represents - set per-instance at spawn time
+
+PROPERTIES
+----------
+  CurrentStats  (UnitStatsRuntime, public get / private set)  the computed live
+                stats, read by PlayerManager and the roguelite skill system
+
+LIFECYCLE
+---------
+  Awake()  (the live version)
+      Resolves GameStartManager.Instance, falling back to a scene-wide
+      FindObjectOfType if the singleton is not yet set (a boot-order safety
+      net). If STILL not found, logs an error and DISABLES this component
+      entirely (enabled = false) - meaning a unit spawned without a
+      GameStartManager present simply never gets its stats applied. If the
+      required services (_gsm.PlayerUnits, _gsm.unitsDatabase,
+      progressionConfig) are not yet ready, starts
+      WaitForServicesAndApply() instead of applying immediately.
+
+  WaitForServicesAndApply()  [coroutine]
+      Polls (WaitUntil) until _gsm and all three dependencies are non-null,
+      then calls ApplyNow(). This handles the case where PlayerStatsApplier's
+      Awake runs before GameStartManager has finished its own initialization.
+
+  OnEnable / OnDisable
+      Subscribe/unsubscribe _gsm.ProgressionService.OnUnitUpgraded ->
+      HandleUnitUpgraded, guarded by null checks on both _gsm and
+      ProgressionService.
+
+  Start()  currently empty - its ApplyNow() call is commented out, since Awake
+           already guarantees stats are applied (directly or via the wait
+           coroutine).
+
+METHODS
+-------
+  HandleUnitUpgraded(upgradedUnitId, oldLevel, newLevel, cost)
+      If the upgraded unit matches THIS instance's unitId, calls ApplyNow() to
+      immediately recompute stats - so an already-spawned unit visibly gets
+      stronger the instant the player spends currency on an upgrade, without
+      needing to respawn.
+
+  ApplyNow()
+      1. If dependencies are still missing, warns and re-enters
+         WaitForServicesAndApply (a defensive re-check).
+      2. Resolves the UnitDefinitionSO by unitId from unitsDatabase; warns and
+         aborts if it or its baseStats is missing.
+      3. Reads the player's SAVED level L for this unit via
+         _gsm.PlayerUnits.GetLevel(unitId), floored at 1.
+      4. Computes growth multipliers via ProgressionMath.GetGrowthMultipliers.
+      5. Builds a FRESH UnitStatsRuntime from the base SO and multiplies ALL
+         SIX stats (attack, defense, maxHP, attackSpeed, moveSpeed,
+         attackRange) by their respective growth factors - this is a complete
+         recompute from scratch each time, so it correctly resets any earlier
+         session's temporary multipliers rather than compounding them.
+      6. Stores the result in CurrentStats.
+      7. Calls TryApplyHealth(rt.maxHP).
+
+  TryApplyHealth(newMaxHp)
+      Finds a PlayerStats in children and, if present, sets its maxHealth,
+      clamps currentHP to the new max, and resets currentHP to full if it was
+      at or below zero (so a fresh spawn is never born already "dead" from a
+      stale value). If no PlayerStats exists, this silently does nothing -
+      the docstring above it mentions a more generic "any component with
+      maxHealth/currentHP fields" fallback that was never actually implemented.
+
+  SetUnitId(id)   simple setter, called by PlayerWaveManager right after
+                  instantiating a unit, before ApplyNow runs.
+
+HOW IT CONNECTS
+---------------
+  - PlayerWaveManager.SpawnOneAt calls SetUnitId then ApplyNow then copies
+    CurrentStats into PlayerManager.unitStats - this is the moment a freshly
+    spawned unit becomes combat-ready with correct numbers.
+  - RogueliteManager.ApplySkillEffect further multiplies CurrentStats in place
+    when a skill card is picked, layering roguelite buffs ON TOP of the
+    meta-progression stats this class computed.
+  - Reads ProgressionMath / ProgressionConfigSO / UnitsDatabaseSO - the same
+    Data-layer types PlayerProgressionService also uses for the upgrade-preview
+    UI, so the numbers shown in the shop and the numbers actually used in
+    battle come from the identical formula.
+
+NOTES
+-----
+  - A dead numbered sibling Awake1() remains; it called ApplyNow() directly with
+    no wait-for-services handling and no fallback FindObjectOfType - an earlier,
+    simpler (and more fragile) version of the live Awake().
+  - Because ApplyNow rebuilds CurrentStats from scratch every time, calling it
+    AFTER a roguelite skill has already multiplied the runtime stats (for
+    example, if an upgrade purchase triggers HandleUnitUpgraded mid-battle)
+    would ERASE any active roguelite multipliers, since those are applied to
+    the SAME UnitStatsRuntime object by RogueliteManager.ApplySkillEffect and
+    are not re-applied here. This is a real ordering hazard: upgrading a
+    deployed unit mid-run could silently strip its current-run skill bonuses.

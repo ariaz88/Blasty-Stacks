@@ -1,0 +1,196 @@
+================================================================================
+  SimpleJump2D.cs
+  Path : Assets/Scripts/Combat/Player/SimpleJump2D.cs
+  Type : MonoBehaviour  -  live class is FrogJumpTransformOnly
+  Layer: Combat / Player
+  IMPORTANT: the file is named SimpleJump2D.cs but contains NO class of that
+  name. Unity resolves a script asset with no filename-matching class to its
+  FIRST declared class, so FrogJumpTransformOnly is what actually gets attached
+  to prefabs (confirmed: used by 12 prefabs). Three other classes used to live
+  in this same file (FrogJumpTransformOnly2/1, FrogJump2D2/1) and were removed
+  in the 2026-08-20 duplicate-class cleanup - they had zero real references and
+  were unreachable anyway since only a file's FIRST class can ever be attached.
+================================================================================
+
+PURPOSE
+-------
+A purely TRANSFORM-DRIVEN jump: no physics, no Rigidbody impulse. It animates
+the character's Y position along a parabolic arc over a fixed duration, plays
+"squash and stretch"-style scale effects on both the player and its shadow, and
+detaches/reattaches the shadow so it can lag behind on the ground while the
+character is airborne. Used for stage-unlock hops and any other jump FX.
+
+INSPECTOR FIELDS
+----------------
+  Refs
+    animator, spriteRenderer  (optional)
+    shadow      (Transform)  the Shadow child object
+    pm          (PlayerManager, resolved in Awake, not serialized)
+
+  Animator States
+    jumpStartState (string, default "JumpStart")
+    jumpLoopState  (string, default "JumpLoop")
+
+  Input
+    jumpKey  (KeyCode, default LeftShift)  a MANUAL test-trigger key
+
+  Jump Shape (transform-only)
+    jumpDistanceY  (float, default 3.0)  forward travel along Y (+up/-down)
+    arcHeight      (float, default 1.5)  visual arc height, does not affect
+                   the landing Y
+    jumpDuration   (float, min 0.05, default 0.45)
+
+  Timing
+    jumpStartToLoopDelay (float, default 0.12)  when to swap from the start clip
+                         to the loop clip
+
+  Facing on Y
+    useFlipYFacing (bool, default false)  use spriteRenderer.flipY instead of
+                   the scale sign to decide jump direction
+
+  QoL
+    jumpBuffer (float, default 0.12)  input buffering window
+
+  Air Scale Effect (Player)
+    apexScale       (1-1.5, default 1.2)  player grows up to 20% at the apex
+    scaleResponse   (min 0.1, default 1.0)  exponent shaping the growth curve
+    resetScaleOnLand (bool, default true)
+
+  Air Scale Effect (Shadow)
+    shadowApexScale (0.5-1, default 0.75)  shadow shrinks to 75% at the apex
+    shadowScaleResponse (min 0.1, default 1.0)
+    resetShadowOnLand (bool, default true)
+
+  Shadow Ground-Follow
+    detachShadowDuringJump (bool, default true)
+    shadowProgressCurve (AnimationCurve, optional; if null, uses t^2 as an
+                         ease-in "lag then catch up" default)
+    shadowGroundAxisMask (Vector3, default (0,1,0))  which world axes the
+                         shadow tracks; Y matches this game's forward direction
+
+RUNTIME STATE
+-------------
+  isJumping (bool, public get via IsJumping), loopPlayed, lastJumpPressedTime,
+  tElapsed, tLoopSwapAt, startPos, endPos
+  baseScaleAbs / baseScaleSign          player's original scale, split into
+                                        magnitude and sign so facing flips are
+                                        never lost while scaling
+  shadowBaseLocalAbs / shadowBaseLocalSign  same idea for the shadow
+  shadowOriginalParent, shadowStartPos, shadowXZHold  detach/reattach bookkeeping
+
+LIFECYCLE
+---------
+  Awake()   caches PlayerManager and CacheBaseScales()
+  Update()  HandleInput() -> TryBeginJump() -> if isJumping, TickJump()
+
+INPUT / TRIGGERING
+-------------------
+  HandleInput()     records lastJumpPressedTime on jumpKey press (a manual
+                    debug/test path)
+  TryBeginJump()    starts a jump if the buffered input is still within
+                    jumpBuffer seconds and not already jumping
+  TriggerJump() -> bool   the PROGRAMMATIC entry point other systems call. It
+                    re-captures the current facing sign BEFORE scaling begins
+                    (so a flip mid-air cannot corrupt the scale math), then
+                    calls BeginJump(). Returns false if already jumping.
+
+BeginJump()  (the live version)
+--------------------------------
+  1. Consumes the input buffer.
+  2. Resolves facing via GetFacingYSign() and computes startPos/endPos, moving
+     jumpDistanceY along local Y in the facing direction.
+  3. Resets timers and flags; computes tLoopSwapAt as the smaller of
+     jumpStartToLoopDelay and half the jump duration (so a very short jump
+     still swaps to the loop clip before landing).
+  4. If a shadow is assigned and detachShadowDuringJump is true: UN-PARENTS the
+     shadow (keeping its world transform), and caches which axes stay fixed
+     (shadowXZHold) versus which follow the jump (per shadowGroundAxisMask).
+  5. Plays jumpStartState.
+
+TickJump()  (per frame while airborne)
+----------------------------------------
+  1. UpdateTimers -> t01, the 0..1 progress through jumpDuration.
+  2. yLinear = Lerp(startPos.y, endPos.y, t01)   the underlying landing curve
+  3. arcT = HeightCurve(t01) = 4*t*(1-t)   a bell curve peaking at t=0.5
+  4. yWithArc = yLinear + arcT * arcHeight   the VISUAL height, added on top of
+     the linear travel so the landing Y is exact regardless of arc shape
+  5. ApplyPositionY(yWithArc)
+  6. UpdatePlayerScale(arcT) / UpdateShadowScale(arcT)   squash-and-stretch FX
+  7. UpdateShadowGroundFollow(t01, yLinear)   moves the (detached) shadow
+  8. MaybeSwapToLoop(t01)   swaps to jumpLoopState once past tLoopSwapAt
+  9. At t01 >= 1, calls Land()
+
+UpdateShadowGroundFollow(t01, yLinear)
+----------------------------------------
+  Computes its own progress value s: either sampling shadowProgressCurve, or
+  defaulting to t01*t01 (an ease-in), so the shadow starts moving slower than
+  the player and "catches up" by landing - the classic top-down jump-shadow
+  effect. Moves only the axes flagged in shadowGroundAxisMask toward the
+  player's endPos on that axis; locked axes stay at the cached shadowXZHold
+  value.
+
+SCALE EFFECTS
+--------------
+  UpdatePlayerScale(arcT)
+      arcForScale = arcT ^ scaleResponse, then lerps the player's absolute
+      scale from 1x to apexScale, re-applying the ORIGINAL sign so a flipped
+      (facing-left) character does not un-flip while growing.
+
+  UpdateShadowScale(arcT)  (the live version)
+      playerU = 1 if the shadow is detached (world scale is being computed
+      independently), else the player's CURRENT uniform scale factor.
+      Computes the shadow's desired WORLD scale (shrinking toward
+      shadowApexScale), then divides by playerU to get the correct LOCAL scale
+      needed to achieve that world scale - this correction only matters while
+      the shadow is still parented; once detached, playerU is forced to 1
+      because the shadow's transform is now independent of the player's.
+
+LANDING
+-------
+  Land()  (the live version)
+      Snaps Y to exactly endPos.y (removing any residual arc), restores the
+      player's original scale if resetScaleOnLand, restores the shadow's scale
+      if resetShadowOnLand, and if the shadow was detached: computes its FINAL
+      ground-aligned position (forward axis = endPos, held axes = the cached
+      value), snaps it there, and RE-PARENTS it back under its original parent.
+      Clears isJumping and loopPlayed.
+
+HELPERS
+-------
+  CacheBaseScales()   splits both the player's and shadow's starting scale into
+                      magnitude + sign, once, so later math never has to guess
+                      which sign was "original" versus "flipped this jump"
+  RestorePlayerScale() / RestoreShadowScale()   reassemble abs * sign
+  ApplyPositionY(y) / SnapToEndY()   direct position writes (no physics)
+  ConsumeJumpBuffer()   resets lastJumpPressedTime to a large negative sentinel
+  HeightCurve(t) = 4t(1-t)   the parabola used for the visual arc
+  GetFacingYSign()   returns -1/+1 from either spriteRenderer.flipY (if
+                      useFlipYFacing) or the sign of localScale.y
+  PlayAnim(state)     forwards to pm.playerAnimatitorManager.PlayTargetAnimation,
+                      null-safe on the animator manager reference
+  GetCurrentPlayerUniformScale()   infers the current scale factor by comparing
+                      absolute current Y scale to the cached base Y scale
+  Sgn(v)   returns -1 or +1 (treats exactly 0 as positive)
+
+HOW IT CONNECTS
+---------------
+  - Reads/writes the same transform.localScale that facing code (PlayerManager,
+    EnemyManager, etc.) also flips - CacheBaseScales/RestorePlayerScale is what
+    keeps these two systems from fighting over sign vs magnitude.
+  - Calls into PlayerAnimatitorManager to trigger the jump clips.
+  - Detach/reattach directly manipulates the shadow's parent Transform, so
+    anything else that assumes a fixed shadow hierarchy (for example a renderer
+    sort-order script) must tolerate a brief re-parent during the jump.
+
+NOTES
+-----
+  - This is a transform-only jump: nothing here uses Rigidbody2D or physics, so
+    it will not interact with colliders while airborne - the character can
+    visually pass over things.
+  - jumpKey (LeftShift) triggers a jump directly from Update() with no other
+    gating, so it functions as an always-on manual test/cheat trigger in any
+    build unless removed before shipping.
+  - The shadow detach/reattach logic assumes exactly one jump happens at a time
+    per instance; TriggerJump() returning false while isJumping already guards
+    re-entrancy, but there is no safety net if the GameObject is destroyed
+    mid-air (the shadow would remain unparented).

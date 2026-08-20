@@ -1,0 +1,223 @@
+================================================================================
+  HomeCardsPager.cs
+  Path : Assets/Scripts/UI/Home/HomeCardsPager.cs
+  Type : MonoBehaviour
+  Layer: UI / Home
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+The low-level scrolling/paging mechanics of the stage-select card strip: builds
+a fixed number of stage cards inside a HorizontalLayoutGroup, deliberately
+DISABLES Unity's own ScrollRect dragging, and instead animates the content's
+anchoredPosition itself so exactly one card is always precisely centred. Also
+swaps a card's PREFAB (not just its style) between a "normal" and a "selected"
+visual whenever the selection changes. HomeManager sits above this and reacts
+to its OnIndexChanged event; this class knows nothing about save data beyond
+what it needs to bind card visuals.
+
+EVENTS
+------
+  OnIndexChanged(int newIndex)
+  OnCardRebuilt(int index, GameObject newCardInstance)
+      Fired whenever a slot's GameObject is replaced (selected<->normal swap or
+      an initial build), so external code can re-wire anything that held a
+      reference to the old instance.
+
+INSPECTOR FIELDS
+----------------
+  Hierarchy: viewport, content (RectTransform), leftButton, rightButton,
+    scrollRect (deliberately disabled at runtime - see BuildIfNeeded)
+  Cards: normalCardPrefab, selectedCardPrefab, cardCount (min 1, default 20)
+  Layout: spacing (min 0, default 20)
+  Motion: smoothTime (0.05-0.40, default 0.18 - declared but UNUSED, see
+    NOTES), pixelSnapEpsilon (0.1-2, default 0.5 - also declared but unused),
+    slideDuration (0.25-0.60, default 0.33 - the value ACTUALLY used to time
+    the slide animation)
+  Data Binding: levelId (min 1, default 1)
+  Shared UI on Pager: playButton, disabledButton, toastAnchor, homeManager
+    (back-reference, used to fetch reward previews and trigger locked toasts)
+
+RUNTIME STATE
+-------------
+  currentIndex (public get via CurrentIndex)
+  hlg (HorizontalLayoutGroup, found or added to content)
+  built (bool)
+  private enum SlotKind { Normal, Selected }; slotKinds[]  - tracks which
+    prefab variant currently occupies each slot
+  targetX, xVelocity (float - xVelocity is declared but never actually used by
+    the live slide animation, which uses a coroutine Lerp instead - see NOTES)
+  rootCanvas (Canvas, cached for pixel-snapping)
+  isAnimating (bool)
+  contentSizeFitter (ContentSizeFitter, optional, found on content if present)
+
+BUILDING
+-----------
+  Start()   calls BuildIfNeeded()
+
+  BuildIfNeeded()
+      No-ops if already built. Requires viewport/content/both prefabs; errors
+      and aborts otherwise. Caches any ContentSizeFitter on content.
+      DELIBERATELY DISABLES the assigned ScrollRect entirely (inertia off,
+      horizontal/vertical off, movementType Unrestricted, then enabled = false
+      and StopMovement()) - the pager fully owns content's position instead of
+      letting the user drag it, which is what guarantees a card is always
+      exactly centred rather than settling wherever a drag gesture released it.
+      Destroys any existing children of content, ensures a
+      HorizontalLayoutGroup exists with MiddleLeft alignment and the
+      configured spacing (the inline comment notes the HLG's Child Control
+      Size/Child Force Expand toggles must both be OFF on both axes in the
+      Inspector - a prefab-configuration requirement this script cannot
+      enforce itself). Instantiates cardCount cards, using selectedCardPrefab
+      ONLY for index 0 and normalCardPrefab for the rest, binding each via
+      BindCard and firing OnCardRebuilt. Forces an immediate layout rebuild,
+      resolves currentIndex = 0, computes and snaps content directly to the
+      target X for index 0 (no animation on first build), refreshes the
+      Play/Disabled buttons for the starting index, wires the nav buttons, and
+      marks built = true.
+
+SLIDING ANIMATION
+---------------------
+  AnimateToTargetX(finalX)  [coroutine]
+      Sets isAnimating = true. Temporarily disables any ContentSizeFitter (to
+      stop it from re-sizing content mid-slide), forces a layout rebuild and
+      canvas update, and waits one frame so the "settled" starting layout is
+      accurate before recording startX. Then, over slideDuration using
+      UNSCALED delta time (works while paused), Lerps content.anchoredPosition.x
+      from startX to finalX with a manual easeOutCubic curve
+      (1 - (1-u)^3), snapping the result to the canvas's actual pixel grid
+      each frame via a local Snap function (computes units-per-pixel from
+      rootCanvas.scaleFactor) so the card strip never renders on a
+      sub-pixel-blurry position. On completion, snaps to the exact final X,
+      re-enables the fitter if it was originally enabled, forces one more
+      layout settle, and clears isAnimating.
+
+  SnapToPixelGrid(x)   a near-duplicate of the local Snap function inside
+                       AnimateToTargetX, but this standalone version is never
+                       actually called from anywhere in the file (see NOTES).
+
+BUTTONS
+----------
+  HookButtons()   wires leftButton -> Prev, rightButton -> Next (clearing old
+                  listeners first)
+  UpdateButtons()  (the live version)
+      Unlike its numbered sibling (see below), this ACTIVATES/DEACTIVATES
+      (SetActive) the nav buttons rather than merely toggling interactable -
+      an unavailable direction's button is fully hidden, not just greyed out.
+
+NAVIGATION
+-------------
+  Next() / Prev()  (the live versions)
+      Both guard against !built, an in-progress animation (isAnimating), and
+      the respective boundary (cardCount-1 / 0). Both: swap the selected-card
+      prefab from the old index to the new one (SwapSelected), advance
+      currentIndex, recompute targetX, refresh buttons and Play/Disabled state,
+      fire OnIndexChanged, then StopAllCoroutines() and start
+      AnimateToTargetX(targetX) - StopAllCoroutines is a blunt instrument here:
+      if anything ELSE on this component were ever using a coroutine, rapid
+      button mashing would also cancel that, though in practice only the slide
+      animation itself runs as a coroutine on this object.
+
+  SwapSelected(oldIndex, newIndex)
+      Replaces the OLD selected slot back to Normal and the NEW target slot to
+      Selected. The ORDER of these two ReplaceAt calls is deliberately chosen
+      based on direction (forward: place the new selected slot first, then
+      revert the old one; backward: the reverse) - the inline comment labels
+      this "safe swap order to avoid phantom cards", implying the naive
+      opposite order previously caused a visual glitch (likely a layout
+      rebuild timing issue where two cards briefly overlapped or a sibling
+      index conflicted mid-swap).
+
+  ReplaceAt(index, prefab, kind)
+      Destroys the existing card GameObject at that content child index,
+      instantiates the replacement prefab, restores its ORIGINAL sibling index
+      (so the new card takes the exact same list position), updates
+      slotKinds[index], rebinds it via BindCard, and fires OnCardRebuilt.
+
+CENTERING MATH
+------------------
+  ComputeTargetContentX(index)
+      Computes how far content must be shifted (negative X) so the card at
+      'index' sits exactly centred in the viewport, by walking every card
+      BEFORE it and summing (preferredWidth + spacing) to find that card's
+      left edge, then adding half its own width to find its centre. Clamps the
+      result between the content's natural leftmost scroll limit (viewport
+      width - total content width, or 0 if content is narrower than the
+      viewport) and 0 - so the FIRST and LAST cards cannot be centred past the
+      strip's actual edges, they simply centre as far as the available content
+      allows.
+
+  GetPreferredWidthAt(i)
+      Prefers a LayoutElement's preferredWidth if present and positive, else
+      falls back to the RectTransform's actual rect.width - supporting mixed
+      fixed-width and auto-sized cards in the same strip.
+
+BINDING A CARD
+------------------
+  BindCard(index, go)  (the live version)
+      Finds the StageCard component (on the instance or a child), sets its
+      title "STAGE {levelId}-{index+1}", reads star count and locked state
+      from SaveSystem.EnsureLevel(levelId, cardCount) (clamped to 0-3 stars,
+      locked if index is past highestUnlocked), applies both, and - if a
+      homeManager reference is assigned - fetches a reward preview via
+      HomeManager.TryGetStageRewardPreview and applies it to the card too
+      (subject to that method's own hpCase=1 mismatch, documented in
+      HomeManager's file).
+
+PLAY / DISABLED BUTTONS
+----------------------------
+  UpdatePlayButtonsForIndex(index)
+      Reads the same lock state and toggles playButton vs disabledButton
+      visibility accordingly. If locked and homeManager is assigned, wires
+      disabledButton to call homeManager.ShowLockedStageToast at toastAnchor
+      (or this transform as a fallback).
+
+PUBLIC JUMP API
+-------------------
+  JumpToIndex(newIndex, animate = true, invokeEvent = true)
+      Calls BuildIfNeeded() first (safe to call before the strip has ever been
+      built). Clamps newIndex into range. SPECIAL CASE: if newIndex equals the
+      current index, it still refreshes buttons/play-state and (if not
+      animating) snaps content to the recomputed target position - handling
+      the case where the strip's layout changed underneath an already-correct
+      selection - then optionally fires the event and returns early, WITHOUT
+      going through SwapSelected (there is nothing to swap). Otherwise performs
+      the full swap-and-slide sequence exactly like Next/Prev, but goes
+      straight to the target index rather than stepping one at a time, and
+      lets the caller choose whether to animate the slide at all (HomeManager
+      calls this with animate: false on scene entry so re-opening Home never
+      visibly scrolls).
+
+HOW IT CONNECTS
+---------------
+  - HomeManager subscribes to OnIndexChanged, calls BuildIfNeeded/JumpToIndex,
+    and is itself referenced back (homeManager field) for reward previews and
+    locked-stage toasts - a two-way relationship between the two classes.
+  - StageCard is the component every bound prefab must expose.
+  - SaveSystem.EnsureLevel is the source of truth for star/lock state per card.
+
+NOTES
+-----
+  - smoothTime, pixelSnapEpsilon and xVelocity are all declared (with
+    Inspector Range attributes suggesting they were meant to be tuned) but are
+    completely UNUSED by the live slide implementation, which instead uses a
+    fixed-duration coroutine Lerp (slideDuration) with a hard-coded easeOutCubic
+    curve. These read as leftovers from an earlier SmoothDamp-based approach
+    (xVelocity is exactly the kind of "current velocity" ref parameter
+    SmoothDamp requires) that was replaced by the current Lerp coroutine
+    without removing the old tuning fields.
+  - SnapToPixelGrid(x) is a dead public-surface-adjacent helper - the live
+    pixel-snapping logic is duplicated as a local function INSIDE
+    AnimateToTargetX instead of calling this method.
+  - Four dead numbered siblings remain: UpdateButtons1 (interactable-toggle
+    style instead of SetActive), Next1/Prev1 (an EARLIER, non-animated version
+    that snapped currentIndex and targetX immediately with no coroutine slide
+    at all - i.e. before the smooth-slide feature was added), and BindCard1
+    (identical to the live BindCard but WITHOUT the reward-preview lookup -
+    the live version is a strict superset).
+  - StopAllCoroutines() being called from within Next/Prev/JumpToIndex, rather
+    than tracking and killing only the specific slide coroutine, is a broad
+    instrument that happens to be safe today only because no other coroutine
+    currently runs on this component - worth a note if a future feature adds
+    one.

@@ -1,0 +1,54 @@
+================================================================================
+  BucketHeader.cs
+  Path : Assets/Scripts/UI/Units/BucketHeader.cs
+  Type : MonoBehaviour
+  Layer: UI / Units
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+The title bar of one roster "bucket" section (Deployed / Undeployed /
+Unachieved) in the Units screen, with an optional context menu button.
+
+TYPES
+-----
+  enum BucketType { Deployed, Undeployed, Unachieved }
+      The three roster groupings the Units UI organises characters into.
+
+FIELDS
+------
+  headerLeftPadding  (float, default 24)  left text margin, kept in code so it
+                     can be tuned without touching the TMP text asset directly
+  titleText   (TMP_Text)
+  menuButton  (Button, optional per-bucket overflow menu)
+  bucket      (BucketType, which section this header represents)
+
+PROPERTIES
+----------
+  Type  => bucket  (read-only)
+  Title  get/set on titleText.text; SETTING it also re-applies the left padding
+        (ApplyTitlePadding) so any external caller changing the title cannot
+        accidentally reset the margin
+  LeftPadding  get/set on headerLeftPadding, re-applies padding when set
+
+METHODS
+-------
+  Wire(Action<BucketType> onMenuClick)
+      Clears and re-adds a single click listener on menuButton that invokes the
+      callback WITH this header's own bucket type - lets one shared handler in
+      the parent controller know which bucket's menu was opened.
+
+  ApplyTitlePadding()  [private]
+      Writes headerLeftPadding into titleText.margin.x (the Vector4 margin's
+      left component).
+
+  Awake() / OnEnable() / OnValidate() [Editor only]
+      All three call ApplyTitlePadding, so the padding is correct whether the
+      value changes via code, the object re-enables, or a designer tweaks it in
+      the Inspector.
+
+HOW IT CONNECTS
+---------------
+  - UnitsPanelController creates/wires one of these per bucket section and
+    calls Wire with its own bucket-menu handler.

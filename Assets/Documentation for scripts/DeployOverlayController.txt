@@ -1,0 +1,165 @@
+================================================================================
+  DeployOverlayController.cs
+  Path : Assets/Scripts/UI/Units/DeployOverlayController.cs
+  Type : MonoBehaviour
+  Layer: UI / Units
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+The "swap a unit into your deployed team" overlay: shows the Deployed roster
+(shaking gently to invite a tap) and the Undeployed roster side by side, lets
+the player pick which undeployed unit to bring IN and which deployed unit to
+replace, and reports the swap back to UnitsPanelController to actually commit
+it. This class holds NO persistent model itself - it only mirrors the orders
+passed to it and reports index-based swap intents.
+
+INSPECTOR FIELDS
+----------------
+  Grids
+    deployedGrid, undeployedGrid  (Transform)  card containers
+  UI
+    titleText  (TMP_Text)
+    saveButton, closeButton  (Button)
+  Prefabs
+    cardPrefab  (UnitCardView)
+  undeployedStatsBurgerButton  (Button)  opens the Undeployed bucket's stats
+                               popup from within this overlay
+  unitsPanelController  (UnitsPanelController)  back-reference, dragged in the
+                        Inspector, used only to forward the burger-button click
+
+RUNTIME STATE
+-------------
+  _db  (UnitsDatabaseSO), _player (PlayerUnitsModel)
+  _deployedOrder, _undeployedOrder  (List<int>)  AUTHORITATIVE display order,
+    copied exactly from whatever UnitsPanelController passed in - this overlay
+    never re-sorts them itself, preserving the Cards screen's visual ordering
+  _candidateUndeployedId  (int, -1 = none)  the unit the player wants to bring IN
+  _replaceDeployedId      (int, -1 = none)  the deployed unit that will be replaced
+  _onSaveReplace  (Action<int,int,int,int>)  callback: (candidateId, replacedId,
+                  deployedIndex, undeployedIndex)
+  _onClose        (Action)
+  _deployedShakeTweens  (List<Tween>)  the idle "come tap me" animation tweens
+  _isClosing  (bool)  guards against a late RefreshWithOrders call arriving
+              after Close/Save has already started tearing the overlay down
+
+LIFECYCLE
+---------
+  Awake()   wires saveButton -> HandleSave and (if both refs exist)
+            undeployedStatsBurgerButton -> HandleUndeployedStatsBurgerClicked
+  OnDisable()  calls StopDeployedShake() - a safety net so tweens never keep
+               running on a hidden/destroyed object
+
+  HandleUndeployedStatsBurgerClicked()
+      Forwards to unitsPanelController.OpenUndeployedStatsFromSwapPanel() - a
+      public method exposed on the parent controller specifically for this.
+
+OPENING / REFRESHING  (the API UnitsPanelController drives)
+------------------------------------------------------------------
+  Show(candidateToDeploy, db, player, deployedOrder, undeployedOrder,
+      onSaveReplace, onClose)
+      Activates the GameObject and brings it to front (SetAsLastSibling).
+      Stores db/player and the two callbacks. Copies both order lists (clearing
+      first). Sets _candidateUndeployedId to the unit that triggered opening
+      the overlay (i.e. the player tapped an undeployed unit to swap it in) and
+      resets _replaceDeployedId to -1 (still to be chosen). Calls BuildUI(),
+      sets the title to "Select a Hero to Replace", and (re)wires the buttons.
+
+  RefreshWithOrders(deployedOrder, undeployedOrder, db, player,
+                    highlightUndeployedId, highlightDeployedId)
+      A LIGHTER re-render used right after a successful save, so the player can
+      keep swapping without the overlay fully closing and reopening. Ignored
+      entirely if _isClosing is true. Otherwise updates all the same state as
+      Show() and rebuilds.
+
+BUILDING THE UI
+------------------
+  BuildUI()
+      Clears both grids, then for the Deployed grid: iterates _deployedOrder in
+      order, SKIPPING any id that no longer exists / is not unlocked / is not
+      actually marked deployed in the live model (a defensive filter against
+      stale order lists), instantiates a card, binds it, and applies
+      SetDeployedTargetStyle(true) only to the card matching
+      _replaceDeployedId. Symmetrically for the Undeployed grid (skipping ids
+      that ARE deployed), applying SetOverlayCandidate(true) only to the card
+      matching _candidateUndeployedId. Finally calls StartDeployedShake() so
+      every deployed card begins its idle animation fresh on every rebuild.
+
+  Clear(t)   destroys every child of a Transform, iterating backwards.
+
+SELECTION
+------------
+  OnClickUndeployedCard(id)
+      Sets _candidateUndeployedId and re-applies SetOverlayCandidate across
+      every card currently in undeployedGrid so only the clicked one is
+      highlighted - a full re-scan rather than tracking/clearing a single
+      previous selection, simple but O(n) per click.
+
+  OnClickDeployedCard(id)
+      Symmetric for _replaceDeployedId and SetDeployedTargetStyle over
+      deployedGrid. Also updates saveButton.interactable to require BOTH a
+      candidate and a replace target selected before Save can be pressed
+      (though see HandleSave below - Save's own logic is actually more
+      permissive than this interactable gate suggests).
+
+SAVING
+---------
+  HandleSave()  (the live version)
+      Branch 1 - NO deployed target chosen (_replaceDeployedId < 0): treated
+      as equivalent to pressing Close - clears selection, stops the shake,
+      hides the overlay, and calls _onClose(). This means Save can act as a
+      cancel button if the player only picked an undeployed candidate but never
+      picked who to replace.
+      Branch 2 - still requires _candidateUndeployedId >= 0 (guards a
+      degenerate state where only a replace target was picked with no
+      candidate - in that case Save simply does nothing).
+      Otherwise: resolves both ids' current INDEX in their respective order
+      lists via IndexOf (clamping to a safe range if somehow not found - though
+      Mathf.Clamp on a -1 with a 0 lower bound just yields 0, effectively
+      "index 0" as a fallback), stops the shake, sets _isClosing, invokes
+      _onSaveReplace(candidateId, replacedId, deployedIndex, undeployedIndex),
+      clears selection, deactivates the GameObject, and calls _onClose().
+
+  IndexOf(list, id)  [static]  linear search returning -1 if not found.
+
+DEPLOYED-CARD SHAKE ANIMATION
+----------------------------------
+  StartDeployedShake()
+      Calls StopDeployedShake() first for safety, then for every child of
+      deployedGrid creates a DOTween DOLocalRotate((0,0,5), 0.8s, InOutSine,
+      infinite Yoyo, SetRelative(true)) - a gentle back-and-forth Z rotation
+      oscillating around whatever the card's CURRENT rotation happens to be at
+      creation time (relative, not absolute), giving every deployed card a
+      subtle "tap me to replace" wobble.
+
+  StopDeployedShake()
+      Kills every tracked tween, clears the list, and explicitly resets every
+      deployedGrid child's localRotation back to identity - so cards never end
+      up visually stuck mid-wobble after the overlay closes.
+
+HOW IT CONNECTS
+---------------
+  - UnitsPanelController owns the model (PlayerUnitsModel), calls Show/
+    RefreshWithOrders, and supplies onSaveReplace/onClose callbacks that
+    actually mutate the roster and persist through SaveSystem.
+  - UnitCardView.SetDeployedTargetStyle / SetOverlayCandidate provide the two
+    distinct highlight styles this overlay relies on.
+
+NOTES
+-----
+  - A dead numbered sibling HandleSave1() remains - it did NOT have the "no
+    replace target = act like Close" branch the live HandleSave adds; that
+    branch is the one meaningful behavioural difference introduced since.
+  - Because BuildUI defensively skips ids that fail the model's current
+    unlocked/deployed checks, an order list that has drifted out of sync with
+    the live model degrades gracefully (missing cards) rather than crashing -
+    but a genuinely stale order list would silently show fewer cards than
+    expected with no warning logged.
+  - A large block of blank lines and old commented-out design notes ("The
+    first edition in which selecting the deploy and undeploy happens when we
+    click on save", "always compute the current indices so they are not -1",
+    "Initial visual selection (scale) for both lists") remains at the end of
+    the file after the closing brace - harmless dead space, evidence of an
+    earlier click-to-save-immediately design that was replaced by the current
+    two-step select-then-Save flow.

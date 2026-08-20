@@ -1,0 +1,408 @@
+================================================================================
+  UnitsPanelController.cs
+  Path : Assets/Scripts/UI/Units/UnitsPanelController.cs
+  Type : MonoBehaviour
+  Layer: UI / Units
+  Scenes: MenuScene
+  LARGEST live script in the project (1428 lines).
+================================================================================
+
+PURPOSE
+-------
+The controller for the entire Units/roster screen: builds the three buckets
+(Deployed / Undeployed / Unachieved) of unit cards, routes clicks into the
+right detail view, wires the Upgrade/Deploy/Undeploy buttons, drives the
+per-bucket "view all stats" popup, and orchestrates the Deploy overlay swap
+flow end to end (including persisting the result through SaveSystem). It is
+the single largest coordination point in the UI layer.
+
+INSPECTOR FIELDS  (grouped)
+------------------------------
+  Cards Screen Section Roots: deployedGroupRoot, undeployedGroupRoot,
+    unachievedGroupRoot (RectTransform, header+container per bucket)
+  Bucket Headers: deployedHeader, undeployedHeader, unachievedHeader
+  Stats Panel: statsPanel (BucketStatsPanel), rowPrefab (BucketStatRow)
+  Design-Time Data: unitsDatabase, upgradeCost, progressionConfig, cpWeights
+  Screens: cardsScreen, detailScreen (the two top-level screen roots)
+  Cards Screen Buckets: deployedContainer, undeployedContainer,
+    unachievedContainer (Transform, where cards actually parent)
+  Detail View: UnDeployedSelection (an overlay marker GameObject),
+    undeployedDetailView, detailView, unAchivedDetailView (three separate
+    UnitDetailView instances - one per bucket context, not one shared view)
+  Detail Buttons: backButton, upgradeButton, upgradeDisabledButton,
+    deployButton, undeployButton
+  Bucket Slot Holders: undeployedParentHolder, unachievedParentHolder
+    (declared but not read anywhere in the file - see NOTES)
+  Prefabs: cardPrefab (UnitCardView)
+  deployOverlay (DeployOverlayController)
+  unachievedOffsetY (float, default 606) - vertical shift applied to the
+    Unachieved section when the Undeployed bucket is empty
+
+RUNTIME STATE
+-------------
+  _deployedSlotByUnit, _undeployedSlotByUnit  (Dictionary<int,int>) - REMEMBERED
+    sibling-index preferences per unit, used only by ApplySavedOrder (called
+    from BuildCardsIntoBuckets, NOT from RebuildAllBuckets - see NOTES)
+  _deployedOrder, _undeployedOrder  (List<int>) - the AUTHORITATIVE display
+    order, synced by EnsureOrderListsSync and mutated directly by
+    HandleDeploySave; this is what gets persisted via SaveSystem.SetUnitOrders
+    and what DeployOverlayController is handed verbatim to render
+  _spawnedCards (List<UnitCardView>), _cardsByUnitId (Dictionary<int,UnitCardView>)
+  _gsm (GameStartManager), PlayerUnits => _gsm.PlayerUnits (property)
+  _currency => CurrencyManager.Instance (property)
+  _selectedUnitId (int, -1 = none)
+  _unachievedBasePos / _unachievedBasePosCached - cached anchored position for
+    the Unachieved panel's up/down shift
+
+  private enum Bucket { Deployed, Undeployed, Unachieved }
+
+LIFECYCLE
+---------
+  Awake()
+      Finds GameStartManager (includeInactive: true; warns if missing). Wires
+      all three BucketHeader.Wire(OpenBucketPanel) callbacks. Calls
+      EnsureOrderListsSync() to seed the order lists from the model.
+
+  OnEnable()
+      Rebuilds everything from scratch (BuildCardsIntoBuckets) and shows the
+      Cards screen every time this panel becomes active - i.e. re-opening the
+      Units tab always gets a fresh snapshot rather than a cached one.
+      Subscribes CurrencyManager.OnCurrencyChanged -> HandleCurrencyChanged and
+      GameStartManager.ProgressionService.OnUnitUpgraded -> HandleUnitUpgraded.
+  OnDisable()   unsubscribes both, correctly paired.
+
+LAYOUT HELPERS
+------------------
+  AdjustUnachievedPanelPosition()
+      Caches the Unachieved group's original anchored position on first call,
+      then shifts it UP by unachievedOffsetY whenever the Undeployed container
+      is empty (so Unachieved visually fills the gap), otherwise restores the
+      base Y.
+
+  SwapPositions(a, b)
+      Swaps both anchoredPosition AND sibling index between two
+      RectTransforms - a full positional swap, not just a value copy.
+
+  UpdateBucketSectionsLayout()
+      Activates/deactivates each bucket's group root based on whether it has
+      any children. If Deployed has content but Undeployed is empty and
+      Unachieved has content, calls SwapPositions to visually move Unachieved
+      into Undeployed's normal slot - a second, DIFFERENT mechanism from
+      AdjustUnachievedPanelPosition's Y-offset approach for handling the same
+      "Undeployed is empty" situation (see NOTES).
+
+BUILDING THE CARD LISTS
+----------------------------
+  BuildCardsIntoBuckets()
+      The FULL rebuild path used on every OnEnable. Clears all three
+      containers and the card caches. For every UnitDefinitionSO in the
+      database (in database order): determines its Bucket via
+      GetBucketForUnit, instantiates a card into the matching container, binds
+      it (unlocked = bucket != Unachieved, level via GetLevelSafe), calls
+      SetLockAwareHeader, subscribes to OnUnlockStateChanged, and shows the
+      requirement text only for Unachieved cards. After the loop, calls
+      ApplySavedOrder for BOTH the deployed and undeployed containers (using
+      the _deployedSlotByUnit/_undeployedSlotByUnit dictionaries - see NOTES,
+      these are never actually populated anywhere), then
+      UpdateBucketSectionsLayout and AdjustUnachievedPanelPosition.
+
+  GetBucketForUnit(def)
+      Returns Unachieved if the model is missing or the unit is locked;
+      otherwise Deployed or Undeployed based on IsDeployed.
+
+CLICK ROUTING
+----------------
+  OnCardClicked(unitId)
+      Sets _selectedUnitId, updates every spawned card's SetSelected
+      highlight, resolves the unit's current bucket, and dispatches to
+      ShowDetail_Deployed / ShowDetail_Undeployed / ShowDetail_Unachieved.
+
+SCREEN SWITCHING
+-------------------
+  ShowCardsScreen() / ShowCardsScreenPublic()
+      Activates cardsScreen, deactivates detailScreen, clears every card's
+      selection/overlay marks, and refreshes upgrade cues. The Public wrapper
+      exists so external callers (e.g. a back button elsewhere) can trigger it.
+
+  ShowDetail_Deployed(unitId)
+      Shows detailScreen with ONLY detailView active (the other two detail
+      views hidden). Calls BuildUnlockedStats(unitId, detailView), wires the
+      back button, shows the Upgrade button, wires Deploy/Undeploy buttons to
+      show Undeploy only, and refreshes upgrade cues.
+
+  ShowDetail_Undeployed(unitId)
+      Symmetric with undeployedDetailView active, Upgrade button hidden, and
+      Deploy button shown (Undeploy hidden).
+
+  ShowDetail_Unachieved(unitId)  (the live version)
+      Shows unAchivedDetailView only, calls BuildLockedStats(unitId), wires
+      back, and hides all three action buttons - a pure "preview + locked"
+      screen with no interactive commands.
+
+BUTTON WIRING
+----------------
+  WireBackButton()
+      Re-wires backButton to call ShowCardsScreen and clear selections. Also
+      hides UnDeployedSelection (the deploy-overlay marker), brings
+      detailScreen to front, and refreshes upgrade cues.
+
+  WireUpgradeButton(unitId, visible)
+      Computes affordability (coins >= upgrade cost at the unit's current
+      level). Shows EITHER upgradeButton (if visible AND affordable, wired to
+      call ProgressionService.TryUpgrade then refresh the detail view) OR
+      upgradeDisabledButton (if visible AND NOT affordable, wired to show a
+      "not enough resources" stacked toast anchored at the detail view's
+      ToastAnchor). Exactly one of the two is ever shown at a time.
+
+  WireDeployButtons(unitId, showDeploy, showUndeploy)
+      Only wires deployButton (to OnClickDeploy, the overlay opener) -
+      showUndeploy is accepted as a parameter but the undeployButton is NEVER
+      actually wired or shown anywhere in this method (see NOTES - "Undeploy"
+      as a direct one-click action from the Deployed detail screen currently
+      does not exist; swapping is the only supported path).
+
+  HideButton(b)   clears listeners and deactivates.
+
+STATS COMPUTATION
+---------------------
+  BuildUnlockedStats(unitId, targetView)
+      Computes CURRENT stats (base * growth at current level, but only
+      attack/maxHP/moveSpeed/attackSpeed are scaled by growth here - defense
+      and attackRange are left at their BASE SO values, matching
+      ProgressionConfigSO's own partial growth-curve set for those two stats
+      that PlayerProgressionService's snapshot ALSO computes fully; here
+      though, only 4 of 6 stats get growth applied even though def/dRNG deltas
+      are still computed as `nxt.X - cur.X`, which will be exactly 0 since
+      neither cur nor nxt scales those fields). Computes NEXT-level stats the
+      same way. Calls targetView.SetStatRows with all 12 values (though, per
+      UnitDetailView's own doc, SetStatRows only actually DISPLAYS 3 of the 12
+      it is passed). Computes CP via CPCalculator, sets meta (xp hard-coded to
+      70 - a placeholder value, not derived from anything), sets the coins-cost
+      display, and finally calls RefreshStatsPopupData with fresh cpNow/cpNext
+      values (recomputing CP a second time for the "next" state) - the popup
+      IS fully correct since RefreshStatsPopupData uses all six stats properly.
+
+  BuildLockedStats(unitId)
+      Same shape but always at level 1 with zero deltas (locked units get no
+      "next level" preview), and sets the requirement text via
+      SetRequirementDetail.
+
+  GetLevelSafe(unitId)   floor 1, model-missing-safe.
+
+MOVING CARDS BETWEEN BUCKETS
+---------------------------------
+  MoveCardToBucket(unitId, dest)
+      Re-parents an EXISTING card component (rather than destroying/recreating
+      it) to the target container, appends it as the last sibling, refreshes
+      its badge and requirement text, applies the upgrade cue, and updates
+      section layout. Used by the (effectively dead) ProcessRequirementUnlocks1.
+
+EXTERNAL EVENT HANDLERS
+---------------------------
+  HandleCurrencyChanged(currency, newValue, delta)
+      Only acts if the detail screen is currently showing a selected unit;
+      re-wires the upgrade button (in case affordability changed) and
+      refreshes upgrade cues across the deployed bucket.
+
+  HandleUnitUpgraded(unitId, oldLevel, newLevel, spentGems)
+      Refreshes that unit's card badge, and if its detail is currently open,
+      calls ShowDetail_Deployed again to fully refresh.
+
+  HandleLevelStageChanged(levelIndex, stageIndex, globalStage)
+      Logs the stage change and calls ProcessRequirementUnlocks().
+      !! NEVER SUBSCRIBED to any event anywhere in this file - see the
+      !! project-wide finding under NOTES below.
+
+  ProcessRequirementUnlocks()  (the live version)
+      Walks the database; for every still-locked unit whose required stage has
+      been reached (via LevelManager.Instance.HasReached), unlocks it into the
+      model, persists via SaveSystem.SetUnitUnlocked/SetUnitDeployed(false),
+      and if ANY unit was unlocked, calls EnsureOrderListsSync +
+      RebuildAllBuckets. This is a complete, correct implementation - it is
+      simply never triggered because HandleLevelStageChanged (its only caller)
+      is never wired to LevelManager.OnLevelStageChanged.
+
+  HandleCardUnlockStateChanged(unitId, unlocked)
+      The DEBUG-context-menu callback path from UnitCardView. Directly
+      Locks/Unlocks the model (NOT through SaveSystem, so this debug path does
+      not persist), rebuilds all cards, and refreshes the currently open detail
+      view if it matches.
+
+UPGRADE CUE (the little floating arrow)
+--------------------------------------------
+  IsUpgradeable(unitId)   coins >= cost at current level
+  RefreshDeployedUpgradeCues()   applies SetUpgradeCue across every card
+                                 currently in deployedContainer
+  IsDeployedBucket(parent)       parent == deployedContainer
+  ApplyUpgradeCue(card, parent)  shows the cue only if the card is in the
+                                 deployed bucket AND affordable
+
+BUCKET STATS POPUP
+----------------------
+  OpenBucketPanel(type)  (the live version)
+      Resolves the title from the matching BucketHeader, clears and shows
+      statsPanel, then for every card currently in the matching bucket
+      container: recomputes current stats and CP the same way
+      BuildUnlockedStats does, instantiates a BucketStatRow, Binds it (passing
+      the upgrade COST into the row's "coins" slot, effectively repurposing
+      that column as a cost display in this context), and calls
+      row.Initialize(unitId, type, OnBucketRowClicked). After the loop,
+      disables the divider line on the LAST row only (a common "no separator
+      after the final item" list-styling trick).
+
+  OnBucketRowClicked(unitId, bucketType)
+      Closes the stats panel and calls OnCardClicked(unitId) - clicking a row
+      in the popup jumps straight to that unit's full detail screen.
+
+DEPLOY OVERLAY FLOW
+------------------------
+  OnClickDeploy()
+      Requires deployOverlay and PlayerUnits. Calls EnsureOrderListsSync(),
+      then opens the overlay with _selectedUnitId as the candidate and the
+      CURRENT order lists, wiring onSaveReplace to HandleDeploySave and
+      onClose to CloseDeployOverlay. Activates UnDeployedSelection (brought to
+      front) and hides both cardsScreen and detailScreen underneath -
+      maintaining a single-screen-visible invariant.
+
+  OpenUndeployedStatsFromSwapPanel()
+      Public entry point called by DeployOverlayController's burger button;
+      re-syncs order lists and reuses OpenBucketPanel(Undeployed) - the SAME
+      popup used from the main Cards screen, opened on top of the swap overlay.
+
+  CloseDeployOverlay()
+      Hides the overlay and returns to the Cards screen, clearing selection.
+
+  HandleDeploySave(candidateId, replacedId, k, j)  (the live version)
+      The actual swap commit, called when the player confirms a replacement in
+      the overlay.
+      1. Guards: PlayerUnits must exist, both ids must be >= 0 and exist in the
+         model.
+      2. Captures BOTH units' CURRENT levels before any mutation.
+      3. Removes candidateId from _undeployedOrder and replacedId from
+         _deployedOrder, clamps k/j to the (now-shrunk) list sizes, and
+         INSERTS candidateId into _deployedOrder at k and replacedId into
+         _undeployedOrder at j - so the swap lands at the exact visual
+         position the player interacted with in the overlay.
+      4. Flips PlayerUnits.SetDeployed for both.
+      5. !! LEVEL TRANSFER RULE: candidateId INHERITS replacedId's level
+         (PlayerUnits.SetLevel(candidateId, replacedLevel)), and replacedId is
+         RESET TO LEVEL 1 (PlayerUnits.SetLevel(replacedId, 1)). This means
+         swapping a unit OUT of the deployed team permanently erases its
+         upgrade progress back to level 1 - a significant, easy-to-miss game
+         design consequence of the deploy-swap mechanic. Any gems the player
+         spent upgrading a unit that later gets benched are lost.
+      6. Persists everything through SaveSystem: SetUnitUnlocked/SetUnitDeployed/
+         SetUnitLevel for the candidate, SetUnitDeployed/SetUnitLevel for the
+         replaced unit, then sanitizes both order lists (valid, existing,
+         distinct ids only) and calls SaveSystem.SetUnitOrders to persist the
+         display order too.
+      7. If the overlay is still open, calls RefreshWithOrders to re-render it
+         in place.
+         !! LIKELY BUG: the call passes (..., candidateId, replacedId) into
+         !! RefreshWithOrders's (highlightUndeployedId, highlightDeployedId)
+         !! parameter SLOTS respectively - despite the inline comments labeling
+         !! them the other way around ("/* highlightDeployed */ candidateId,
+         !! /* highlightUndeployed*/ replacedId"). Since candidateId is now
+         !! actually DEPLOYED (not undeployed) and replacedId is now actually
+         !! UNDEPLOYED (not deployed) after the swap, and
+         !! DeployOverlayController.BuildUI only highlights a card if its id
+         !! matches _candidateUndeployedId WITHIN THE UNDEPLOYED GRID (and
+         !! _replaceDeployedId WITHIN THE DEPLOYED GRID), neither highlight
+         !! condition can be satisfied post-swap - the freshly swapped cards
+         !! render with NO NEW selection highlight in the refreshed overlay,
+         !! even though the code appears (and is commented) to intend keeping
+         !! them highlighted. Worth verifying visually in the Editor and
+         !! swapping the two arguments if this is confirmed unintended.
+      8. Calls EnsureOrderListsSync() and RebuildAllBuckets() to refresh the
+         Cards screen underneath.
+
+REBUILDING FROM THE MODEL
+------------------------------
+  RebuildAllBuckets()
+      A full teardown/rebuild driven STRICTLY by _deployedOrder/_undeployedOrder
+      (rather than database order like BuildCardsIntoBuckets) plus a final pass
+      over the database for Unachieved units. Destroys all children of all
+      three containers, then rebuilds each bucket from its order list (double-
+      checking the unlocked/deployed flags still agree with the model before
+      including an id), resetting every card's selection/overlay marks to
+      clean. Ends with RefreshDeployedUpgradeCues, UpdateBucketSectionsLayout,
+      and AdjustUnachievedPanelPosition. This is the path used after any
+      state-changing action (deploy swap, requirement unlock) rather than
+      BuildCardsIntoBuckets, which is reserved for the initial OnEnable.
+
+  ApplySavedOrder(parent, slotMap)
+      A two-pass sibling-index reordering algorithm: PASS 1 places every child
+      whose unitId has a saved slot index (from slotMap) at that ABSOLUTE
+      index (skipping invalid/out-of-range indices, and probing forward if the
+      slot is already taken); PASS 2 fills every remaining, unassigned child
+      into the leftover free slots in their original relative order. This is a
+      general "restore a subset of pinned positions, keep the rest stable"
+      algorithm - but see NOTES, slotMap is never actually populated with real
+      data anywhere in this file.
+
+  EnsureOrderListsSync()
+      Rebuilds deployedIds/undeployedIds fresh from the model (only unlocked
+      units, split by IsDeployed), then: if an order list is currently EMPTY
+      but the corresponding id set is not, seeds it sorted by id (first-time
+      initialization); removes any id from the order lists that is no longer
+      in the current set (unlocked-then-relocked, etc.); and appends any id
+      present in the set but missing from the order list (newly unlocked).
+      This is the reconciliation function that keeps _deployedOrder/
+      _undeployedOrder consistent with PlayerUnits without ever fully
+      resorting an already-established order.
+
+HOW IT CONNECTS
+---------------
+  - Reads UnitsDatabaseSO/UpgradeCostSO/ProgressionConfigSO/CPWeightsConfigSO -
+    essentially the whole Data layer feeds this one controller.
+  - Reads/writes PlayerUnitsModel via GameStartManager, and persists every
+    mutation through SaveSystem.
+  - Drives UnitCardView, three separate UnitDetailView instances,
+    BucketStatsPanel/BucketStatRow, and DeployOverlayController.
+  - Subscribes to CurrencyManager.OnCurrencyChanged and
+    GameStartManager.ProgressionService.OnUnitUpgraded.
+
+NOTES / RISKS - IMPORTANT
+--------------------------
+  !! UNIT UNLOCK-BY-STAGE APPEARS UNWIRED HERE TOO: HandleLevelStageChanged
+  !! (the only caller of the fully-correct ProcessRequirementUnlocks) is never
+  !! subscribed to LevelManager.OnLevelStageChanged or any other event in this
+  !! file - grep confirms no call site. Combined with the separate finding in
+  !! PlayerProgressionService (its own ProcessStageUnlocks is ALSO never
+  !! called from anywhere in the project), this means there may be NO live
+  !! automatic path that unlocks a new unit purely from reaching its required
+  !! stage during normal play - a unit only becomes unlocked today via
+  !! GameStartManager's first-run seeding, or the DEBUG unlock context-menu
+  !! path on UnitCardView (which does not even persist). Worth flagging to a
+  !! developer as a likely missing wiring step (e.g. subscribing
+  !! LevelManager.Instance.OnLevelStageChanged += HandleLevelStageChanged
+  !! somewhere in Awake/OnEnable).
+  - The reward-swap level-transfer rule (candidate inherits level, replaced
+    resets to 1) is a real design decision with real player-facing
+    consequences - see HandleDeploySave notes above.
+  - The likely-swapped highlight arguments in the post-swap RefreshWithOrders
+    call (see above) would only be visible as "the overlay doesn't visually
+    confirm which cards just swapped" - a cosmetic bug, not a data-correctness
+    one, since the actual model state and saved data are correct regardless.
+  - _deployedSlotByUnit / _undeployedSlotByUnit are declared, passed into
+    ApplySavedOrder, and the algorithm that CONSUMES them is fully implemented
+    - but nothing in this file ever WRITES an entry into either dictionary.
+    ApplySavedOrder therefore always takes its "no saved slot" fallback path
+    (pass 2 only) in current usage - dead capability, not a bug, but a
+    partially-built feature.
+  - undeployedParentHolder / unachievedParentHolder are declared and
+    Inspector-assignable but never read anywhere in the file.
+  - WireDeployButtons never actually wires or shows undeployButton despite
+    accepting a showUndeploy parameter - there is currently no direct
+    "undeploy without swapping" action available from the Deployed detail
+    screen; the deploy-overlay swap is the only supported roster-editing flow.
+  - Two dead numbered siblings of significant size remain as methods:
+    ShowDetail_Unachieved2 (an empty stub - three blank lines, does nothing),
+    OpenBucketPanel1 (near-identical to the live OpenBucketPanel but uses
+    ClearContainer instead of statsPanel.Clear() to wipe the popup), and
+    HandleDeploySave1/ProcessRequirementUnlocks1 (earlier, less-guarded
+    versions of the live save/unlock logic - HandleDeploySave1 in particular
+    lacks the id-existence guards and the SaveSystem persistence calls the
+    live version adds).
+  - BuildUnlockedStats's xp meta value is hard-coded to 70 for every unit at
+    every level - clearly a placeholder never wired to a real source.

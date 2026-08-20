@@ -1,0 +1,113 @@
+================================================================================
+  NewCharacterStats.cs
+  Path : Assets/Scripts/UI/Home/NewCharacterStats.cs
+  Type : MonoBehaviour
+  Layer: UI / Home
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+The "new hero available / claim it" popup shown from the Home screen. It is a
+self-contained, simplified sibling of UnitDetailView (duplicating much of its
+header/stats-popup structure) specialised for ONE extra action: actually
+UNLOCKING the unit when the player taps Claim.
+
+FIELDS
+------
+  currentUnitId  (int, runtime)
+  currentVisualInstance  (GameObject, declared but never assigned/used - see
+                          NOTES)
+  Header UI: portraitImage, nameText, levelText
+  Stats UI (compact): hpText, atkText, defText  (no delta labels on the main
+    row set, unlike UnitDetailView)
+  Buttons: burgerButton (opens the full stats popup), claimButton, popupCloseBtn
+  Stats Popup (overlay): statsPopupRoot, popupHeader, popupCP/HP/ATK/DEF/Move/
+    AtkSpd/Range and their matching *Delta fields - an EXACT field-for-field
+    duplicate of UnitDetailView's popup section
+
+LIFECYCLE
+---------
+  Awake()
+      Wires claimButton -> OnClaimClicked, burgerButton -> ShowStatsPopup,
+      popupCloseBtn -> HideStatsPopup, and hides statsPopupRoot.
+
+STATS POPUP
+--------------
+  ShowStatsPopup() / HideStatsPopup()
+      Simple activate/deactivate toggles - UNLIKE UnitDetailView's versions,
+      these do NOT hide/show any character visual instance (there is no
+      currentVisualInstance actually populated here to manage).
+
+DISPLAY
+----------
+  SetHeader(displayName, portrait, level)   sets portrait/name/"LVL. N" text
+  SetStatRows(hpCurrent, atkCurrent, defCurrent)
+      A SIMPLER 3-parameter version than UnitDetailView's 12-parameter
+      SetStatRows - this one takes no deltas at all (matching the fact that
+      this popup is for a brand-new, not-yet-owned unit, where a "next level"
+      preview makes no sense at level 1).
+  SetNumber(label, value, dec)   identical helper to UnitDetailView's
+  Compact(v)  [static]   identical unused utility, present here too
+  RefreshStatsPopupData(unitName, cpNow, cpDelta, current, next)   an EXACT
+      copy of UnitDetailView's implementation, all seven stats with deltas via
+      the local DeltaText helper
+  DeltaText(d)  [private static]   identical to UnitDetailView's version, same
+      one-sided epsilon quirk (d <= 0.0001f reads as "0", not Mathf.Abs(d))
+
+SHOWING THE POPUP FOR A SPECIFIC UNIT
+------------------------------------------
+  Show(unitId)  (the live version)
+      Stores currentUnitId. Resolves GameStartManager.Instance.unitsDatabase
+      (warns and shows an otherwise-empty popup if missing). Linear-scans
+      db.Units for the matching UnitDefinitionSO (rather than using
+      UnitsDatabaseSO.GetById, which exists precisely for this - a missed
+      reuse opportunity, though functionally equivalent). Reads the unit's
+      CURRENT level from PlayerUnits.GetLevel if available, else defaults to 1
+      (relevant for a NOT-YET-UNLOCKED unit, which would read level 1 anyway
+      since it has no saved progress). Builds a UnitStatsRuntime from
+      def.baseStats and applies growth multipliers for attack/maxHP/moveSpeed/
+      attackSpeed (defense and range left at base, same partial-growth pattern
+      seen in UnitsPanelController.BuildUnlockedStats). Calls SetHeader and
+      SetStatRows, then activates the GameObject.
+
+CLAIMING
+-----------
+  OnClaimClicked()
+      Calls ClaimCharacter(currentUnitId), then deactivates this GameObject.
+
+  ClaimCharacter(unitId)
+      Resolves GameStartManager.Instance.ProgressionService and calls
+      UnlockUnit(unitId) on it - which unlocks in PlayerUnitsModel AND persists
+      via SaveSystem.SetUnitUnlocked (see PlayerProgressionService's own doc).
+      This is likely the ACTUAL live mechanism by which a player ends up with a
+      newly unlocked unit in a normal playthrough, GIVEN the separate finding
+      (documented on HandleLevelStageChanged/ProcessRequirementUnlocks in
+      UnitsPanelController and ProcessStageUnlocks in
+      PlayerProgressionService) that the automatic "unlock the moment a stage
+      requirement is reached" code paths are never actually triggered anywhere
+      in the project. If that is correct, THIS claim button - triggered by
+      HomeManager after a win, per its own doc - may be the only way units
+      become unlocked during normal play beyond the initial roster seed.
+
+HOW IT CONNECTS
+---------------
+  - HomeManager.NotifyStageWon (or a related win-flow method) finds this
+    component via FindObjectOfType and calls Show(unitId) for a unit that just
+    became eligible.
+  - Calls PlayerProgressionService.UnlockUnit, tying it into the same
+    unlock/persistence path the rest of the roster system uses.
+
+NOTES
+-----
+  - A dead numbered sibling Show1(unitId) remains - it only sets currentUnitId
+    and activates the GameObject, doing NONE of the stat-loading work the live
+    Show() performs; an early stub.
+  - currentVisualInstance is declared but never assigned anywhere - dead field,
+    a leftover from copying UnitDetailView's structure without the matching
+    visual-instantiation logic.
+  - This file duplicates a substantial amount of code verbatim from
+    UnitDetailView (RefreshStatsPopupData, DeltaText, SetNumber, Compact) -
+    a shared base class or utility would remove the duplication, though as
+    written both copies are independently correct and consistent with each
+    other.

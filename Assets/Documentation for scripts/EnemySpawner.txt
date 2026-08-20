@@ -1,0 +1,128 @@
+================================================================================
+  EnemySpawner.cs
+  Path : Assets/Scripts/Combat/Spawning/EnemySpawner.cs
+  Type : MonoBehaviour
+  Layer: Combat / Spawning
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+Executes a LevelConfig: runs through its waves in order, spawns the enemies at
+computed positions in the chosen formation, and (loosely) waits for each wave to
+be cleared before moving to the next.
+
+INSPECTOR FIELDS
+----------------
+  levelConfig  (LevelConfig)  the stage's wave data
+  cpWeights    (CPWeightsConfigSO, optional)  passed through to every spawned
+               enemy for CP calculation
+
+RUNTIME STATE
+-------------
+  _alive  (int)  count of currently-alive spawned enemies, used as the
+          "wave clear" gate
+
+LIFECYCLE
+---------
+  Start()
+      Warns and aborts if levelConfig is missing, else starts RunLevel().
+
+PAUSE-AWARE WAITING
+---------------------
+  IsGameplayPaused()
+      Checks HudCurrencyView.Instance?.IsGameplayPaused, null-safe.
+
+  WaitForSecondsGameplay(duration)  [coroutine]
+      A custom wait that accumulates elapsed time only while NOT paused,
+      polling every frame - this is how wave delays correctly freeze during a
+      pause (revive offer, roguelite skill pick) without using Time.timeScale.
+
+MAIN LOOP
+---------
+  RunLevel()  (the live version)
+      1. stageLevel = LevelManager.CurrentStage if LevelManager.Instance
+         exists, ELSE levelConfig.levelNumber as a fallback - this lets the
+         scene be tested standalone without a LevelManager present.
+      2. Waits levelConfig.startDelay (pause-aware).
+      3. For each wave in order:
+           - waits wave.delayBeforeWave if set (pause-aware)
+           - dispatches to SpawnAllTogetherGrid or SpawnTwoRows based on
+             wave.formation, passing the SAME stageLevel to every wave (a
+             stage does not get harder wave-to-wave within itself, only
+             stage-to-stage)
+           - yield return new WaitUntil(() => _alive == 0) - waits for every
+             spawned enemy in the wave to die before the next wave begins.
+      A trailing comment notes stage completion is currently handled by WinPanel
+      after the player claims victory, not automatically here.
+
+FORMATIONS
+----------
+  SpawnAllTogetherGrid(wave, stageLevel)  [coroutine]
+      1. Validates each entry (ValidateEntry) and sums their counts into total;
+         bails out (yield break) if total is 0.
+      2. Builds an INTERLEAVED spawn order: round-robins across entries so
+         different enemy types are visually mixed rather than spawning in
+         blocks (loop i from 0..maxCount, and for each i, add one instance from
+         every entry that still has count > i).
+      3. Generates that many grid positions via GenerateGridPositions.
+      4. Instantiates every entry via SpawnOne in one pass (no per-unit delay).
+
+  SpawnTwoRows(wave, stageLevel)  [coroutine]
+      1. Splits entries into front/back lists by WaveEntry.row.
+      2. Computes frontY/backY from spawnMin/Max, frontAnchor and rowYOffset
+         (or half the spawn area's Y span if rowYOffset is 0).
+      3. Spawns the whole front row at once, evenly distributed along X via
+         DistributeAlongX.
+      4. Waits wave.secondRowDelay (pause-aware) if there is a back row.
+      5. Spawns the whole back row the same way.
+
+LOW-LEVEL UTILITIES
+---------------------
+  ValidateEntry(e)
+      Requires both enemyPrefab and statsBase; logs a warning and skips
+      otherwise so one bad entry does not halt the whole wave.
+
+  SpawnOne(entry, pos, stageLevel)
+      Instantiates the prefab, increments _alive, and if it has an EnemyManager
+      configures statsBase/unitLevel/stageLevel/cpWeights and calls
+      Initialize(stageLevel) - this single call is what makes the spawned enemy
+      build its live stats and CP (see EnemyManager's own doc). Then starts
+      WatchDeath on its EnemyStats if present.
+
+  WatchDeath(EnemyStats e)  [coroutine]
+      Polls every frame until the enemy is null or enemyIsdead, then decrements
+      _alive (floored at 0). This coroutine, one per spawned enemy, is what lets
+      RunLevel's WaitUntil(_alive == 0) know when a wave is cleared.
+
+  GenerateGridPositions(min, max, count, columns, minSpacing)  [static]
+      Computes an evenly-spaced grid inside the rectangle. Columns default to
+      ceil(sqrt(count)) if not specified. Spacing is the larger of the "fit
+      evenly" spacing and the configured minSpacing. Rows are filled top-to-
+      bottom, all positions clamped inside the rectangle.
+
+  DistributeAlongX(xMin, xMax, count)  [static]
+      Evenly spaces count positions between xMin and xMax inclusive (a single
+      position lands exactly in the centre).
+
+HOW IT CONNECTS
+---------------
+  - Reads LevelConfig and its Wave/WaveEntry data.
+  - Reads LevelManager.CurrentStage for the CP/progression lens.
+  - Drives EnemyManager.Initialize on every spawned enemy.
+  - Reads HudCurrencyView.Instance.IsGameplayPaused for pause-aware waiting.
+
+NOTES
+-----
+  - A dead numbered sibling RunLevel1() remains - it always used
+    levelConfig.levelNumber and never consulted LevelManager, i.e. it predates
+    the stage-based difficulty hookup. The live RunLevel() is what actually
+    runs.
+  - The "wait for wave clear" gate (WaitUntil(_alive == 0)) means if even one
+    enemy from a wave never dies (for example it gets stuck, or its EnemyStats
+    is missing so WatchDeath was never started for it), the ENTIRE STAGE stalls
+    forever, since the next wave never spawns. There is no timeout.
+  - CP weighting is optional (cpWeights may be null); EnemyManager falls back to
+    hard-coded weights via UnitCP_WithFallback in that case.
+  - concurrencyCap on Wave is authored but never read here - waves always spawn
+    their full count at once rather than trickling in.

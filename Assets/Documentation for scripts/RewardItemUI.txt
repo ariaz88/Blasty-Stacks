@@ -1,0 +1,32 @@
+================================================================================
+  RewardItemUI.cs
+  Path : Assets/Scripts/UI/WinLose/RewardItemUI.cs
+  Type : MonoBehaviour
+  Layer: UI / WinLose
+================================================================================
+
+PURPOSE
+-------
+A tiny, generic "icon + amount" UI row - one visual line item for a single
+reward type (a coin icon and its count, a gem icon and its count, etc.).
+
+FIELDS
+------
+  iconImage   (Image)
+  amountText  (TextMeshProUGUI)
+
+METHODS
+-------
+  Setup(Sprite icon, int amount)
+      Sets the icon and the amount text (plain number, no "x" prefix), both
+      null-checked so a partially-wired prefab does not throw.
+
+HOW IT CONNECTS
+---------------
+  - A reusable presentation component, likely instantiated per reward type in a
+    rewards summary list (e.g. on the Home screen or a results breakdown).
+
+NOTES
+-----
+  - Deliberately minimal - no logic, only display. Safe to reuse anywhere a
+    single "icon + number" row is needed.

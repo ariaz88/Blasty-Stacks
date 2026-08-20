@@ -1,0 +1,65 @@
+================================================================================
+  StageRewardCalculator.cs
+  Path : Assets/Scripts/UI/WinLose/StageRewardCalculator.cs
+  Type : [Serializable] plain class (StageRewardConfig) + static class
+         (StageRewardCalculator) in the same file
+  Layer: UI / WinLose
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The shared formula for how much coins/gems/heroXP a stage victory is worth,
+factoring in both the stage number (higher stages pay more) and how much
+health the player's gate had left (a performance bonus). Used by both the Home
+screen (for reward previews) and WinPanel (for the actual payout).
+
+TYPES
+-----
+  class StageRewardConfig  [Serializable]
+      baseRewardStageValues   (WinPanel.RewardValues)  Stage-1 base payout
+      perStageBonusPercent    (float, default 0.05)  DECLARED but not read by
+                              the calculator below - superseded by the three
+                              per-currency percents that follow
+      coinsPerStagePercent    (float, default 0.05)
+      gemsPerStagePercent     (float, default 0.20)
+      xpPerStagePercent       (float, default 0.05)
+      tier1Multiplier         (float, default 1.0)   lowest HP case
+      tier2Multiplier         (float, default 1.2)
+      tier3Multiplier         (float, default 1.5)   full HP case
+
+  static class StageRewardCalculator
+      GetRewardForStageAndHpCase(stage1Based, hpCase, cfg) -> WinPanel.RewardValues
+          Returns a zeroed RewardValues if cfg is null.
+          Clamps stage1Based to >= 1 and hpCase to the 1..3 range.
+          Computes COMPOUNDING per-stage multipliers for each currency
+          independently:
+              mul = (1 + percent) ^ (stage1Based - 1)
+          so stage 1 always pays exactly the base amount, and each currency
+          grows at its OWN rate (gems grow fastest by default, at 20%/stage).
+          Builds a "stageBase" reward from these multipliers, then computes
+          THREE tiered reward amounts (r1, r2, r3) by scaling stageBase by
+          tier1/2/3Multiplier via WinPanel.RewardValues.FromScaled.
+          !! ACCUMULATION, NOT SELECTION: the final total is built by ADDING
+          !! tiers together up to hpCase - "if (hpCase >= 1) total.Add(r1);
+          !! if (hpCase >= 2) total.Add(r2); if (hpCase >= 3) total.Add(r3);" -
+          !! so a full-HP win (hpCase 3) actually SUMS r1+r2+r3, not just r3.
+          !! This means the effective payout ratio between a low-HP win and a
+          !! full-HP win is much larger than the tier multipliers alone would
+          !! suggest (e.g. with the defaults, hpCase 3 pays 1.0+1.2+1.5 = 3.7x
+          !! the stageBase, not 1.5x). Worth confirming this is the intended
+          !! design before retuning tier multipliers, since changing e.g.
+          !! tier1Multiplier affects EVERY hpCase's total, not just the lowest one.
+
+HOW IT CONNECTS
+---------------
+  - WinPanel.CalculateAllRewards calls this with the CP-relevant stage number
+    (from HomeManager.CurrentStage1Based) and the hpCase computed from the
+    gate's remaining HP percent.
+  - Shares the WinPanel.RewardValues type (coins/gems/heroXP) so both WinPanel
+    and HomeManager agree on the reward shape.
+
+NOTES
+-----
+  - perStageBonusPercent is authored in the Inspector but has zero effect on
+    the computed reward - only the three per-currency percent fields matter.

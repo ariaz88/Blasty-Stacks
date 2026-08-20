@@ -1,0 +1,157 @@
+================================================================================
+  AdManager.cs
+  Path : Assets/Scripts/Core/Ads/AdManager.cs
+  Type : MonoBehaviour - singleton, DontDestroyOnLoad
+  Layer: Core / Ads
+  Scenes: NOT YET PLACED IN ANY SCENE (structure only - see NOTES)
+================================================================================
+
+PURPOSE
+-------
+The single facade for all Google AdMob traffic: banner, interstitial, and
+rewarded ads. Gameplay and UI code never reference GoogleMobileAds types
+directly - they call AdManager.Instance and receive plain C# callbacks. This
+keeps the SDK dependency confined to one file and lets the rest of the project
+compile with or without the plugin installed.
+
+COMPILE GUARD - IMPORTANT
+-------------------------
+  The GoogleMobileAds SDK is NOT in Packages/manifest.json yet. Every line that
+  touches the SDK is wrapped in:
+
+      #if GOOGLE_MOBILE_ADS ... #endif
+
+  Without that define the class still compiles and behaves as a "no-ad mode"
+  stub: loads are no-ops, IsRewardedAdReady is always false, and ShowRewardedAd
+  immediately calls onAdUnavailable so callers never hang waiting for a
+  callback that will not arrive.
+
+  To turn it on:
+    1. Add the package + com.google.external-dependency-manager to
+       Packages/manifest.json (see the /ads command reference for versions).
+    2. Add GOOGLE_MOBILE_ADS to Project Settings > Player > Scripting Define
+       Symbols for Android and iOS.
+
+INSPECTOR FIELDS
+----------------
+  Ad Units
+    useTestIds (bool, default true)
+        When true the serialized IDs are ignored and Google's official test
+        units are used instead (TestAndroid / TestIos static readonly fields).
+        Must be turned OFF before shipping.
+    androidIds / iosIds (AdUnitIds)
+        Serializable class with three string fields: banner, interstitial,
+        rewarded. Production IDs go here.
+
+  Lifecycle
+    initializeOnAwake (bool, default true)   calls Initialize() from Awake
+    preloadAfterInitialize (bool, default true)
+        Loads one rewarded and one interstitial as soon as the SDK reports
+        initialized, so the first Show has something ready.
+
+  Retry
+    retryDelaySeconds (float, min 0, default 5)
+    maxLoadRetries (int, min 0, default 3)
+        A failed load reschedules itself via a realtime coroutine, up to
+        maxLoadRetries consecutive failures. The counter resets to 0 on any
+        successful load.
+
+  Banner
+    showBannerAfterInitialize (bool, default false)
+
+PUBLIC STATE
+------------
+  Instance              static singleton handle
+  IsInitialized         set once MobileAds.Initialize reports back
+  IsRewardedAdReady     true while a loaded rewarded ad is held
+  IsInterstitialReady   true while a loaded interstitial is held
+
+EVENTS
+------
+  OnInitialized()                     SDK ready, preloads have been kicked off
+  OnRewardedAvailabilityChanged(bool) true on successful load, false when the
+                                      held rewarded ad is consumed or fails -
+                                      intended for "Watch Ad" buttons that
+                                      should grey out when no ad is available
+  OnAdOpened() / OnAdClosed()         full-screen content opened/closed; useful
+                                      for pausing gameplay or audio
+
+FLOW
+----
+  Awake()
+      Standard project singleton guard + DontDestroyOnLoad, then Initialize()
+      if initializeOnAwake.
+
+  Initialize()
+      No-ops if already initialized. Sets
+      MobileAds.RaiseAdEventsOnUnityMainThread = true (so every SDK callback
+      below is safe to touch Unity objects from) and calls MobileAds.Initialize.
+      Without the define it logs a warning and goes straight to
+      HandleInitialized so the no-ad path is still fully wired.
+
+  HandleInitialized()
+      Sets IsInitialized, fires OnInitialized, optionally preloads rewarded +
+      interstitial and shows the banner.
+
+  Rewarded
+      LoadRewardedAd()  - skips if not initialized or one is already held.
+      ShowRewardedAd(onRewardEarned, onAdUnavailable = null, onAdClosed = null)
+          If nothing is ready: triggers a load and calls onAdUnavailable
+          immediately. Otherwise stores the callbacks and shows the ad.
+          onRewardEarned fires ONLY from the SDK's user-earned-reward callback.
+      Full-screen closed  -> destroys the ad, fires onAdClosed + OnAdClosed,
+                             then reloads the next one.
+      Full-screen failed  -> destroys the ad, DROPS the pending reward, reloads.
+
+  Interstitial
+      Same shape. ShowInterstitial(onClosed) invokes onClosed even when no ad
+      was available, so a "continue after the ad" flow never stalls.
+
+  Banner
+      ShowBanner() lazily constructs a bottom-anchored AdSize.Banner BannerView
+      and loads it; HideBanner() hides without destroying; DestroyBanner()
+      tears it down and is also called from OnDestroy.
+
+  ScheduleRetry(ref retryCount, loader) / RetryAfterDelay(loader)
+      WaitForSecondsRealtime so retries still tick while Time.timeScale is 0
+      (pause menus, win/lose panels).
+
+CALLING CONVENTION
+------------------
+  Guard, then show, then grant only in the callback:
+
+      if (AdManager.Instance == null || !AdManager.Instance.IsRewardedAdReady)
+      {
+          SetButtonsInteractable(true);
+          return;
+      }
+
+      AdManager.Instance.ShowRewardedAd(
+          onRewardEarned:  () => GrantReward(3),
+          onAdUnavailable: () => SetButtonsInteractable(true));
+
+  NEVER grant the reward before ShowRewardedAd returns - the reward callback is
+  asynchronous and may never fire.
+
+HOW IT CONNECTS
+---------------
+  Nothing calls this yet. The intended consumers are:
+    - RevivePanel  (watch an ad instead of spending a gem to revive)
+    - WinPanel / LosePanel  (double-rewards, retry)
+    - CurrencyManager  (the reward callback should route through AddGems /
+      AddCoins so the grant persists via SaveSystem like every other currency
+      change)
+
+NOTES
+-----
+  - Follows the project's hand-rolled singleton pattern (public static Instance,
+    guard-and-destroy in Awake, DontDestroyOnLoad) used by LevelManager,
+    GameStartManager, and CurrencyManager. Note the portable /ads reference
+    snippet writes AdManager.instance (lowercase); this project uses Instance.
+  - OnDestroy clears Instance and destroys the banner.
+  - No ScriptableObject config asset exists for the ad IDs yet - they are plain
+    serialized fields on the component. If more placements are added, promoting
+    AdUnitIds to an SO under Assets/Scripts/Data/ would match how the rest of
+    the project stores design-time config.
+  - The Editor shows a grey placeholder "test ad" panel; real creatives only
+    appear on a device with internet.

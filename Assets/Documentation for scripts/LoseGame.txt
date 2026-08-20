@@ -1,0 +1,82 @@
+================================================================================
+  LoseGame.cs
+  Path : Assets/Scripts/UI/WinLose/LoseGame.cs
+  Type : MonoBehaviour
+  Layer: UI / WinLose
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The final LOSE screen (shown after the player declines or exhausts revives). It
+offers "Play Again" (reload the current stage) and "Main Menu", fading itself
+and a background overlay out before loading the target scene.
+
+STATIC EVENTS
+----------------
+  OnPlayAgainClicked  (Action)
+  OnMainMenuClicked   (Action)
+      Broadcast BEFORE the scene load starts, so other systems (analytics,
+      save flushing, etc.) can react without this class needing to know about
+      them.
+
+INSPECTOR FIELDS
+----------------
+  losePanel          (GameObject)  the root panel
+  BGImage             (Image)  dark background overlay behind the panel
+  loseCanvasGroup     (CanvasGroup)  drives the fade
+  fadeDuration        (float, default 0.35)
+  playAgainButton, mainMenuButton  (Button)
+  menuSceneName       (string, default "MenuScene")
+
+LIFECYCLE
+---------
+  Awake()
+      Ensures losePanel is active (the comment notes RevivePanel is expected to
+      have already activated it via ShowLosePanel - this is a defensive
+      re-assertion, not the primary activation path). If a canvasGroup is
+      assigned, forces it fully visible/interactive immediately - the panel is
+      meant to appear ALREADY VISIBLE (Revive handled any fade-in before this
+      point), not fade itself in.
+
+  Start()
+      Wires both buttons to their handlers.
+
+BUTTON HANDLERS
+------------------
+  OnPlayAgainButton()
+      Fires OnPlayAgainClicked, then fades out and reloads the CURRENT active
+      scene by name (SceneManager.GetActiveScene().name) - restarting the same
+      stage.
+
+  OnMainMenuButton()
+      Fires OnMainMenuClicked, then fades out and loads menuSceneName.
+
+FADE + LOAD
+--------------
+  FadeOutLoseAndLoadScene(sceneName)  [coroutine]
+      Fades BOTH loseCanvasGroup.alpha and BGImage's colour alpha from their
+      current values to 0 over fadeDuration, using Time.unscaledDeltaTime so
+      the fade still plays correctly EVEN THOUGH the game is currently paused
+      (LevelGameManager paused gameplay when the player gate was destroyed, and
+      nothing has unpaused it yet at this point).
+      After the fade: disables interaction, deactivates losePanel, calls
+      GameplayPause.SetPaused(false) so the NEXT scene starts unpaused, and
+      finally loads sceneName.
+
+HOW IT CONNECTS
+---------------
+  - Activated by RevivePanel.ShowLosePanel(), which is itself called by
+    LevelGameManager.OnPlayerGateDestroyed / RevivePanel's own decline flow.
+  - Depends on GameplayPause being correctly cleared before the next scene, or
+    that scene would start already time-frozen.
+
+NOTES
+-----
+  - The class imports DOTween (using DG.Tweening;) but the actual fade is
+    implemented with a manual coroutine Lerp, not a DOTween call - the import
+    appears to be an unused leftover from an earlier or alternate
+    implementation.
+  - Relies entirely on RevivePanel to activate losePanel and start the correct
+    visual state before this script's own logic runs; LoseGame itself does not
+    initiate its own appearance, only its exit.

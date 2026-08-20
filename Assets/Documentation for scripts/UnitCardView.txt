@@ -1,0 +1,152 @@
+================================================================================
+  UnitCardView.cs
+  Path : Assets/Scripts/UI/Units/UnitCardView.cs
+  Type : MonoBehaviour
+  Layer: UI / Units
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+One unit's CARD - the small clickable tile shown in roster lists throughout the
+Units screen (bucket rows, deploy overlay grid, etc.). Handles its own visuals
+for locked/unlocked, selected, "deploy candidate", and "currently deployed"
+states, plus an animated upgrade-available arrow.
+
+INSPECTOR FIELDS
+----------------
+  Upgrade Cue
+    upgradeArrow  (GameObject)  a small floating arrow shown when this unit can
+                  be upgraded
+
+  UI Refs
+    levelText        (TMP_Text, "Lvl N")
+    stageValueText   (TMP_Text, shows the unlock requirement e.g. "1-3" while
+                     locked)
+    portraitImage    (Image)
+    selectedHighlight (GameObject)  FULL green overlay - used for "currently
+                      deployed" styling, distinct from the border highlight
+    bgHighlighted    (Image)  border/background highlight for "selected" or
+                     "candidate" styling
+    bgGrayOut        (Image)  shown while locked
+    BGNormal         (Image)  shown while unlocked and not otherwise styled
+    clickButton      (Button)
+    requirementText  (TMP_Text, optional badge)
+
+  Behavior
+    allowClickWhenLocked (bool, default true)  locked cards still forward
+                         clicks so the detail screen can show "Locked" info
+
+PUBLIC IDENTITY
+------------------
+  UnitId  (int, public get)
+  OnUnlockStateChanged  (event Action<int,bool>)  fired only from the DEBUG
+                        context-menu unlock/lock actions, not from normal play
+
+RUNTIME STATE
+-------------
+  _unlocked, _selected  (bool)
+  _onClick  (Action)
+  upgradeTween  (DOTween Tween, the floating-arrow animation)
+  upgradeArrowBasePos  (Vector3)
+
+LIFECYCLE
+---------
+  Awake()
+      Resolves clickButton if unassigned, hides bgHighlighted and
+      selectedHighlight, caches the upgrade arrow's base position and hides it.
+  OnDisable()  pauses upgradeTween as a safety net if the card deactivates
+               mid-animation.
+
+BINDING
+----------
+  Bind(def, unlocked, level, onClick)
+      Warns and aborts if def is null. Sets UnitId, stores unlocked/onClick,
+      sets the portrait, calls SetLevelText and SetLockAwareHeader, resets
+      selection state, calls ApplyVisuals, and (re)wires clickButton -
+      IMPORTANT: interactable is always left true regardless of lock state -
+      "controller decides behaviour" per the inline comment; the lock gating
+      happens inside HandleClick via allowClickWhenLocked instead of via the
+      Button component itself.
+
+  RefreshBadge(unlocked, level)
+      Lighter-weight update path for after an upgrade: updates unlocked/level
+      and re-applies visuals without rebinding click handlers.
+
+SELECTION / STYLING
+-----------------------
+  SetSelected(bool)  (the live version)
+      No-ops if the card is locked. Explicitly hides selectedHighlight (the
+      full overlay is reserved for "deployed", not plain selection) and toggles
+      only bgHighlighted.
+
+  SetOverlayCandidate(bool)  (the live version)
+      Same lock-guard; used while the deploy overlay is open to mark a card as
+      a possible swap target - toggles bgHighlighted only.
+
+  SetDeployedTargetStyle(bool)  (the live version)
+      Same lock-guard; toggles the FULL selectedHighlight overlay (not
+      bgHighlighted) - the visually strongest state, reserved for units
+      currently in the Deployed bucket.
+
+  ClearOverlayMarks()
+      Hides both selectedHighlight and bgHighlighted. Explicitly documented as
+      NOT touching BGNormal/bgGrayOut - ApplyVisuals() alone owns those two.
+
+  ApplyVisuals()
+      Sets BGNormal active = _unlocked, bgGrayOut active = !_unlocked. The
+      single authority for the locked/unlocked background swap.
+
+CLICK / DEBUG
+-----------------
+  HandleClick()
+      Blocks the click only if BOTH locked AND allowClickWhenLocked is false;
+      otherwise invokes _onClick.
+
+  SetUnlocked(unlocked, notify = true)
+      No-ops if unchanged. Updates state, reapplies visuals, and optionally
+      fires OnUnlockStateChanged. Marked TEST/DEBUG ONLY in the source comment.
+
+  [ContextMenu] DebugUnlock / DebugLock / DebugToggle
+      Right-click-in-Inspector debug actions, available in Play mode, all
+      routing through SetUnlocked.
+
+TEXT / BADGES
+-----------------
+  SetLevelText(level)      "LVL. N" with the "LVL." word in white rich text
+  SetRequirementText(text, visible)   generic optional badge
+  SetStageUI(reqLevel, reqStage, visible)   "STAGE L-S" rich text, shown while
+                                            locked
+  SetLockAwareHeader(def, unlocked, level)
+      Composite: shows levelText only when unlocked (and sets its text), and
+      shows the stage-requirement badge only when LOCKED (derived from
+      def.requiredLevelIndex/requiredStageIndexWithinLevel) - the two badges
+      are mutually exclusive by construction.
+
+UPGRADE CUE ANIMATION
+-------------------------
+  SetUpgradeCue(bool on)
+      Turning ON: activates the arrow, lazily creates a DOTween loop
+      (DOLocalMoveY up 6px over 0.6s, InOutSine, infinite Yoyo, created paused)
+      the FIRST time it is needed, then plays/resumes it.
+      Turning OFF: pauses the tween, hides the arrow, and resets its local
+      position back to the cached base Y - so re-enabling later starts clean
+      rather than from wherever the float animation happened to stop.
+
+HOW IT CONNECTS
+---------------
+  - UnitsPanelController and DeployOverlayController both instantiate/bind
+    these cards and drive their selection/candidate/deployed styling as the
+    player browses and swaps units.
+  - UnitDetailView is typically opened via the onClick callback passed to Bind.
+
+NOTES
+-----
+  - Several PAIRS of methods exist where only the un-numbered one is called:
+    SetSelected1/SetSelected2 vs SetSelected, SetOverlayCandidate1 vs
+    SetOverlayCandidate, SetDeployedTargetStyle1 vs SetDeployedTargetStyle,
+    ClearOverlayMarks1 vs ClearOverlayMarks. The numbered siblings differ mainly
+    in whether they respect the _unlocked guard and whether they touch
+    BGNormal directly - the live versions consistently push background
+    ownership into ApplyVisuals alone and add the lock guard, a real
+    refinement over the earlier attempts sitting unused beside them.

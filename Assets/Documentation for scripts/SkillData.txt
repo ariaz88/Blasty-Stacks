@@ -1,0 +1,54 @@
+================================================================================
+  SkillData.cs
+  Path : Assets/Scripts/Roguelite/SkillData.cs
+  Type : ScriptableObject   (menu: "Roguelite/Skill Data")
+         + 2 supporting enums in the same file
+  Layer: Roguelite
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The design-time definition of one roguelite skill card: its name, description,
+icons, how strong it gets per pick, and which fighter types it applies to. One
+asset per skill, picked at random into the level-up card selection.
+
+TYPES DEFINED IN THIS FILE
+----------------------------
+  enum SkillCategory   { Offensive, Defensive }
+      Which icon row (offensiveSlots / defensiveSlots in RogueliteManager) the
+      picked skill's icon appears in.
+
+  enum SkillEffectType { AttackSpeed, AttackDamage, Health }
+      Which UnitStatsRuntime stat the skill multiplies.
+
+FIELDS
+------
+  skillName        (string)
+  description      (string)
+  category         (SkillCategory)
+  effectType       (SkillEffectType)
+  normalIcon       (Sprite)  shown on picks 1-5
+  evolvedIcon      (Sprite)  shown on the 6th ("evolved") pick and afterward
+  baseIncrement    (float)  bonus added PER PICK before evolving, e.g. 0.05 for
+                   a card that adds +5% per pick
+  maxIncrement     (float)  caps the pre-evolution bonus so repeated picks
+                   cannot compound indefinitely
+  evolvedIncrement (float)  the flat bonus applied once evolved, replacing the
+                   incremental math entirely
+  allowedTypes     (FighterType[])  if non-empty, restricts the effect to units
+                   whose stats.type is in this list; empty = applies to everyone
+
+HOW IT CONNECTS
+---------------
+  - skillPool on RogueliteManager is a curated list of these assets.
+  - RogueliteManager.ApplySkillEffect reads baseIncrement/maxIncrement/
+    evolvedIncrement/allowedTypes/effectType to compute and apply the stat
+    multiplier.
+  - SkillCardUI.Init reads name/description/normalIcon/evolvedIcon for display.
+
+NOTES
+-----
+  - The evolve threshold (6th pick) is NOT stored here - it is a hard-coded
+    constant (evolveThreshold = 6) in RogueliteManager, so changing it means
+    editing code, not this asset.

@@ -1,0 +1,55 @@
+================================================================================
+  BucketStatsPanel.cs
+  Path : Assets/Scripts/UI/Units/BucketStatsPanel.cs
+  Type : MonoBehaviour
+  Layer: UI / Units
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+A generic modal overlay that shows a titled, scrollable list of BucketStatRow
+entries - the "view full bucket" popup opened from a BucketHeader's menu
+button.
+
+FIELDS
+------
+  titleText     (TMP_Text)
+  content       (RectTransform)  the ScrollRect's Content transform rows get
+                parented under
+  root          (GameObject)  the whole overlay object; defaults to this
+                GameObject if left unassigned
+  closeButton   (Button)
+  skeletonImage (RectTransform)  a placeholder/loading background that must
+                NOT be destroyed when the list is cleared
+
+PROPERTIES
+----------
+  Content => content  (read-only, exposed so UnitsPanelController can
+                       instantiate rows directly into it)
+
+LIFECYCLE
+---------
+  Awake()
+      Defaults root to this GameObject if unset, wires closeButton, and calls
+      Hide() so the overlay starts closed.
+  OnDestroy()   removes the close listener (defensive cleanup)
+
+METHODS
+-------
+  OnCloseClicked()   calls Hide()
+  Show(title)         uppercases and sets the title, activates root
+  Hide()               deactivates root
+  Clear()
+      Destroys every child of content EXCEPT skeletonImage, iterating
+      backwards (safe removal pattern while destroying children in a loop).
+
+HOW IT CONNECTS
+---------------
+  - UnitsPanelController calls Show/Clear/Content when a BucketHeader's menu
+    is clicked, populating Content with fresh BucketStatRow instances.
+
+NOTES
+-----
+  - There is a duplicate 'using TMPro;' and 'using UnityEngine;' at the top of
+    the file (harmless, just redundant).

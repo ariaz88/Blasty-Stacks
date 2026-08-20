@@ -1,0 +1,35 @@
+================================================================================
+  BackButtonRelay.cs
+  Path : Assets/Scripts/UI/Managers/BackButtonRelay.cs
+  Type : MonoBehaviour   [RequireComponent(typeof(Button))]
+  Layer: UI / Managers
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+A one-line adapter: wires whatever Button it sits on to call
+UnitsPanelController.ShowCardsScreenPublic(). Exists so a back button anywhere
+in the hierarchy can return to the Units cards screen without every caller
+needing a direct reference to the controller wired through the Inspector by
+hand for each individual button.
+
+FIELDS
+------
+  panel  (UnitsPanelController)  assigned once per instance in the Inspector
+
+LIFECYCLE
+---------
+  Awake()
+      Gets the required Button, clears any existing listeners, and adds one
+      that calls panel.ShowCardsScreenPublic().
+
+HOW IT CONNECTS
+---------------
+  - A thin glue component between any Button in the scene and
+    UnitsPanelController's public re-entry point.
+
+NOTES
+-----
+  - panel is not null-checked; a BackButtonRelay left with panel unassigned
+    would throw a NullReferenceException the first time its button is clicked.

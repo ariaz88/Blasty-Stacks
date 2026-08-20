@@ -1,0 +1,98 @@
+================================================================================
+  ResourcesAnimationManager.cs
+  Path : Assets/Scripts/UI/HUD/ResourcesAnimationManager.cs
+  Type : MonoBehaviour - singleton
+  Layer: UI / HUD
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+Plays the "coins/gems/XP fly from a source point to the HUD counter" animation
+using a small OBJECT POOL of pre-instantiated icon instances per currency, so
+no allocation happens during the actual reward-claim moment.
+
+SINGLETON
+---------
+  instance  (static, public field - not a property, no guard against a second
+            instance ever being created; simply overwritten in Awake)
+
+INSPECTOR FIELDS
+----------------
+  UI References: canvas, animatedCoinPrefab, animatedGemPrefab,
+    animatedXPPrefab, coinTargetUI, gemTargetUI, XPTargetUI
+  Available Items: MaxCoin (int)  - the pool size used for ALL THREE queues
+    (coins, gems, AND xp), despite its name suggesting coins only
+  easeType (Ease), spread (float, default 0.15 - random per-icon scatter),
+    minAnimDuration/maxAnimDuration (hard-coded 0.6/0.9, not Inspector fields)
+
+RUNTIME STATE
+-------------
+  coinsQueue, gemsQueue, XPQueue  (Queue<GameObject>)  the pools
+
+LIFECYCLE
+---------
+  Awake()
+      Sets the singleton reference (no duplicate-destroy guard), then calls
+      PrepareItems for all three prefabs, each sized MaxCoin.
+
+  PrepareItems(prefab, queue, count)
+      Instantiates 'count' inactive instances under this transform and enqueues
+      them - the entire pool for one currency is built up front at scene load.
+
+ANIMATION
+------------
+  AnimateFromUI(source, targetUI, itemQueue, amount)  (the live entry point,
+    called by all three public methods below)
+      For up to 'amount' iterations (BREAKING EARLY the moment itemQueue is
+      empty - see NOTES): dequeues a pooled item, activates it, parents it
+      under the canvas, positions it at source.position plus a small random
+      scatter (+/- spread on X and Y), then DOMove's it to targetUI.position
+      over a RANDOM duration between 0.6 and 0.9 seconds with the configured
+      ease. On completion, deactivates the item and returns it to the queue
+      for reuse.
+
+  WorldToRectTransformPosition(worldPosition, canvasRectTransform, camera)
+      [static, public]  A general-purpose world-to-UI-local-space converter
+      (WorldToScreenPoint then ScreenPointToLocalPointInRectangle), available
+      for reuse elsewhere though currently only referenced by this file's own
+      dead Animate1 sibling.
+
+PUBLIC API
+-------------
+  AddCoinsFromUI(source, amount)   -> AnimateFromUI(source, coinTargetUI,
+                                      coinsQueue, amount)
+  AddGemsFromUI(source, amount)    -> gemTargetUI / gemsQueue
+  AddHeroXPFromUI(source, amount)  -> XPTargetUI / XPQueue
+
+HOW IT CONNECTS
+---------------
+  - WinPanel.PlayResourceFlyAnimations calls all three methods with the
+    ACTUAL reward amounts (totalGiven.coins/gems/heroXP) as 'amount'.
+
+NOTES
+-----
+  - !! POOL-SIZE MISMATCH RISK: 'amount' as passed by WinPanel is the actual
+  !! CURRENCY VALUE (which can easily be in the hundreds for coins/gems at
+  !! higher stages, per StageRewardCalculator's compounding growth), not a
+  !! capped "number of icons to show". AnimateFromUI treats 'amount' as a
+  !! literal loop count of ONE ICON PER UNIT and only stops early once the
+  !! shared MaxCoin-sized pool is exhausted. In practice this means a large
+  !! reward silently animates only up to MaxCoin icons (whatever that
+  !! Inspector value is) rather than one icon per currency unit, and provides
+  !! no visual distinction between "you got 50 coins" and "you got 500 coins"
+  !! beyond however many pooled icons happen to be available - a design
+  !! mismatch between how the method is written (per-unit) and how it is
+  !! actually called (aggregate reward value), though not a crash risk since
+  !! the early-exit prevents any error.
+  - A dead numbered sibling Animate1 remains - an EARLIER implementation that
+    took a raw Vector3 world position (rather than a RectTransform "source")
+    and used WorldToRectTransformPosition for the conversion; the live
+    AnimateFromUI instead uses transform.position directly under the
+    assumption that the source RectTransform already lives under the same
+    canvas, which is simpler but only valid for UI-to-UI sources (matching how
+    WinPanel actually calls it, with UI RectTransform spawn points, not world
+    gameplay positions).
+  - The singleton has no "already exists, destroy this one" guard (unlike
+    almost every other singleton in the project) - a second instance loaded
+    into the same scene would simply overwrite 'instance' silently.

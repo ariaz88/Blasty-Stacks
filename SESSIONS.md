@@ -55,8 +55,6 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
-- Reopen Unity and confirm the Console is clean after the 2026-08-20 script reorg. Nothing
-  was compiled or Play-tested, because the Editor had to be closed for the move.
 - Build Profiles points `Level_1_Stage_8..20` at the stale path `Scenes/Level_1_Stage_N.unity`;
   the real files are under `Scenes/TestScenes/GamePlay Scenes/`. Stages 8-20 are not in the build.
 - `Assets/Scripts/_Legacy/` holds 16 quarantined scripts. Confirm each is truly unused, then delete.
@@ -65,6 +63,26 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
 - Duplicate type names to disambiguate: `Piece` and `GameState` are each declared in two files.
 - `/feature-doc` was invoked with no feature named. Waiting on the user to specify: feature name,
   which scripts implement it, and what broke along the way.
+- **`GameStartManager.Awake()` hard-codes a full save wipe on every launch** (`resetBool = true;
+  OnResetButtonClicked();`) — confirmed still present as of the doc pass. Almost certainly a
+  debug leftover; needs the two lines removed or `resetBool` exposed as a real toggle before
+  this project can retain any player progress across sessions.
+- Roguelite XP is fully implemented but never triggered in play: `RogueliteManager.AddXP` /
+  `NotifyEnemyKilled` have zero live call sites (`EnemyManager`'s call is commented out).
+  Confirm whether this is intentional WIP or a lost wire-up.
+- `WinPanel.RewardValues` is summed cumulatively across HP tiers in
+  `StageRewardCalculator` (hpCase 3 = r1+r2+r3, not just r3) while
+  `HomeManager.TryGetStageRewardPreview` passes hpCase=1 despite its own comment saying
+  "best case" — the stage-card reward preview likely understates the real payout.
+  See `Assets/Documentation for scripts/StageRewardCalculator.txt` and `HomeManager.txt`.
+- `UnitsPanelController.HandleDeploySave` likely swaps the `highlightUndeployedId`/
+  `highlightDeployedId` arguments when refreshing the deploy overlay post-swap — cosmetic only
+  (save data is correct) but the just-swapped cards probably lose their highlight. See
+  `Assets/Documentation for scripts/UnitsPanelController.txt`.
+- A full per-script reference now exists at `Assets/Documentation for scripts/` (101 `.txt`
+  files, one per live script reachable from the 9 build scenes). Read the target file's doc
+  there before editing it blind — each one lists dead numbered siblings, magic strings, and
+  known bugs found while writing it.
 
 ---
 
@@ -148,110 +166,95 @@ _Newest first._
 - **Next:** fix the Stage 8-20 build paths; move leftover data assets out of `Assets/Scripts/`;
   empty `_Legacy/`; then namespaces + the gameplay→UI event refactor.
 
-#### PAUSED 2026-08-20 — per-script documentation, 66 of 101 done
+#### Continuation (later session) — per-script reference documentation, 101/101 complete
 
-**Task:** read every live gameplay script line by line and write one explanatory
-`.txt` per script into `Assets/Documentation for scripts/`. Paused at the user's
-request (hourly limits), to be resumed.
-
-**Done: 66 / 101.** All of Data, Core, Puzzle, Combat/Player (incl. States),
-Combat/Shared, Combat/Enemy (except EnemyManager), and the Editor script.
-
-**Remaining 35 files, in the order to tackle them:**
-1. The three big combat brains — `Combat/Enemy/EnemyManager.cs` (794 lines),
-   `Combat/Player/PlayerManager.cs` (660), `Combat/Player/SimpleJump2D.cs` (428)
-2. Spawning — `EnemySpawner.cs` (306), `LevelConfig.cs` (79),
-   `PlayerWaveManager.cs` (822)
-3. Roguelite — `RogueliteManager.cs` (426), `PlayerStatsApplier.cs` (173),
-   `SkillCardUI.cs` (82), `SkillData.cs` (21)
-4. UI/WinLose — `RevivePanel.cs` (648), `WinPanel.cs` (381),
-   `LevelGameManager.cs` (165), `LoseGame.cs` (128),
-   `StageRewardCalculator.cs` (68), `RewardItemUI.cs` (18)
-5. UI/Units — `UnitsPanelController.cs` (1428), `UnitDetailView.cs` (493),
-   `DeployOverlayController.cs` (430), `UnitCardView.cs` (336),
-   `BucketStatRow.cs` (73), `BucketStatsPanel.cs` (72), `BucketHeader.cs` (57)
-6. UI/Home — `HomeManager.cs` (909), `HomeCardsPager.cs` (500),
-   `NewCharacterStats.cs` (267), `StageCard.cs` (112)
-7. UI/HUD + Managers + Common — `HudCurrencyView.cs` (270),
-   `ResourcesAnimationManager.cs` (160), `CurrencyManager.cs` (170),
-   `MainMenuPanelController.cs` (296), `BackButtonRelay.cs` (15),
-   `UIButtonPressScaler.cs` (120), `ScrollOnlyUp.cs` (39)
-8. `Debug/DebugStageManager.cs` (238)
-
-**Method to keep using (it works well):**
-- Read the source with `cat`, never document a file unseen. (One entry,
-  `PieceColorPalette`, was drafted from assumption and had to be rewritten —
-  always read first.)
-- Write a bundle file to the scratchpad with `<<<FILE: Name.txt>>>` separators,
-  then split it with `scratchpad/split-docs.js` (copy it to the repo root, run,
-  then delete it — do not leave it in the repo).
-- Doc template: PURPOSE / FIELDS / METHODS or FLOW / HOW IT CONNECTS / NOTES.
-- **Avoid backticks and backslashes in bundle text** — the Bash heredoc mangles
-  both. Use the Write tool for the bundles.
-
-**Still owed to the user after the docs are finished:** package this whole
-workflow as a reusable SKILL so the same documentation can be generated in any
-other project, for both existing and future scripts.
-
-**Bugs found while documenting (reported, not fixed):**
-- `GameStartManager.Awake()` hard-codes `resetBool = true` then calls
-  `OnResetButtonClicked()` — **the save is wiped on every launch.** Critical.
-- `SaveSystem.LoadInternal()` calls `Save()` during migration while `_cache` is
-  still null, causing re-entrant loads; the `saveDepth > 10` guard papers over it.
-- `CPWeightMath.Evaluate` never reads `cfg.meleeMultByLevel` and assigns
-  `rangedMult` twice, so the melee curve is ignored.
-- `PlayerProgressionService` charges **coins**, while its comments and
-  `UpgradeCostSO` both say gems.
-- `PlayerStats` refreshes the health bar against `statsBase.maxHP` in
-  `ApplyDamageToPlayer` but `maxHealth` in `Start` — wrong ratio after a
-  runtime max-HP buff.
-- `RaycastToBoard` and `PieceDragHandlerSimple` still use XZ/3D plane maths on
-  this XY board.
-- A prefab using `FrogJumpTransformOnly` has `playerRigidbody` serialized as a
-  3D `Rigidbody` where a `Rigidbody2D` is expected — null in builds.
-
-#### Continuation (same session) — dead-code purge, verified in the Editor
-
-- **Reopened Unity:** Console clean, 0 errors. Opened all 9 ticked build scenes: 3,197 objects /
-  9,970 components / **0 missing scripts** — the reorg broke nothing.
-- **Architecture review (no code changed):** built a cross-layer dependency matrix. Key results —
-  **the Puzzle layer has ZERO outgoing dependencies** (it reaches the rest of the game only through
-  `MatchResolver.OnBlast`); gameplay wrongly reaches **up** into UI in 3 files
-  (`EnemyGateStats` → WinPanel/HomeManager/LevelGameManager, `EnemySpawner` → WinPanel/HudCurrencyView,
-  `PlayerManager` → HudCurrencyView); `CurrencyManager` is a core economy service **misfiled** under
-  `UI/Managers/` (it imports only System + UnityEngine, zero UI code) — moving it to `Core/` would
-  erase most of the Core→UI coupling. Singleton reach-through counts: `CurrencyManager.Instance` 43,
-  `SaveSystem.Data` 26, `LevelManager.Instance` 19, `GameStartManager.Instance` 13.
-- **PHASE 1 — deleted 47 numbered duplicate types** across 27 files (**−8,937 lines**).
-  Rule applied: the type name ends in a digit **and** it has zero real-code references, counted with
-  a comment/string-aware scanner so mentions inside comments don't create false positives. All 47
-  scored 0. Every file kept its main class — verified with a survives-vs-deleted table before applying.
-  Note: `SimpleJump2D.cs` contains no class of that name; Unity resolves such a file to its **first**
-  class, here `FrogJumpTransformOnly` (used by 12 prefabs). It was preserved; only
-  `FrogJumpTransformOnly1/2` and `FrogJump2D1/2` were removed.
-- **PHASE 2 — removed 2,537 lines of commented-out code** across 55 files. The classifier groups
-  contiguous `//` blocks and scores them; a block is deleted only when ≥50% of its lines look like
-  C# (ends in `;`/`{`/`}`, starts with a keyword, is an attribute, an assignment, or a call).
-  `///` XML doc comments are always kept, and so are prose comments. Empty `#region` blocks pruned.
-- **Result:** 30,778 → **18,947 lines** (−38%); comment ratio 17% → **9%**.
-  `EnemyManager` 1830→794, `RevivePanel` 1743→648, `HomeCardsPager` 1539→522, `WinPanel` 1316→385,
-  `MainMenuPanelController` 1043→297, `BoardGridXY` 1052→345, `FractureObject` 1098→608.
-- **Verified:** braces balanced across all 101 live scripts; Unity recompiled with **0 errors**;
-  re-audited all 9 build scenes → **0 missing scripts**; `git status` shows **no `.unity` or
-  `.prefab` modified**. Still **not** Play-mode tested — that remains the open check.
+- **Goal:** read every live gameplay script line by line and write one explanatory
+  `.txt` file per script into `Assets/Documentation for scripts/`, covering every script
+  reachable from the 9 ticked build scenes (matches the CORE+ACTIVE set from the reorg pass
+  above). Paused once mid-task at the user's request (hourly limit) at 66/101 and resumed in a
+  later session; this entry covers the full arc from 0 to 101.
+- **Status:** done — verified every live `.cs` under `Assets/Scripts` (excluding `_Legacy/`) has
+  a matching `.txt` by filename.
+- **Changed:**
+  - `Assets/Documentation for scripts/` — 101 new `.txt` files (plus Unity-generated `.meta`
+    siblings), one per script, each following PURPOSE / FIELDS / METHODS-or-FLOW /
+    HOW IT CONNECTS / NOTES. NOTES call out dead numbered siblings, magic
+    strings/animator-parameter contracts, and any bug found while reading the source.
+- **Scene/Prefab/SO edits:** none.
+- **Verified:** every doc was written only after reading the actual source (one early exception —
+  `PieceColorPalette.txt` was drafted from assumption and had to be rewritten after actually
+  reading the file; documented as a process note, not repeated after). Cross-checked file list at
+  the end: `find Assets/Scripts -name '*.cs' -not -path '*_Legacy*'` vs the doc folder — exact
+  1:1 match, 101/101.
+- **Findings surfaced while writing the docs (added to Open Threads above):**
+  - `GameStartManager.Awake()` wipes the save on every launch (`resetBool = true` +
+    `OnResetButtonClicked()`), confirmed still present.
+  - Roguelite XP (`RogueliteManager.AddXP` / `NotifyEnemyKilled`) has zero live call sites —
+    the whole skill-card system is unreachable through normal play as currently wired.
+  - Unit auto-unlock-by-stage in `UnitsPanelController.ProcessRequirementUnlocks` and
+    `PlayerProgressionService.ProcessStageUnlocks` are both dead code (never subscribed/called).
+    The REAL live unlock path is `HomeManager.Start() → CachePendingCharacterUnlocks() →
+    PlayerProgressionService.GetReachableButLockedUnits() → NewCharacterStats claim popup →
+    ProgressionService.UnlockUnit()`, triggered every time the player returns to the Home screen.
+  - `StageRewardCalculator` sums HP tiers cumulatively (hpCase 3 = r1+r2+r3), while
+    `HomeManager.TryGetStageRewardPreview` passes hpCase=1 despite its own comment claiming
+    "best case" — the stage-card reward preview likely understates the real payout substantially.
+  - `UnitsPanelController.HandleDeploySave` appears to pass `highlightUndeployedId`/
+    `highlightDeployedId` swapped when refreshing the deploy overlay post-swap (cosmetic only;
+    the actual saved model/order data is correct).
+  - Deploying a unit via the swap overlay makes the candidate INHERIT the replaced unit's level,
+    and resets the replaced unit to level 1 — a real, easy-to-miss game-design consequence
+    (gems spent upgrading a benched unit are lost) documented in `UnitsPanelController.txt`.
 - **Gotchas:**
-  - The multi-class files that remain (`LevelConfig`, `SaveData`, `PlayerUnitsModel`, `WinPanel`,
-    `StageRewardCalculator`, `SaveOnStop`, `DebugStageManager`) hold legitimate companion/nested
-    types (`Wave`, `WaveEntry`, `UnitState`, `RewardValues`, …). **Do not "clean" these.**
-  - `DebugStageManagerEditor` lives in a non-Editor folder but is correctly wrapped in
-    `#if UNITY_EDITOR`, so player builds are unaffected.
-  - **Latent pre-existing bug found** (not caused by this work): Unity warns
-    *"field 'playerRigidbody' expects 'Rigidbody2D' but the stored reference is a 'Rigidbody' —
-    the reference is treated as null (and serialized as null in player builds)"* on a prefab using
-    `FrogJumpTransformOnly`. It must be re-assigned in the Inspector or jumping silently no-ops
-    in a build.
-  - Writing Markdown/JS through a shell heredoc mangles both backslashes **and** backticks in this
-    environment. Use the Write tool for any content containing them.
+  - Writing bundle text through a Bash heredoc mangles both backslashes (`\\b` → literal
+    backspace) and backticks/markdown code-spans in this environment — every multi-file batch
+    had to go through the Write tool instead, then be split by a small Node script
+    (`split-docs.js`, kept in the scratchpad and copied into the repo root only for the instant
+    it runs, then deleted) that parses `<<<FILE: Name.txt>>>` markers.
+  - `SessionStart`-injected `SESSIONS.md` context is large; large edits to this file are best done
+    with a small Node splice script against known anchor lines rather than the Edit tool, since
+    the file changes across turns as other sessions/this session append to it.
+- **Next:** none for the documentation task itself. See the Open Threads list above for what the
+  findings imply (all six items were added there, not just logged here).
+
+#### Continuation (same session) — standing hook to keep script docs in sync going forward
+
+- **Goal:** the user asked that from now on, any script change or new script triggers an update
+  (or creation) of its doc in `Assets/Documentation for scripts/`, enforced automatically rather
+  than relying on a future session remembering.
+- **Status:** done.
+- **Changed:**
+  - `.claude/hooks/doc-reminder.js` — new `PostToolUse` hook script. Reads the tool-call JSON on
+    stdin, extracts the touched file path (`tool_response.filePath` or `tool_input.file_path`),
+    and if it matches `Assets/Scripts/**/*.cs` (excluding `Assets/Scripts/_Legacy/**`), emits
+    `hookSpecificOutput.additionalContext` reminding the model to update/create
+    `Assets/Documentation for scripts/<basename>.txt` in the same PURPOSE/FIELDS/METHODS-or-FLOW/
+    HOW IT CONNECTS/NOTES format used by the rest of the folder. Fails silently (never blocks the
+    tool call) on unparseable input.
+  - `.claude/settings.json` — added a `PostToolUse` entry with `matcher: "Write|Edit"` calling the
+    hook above, merged alongside the existing `SessionStart` hook (not replaced).
+  - `CLAUDE.md` — added a "Per-script documentation — keep it in sync" section documenting the
+    convention for humans and future sessions, pointing at the hook and explaining the exclusion.
+- **Scene/Prefab/SO edits:** none.
+- **Verified:** pipe-tested the raw hook against six synthesized stdin payloads (Edit on a live
+  script → fires; Write on a brand-new script path → fires; Edit under `_Legacy/` → silent; Edit
+  on a non-script file → silent; `tool_response.filePath`-shaped input → fires; malformed JSON →
+  exits 0, no crash). Validated `.claude/settings.json` is well-formed JSON and the hook entry
+  shape matches schema via a Node script (no `jq` on this machine, matching the note already in
+  `CLAUDE.md`). **Proved it fires live**: made a real, trivial `Edit` on
+  `Assets/Scripts/UI/Common/ScrollOnlyUp.cs` (added then immediately removed a
+  `// hook-fire-test` comment line) — the reminder appeared in the actual `PostToolUse:Edit`
+  system-reminder both times, then confirmed `git diff` on that file is empty (clean revert, no
+  net change committed or left behind).
+- **Gotchas:**
+  - This project's settings watcher was already active from earlier in the session (the
+    `SessionStart` hook has been firing all along), so no `/hooks` reload or restart was needed
+    for the new `PostToolUse` hook to take effect immediately — confirmed by the live fire test
+    above, not assumed.
+- **Next:** nothing pending for this. Going forward, any session that edits or adds a script under
+  `Assets/Scripts/` (outside `_Legacy/`) will get an automatic reminder to keep
+  `Assets/Documentation for scripts/` current — actually updating the doc is still on the model,
+  the hook only reminds, it does not write the doc itself.
 
 ### 2026-08-20 — CLAUDE.md init; /ads command + guide added to project; /feature-doc blocked
 - **Goal:** run `/init` to generate the repo's `CLAUDE.md`; separately, bring the `/ads` slash

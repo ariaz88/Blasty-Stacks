@@ -1,0 +1,96 @@
+================================================================================
+  CurrencyManager.cs
+  Path : Assets/Scripts/UI/Managers/CurrencyManager.cs
+  Type : MonoBehaviour - singleton, DontDestroyOnLoad
+  Layer: UI / Managers  (functionally a Core economy service - see NOTES)
+  Scenes: StarterScene
+================================================================================
+
+PURPOSE
+-------
+The single source of truth for the player's three currencies: gems, coins, and
+hero XP. Every add/spend/set goes through here, every change persists
+immediately via SaveSystem, and every change broadcasts one shared event so any
+UI can stay in sync without polling.
+
+INSPECTOR FIELDS
+----------------
+  startingGems  (int, min 0, default 10)  used ONLY if no save is loaded
+  startingCoins (int, min 0, default 10)
+  startingHeroXP (int, min 0, default 0)
+  StartingCoins / StartingGems / StartingHeroXP  (public read-only accessors)
+    - read by GameStartManager and SaveSystem.ResetAllIfRequested when seeding
+    a fresh save
+
+RUNTIME STATE (public, read-only)
+--------------------------------------
+  Gems, Coins, HeroXP  (int)
+
+EVENT
+--------
+  OnCurrencyChanged(string currencyName, int newValue, int delta)
+      Fired on EVERY successful mutation (add, spend, or set) for all three
+      currencies, sharing one event with the currency name as a string key
+      rather than three separate typed events.
+
+LIFECYCLE
+---------
+  Awake()
+      Singleton guard, DontDestroyOnLoad. Initialises Gems/Coins/HeroXP
+      directly from the starting* Inspector values - the comment notes that if
+      a save system needs to override these, it must call Set* AFTER Awake
+      runs (which is exactly what GameStartManager.InitializeServices does,
+      per its own doc).
+
+GEMS API
+-----------
+  AddGems(delta)         no-ops on delta==0; clamps result at >=0; persists via
+                         SaveSystem.SetGems; fires the change event
+  TrySpendGems(amount) -> bool
+                         amount<=0 trivially succeeds; fails if insufficient;
+                         otherwise deducts, persists, fires, returns true
+  SetGems(absolute)      clamped >=0; no-ops if unchanged; persists; fires
+
+COINS API
+------------
+  AddCoins(delta) / TrySpendCoins(amount) / SetCoins(val, silent = false)
+      Same shape as gems, with one difference: SetCoins accepts a 'silent'
+      flag that SKIPS firing OnCurrencyChanged when true - used by
+      GameStartManager during boot to set the initial balance WITHOUT
+      triggering any UI refresh logic that might not be ready yet.
+
+HERO XP API
+--------------
+  AddHeroXP(delta) / TrySpendHeroXP(amount) / SetHeroXP(absolute)
+      Same shape as the other two (TrySpendHeroXP's doc comment notes it is
+      "rarely needed" since nothing currently spends hero XP in the live
+      codebase, but the symmetric API exists for future use).
+
+INTERNAL
+-----------
+  FireChanged(currency, newValue, delta)
+      Wraps the event invocation in a try/catch, logging any exception thrown
+      by a subscriber (via Debug.LogException) rather than letting it
+      propagate and potentially interrupt whatever mutation just succeeded -
+      the currency change itself always completes regardless of a broken
+      listener.
+
+HOW IT CONNECTS
+---------------
+  - SaveSystem.SetGems/SetCoins/SetHeroXP persist every change immediately.
+  - GameStartManager seeds/restores balances on boot.
+  - WinPanel.ApplyRewardsToPlayer, PlayerProgressionService.TryUpgrade,
+    RevivePanel.RemoveGem, and UnitsPanelController (via
+    WireUpgradeButton/HandleCurrencyChanged) all read or spend through this
+    class.
+  - HudCurrencyView / ResourcesAnimationManager subscribe to OnCurrencyChanged
+    to animate the HUD numbers.
+
+NOTES
+-----
+  - Despite living under UI/Managers, this class contains ZERO UI code (no
+    UnityEngine.UI or TMPro imports) - it is a pure core economy service that
+    happens to be filed alongside UI controller scripts. Moving it under
+    Core/ would better reflect what it actually is and would remove most of
+    the architecturally-odd "Core reaching into UI" dependency edges recorded
+    elsewhere in this project's documentation.

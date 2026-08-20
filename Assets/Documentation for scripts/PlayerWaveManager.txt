@@ -1,0 +1,240 @@
+================================================================================
+  PlayerWaveManager.cs
+  Path : Assets/Scripts/Combat/Spawning/PlayerWaveManager.cs
+  Type : MonoBehaviour
+  Layer: Combat / Spawning
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The single script that turns a PUZZLE BLAST into a WAVE OF PLAYER UNITS. It is
+the concrete implementation of the game's core hook: subscribes to
+MatchResolver.OnBlast, spawns a locked wave of deployed units at the four gate
+points, waits for a match to "unlock" them via an animated release sequence, and
+loops for as long as the puzzle board still has pieces on it.
+
+INSPECTOR FIELDS
+----------------
+  Refs
+    matchResolver     (MatchResolver)  the puzzle event source
+    playerPrefabs     (GameObject[])   legacy multi-prefab array (unused by the
+                      live spawn path - see SpawnOneAt)
+    playerRootPrefab  (GameObject)     legacy "root + injected visual" prefab
+                      (also unused by the live path)
+    gatePoints        (Transform[4])   the four spawn points
+
+  Wave Settings
+    nextWaveDelay   (float, min 0, default 0.75)
+    minPerWave      (int, default 1)
+    maxPerWave      (int, default 4)  inclusive range for random wave size
+    freezePhysicsWhileLocked (bool, default true)  make locked units' Rigidbody2D
+                    Static rather than merely disabling movement flags
+
+  Spawn Safety
+    playerLayer         (LayerMask)  used to detect "something already stands
+                        here" before choosing a gate
+    occupyCheckRadius   (float, min 0, default 0.3)
+
+  jumpWaitTimeout  (float, min 0.1, default 0.5)  failsafe cap on how long the
+                   unlock sequence waits for a unit's jump animation
+
+RUNTIME STATE
+-------------
+  currentWave        (List<PlayerManager>)  the units in the wave currently
+                     locked at the gates
+  waveLocked         (bool)  true while waiting for the next puzzle match
+  running            (bool)  master on/off switch for the whole loop
+  unlockAnimInProgress (bool)  guards re-entrant blasts while the throw
+                       animation is playing
+  pendingStageEvents (int)  count of gate "Throw" animations still in flight
+
+  _gsm      (GameStartManager, found via FindObjectOfType in Awake)
+  PlayerUnits => _gsm.PlayerUnits    (property, null-safe via ?. on _gsm)
+  _unitsDb  (UnitsDatabaseSO, copied from _gsm.unitsDatabase)
+
+LIFECYCLE
+---------
+  OnEnable / OnDisable
+      Subscribe/unsubscribe MatchResolver.OnBlast -> HandleBlast, but ONLY IF
+      matchResolver is already assigned at that point - if it is assigned later
+      (e.g. in Awake after OnEnable already ran), the subscription would be
+      silently skipped. In practice matchResolver is Inspector-wired so this is
+      fine as long as the reference is set before the object enables.
+
+  Awake()
+      Finds GameStartManager in the scene (logs an error and returns early if
+      missing - _unitsDb stays null, which would break spawning later) and
+      caches its unitsDatabase.
+
+  Start()
+      Calls BeginWaves().
+
+  BeginWaves() / StopWaves() / RestartAfterRevive()
+      BeginWaves guards against double-starting (running check) and starts
+      WaveLoop(). StopWaves halts everything with StopAllCoroutines().
+      RestartAfterRevive is called after the player pays to revive: stops
+      everything, clears state, and calls BeginWaves() again - relying on the
+      live WaveLoop's own "does the puzzle still have stacks" re-check rather
+      than any special revive-specific logic.
+
+GetDeployedUnitDefinitions() -> List<UnitDefinitionSO>
+---------------------------------------------------------
+  Filters the units database down to only units that are BOTH unlocked AND
+  deployed (per PlayerUnitsModel), in database order. This is the pool every
+  spawn draws from.
+
+THE WAVE LOOP  (WaveLoop, the live version)
+----------------------------------------------
+  1. Waits (polling every frame) until matchResolver.HasAnyStacksLeft() is
+     true - so the very first wave does not spawn on an already-empty board.
+  2. Spawns the FIRST wave with a random size in [minPerWave, maxPerWave].
+  3. Then loops while running:
+       a. Waits while waveLocked is true (HandleBlast will flip it false once
+          a match clears and the unlock animation completes).
+       b. Once unlocked, checks PuzzleHasStacks() again - if the board is now
+          empty, sets running = false and exits: NO MORE WAVES SPAWN even
+          though the units already on the field keep fighting.
+       c. Waits nextWaveDelay seconds.
+       d. Double-checks PuzzleHasStacks() once more (in case the board emptied
+          during the delay) before spawning the next locked wave.
+  This is the mechanism that ties "you have to keep playing the puzzle to keep
+  getting reinforcements" together - the wave supply is directly gated on
+  MatchResolver.HasAnyStacksLeft(), called REPEATEDLY here (see NOTES for the
+  per-frame allocation this causes in MatchResolver).
+
+SPAWNING A LOCKED WAVE
+------------------------
+  SpawnLockedWave(count)  (the live version)
+      Bails out immediately if the puzzle is already empty (extra safety net).
+      Clears currentWave, finds free (unoccupied) gate indices via
+      GetFreeGateIndices, shuffles them, and spawns up to 'count' units (capped
+      by however many gates are actually free) via SpawnOneAt.
+      For each spawned unit: captures a ChildLocalSnapshot of every direct child
+      (see ChildLocalSnapshot's own doc) BEFORE re-parenting, then parents the
+      unit under the gate's "Top_0" child (via GetStageTopAnchor) so it visually
+      sits ON TOP of the gate structure while locked, then locks it via
+      ApplyLock(pm, true) and adds it to currentWave.
+      Sets waveLocked = true at the end - every spawned wave starts locked.
+
+SPAWNING ONE UNIT
+-------------------
+  SpawnOneAt(pos, rot)  (the live version - the one actually called)
+      1. Gets the deployed-units pool; warns and returns null if empty.
+      2. Picks ONE at RANDOM from the pool.
+      3. Requires def.runtimePrefab; errors and returns null if missing.
+      4. Instantiates that FULL prefab directly (no root+visual injection).
+      5. Requires a PlayerManager component on it; errors, destroys the
+         instance and returns null if missing.
+      6. If the spawned unit has a playerStatsApplier, calls
+         SetUnitId(def.unitId), then ApplyNow(), then copies the computed
+         stats into pm.unitStats - this is the moment a spawned unit's live
+         stats (including any active roguelite multipliers) become correct.
+
+  ApplyLock(pm, locked)
+      If locking: immediately calls pm.SwitchToNextState(pm.PlayerLockState) -
+      forcing the FSM straight into the lock state regardless of what it was
+      doing. Also sets pm.canMove = !locked and pm.SetAnimMoving(false) as a
+      belt-and-braces fallback, and (if freezePhysicsWhileLocked) toggles the
+      Rigidbody2D between Static (locked) and Dynamic (unlocked).
+
+RELEASING THE WAVE
+--------------------
+  HandleBlast(int _)   [MatchResolver.OnBlast subscriber]
+      Ignored if not running, not currently waveLocked, or an unlock animation
+      is already in progress (prevents a rapid double-match from double-firing
+      the release sequence). Otherwise calls PlayStageUnlockAnimations().
+
+  PlayStageUnlockAnimations()
+      For each gate point that currently has a player standing on it (checked
+      via Physics2D.OverlapCircle against playerLayer) AND has a child Animator:
+      resets and re-triggers its "Throw" animation trigger, and increments
+      pendingStageEvents. If NO gate had both an occupant and an Animator (an
+      edge case that "shouldn't happen"), it unlocks immediately as a fallback
+      rather than waiting forever. Otherwise sets unlockAnimInProgress = true
+      and waits for animation events to call back in.
+
+  OnOneStageUnlockEventFired()
+      Called from an ANIMATION EVENT on each gate's "Throw" clip (relayed
+      through StageUnlockRelay, since animation events must live on the same
+      object as the Animator). Decrements pendingStageEvents; once it reaches
+      zero (all triggered gates have fired their event), clears
+      unlockAnimInProgress and calls UnlockCurrentWaveViaAnimation().
+
+  UnlockCurrentWaveViaAnimation()  (the live version)
+      For every unit in currentWave:
+        1. Detaches from its gate parent (SetParent(null, true)).
+        2. RESTORES every child's local transform from the ChildLocalSnapshot
+           captured at spawn time - undoing any distortion the re-parenting or
+           the gate's own animation may have applied to the child hierarchy.
+        3. Sets pm.isUnlocked = true and ApplyLock(pm, false).
+        4. Starts JumpThenSwitch(pm) - the unit performs its release jump
+           before actually pursuing.
+      Clears waveLocked at the end.
+
+  JumpThenSwitch(pm)  [coroutine]
+      Finds a FrogJumpTransformOnly component (SimpleJump2D.cs's live class) on
+      the unit. If none exists, switches straight to PlayerPursueTargetState.
+      Otherwise triggers a jump (if not already jumping) and waits, POLLING
+      jumper.IsJumping every frame, capped by jumpWaitTimeout as a failsafe so a
+      stuck or mis-configured jump component can never freeze a unit forever.
+      Once done (or timed out), switches to PlayerPursueTargetState.
+
+HELPERS
+-------
+  GetFreeGateIndices() -> List<int>
+      Returns the indices of gatePoints NOT currently occupied by anything on
+      playerLayer within occupyCheckRadius - preventing units from stacking on
+      the same gate.
+
+  Shuffle<T>(list)  [static]  Fisher-Yates shuffle, used to randomise which
+                    free gates get used first.
+
+  OnDrawGizmosSelected()  draws a green wire sphere at each gate's
+                          occupyCheckRadius for scene-view tuning.
+
+  PuzzleHasStacks() -> bool   thin wrapper over
+                       matchResolver.HasAnyStacksLeft(), null-safe.
+
+  GetStageTopAnchor(stage) -> Transform
+      Looks for a child named "Top_0" on the gate; warns and falls back to the
+      gate itself if not found - a MAGIC CHILD NAME that every gate prefab must
+      contain exactly.
+
+HOW IT CONNECTS
+---------------
+  - Subscribes to MatchResolver.OnBlast - this IS the puzzle-to-combat bridge.
+  - Reads GameStartManager.PlayerUnits and unitsDatabase to know which units are
+    deployed.
+  - Spawns UnitDefinitionSO.runtimePrefab, configures via PlayerStatsApplier.
+  - Drives PlayerManager's FSM directly (SwitchToNextState calls bypass the
+    normal Tick() flow, which is expected here since the manager is external
+    orchestration, not another state).
+  - StageUnlockRelay forwards each gate's animation event into
+    OnOneStageUnlockEventFired.
+  - Uses FrogJumpTransformOnly (SimpleJump2D.cs) for the release jump.
+
+NOTES / RISKS
+-------------
+  - Six numbered dead siblings remain as methods (not classes, so the earlier
+    class-level cleanup did not remove them): WaveLoop1, WaveLoop2,
+    SpawnLockedWave1, SpawnOneAt1 through SpawnOneAt5, UnlockCurrentWave1,
+    UnlockCurrentWaveViaAnimation1. Reading them is informative history: they
+    show the spawn path evolved from "one shared prefab" (SpawnOneAt1) through
+    "random prefab array" (SpawnOneAt2), "spawn the unit's own visual prefab
+    directly" (SpawnOneAt3), "spawn a shared root and inject visuals via
+    reflection" (SpawnOneAt4/5, including a raw
+    System.Reflection.GetField(...).SetValue(...) call to reach a private field)
+    before settling on the current, much simpler approach: instantiate
+    def.runtimePrefab directly and configure it through the public
+    PlayerStatsApplier API. None of the numbered versions are called.
+  - HasAnyStacksLeft() is called from the WaveLoop's outer wait AND from
+    PuzzleHasStacks() at multiple points per cycle - see MatchResolver's own
+    doc for the per-frame allocation this causes while a wave is locked.
+  - The wave supply permanently STOPS once the puzzle board empties
+    (running = false), even if the player later somehow gets more pieces onto
+    the board (not currently possible in this game's rules, but worth noting
+    as a coupling point if board refills are ever added).
+  - "Top_0" and the "Throw" animator trigger are magic strings; a gate prefab
+    missing either silently degrades (falls back to the gate root, or the wave
+    unlocks immediately without a throw animation).

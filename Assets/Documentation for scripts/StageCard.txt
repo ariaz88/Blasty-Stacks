@@ -1,0 +1,57 @@
+================================================================================
+  StageCard.cs
+  Path : Assets/Scripts/UI/Home/StageCard.cs
+  Type : MonoBehaviour
+  Layer: UI / Home
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+One tile in the stage-select map: shows the stage number/title, a 3-section
+star/reward indicator, a lock overlay for unreached stages, and a reward
+preview (coins/gems/xp).
+
+FIELDS
+------
+  stageIndex     (int, 0-based identity)
+  lockOverlay    (GameObject, optional dim/lock visual)
+  section1Image / section2Image / section3Image  (Image)  three separate star
+    slots, one per performance tier (Stage Clear / 50% HP Clear / 100% HP Clear)
+  sec1Empty/sec1Gold, sec2Empty/sec2Gold, sec3Empty/sec3Gold  (Sprite pairs)
+  titleText  (TMP_Text, optional)
+  rewardCoinsText, rewardGemsText, rewardXPText  (TMP_Text)
+
+METHODS
+-------
+  SetLocked(bool)   toggles lockOverlay. Per the inline comment, locked stages
+                    STILL show empty star sprites underneath (a deliberate
+                    design choice, not a bug).
+
+  SetStars(int)  (the live version)
+      Clamps 0-3. CUMULATIVE behaviour: resets all three sections to Empty,
+      then sets section1 Gold if stars>=1, section2 Gold if stars>=2, section3
+      Gold if stars>=3 - i.e. a 3-star clear lights up ALL THREE sections gold,
+      matching the conventional "N filled stars out of 3" reading.
+
+  SetRewardPreview(coins, gems, xp)   writes all three, each null-checked
+  SetTitle(text)                      sets titleText
+  SetSectionSprite(img, sprite)  [private static]  enables the Image and sets
+                                 its sprite (never disables it)
+
+HOW IT CONNECTS
+---------------
+  - HomeManager instantiates/binds one of these per stage in the stage-select
+    scroller, using SaveSystem.GetStars/GetHighestUnlocked to decide star count
+    and lock state.
+
+NOTES
+-----
+  - A dead numbered sibling SetStars1() remains with an EXCLUSIVE behaviour
+    documented in its own XML comment: only the section matching the EXACT
+    star count lights up (stars==1 -> only section1 gold; stars==2 -> only
+    section2 gold, leaving section1 empty). This reads as a completely
+    different visual language (one badge per achievement, not a filled star
+    bar) from the live cumulative SetStars - worth knowing if the star display
+    ever looks "wrong" during a design review, since the OLD interpretation is
+    still sitting right next to the live one in the same file.

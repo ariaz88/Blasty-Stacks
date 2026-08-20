@@ -13,6 +13,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   Log and update its Open Threads, following the protocol written in that file. The `/wrap`
   command does exactly this.
 
+## Per-script documentation — keep it in sync
+
+`Assets/Documentation for scripts/` holds one `.txt` per live script (same basename as the
+`.cs` file), covering PURPOSE / FIELDS / METHODS-or-FLOW / HOW IT CONNECTS / NOTES — including
+dead numbered siblings, magic strings/animator-parameter contracts, and known bugs found while
+reading the source. Read the matching doc before editing a script blind.
+
+- **A `PostToolUse` hook** (`.claude/settings.json` → `.claude/hooks/doc-reminder.js`) fires after
+  every `Write`/`Edit` that touches `Assets/Scripts/**/*.cs` (excluding `Assets/Scripts/_Legacy/`)
+  and reminds the model to update or create the matching doc.
+- **When the reminder fires:** re-read the changed script and update its `.txt` to match — or, for
+  a brand-new script, write one from scratch in the same format as the rest of the folder.
+  Don't skip this because the change looks small; a stale doc is worse than no doc.
+- `_Legacy/` scripts are excluded on purpose — they are quarantined, not live.
+
 ## Project overview
 
 "Blasty-Stacks" (aka "Stacky Warriors 2D") is a Unity 2D game combining a grid-based block-placement puzzle with a tower-defense / roguelite auto-battler combat layer. It is a standard Unity Editor project — there is no CLI build/test pipeline in this repo.

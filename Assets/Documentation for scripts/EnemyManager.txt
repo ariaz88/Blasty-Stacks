@@ -1,0 +1,265 @@
+================================================================================
+  EnemyManager.cs
+  Path : Assets/Scripts/Combat/Enemy/EnemyManager.cs
+  Type : MonoBehaviour   [DefaultExecutionOrder(-100)]
+  Layer: Combat / Enemy
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The BRAIN of one enemy: it owns the live stats (via CP/stat rebuild), the target
+detection, facing, gate-attack vs player-attack decision, the attack cooldown,
+and the death/revive lifecycle. It is the enemy-side counterpart to PlayerManager
+combined with the FSM states - except enemies do NOT use a state-machine, all
+logic lives directly in this one class as a big if/else per-frame update.
+
+[DefaultExecutionOrder(-100)] makes it initialise before most other scripts,
+which matters because Awake resolves the gate reference other systems may need.
+
+REGION: CP / STATS / PROGRESSION
+---------------------------------
+  statsBase     (UnitStatsSO)          design-time L1 stats
+  unitStats     (UnitStatsRuntime)     live mutable stats
+  unitLevel     (int, min 1)           progression level (see Initialize below)
+  progression   (ProgressionConfigSO)  growth curves
+  stageLevel    (int, min 1)           the CP "lens" - set by EnemySpawner
+  cpWeights     (CPWeightsConfigSO)
+  cp            (int, Debug)           computed Combat Power, visible in Inspector
+
+  _atkM, _defM, _hpM, _mvM, _asM, _rngM  (float, default 1) runtime multipliers,
+      the enemy-side equivalent of roguelite buffs
+
+  Initialize(int stageLevelFromSpawner)
+      Sets stageLevel AND unitLevel to the same value - this is the key design
+      decision: an enemy's progression level literally IS the stage number, so
+      enemies naturally get stronger stats.attack/maxHP/etc. as the player
+      advances through stages, without any separate difficulty curve.
+      Then calls RebuildFromBase().
+
+  RebuildFromBase()
+      1. unitStats.FromSO(statsBase) - reset to base.
+      2. Apply growth multipliers from ProgressionMath using unitLevel
+         (attack, HP, moveSpeed, attackSpeed only - defense/range growth is
+         commented as "add later" and never applied).
+      3. Apply the runtime multipliers via ApplyMultipliers.
+      4. Push maxHealth/currentHP into the EnemyStats component so the health
+         bar matches.
+      5. Recompute cp via UnitCP_WithFallback.
+
+  SetRuntimeMultipliers(atk, def, hp, mv, atkSpd, rng, rebuildNow = true)
+      Stores the multipliers and optionally rebuilds immediately.
+
+  UnitCP_WithFallback(stats, stage, cfg)
+      If cfg is assigned, delegates to CPCalculator.UnitCP. Otherwise computes a
+      simplified CP using hard-coded fallback weights (missing the range term
+      that the real calculator has) - a safety net for a spawner that forgot to
+      assign cpWeights.
+
+CORE FIELDS (outside the region)
+---------------------------------
+  initialBodyType        (RigidbodyType2D) captured at Awake, restored on revive
+  enemyLocoMotion, enemyAnimationManager, playerStats, enemyStats, topDownMover
+      cached component references
+  currentGateTarget       (PlayerGateStats)
+  attackPlayerGate        (bool) true once this enemy has reached the gate
+  enemyDamageCollider     (CapsuleCollider2D)
+  IsAttacking             (bool, public get / private set)
+  defaultAttack           (EnemyAttackAction)
+  currentAttack           (EnemyAttackAction, private)
+  isPerformingAction, isInteracting  (bool)
+  currentRecoveryTimer    (float) attack cooldown
+  detectionRadius, minimumDetectionAngle, maximumDetectionAngle,
+  stoppingDistance, rotationSpeed   (AI tuning)
+  faceCenterOnStart, playerIsInLeft  (facing)
+  reachedGate, gateStopPosition, gateStopDistance  (gate arrival state)
+  facingDeadZoneX, facingLockedToPlayer  (anti-jitter facing)
+
+LIFECYCLE
+---------
+  OnEnable / OnDisable
+      Subscribe/unsubscribe PlayerGateStats.OnGateDestroyed -> HandleGateDestroyed.
+      Correctly paired, so no leak across spawns.
+
+  Awake()
+      Caches components, defaults currentAttack to defaultAttack (so a gate hit
+      always has SOMETHING to swing with even before targeting logic runs),
+      finds "PlayerCastle" by NAME if currentGateTarget is unassigned (logs an
+      error if not found), and remembers the starting Rigidbody2D body type for
+      later restoration on revive.
+
+  Start()
+      Disables the damage collider, applies initial facing, and registers itself
+      with the scene's RogueliteManager via
+      GameObject.FindObjectOfType<RogueliteManager>().RegisterEnemy(this) -
+      NOT NULL-CHECKED, so a scene without a RogueliteManager would throw here.
+
+  Update()  (the live version)
+      1. Respects GameplayPause.
+      2. If close to a target (distanceFromTarget < fairDistanceToPlayer),
+         updates facing every frame.
+      3. If enemyStats.enemyIsdead: calls StopMovingEnemy(), and on the first
+         frame of death starts DestroyAfterDelayRealtime(0.5f), then RETURNS -
+         no further logic runs once dead.
+      4. If the current target has died (currentTarget.playerIsdead), resets
+         attack flags so the enemy does not stay locked waiting on a corpse.
+      5. Calls DetectPlayerTargets() EVERY FRAME (see below).
+      6. HandleRecoveryTimer() and reads the animator's "isInteracting" bool
+         back into isInteracting.
+
+  FixedUpdate()
+      Respects GameplayPause, then calls HandleCurrentAction().
+
+FACING  (#region Facing)
+-------------------------
+  UpdateFacing()
+      Priority 1: if there is a player target, FacePlayerStable(); else
+      Priority 2: SetInitialFacingByScreenHalf().
+
+  FacePlayerStable()
+      Computes horizontal delta to the target, ignores it if smaller than
+      facingDeadZoneX (prevents flicker when standing almost level), else calls
+      ApplyFacing(faceLeft = dx < 0).
+
+  ApplyFacing(faceLeft) / FaceLeft(faceLeft)
+      Both flip transform.localScale.x's sign - the standard 2D sprite-flip.
+
+  SetInitialFacingByScreenHalf()
+      Uses the main camera's viewport X to decide which half of the screen the
+      enemy is on, and faces toward the opposite half (so enemies spawned on the
+      right face left, roughly toward the player's side).
+
+STOPPING / DEATH
+-----------------
+  StopMovingEnemy()
+      Zeroes the animator's Vertical/Horizontal floats, hard-stops the
+      Rigidbody2D (zero velocity, Kinematic), and DISABLES enemyLocoMotion and
+      topDownMover so nothing can write velocity again this frame or later.
+      If enemyIsdead, plays "Dying" directly.
+
+  DestroyAfterDelayRealtime(seconds)  [coroutine]
+      Uses WaitForSecondsRealtime so the destroy still happens even while
+      GameplayPause has set Time.timeScale to 0 - the point being that a paused
+      game can still finish clearing a dead enemy off screen once resumed, since
+      "seconds" is real time not game time.
+
+TARGETING
+---------
+  DetectPlayerTargets()
+      Physics2D.OverlapCircleAll around detectionRadius on playerDetectionLayer,
+      picks the NEAREST live (non-dead) PlayerStats, and writes it into
+      enemyLocoMotion.currentTarget - this is the single source of truth for
+      "who is this enemy fighting", read by EnemyLocoMotion's movement.
+      !! PERFORMANCE: this allocates a new Collider2D[] array EVERY FRAME for
+      EVERY enemy (OverlapCircleAll, not the NonAlloc variant). With a wave of
+      enemies this is one of the larger recurring GC sources in combat.
+
+ACTION DECISION
+----------------
+  HandleCurrentAction()   (the live version, called from FixedUpdate)
+      1. If there is a current player target within stoppingDistance, and
+         neither it nor this enemy is dead: AttackTarget() + UpdateFacing(),
+         then RETURN - player takes priority over the gate.
+      2. Else, if attackPlayerGate is set and the gate is alive: on cooldown
+         expiry, sets isPerformingAction, resets currentRecoveryTimer from
+         currentAttack.recoveryTime (falling back to defaultAttack with a
+         warning if currentAttack was somehow null), stops the walk animation,
+         and plays the attack animation at unitStats.attackSpeed.
+
+GATE CONTACT
+-------------
+  HandleGateDestroyed()
+      Clears attackPlayerGate, currentGateTarget and reachedGate, and stops the
+      walk animation. Called when PlayerGateStats broadcasts its static event.
+
+  HandleGateTrigger(gate)  /  OnTriggerEnter2D  /  OnTriggerStay2D
+      Both trigger callbacks funnel into HandleGateTrigger, which sets
+      attackPlayerGate = true, currentGateTarget = gate, and on the FIRST
+      contact latches reachedGate = true and records gateStopPosition from the
+      Rigidbody2D - this is what EnemyLocoMotion clamps to so the enemy can
+      never walk past the gate. Using OnTriggerStay2D as well as Enter means
+      the gate reference and stop position self-heal even if Enter is somehow
+      missed on the first frame.
+
+DAMAGE
+------
+  DamageApplying(PlayerManager target) -> float
+      CombatMath.DamagePerHit(unitStats, target.unitStats) - the enemy's
+      outgoing damage formula, shared with the player side.
+
+ATTACK  (#region Attack)
+--------------------------
+  HandleRecoveryTimer()
+      Counts currentRecoveryTimer down by Time.deltaTime. When it reaches 0
+      while isPerformingAction is still true, clears both isPerformingAction and
+      IsAttacking - this is the ONLY place IsAttacking is turned off, making it
+      the authoritative "attack finished" signal.
+
+  AttackTarget()
+      If already performing an action, just zeroes the Vertical float and
+      returns (do not restart the swing). If no currentAttack, calls
+      GetNewAttack() and returns (try again next call). If the target has died,
+      bails out. Otherwise sets IsAttacking/isPerformingAction, starts the
+      cooldown from currentAttack.recoveryTime, zeroes the movement animator
+      float, and plays the attack clip at unitStats.attackSpeed.
+
+  GetNewAttack()
+      Selects defaultAttack only if distanceFromTarget falls within the attack's
+      min/max distance band; otherwise leaves currentAttack null.
+
+  GetNewTargets()
+      If there is neither a player target nor a gate target, calls
+      HandleCurrentAction() directly - an odd one-off manual poke, not called
+      from Update or FixedUpdate itself.
+
+REVIVE
+------
+  ResetAfterRevive()
+      Called after the player revives (paying gems) and the fight resumes.
+      Refuses to act if this particular enemy is already dead (a dead enemy
+      cannot be "revived"). Clears attackPlayerGate and reachedGate, RE-FINDS
+      the PlayerGateStats via FindObjectOfType (falling back to a GameObject.Find
+      by name, logging a warning if neither succeeds), resets the Rigidbody2D to
+      Dynamic with zero velocity, re-enables enemyLocoMotion and clears its
+      target so detection runs fresh, resets action/interaction flags and the
+      cooldown timer, and finally calls DetectPlayerTargets() immediately so the
+      enemy does not have to wait a frame to reacquire someone.
+
+HOW IT CONNECTS
+---------------
+  - Reads UnitStatsSO/UnitStatsRuntime/ProgressionConfigSO/CPWeightsConfigSO -
+    the whole Data layer.
+  - Drives EnemyLocoMotion (by writing currentTarget and reading
+    distanceFromTarget) and EnemyAnimatorManager (PlayTargetAnimation).
+  - Damages PlayerStats and PlayerGateStats through PlayerDamageCollider is the
+    reverse path; this class computes the OUTGOING damage number that
+    EnemyDamageCollider applies.
+  - RogueliteManager.RegisterEnemy links this enemy into the roguelite XP
+    system, presumably so its death later grants XP (the actual kill-XP hookup
+    is commented out elsewhere - see EnemyManager NOTES below and
+    RogueliteManager's own doc).
+  - PlayerGateStats.OnGateDestroyed drives HandleGateDestroyed.
+
+NOTES / RISKS
+-------------
+  - This is the largest live script in the project (794 lines even after the
+    2026-08-20 duplicate-class cleanup removed EnemyManager1/EnemyManager2,
+    which together held over 1,000 additional lines). It mixes stat
+    progression, targeting, facing, combat decision, gate logic and revive
+    handling in one class - a strong candidate for splitting if it is ever
+    touched again.
+  - Six numbered-but-unused sibling methods remain as METHODS (not classes, so
+    the earlier class-level cleanup did not remove them): Initialize1,
+    RebuildFromBase1, UpdateFacing1, Update1, FixedUpdate1, HandleCurrentAction1,
+    HandleGateDestroyed1, OnTriggerEnter2D1, ResetAfterRevive1. None of them are
+    called - Unity only invokes the exactly-named Awake/Start/Update/FixedUpdate,
+    and the others are simply dead code sitting next to their live twins.
+  - DetectPlayerTargets allocates every frame per enemy (see PERFORMANCE note
+    above) - the single largest per-frame GC source among the Combat/Enemy
+    scripts.
+  - GameObject.FindObjectOfType<RogueliteManager>() in Start() is not
+    null-checked - a gameplay scene without exactly one RogueliteManager object
+    would throw a NullReferenceException for every enemy that spawns.
+  - "PlayerCastle" and the "PlayerGate" tag are magic strings/names on which
+    Awake and revive both depend; renaming either silently breaks gate
+    targeting.

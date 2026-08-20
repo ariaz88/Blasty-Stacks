@@ -1,0 +1,219 @@
+================================================================================
+  RevivePanel.cs
+  Path : Assets/Scripts/UI/WinLose/RevivePanel.cs
+  Type : MonoBehaviour - singleton
+  Layer: UI / WinLose
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The "pay gems to keep fighting" modal: a countdown timer, a Revive button
+(costing an escalating amount of gems) and a No Thanks button. If the player
+revives, this class does the heavy lifting of RESETTING THE STAGE - clearing
+the puzzle board, destroying leftover locked units, refilling the gate, and
+restarting the wave spawner - rather than reloading the whole scene. If the
+player declines or the timer runs out, it hands off to the Lose panel.
+
+SINGLETON
+---------
+  Instance  guard-and-destroy in Awake, no DontDestroyOnLoad (fresh per stage,
+            matching LevelGameManager's pattern).
+
+INSPECTOR FIELDS
+----------------
+  Fade
+    reviveCanvasGroup, loseCanvasGroup  (CanvasGroup)
+    fadeDuration          (float, default 0.35)  fade-IN duration
+    fadeDurationrEVIVE    (float, default 0.85)  fade-OUT duration (note the
+                          inconsistent casing in the field name itself)
+
+  UI
+    reviveButton, noThanksButton  (Button)
+    revivePanel  (GameObject, the orange window)
+    losePanel    (GameObject, the pink panel - shared with/handed off from
+                 LoseGame's own losePanel reference)
+    BGImage      (Image, dark overlay shared by both panels)
+    progressBar, whiteBar  (Image, circular countdown fill)
+    barText      (TMP_Text, countdown number)
+    gemCostText  (TMP_Text, current revive price)
+
+  Revive Settings
+    countdownDuration        (float, default 9)  seconds before auto-decline
+    baseReviveGemCost        (int, default 15)   1st revive price
+    secondReviveFlatIncrement (int, default 5)   2nd revive = base + 5
+    laterReviveMultiplier    (float, default 1.3)  3rd+ revive = prev * 1.3
+
+  State (debug, Inspector-visible)
+    isReviveActive, isReviveButtonPressed, gameOver (bool)
+
+  Board Roots
+    blocksRoot            (GameObject, "BG/Blocks" - the live puzzle pieces)
+    redundantBlocksRoot    (GameObject, "BG/RedundantBlocks" - a FRESH,
+                           pre-authored replacement board)
+    board                  (BoardGridXY)
+
+RUNTIME STATE
+-------------
+  timer             (float)  countdown remaining
+  currentReviveCost (int)    current gem price, escalates per use
+  reviveUsedCount   (int)    revives used this stage
+  playerWaveManager (PlayerWaveManager, found in Awake)
+
+LIFECYCLE
+---------
+  Awake()
+      Singleton guard. Caches PlayerWaveManager. Resets currentReviveCost to
+      baseReviveGemCost and reviveUsedCount to 0 (PER-RUN state, reset fresh
+      since this is a per-scene singleton). Hides revivePanel and starts
+      BGImage fully transparent.
+
+  Start()   wires both buttons; calls RefreshGemCostUI() to show the initial price.
+
+  Update()
+      No-ops unless isReviveActive and not yet pressed. Counts timer down using
+      UNSCALED delta time (so the countdown runs even though gameplay is
+      paused while this panel is up), updates both fill bars and the text, and
+      once timer <= 0: clears the active/pressed flags and calls
+      HideReviveAndShowLose() - the AUTO-DECLINE path.
+
+SHOWING THE PANEL
+--------------------
+  ShowRevivePanel()  (the live version)
+      Pauses gameplay (GameplayPause.SetPaused(true)), refreshes the gem cost
+      text, activates revivePanel, resets the countdown state and both fill
+      bars to full, resets BGImage alpha to 0, then starts
+      FadeInRevivePanelRoutine() to animate both the panel's CanvasGroup and
+      the BG overlay in together over fadeDuration (unscaled).
+
+  FadeInRevivePanelRoutine() / FadeOutRevivePanelRoutine(onComplete)
+      [coroutines]  Straightforward Lerp-based alpha animations, both entirely
+      on unscaled time so they work correctly while paused. The fade-out
+      variant accepts a completion callback (used to chain into ShowLosePanel)
+      and, at the end, deactivates revivePanel and disables its raycast/
+      interactable flags.
+
+REVIVE BUTTON
+----------------
+  ReviveLevel()  (the live version)
+      Guarded by isReviveActive/isReviveButtonPressed. First tries RemoveGem();
+      if payment fails (not enough gems), treats this exactly like declining -
+      sets flags and calls HideReviveAndShowLose(). Otherwise:
+        1. Sets the pressed/active flags.
+        2. Notifies LevelGameManager.NotifyReviveAccepted() (marks the
+           single-revive-per-stage rule as consumed).
+        3. Unpauses gameplay and clears gameOver BEFORE fading anything out -
+           the actual stage reset (ReviveTheStage) runs while the panel is
+           still visually up, then the panel fades out over it.
+        4. Calls ReviveTheStage() (see below).
+        5. Fades the panel/BG out via FadeOutRevivePanelRoutine(null) - no
+           follow-up callback needed since the game is already running again.
+
+  RemoveGem() -> bool
+      Charges currentReviveCost via CurrencyManager.TrySpendGems. If
+      CurrencyManager.Instance is missing, WARNS and returns true - i.e. revive
+      becomes FREE rather than blocked, a deliberate fail-open so a missing
+      singleton cannot soft-lock the player at a lose screen. On successful
+      payment: increments reviveUsedCount, then computes the NEXT price -
+      exactly base+increment after the first revive, then multiplied by
+      laterReviveMultiplier (rounded up) for every revive after that - and
+      refreshes the cost text.
+
+NO THANKS / TIMEOUT
+-----------------------
+  NoThanksClick()
+      Guarded by isReviveActive. Clears flags, notifies
+      LevelGameManager.NotifyReviveDeclined(), and calls
+      HideReviveAndShowLose(). Both this and the timer-expiry path in Update()
+      funnel into the same method.
+
+  HideReviveAndShowLose()  (the live version)
+      Notifies LevelGameManager.NotifyReviveDeclined() a SECOND time here as
+      well (redundant with NoThanksClick's own call when reached via that
+      path, harmless since it just sets a state enum, but the timeout path
+      relies on THIS call being the only one). If no revive UI exists at all,
+      shows Lose directly; otherwise fades the revive panel out and chains into
+      ShowLosePanel via the completion callback.
+
+SHOWING THE LOSE PANEL
+--------------------------
+  ShowLosePanel()  (the live version, public - also called directly by
+                    LevelGameManager when a second-revive is disallowed)
+      Keeps gameplay paused, activates losePanel, resets its CanvasGroup and
+      the BG alpha to 0, and starts FadeInLosePanelRoutine() - the same
+      Lerp-based fade-in pattern as the revive panel, timed on fadeDuration
+      (NOT fadeDurationrEVIVE).
+
+ACTUAL STAGE RESET  (the substance of a revive)
+----------------------------------------------------
+  ReviveTheStage()
+      1. gameOver = false.
+      2. board.ClearAllOccupancy() - wipes the grid's occupancy tracking (not
+         the visual pieces yet).
+      3. Destroys EVERY active PieceSimple in the scene via
+         FindObjectsOfType - the old puzzle state is discarded entirely.
+      4. Destroys every active PlayerManager unit that is currently in
+         PlayerLockState (i.e. still waiting at a gate, not yet released),
+         EXCLUDING anything tagged "PlayerGate" (the player's own castle also
+         carries a PlayerManager component and must be spared).
+      5. Swaps board ROOTS: disables blocksRoot (the now-cleared original
+         board GameObject), enables redundantBlocksRoot - a SEPARATE,
+         pre-authored replacement set of blocks that was sitting inactive in
+         the scene the whole time. This is the actual mechanism by which the
+         puzzle board "refills" on revive: not procedural regeneration, but
+         swapping in a second hand-placed copy. Warns loudly if either root is
+         unassigned.
+      6. Refills the PlayerGateStats: finds it via FindObjectOfType, resets
+         isPlayerGateDestroyed to false, currentHP to maxHealth, and updates
+         its health bar. Warns if no gate is found.
+      7. Starts ActivateWaveSpawner() - a short real-time delay before calling
+         PlayerWaveManager.RestartAfterRevive().
+      8. Calls ResetAfterRevive() on every EnemyManager currently in the
+         scene, un-freezing them and clearing their target so they re-detect
+         fresh.
+
+  ActivateWaveSpawner()  [coroutine]
+      WaitForSecondsRealtime(0.1f) - deliberately real-time so it elapses even
+      immediately after GameplayPause was cleared but before the timeScale
+      change has necessarily propagated - then calls
+      playerWaveManager.RestartAfterRevive() (re-finding the manager if the
+      cached reference was somehow lost).
+
+HOW IT CONNECTS
+---------------
+  - LevelGameManager.OnPlayerGateDestroyed calls ShowRevivePanel() or
+    ShowLosePanel() directly.
+  - Notifies LevelGameManager.NotifyReviveAccepted/Declined so its own state
+    machine (Playing/ReviveOffer/Lost) stays in sync.
+  - Destroys and reconstructs Puzzle-layer state (BoardGridXY, PieceSimple) and
+    Combat-layer state (PlayerManager, EnemyManager) directly - this is one of
+    the few places outside the Puzzle/Combat systems themselves that reaches
+    deep into both.
+  - Restarts PlayerWaveManager's wave loop via RestartAfterRevive.
+  - Pays through CurrencyManager.TrySpendGems.
+
+NOTES / RISKS
+-------------
+  - THE "REDUNDANT BLOCKS" DESIGN: rather than procedurally regenerating a
+    fresh puzzle layout after a revive, the stage must be AUTHORED WITH TWO
+    complete board setups (blocksRoot and redundantBlocksRoot) side by side in
+    the scene, with the second one inactive until a revive swaps it in. Every
+    one of the 7 gameplay scenes must follow this convention or a revive will
+    leave the board empty (with only warnings logged, not errors).
+  - reviveUsedCount / currentReviveCost reset in Awake, meaning they are
+    per-SCENE-INSTANCE, not truly per-stage-attempt in a strict sense - since
+    LevelGameManager is also a fresh instance per scene load, this stays
+    consistent with "resets each time you (re)enter a stage", including after
+    Play Again from the Lose screen.
+  - Five dead numbered siblings remain as methods: ShowRevivePanel1,
+    ReviveLevel1, HideReviveAndShowLose1, ShowLosePanel1. All of them use
+    DOTween (DOScale/DOFade with SetUpdate(true)) directly rather than the
+    manual coroutine Lerps the live versions use - an earlier implementation
+    style that was replaced, likely to gain more explicit control over exactly
+    which properties (CanvasGroup alpha vs. GameObject scale) get animated and
+    in what order relative to gameplay state changes.
+  - RemoveGem's fail-open behaviour (free revive if CurrencyManager is
+    missing) is a deliberate design choice worth knowing about if
+    CurrencyManager is ever refactored - a bug that makes the singleton
+    intermittently null would silently make revives free rather than visibly
+    broken.

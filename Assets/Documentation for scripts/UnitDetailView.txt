@@ -1,0 +1,210 @@
+================================================================================
+  UnitDetailView.cs
+  Path : Assets/Scripts/UI/Units/UnitDetailView.cs
+  Type : MonoBehaviour
+  Layer: UI / Units
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+The full detail screen for one selected unit: header (portrait, name, level),
+a compact set of current-stat labels, a "burger menu" stats popup showing all
+seven stats with deltas, a tooltip, and a shared animated toast system used for
+"locked feature" and "not enough resources" messages. Per its own doc comment,
+this is a PURE VIEW - it performs no game logic, only display, and is driven
+entirely by UnitsPanelController.
+
+INSPECTOR FIELDS  (grouped)
+------------------------------
+  Stats Popup (overlay)
+    statsPopupRoot, popupHeader
+    popupCP/HP/ATK/DEF/Move/AtkSpd/Range   (current-value labels)
+    popupCPDelta/HPDelta/ATKDelta/DEFDelta/MoveDelta/AtkSpdDelta/RangeDelta
+      (optional +Δ labels, may be left null)
+    burgerButton, popupCloseBtn, gearBtn, STartUpBtn, skinBtn  (buttons)
+    gearToastAnchor, starUpToastAnchor, skinToastAnchor  (RectTransform, where
+      each "coming soon" toast for gear/star-up/skin spawns)
+
+  Header UI
+    visualRoot        (RectTransform)  where the unit's 3D/animated visual
+                      prefab gets instantiated
+    currentVisualInstance (GameObject, runtime, not serialized)
+    portraitImage, nameText, levelText
+    cpText, xpText, coinsText, coinsTextDelta
+
+  Stats UI (Current / +Delta)
+    hpText/hpDeltaText, atkText/atkDeltaText, defText/defDeltaText,
+    atkSpdText/atkSpdDeltaText, moveSpdText/moveSpdDeltaText,
+    rangeText/rangeDeltaText
+    requirementDetailText  (shown under a "Locked" message panel)
+
+  Formatting
+    decimals    (int, 0-3, default not shown explicitly - Range attribute)
+    deltaColor  (Color, default green)
+
+  Tooltip
+    tooltipRoot, tooltipButton, hideOnClickButton (full-screen transparent
+    "click anywhere to dismiss" button), tooltipFadeDuration (0.3),
+    tooltipFadeEase (OutQuad)
+
+  Locked Stage Toast Settings
+    toastCanvasParent, toastAnchor, notEnoughText ("NOT ENOUGH RESOURCES"),
+    commingSoonText ("Comming Soon.." - sic), lockedToastPrefab,
+    toastStartColor (white), toastGrayColor (gray), toastStartYOffset,
+    toastRisePixels (40), toastRiseDuration (2), toastRiseEase (OutQuad),
+    toastFadeInDuration (0.13), toastGrayAt (0.75, 0-1), toastFadeOutAt
+    (0.8, 0-1), toastTextSize (25, private runtime field),
+    DesigeredTextSize (40 - sic, the actually-used size)
+  ToastAnchor => toastAnchor  (public read-only accessor)
+
+LIFECYCLE
+---------
+  Awake()
+      Wires every button (burger -> ShowStatsPopup, popupClose ->
+      HideStatsPopup, tooltipButton -> ShowTooltip, hideOnClickButton ->
+      HideTooltip, gear/STartUp/skin -> their respective toast methods),
+      clearing old listeners first each time. Hides statsPopupRoot and
+      tooltipRoot so both start closed.
+
+STATS POPUP
+--------------
+  ShowStatsPopup()
+      If closed: hides the currently instantiated unit visual (so the stats
+      overlay is not obscured/overlapped by it) and activates statsPopupRoot.
+      The Detail screen underneath stays active - this is purely an overlay.
+
+  HideStatsPopup()
+      If open: re-shows the visual instance and deactivates the popup. NOTE:
+      re-showing the visual is nested INSIDE the popup-active check but the
+      currentVisualInstance re-activation only happens if BOTH conditions are
+      true in the same if-block - if currentVisualInstance were somehow null
+      while the popup was open, the popup would never close via this path (see
+      NOTES).
+
+TOOLTIP
+----------
+  ShowTooltip()
+      Activates tooltipRoot, ensures a CanvasGroup exists (adding one if
+      missing), starts it fully transparent but ALREADY interactable/raycast-
+      blocking, then fades alpha to 1 via DOTween.
+  HideTooltip()
+      No-ops if not currently active. Fades alpha to 0, then on completion
+      deactivates the root and resets the CanvasGroup back to alpha 1 /
+      non-interactive - ready for the next ShowTooltip call.
+
+HEADER
+---------
+  SetHeader(UnitDefinitionSO unitDef, level)  (the live version)
+      Sets name/level text. Destroys any previously instantiated visual, then
+      (if both a visualPrefab and visualRoot exist) instantiates the new
+      visual under visualRoot at zero local position/rotation and the unit's
+      configured uiVisualScale. Finds an Animator on the new instance and
+      forces it to the "Idle" state at time 0 immediately (animator.Update(0f)
+      then Play) so the character does not visibly pop into a T-pose or a
+      random frame before the next real Update tick.
+
+STAT ROWS
+------------
+  SetStatRows(hpCurrent, hpDelta, atkCurrent, atkDelta, defCurrent, defDelta,
+             asCurrent, asDelta, mvCurrent, mvDelta, rgCurrent, rgDelta)
+      !! INCOMPLETE: despite accepting all twelve current/delta pairs (HP,
+      !! attack, defense, attack speed, move speed, range), the METHOD BODY
+      !! only calls SetNumber for hpText/atkText/defText - NONE of the six
+      !! delta parameters are used, and attackSpeed/moveSpeed/range are
+      !! silently DROPPED even though their UI fields (atkSpdText,
+      !! moveSpdText, rangeText, and all *DeltaText fields) exist and are
+      !! wired in the Inspector. The main detail screen therefore currently
+      !! shows only HP/ATK/DEF as plain numbers with no green +Δ, while the
+      !! popup (RefreshStatsPopupData, below) DOES show all seven stats with
+      !! deltas correctly - the two display surfaces are out of sync.
+
+  SetNumber(label, value, dec)   rounds to int if dec<=0, else "F{dec}" format
+  SetDelta(label, delta, dec)
+      Treats |delta| <= 0.0005 as zero and CLEARS the label text entirely
+      (rather than showing "+0") to avoid visual noise; otherwise formats with
+      a leading "+" and applies deltaColor. Currently unused by SetStatRows
+      (see above) but IS used conceptually by the pattern RefreshStatsPopupData
+      follows (though that method has its own separate DeltaText helper - see
+      NOTES).
+
+  SetMeta(cp, coins, xp)
+      Sets cpText and xpText. NOTE: despite the parameter name 'coins', this
+      method never touches coinsText - only cp and xp are written.
+
+  Compact(v)  [static]  formats large ints as "12.3K" / "1.25M" - defined but
+              not called from anywhere visible in this file (a ready-made
+              utility, currently unused).
+
+  SetCoinsCost(costNeeded, coinsOwned)
+      Writes "/ {coinsOwned}" into coinsText and costNeeded into
+      coinsTextDelta - an upgrade-cost display ("cost / owned" style), reusing
+      the "delta" field name for a different purpose (cost, not a stat delta).
+
+  SetRequirementDetail(text)   sets requirementDetailText, empty-string safe
+
+STATS POPUP DATA
+--------------------
+  RefreshStatsPopupData(unitName, cpNow, cpDelta, current, next)
+      The FULLY correct seven-stat-with-delta implementation (unlike
+      SetStatRows above). Sets popupHeader to the unit name, popupCP/CPDelta
+      from the given cp values, then for EACH of HP/ATK/DEF/Move/AtkSpd/Range:
+      writes current.X formatted to 2 decimals ("0.##") and computes the delta
+      as next.X - current.X through the LOCAL DeltaText helper.
+
+  DeltaText(d)  [private static]
+      Distinct from the earlier SetDelta: treats d <= 0.0001 as "0" (note this
+      is a ONE-SIDED epsilon check, not Mathf.Abs - a small NEGATIVE delta
+      would also read as "0" here, whereas SetDelta uses Mathf.Abs), shows
+      values under 1 with 2 decimals, values >= 1 rounded to an int.
+
+TOASTS
+---------
+  ShowLockedStageToast(anchorParent, textSize, textToDisplay)
+      Instantiates lockedToastPrefab under (anchorParent ?? toastCanvasParent
+      ?? this transform), sets every child TMP_Text's colour/size and puts
+      textToDisplay into the FIRST one found, anchors it top-center with a
+      bottom pivot (so it visually "rises"), then builds a DOTween Sequence:
+        1. fade in over toastFadeInDuration
+        2. rise by toastRisePixels over toastRiseDuration (joined with the fade)
+        3. at grayPct of the duration (clamped so grayPct <= fadePct), flip all
+           text to toastGrayColor via an InsertCallback
+        4. from fadePct of the duration to the end, fade the whole CanvasGroup
+           to 0 (with a 0.06s minimum so the fade is never instant/invisible)
+        5. on complete, destroys the toast instance
+      This single method drives every toast variant in the panel.
+
+  PlayNotEnoughResourcesToastStacked(anchorParent, costRequired, gemsOwned)
+      Intends a 3-layer "stacked echo" effect (declares alphas and small pixel
+      offsets per layer) but the loop body ONLY calls ShowLockedStageToast with
+      the same anchor/text three times - the layered alpha/offset arrays are
+      computed but NEVER actually applied to the spawned toasts. Effectively
+      spawns the same toast three times stacked on each other rather than a
+      genuine staggered echo effect.
+
+  ShowGearToast() / ShowStarUpToast() / ShowSkinToast()
+      Thin wrappers calling ShowLockedStageToast with their own anchor and the
+      shared commingSoonText - all three "coming soon" feature buttons reuse
+      one toast implementation.
+
+HOW IT CONNECTS
+---------------
+  - UnitsPanelController calls SetHeader, SetStatRows, SetMeta,
+    RefreshStatsPopupData and SetRequirementDetail after computing values from
+    PlayerProgressionService/CPCalculator - this view never computes anything
+    itself.
+  - UnitDefinitionSO supplies the visual prefab and scale for the header.
+
+NOTES
+-----
+  - A dead numbered sibling SetHeader1(displayName, portrait, level) remains -
+    an earlier, simpler header setter that took raw values instead of a
+    UnitDefinitionSO and never instantiated a visual prefab.
+  - The two INCOMPLETE/inconsistent behaviours worth flagging to a developer
+    are SetStatRows (drops 9 of its 12 parameters, see above) and
+    PlayNotEnoughResourcesToastStacked (the stacking effect is not actually
+    implemented, see above) - both LOOK finished (full parameter lists,
+    prepared data) but do less than their signatures promise.
+  - "commingSoonText" and "DesigeredTextSize" are both misspelled field names
+    that are otherwise functioning correctly - noted here only so a future
+    search for "ComingSoon" or "DesiredTextSize" does not miss them.

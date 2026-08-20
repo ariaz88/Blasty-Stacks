@@ -1,0 +1,89 @@
+================================================================================
+  UIButtonPressScaler.cs
+  Path : Assets/Scripts/UI/Common/UIButtonPressScaler.cs
+  Type : MonoBehaviour   [RequireComponent(typeof(Button))]
+         implements IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler,
+         IPointerExitHandler, IBeginDragHandler, IEndDragHandler, ICancelHandler
+  Layer: UI / Common
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+A generic "press to squash" tactile-feedback component for any UI Button:
+scales the button (or an assigned child target) down while pressed and back up
+on release, using DOTween for the animation. Meant to be dropped onto any
+button prefab that wants this feel.
+
+INSPECTOR FIELDS
+----------------
+  target             (Transform, defaults to this.transform)  what actually
+                     gets scaled - lets you shrink only an inner graphic while
+                     leaving the button's own hit area untouched
+  normalScale         (Vector3, default (1,1,1))
+  pressedScale        (Vector3, default (0.9,0.9,1))
+  pressDuration        (float, 0.01-0.5, default 0.08)
+  releaseDuration      (float, 0.01-0.5, default 0.12)
+  pressEase / releaseEase  (Ease, both default OutQuad)
+  onlyWhenInteractable (bool, default true)  ignores presses entirely while
+                       the Button component is non-interactable
+
+RUNTIME STATE
+-------------
+  button (Button), pressed (bool), inside (bool), tween (DOTween Tween)
+
+LIFECYCLE
+---------
+  Awake()   caches the Button, defaults target to this.transform if unassigned
+  OnEnable() / OnDisable()
+      Both kill any in-flight tween and FORCE the target back to normalScale -
+      "never leave it squashed" - and reset pressed/inside flags. This matters
+      for pooled or toggled UI: a button that gets disabled mid-press cannot
+      get stuck visually shrunk.
+
+POINTER EVENTS
+-----------------
+  OnPointerDown    if CanInteract(): sets pressed=inside=true, animates TO
+                   pressedScale
+  OnPointerUp      if currently pressed: clears pressed, animates back to
+                   normalScale
+  OnPointerEnter   empty - no behaviour on hover-enter alone
+  OnPointerExit    if currently pressed: clears 'inside' and animates TO
+                   pressedScale (see NOTES - likely intended to go to
+                   normalScale here)
+  OnBeginDrag      if pressed: clears 'inside' and animates back to
+                   normalScale - treats the start of a drag gesture as
+                   equivalent to releasing the press
+  OnEndDrag        empty - relies on the eventual PointerUp to reset scale
+  OnCancel         unconditionally resets pressed/inside and animates back to
+                   normalScale - handles system-level interruptions such as a
+                   modal opening mid-press
+
+HELPERS
+----------
+  CanInteract()   true if onlyWhenInteractable is false, OR the Button is
+                  missing, OR button.interactable is true
+  AnimateTo(scale, duration, ease)   kills any existing tween, starts a new
+                                     DOScale on target
+  KillTween()   stops and clears the tracked tween if active
+
+HOW IT CONNECTS
+---------------
+  - A drop-in, self-contained component - has no dependency on any other
+    project script, purely reacts to Unity's EventSystem interfaces.
+
+NOTES
+-----
+  - !! POSSIBLE BUG: OnPointerExit, when the button is still pressed (finger/
+  !! cursor dragged off the hit area without releasing), calls
+  !! AnimateTo(pressedScale, ...) - animating TO the state it is ALREADY in
+  !! (since OnPointerDown already scaled it to pressedScale). Every other exit
+  !! path in this file (OnBeginDrag, OnCancel) explicitly returns the button to
+  !! normalScale when the pointer leaves/interrupts. This one line reads as a
+  !! copy-paste of the OnPointerDown animation call rather than the intended
+  !! "un-press when the finger leaves the hit area" behaviour - if a user
+  !! presses down and drags off without lifting, the button will visually stay
+  !! squashed rather than popping back up, unless OnBeginDrag's own drag
+  !! detection happens to fire first (drag detection has a distance threshold,
+  !! so a slow/small movement off the edge may trigger OnPointerExit without
+  !! ever registering as a drag).

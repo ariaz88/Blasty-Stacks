@@ -1,0 +1,46 @@
+================================================================================
+  ScrollOnlyUp.cs
+  Path : Assets/Scripts/UI/Common/ScrollOnlyUp.cs
+  Type : MonoBehaviour
+  Layer: UI / Common
+  Scenes: MenuScene
+================================================================================
+
+PURPOSE
+-------
+Clamps a ScrollRect so its content can never scroll BELOW its starting
+position - i.e. the list can be dragged up to reveal more content, but cannot
+be dragged down past where it started (no "peek behind the top" overscroll in
+that direction). Was previously loose at the Assets root before the
+2026-08-20 reorganisation.
+
+FIELDS
+------
+  scrollRect  (ScrollRect, resolved via GetComponent if unassigned)
+  content     (RectTransform, cached from scrollRect.content)
+  minY        (float)  the anchored Y captured at Awake - the highest position
+              allowed, treated as the floor for how far DOWN content may drift
+
+LIFECYCLE
+---------
+  Awake()   resolves scrollRect if needed, caches content and its starting Y
+            as minY.
+
+  LateUpdate()
+      If content's current anchoredPosition.y has dropped BELOW minY (i.e. the
+      user dragged it down past its start), snaps it back to minY and also
+      zeroes any DOWNWARD (negative Y) component of the ScrollRect's own
+      velocity - so releasing a drag that overshot does not fling it back down
+      again on the next physics step.
+
+HOW IT CONNECTS
+---------------
+  - A generic drop-in constraint for any ScrollRect in the Home/Menu UI that
+    should not be draggable past its starting scroll position in one
+    direction.
+
+NOTES
+-----
+  - Runs in LateUpdate every frame regardless of whether the user is currently
+    interacting with the scroll view - cheap (a few comparisons), but worth
+    knowing it is not event-driven.

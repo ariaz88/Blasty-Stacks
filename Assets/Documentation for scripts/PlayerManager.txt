@@ -1,0 +1,281 @@
+================================================================================
+  PlayerManager.cs
+  Path : Assets/Scripts/Combat/Player/PlayerManager.cs
+  Type : MonoBehaviour   [DefaultExecutionOrder(-100)]
+  Layer: Combat / Player
+  Scenes: all 9 build scenes
+================================================================================
+
+PURPOSE
+-------
+The player unit's central hub. Unlike EnemyManager (which does all its own
+decision logic), PlayerManager mostly HOSTS the state machine and provides
+shared services to it: stats, target detection, facing, movement toward a
+target with friendly-separation steering, and damage application. The actual
+decisions live in the PlayerState classes; this class is their toolbox.
+
+[DefaultExecutionOrder(-100)] runs it early, before most dependent scripts.
+
+FIELDS
+------
+  childSnapshot   (List<ChildLocalSnapshot>, HideInInspector) captured child
+                  poses, presumably for restoring a hierarchy after a jump/attack
+
+  Stats
+    statsBase   (UnitStatsSO) design-time L1 stats
+    unitStats   (UnitStatsRuntime) live stats - assigned from playerStatsApplier
+                in Start, NOT built locally like EnemyManager does
+
+  Component refs
+    playerDamageCollider    (CapsuleCollider2D)
+    playerStatsApplier      (PlayerStatsApplier)
+    targetDetectionForPlayer (TargetDetectionForPlayer)
+    playerAnimatitorManager (PlayerAnimatitorManager)
+    playerRigidbody         (Rigidbody2D)
+    PlayerStats             (private, cached)
+    enemyStats              (private, found via FindAnyObjectByType - see NOTES)
+
+  Targeting
+    hasDetectedEnemyOnce  (bool) latched true the first time ANY target is found
+    hasEverDetectedEnemy  (private bool) gates the two-phase search in
+                          UpdateTargetSelection (see below)
+    currentTarget         (EnemyStats)
+    currentGateTarget     (EnemyGateStats)
+    lastKnownTarget       (private EnemyStats)
+
+  Player States  (Inspector-wired, one field per state the unit can enter)
+    playerIdleState, PlayerLockState, PlayerPursueTargetState, AttackState,
+    PlayerDeathState, playerGameCompleteState, currentState (PlayerState)
+
+  Booleans: isPerformingAction, isInteracting
+
+  AI settings
+    detectionRadius (default 20), minimumDetectionAngle (-60),
+    maximumDetectionAngle (60), rotationSpeed (15),
+    currentRecoveryTimer (default 0.5, attack cooldown)
+    maxAttackRange (default 1), distanceFromTarget (published for states)
+
+  Movement
+    moveSpeed (default 0.5), canMove (bool), isUnlocked (bool - the FSM lock gate)
+
+  Facing/Targeting
+    faceCenterOnStart, enemyIsInLeft, chosenEnemyOffset (Transform - which
+    approach slot on the enemy to walk toward)
+
+  attackPlayerGate  (bool)
+  visualRoot        (Transform, the "Visual" child, for scale effects)
+
+  Separation / Avoidance
+    separationRadius (0.5), separationStrength (1.0), friendlyLayerMask
+  Horizontal overlap fix
+    minHorizontalSpacing (0.35), spacingCheckRadius (0.4)
+
+LIFECYCLE
+---------
+  OnEnable / OnDisable
+      Subscribe/unsubscribe EnemyGateStats.OnGateDestroyed -> HandleGateDestroyed.
+
+  Awake()
+      Caches every component reference. Note enemyStats is resolved with
+      FindAnyObjectByType<EnemyStats>() - it is assigned but never actually used
+      anywhere else in the class; dead lookup.
+
+  Start()
+      Sets the Rigidbody2D to Dynamic, disables the damage collider, applies
+      initial facing, and - IMPORTANTLY - sets unitStats = playerStatsApplier
+      .CurrentStats. Unlike EnemyManager, PlayerManager does not build its own
+      stats from statsBase; it simply borrows the reference already computed by
+      PlayerStatsApplier (which itself handles roguelite multipliers).
+
+  HandleGateDestroyed()
+      Clears attackPlayerGate/currentGateTarget, makes the Rigidbody2D kinematic
+      and stops all motion, calls SetAnimMoving(false), calls
+      HudCurrencyView.Instance?.PauseGameplay() (null-conditional, safe if the
+      HUD singleton has not initialised), and transitions to
+      playerGameCompleteState via ChangeStateSafe. The comment explicitly notes
+      "NO global pause here" - only this unit freezes, unlike GameplayPause which
+      stops the whole game.
+
+  ChangeStateSafe(next)
+      Guards against a null target or a redundant same-state assignment before
+      calling SwitchToNextState.
+
+FACING  (#region Facing Player)
+--------------------------------
+  SetVisualScale(factor)   scales visualRoot uniformly - used for pop/squash FX
+
+  UpdateFacing()
+      Freezes facing entirely while attacking or interacting (so a mid-swing
+      character does not spin). Otherwise: if there is a real target and the
+      unit is not locked, calls UpdateFacingAndOffset(); else falls back to
+      SetFacingByScreenHalf().
+
+  UpdateFacingAndOffset()  (the live version)
+      Computes horizontal delta to the target, ignores movement smaller than a
+      0.03 dead-zone, flips facing via FaceLeft(), and re-picks
+      chosenEnemyOffset via currentTarget.GetOffsetFacingPlayer - keeping BOTH
+      the sprite orientation and the approach slot synced to the same target
+      side every frame.
+
+  SetFacingByScreenHalf()
+      Faces toward the SCREEN CENTER based on which half the unit currently
+      occupies - so units entering from either side visually converge inward.
+
+  FaceLeft(faceLeft)
+      Flips transform.localScale.x, and (if there is a current target)
+      re-resolves chosenEnemyOffset immediately - every facing change keeps the
+      approach slot in sync.
+
+Update()
+--------
+  1. Respects GameplayPause.
+  2. HandleRecoveryTimer().
+  3. Reads the animator's "isInteracting" bool (null-checked).
+  4. If PlayerStats.playerIsdead, forces SwitchToNextState(PlayerDeathState)
+     DIRECTLY - bypassing the normal Tick()-returns-next-state flow, since a
+     dead unit must not wait for its current state to notice.
+  5. UpdateTargetSelection() (see below).
+  6. UpdateFacing() - the only facing call each frame.
+  7. Recomputes distanceFromTarget from GetActiveTargetPosition() purely for
+     Inspector debugging visibility.
+
+UpdateTargetSelection() -> bool
+--------------------------------
+  A two-phase target search:
+
+  PHASE A - First detection (while !hasEverDetectedEnemy)
+      Runs ONE Physics2D.OverlapCircleAll against "EnemyLayer" within
+      detectionRadius, picks the nearest living EnemyStats. On success sets
+      currentTarget/lastKnownTarget and latches hasEverDetectedEnemy = true.
+
+  PHASE B - Persistent search (once hasEverDetectedEnemy is true)
+      From then on it calls FindObjectsOfType<EnemyStats>() EVERY FRAME and
+      scans ALL of them for the nearest living one, only switching
+      currentTarget if the newly-nearest is STRICTLY closer than the existing
+      target (using squared distance). If none remain, clears both target
+      fields and hasEverDetectedEnemy, dropping back to Phase A next frame.
+
+  !! PERFORMANCE: Phase B runs FindObjectsOfType<EnemyStats>() - a full scene
+  scan allocating an array - EVERY FRAME for EVERY player unit once it has
+  found its first target. This is more expensive than EnemyManager's own
+  per-frame OverlapCircleAll and is the most significant per-frame allocation
+  source among the Combat/Player scripts.
+
+  GetActiveTargetPosition() -> Vector3
+      Returns the gate's position if attackPlayerGate is set, else the current
+      target's position, else the unit's own position as a safe fallback.
+
+MOVEMENT
+--------
+  HandleMoveToTarget(bool canMove)
+      No-ops if canMove is false, or the Rigidbody2D or chosenEnemyOffset is
+      missing. Computes the direction to chosenEnemyOffset, and if effectively
+      AT the target applies a half-speed "idle separation nudge" so units do not
+      perfectly stack. Otherwise normalizes direction, runs it through
+      ApplyFriendlySeparation, and sets linearVelocity = dir * moveSpeed - with
+      an extra 0.7x damping once within maxAttackRange, to slow the approach for
+      a cleaner stop.
+
+  ApplyFriendlySeparation(desiredDir) -> Vector2
+      A crowd-avoidance steering function. Finds nearby same-tag friendly
+      colliders within separationRadius, and for each one BEHIND OR LEVEL in Y
+      (myPos.y > otherPos.y is skipped - i.e. only units further back get
+      pushed, so the FRONT of a formation is not perturbed) computes a
+      horizontal-only push scaled by closeness. Blends multiple overlapping
+      neighbours with a crowd-density multiplier (up to 2x for 4+ neighbours)
+      and returns the desired direction bent toward the combined dodge vector.
+      2D, horizontal-only, deliberately biased so player waves fan out sideways
+      rather than clumping in a single file.
+
+  ResolveHorizontalOverlap()
+      A separate, SIMPLER anti-stacking pass, called every FixedUpdate
+      regardless of movement state. Finds same-tag neighbours within
+      spacingCheckRadius that are too close in X (and roughly the same row in
+      Y), computes an average push distance, and directly MovePosition()s
+      halfway toward a corrected spot. This runs on TOP OF the velocity-based
+      separation in HandleMoveToTarget, so two separate anti-overlap systems
+      are active simultaneously.
+
+  SetAnimMoving(bool moving)
+      Sets the Horizontal/Vertical blend-tree floats, null-safe.
+
+FixedUpdate()
+-------------
+  Calls HandleStateMachine() then ResolveHorizontalOverlap() every physics
+  step - NOT gated by GameplayPause, unlike Update(), meaning the state machine
+  keeps ticking during a pause unless the individual state itself checks the
+  pause flag (most states do not).
+
+  HandleStateMachine()
+      currentState.Tick(this, PlayerStats, playerAnimatitorManager) -> if a
+      non-null next state comes back, SwitchToNextState(next). This is the
+      literal FSM drive loop described in PlayerState's own doc.
+
+  SwitchToNextState(playerState)
+      currentState = playerState. No enter/exit hooks - a state's setup logic
+      must happen inside its own Tick on first call.
+
+  HandleRecoveryTimer()
+      Counts currentRecoveryTimer down; clears isPerformingAction once it
+      expires. (Unlike EnemyManager's equivalent, this does not also clear an
+      IsAttacking flag - PlayerManager has none.)
+
+DAMAGE
+------
+  DamageApplying(EnemyManager target) -> float
+      CombatMath.DamagePerHit(unitStats, target.unitStats) - the player's
+      outgoing damage number, applied by PlayerDamageCollider.
+
+COLLISION
+---------
+  OnCollisionEnter2D(collision)
+      If the other object is tagged "EnemyGate", sets attackPlayerGate = true
+      and resolves currentGateTarget from its EnemyGateStats component, logging
+      a debug message. This is a COLLISION (not trigger) callback, so it
+      requires the gate to have a non-trigger collider that the unit physically
+      bumps into.
+
+HOW IT CONNECTS
+---------------
+  - Every PlayerState's Tick receives this object and drives it through public
+    fields: currentTarget, currentGateTarget, canMove, isUnlocked,
+    attackPlayerGate, playerRigidbody, moveSpeed, maxAttackRange, etc.
+  - PlayerStatsApplier supplies unitStats.
+  - TargetDetectionForPlayer is ALSO present on the object but note that
+    UpdateTargetSelection here is a SEPARATE, independent target-acquisition
+    implementation - the states call targetDetectionForPlayer.EnsureTarget()
+    while PlayerManager.Update() runs its own UpdateTargetSelection()
+    concurrently. Both write to currentTarget, so two systems race to decide
+    the same field every frame (see NOTES).
+  - EnemyGateStats.OnGateDestroyed drives HandleGateDestroyed.
+  - HudCurrencyView.Instance is touched on gate destruction.
+
+NOTES / RISKS
+-------------
+  - DUPLICATE TARGETING SYSTEMS: this class's own UpdateTargetSelection() and
+    TargetDetectionForPlayer.EnsureTarget() (called from the FSM states) are
+    two independent implementations that both assign playerManager.currentTarget
+    every frame, using different search strategies (this one scans ALL
+    EnemyStats every frame in Phase B; TargetDetectionForPlayer uses a
+    configurable overlap radius with hysteresis and FOV options). Because both
+    run every frame, the LAST one to execute in the frame order wins, and it is
+    not obvious from either file alone which will "stick". This is very likely
+    a leftover from an earlier target-acquisition design that was never fully
+    replaced - worth consolidating onto TargetDetectionForPlayer alone.
+  - UpdateTargetSelection's Phase B is the single most expensive operation
+    running every frame per unit in the combat layer (full-scene
+    FindObjectsOfType scan). With many player units alive simultaneously this
+    is O(units * enemies) per frame.
+  - Two anti-overlap systems (ApplyFriendlySeparation inside movement, and the
+    separate ResolveHorizontalOverlap in FixedUpdate) run concurrently and were
+    likely added at different times to solve the same "units stacking" problem
+    rather than one being removed when the other was added.
+  - A dead numbered sibling HandleGateDestroyed1() remains - differs from the
+    live version mainly in explicitly calling ChangeStateSafe with a comment
+    referencing a "real state-switch method name", suggesting an in-progress
+    refactor that was completed in the live version and left behind here.
+  - UpdateFacingAndOffset1() is another unused numbered sibling with a nearly
+    identical but slightly different (no dead-zone) implementation.
+  - enemyStats (private field) is assigned in Awake via a scene-wide
+    FindAnyObjectByType call but is never read anywhere in the class - a dead
+    lookup that still costs a scene search on every unit's Awake.

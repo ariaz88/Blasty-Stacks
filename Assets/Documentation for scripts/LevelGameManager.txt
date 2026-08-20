@@ -1,0 +1,114 @@
+================================================================================
+  LevelGameManager.cs
+  Path : Assets/Scripts/UI/WinLose/LevelGameManager.cs
+  Type : MonoBehaviour - singleton (no DontDestroyOnLoad - see NOTES)
+  Layer: UI / WinLose
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The stage-level game-flow state machine: Playing / Won / ReviveOffer / Lost.
+It is the single place that listens for BOTH gates being destroyed and decides
+what happens next - show the win panel, offer a revive, or go straight to lose.
+
+STATE ENUM
+----------
+  GameState { Playing, Won, ReviveOffer, Lost }
+  CurrentState  (public get / private set, default Playing)
+
+SINGLETON
+---------
+  Instance  guard-and-destroy in Awake. NOT DontDestroyOnLoad - a fresh instance
+            is expected in every gameplay scene, which matches ResetForNewStage
+            existing as an alternative to a full scene reload.
+
+INSPECTOR FIELDS
+----------------
+  winPanel      (WinPanel)
+  revivePanel   (RevivePanel)
+  allowSingleRevivePerStage (bool, default true)
+
+RUNTIME STATE
+-------------
+  hasRevivedThisStage (bool)
+  playerGate  (PlayerGateStats, found in Start)
+  enemyGate   (EnemyGateStats, found in Start)
+
+LIFECYCLE
+---------
+  Awake()   singleton guard
+  OnEnable / OnDisable
+      Subscribe/unsubscribe BOTH EnemyGateStats.OnGateDestroyed ->
+      OnEnemyGateDestroyed AND PlayerGateStats.OnGateDestroyed ->
+      OnPlayerGateDestroyed - correctly paired.
+  Start()   finds both gates via FindObjectOfType (not null-checked afterward,
+            but only read inside OnEnemyGateDestroyed's HP% calculation, which
+            null-checks playerGate defensively)
+
+ENEMY GATE DESTROYED -> WIN
+-------------------------------
+  OnEnemyGateDestroyed()
+      Ignored if CurrentState is not Playing (guards against double-firing).
+      Sets CurrentState = Won.
+      EXPLICITLY DOES NOT call GameplayPause.SetPaused(true) - the extensive
+      inline comments explain why: player units already individually freeze via
+      PlayerManager.HandleGateDestroyed reacting to the SAME static event, and
+      the reward UI animations (coins/gems/XP flying in) need Time.timeScale to
+      keep running normally.
+      Computes hpPercent = playerGate.currentHP / playerGate.maxHealth
+      (clamped 0..1, defaulting to 1 if the gate reference is missing).
+      Calls HomeManager.NotifyStageWon(hpPercent) - the progression/star-saving
+      hookup.
+      Activates and calls winPanel.Show(hpPercent).
+
+PLAYER GATE DESTROYED -> REVIVE OR LOSE
+--------------------------------------------
+  OnPlayerGateDestroyed()
+      Ignored if not Playing. UNLIKE the win path, this DOES call
+      GameplayPause.SetPaused(true) - losing/reviving is meant to fully freeze
+      the game.
+      If allowSingleRevivePerStage AND hasRevivedThisStage is already true:
+      goes straight to Lost and calls revivePanel.ShowLosePanel().
+      Otherwise: goes to ReviveOffer and calls revivePanel.ShowRevivePanel().
+
+REVIVE CALLBACKS  (called BY RevivePanel, not internally)
+--------------------------------------------------------------
+  NotifyReviveAccepted()
+      Sets hasRevivedThisStage = true and CurrentState back to Playing. Per the
+      comment, RevivePanel itself is responsible for calling
+      GameplayPause.SetPaused(false) after actually reviving - this method only
+      updates the state flag.
+
+  NotifyReviveDeclined()
+      Sets CurrentState = Lost. Gameplay remains paused; the Lose panel (already
+      shown by RevivePanel at this point) stays up.
+
+  ResetForNewStage()
+      Resets CurrentState to Playing and clears hasRevivedThisStage - an
+      alternative to destroying/recreating this object if a stage is replayed
+      without a full scene reload.
+
+HOW IT CONNECTS
+---------------
+  - EnemyGateStats.OnGateDestroyed / PlayerGateStats.OnGateDestroyed are the two
+    inputs - both static events raised deep in the Combat layer, consumed here
+    without any direct reference needed.
+  - HomeManager.NotifyStageWon is called on win - the actual star/progress save
+    happens over there.
+  - WinPanel.Show / RevivePanel.ShowRevivePanel / RevivePanel.ShowLosePanel are
+    the three UI entry points this class drives.
+  - RevivePanel calls back into NotifyReviveAccepted/NotifyReviveDeclined.
+
+NOTES
+-----
+  - A dead numbered sibling GameState existed only as a NAME COLLISION risk, not
+    a duplicate class: Core/SaveLoad/GameState.cs ALSO declares a (unrelated)
+    static class named GameState in the global namespace, while this file
+    declares a nested enum GameState inside LevelGameManager. They do not
+    actually collide at compile time because one is nested, but the shared name
+    is confusing when searching the codebase.
+  - Because this is a per-scene singleton (no DontDestroyOnLoad), reloading the
+    gameplay scene naturally gives a fresh instance with CurrentState reset to
+    Playing - ResetForNewStage exists for the case where the SAME scene
+    instance is reused instead.

@@ -1,0 +1,82 @@
+================================================================================
+  LevelConfig.cs
+  Path : Assets/Scripts/Combat/Spawning/LevelConfig.cs
+  Type : ScriptableObject   (menu: "TD/Level Config")
+         + 2 supporting enums + 2 [Serializable] plain classes in the same file
+  Layer: Combat / Spawning
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The complete design-time definition of one stage's ENEMY waves: how many waves,
+what is in each, where they spawn, and in what formation. One asset per stage,
+consumed entirely by EnemySpawner.
+
+TOP-LEVEL FIELDS
+-----------------
+  levelNumber          (int, default 1)  fallback CP/progression level used only
+                       if LevelManager is not present in the scene
+  startDelay           (float, default 2)  seconds before the first wave
+  targetStageDuration  (float, default 90)  intended pacing target - NOT enforced
+                       anywhere in code, purely documentation for the designer
+  waves                (List<Wave>)  the sequential wave list
+
+TYPES DEFINED IN THIS FILE
+----------------------------
+  enum SpawnFormation { AllTogetherGrid, TwoRows }
+      AllTogetherGrid - every entry's units interleaved into one grid layout
+      TwoRows         - a front row and a back row, optionally staggered in time
+
+  enum FrontRowAnchor { MinY, MaxY }
+      Whether the "front" row (the one that spawns first, closer to the player)
+      sits at the low or high end of the spawn rectangle's Y range.
+
+  enum RowIndex { FrontRow = 0, BackRow = 1 }
+      Which row a WaveEntry belongs to (only meaningful in TwoRows formation).
+
+  class Wave  [Serializable]
+      name               (string, default "Wave")  for readability in the
+                         Inspector list, not used by code
+      delayBeforeWave    (float, default 5)  pause before this wave starts
+      formation          (SpawnFormation, default AllTogetherGrid)
+      spawnMin / spawnMax (Vector2)  the world-space rectangle enemies spawn
+                         inside (defaults (1,2) to (10,4))
+      gridColumns        (int, default 0 = auto ceil(sqrt(total)))
+      minSlotSpacing     (Vector2, default (0.4, 0.4))  minimum gap between
+                         auto-placed slots
+      frontAnchor        (FrontRowAnchor, default MinY)
+      rowYOffset         (float, default 0 = auto from area height)
+      secondRowDelay     (float, default 0.2)  gap between spawning the two rows
+      entries            (List<WaveEntry>)  the archetypes and counts in this wave
+      concurrencyCap     (int, default 0 = unlimited)  declared but UNUSED by
+                         EnemySpawner - a planned "drip spawn" cap that was never
+                         wired up
+
+  class WaveEntry  [Serializable]
+      enemyPrefab   (GameObject)  must carry an EnemyManager component
+      statsBase     (UnitStatsSO)  which base stat sheet this archetype uses
+      count         (int, min 1, default 3)
+      row           (RowIndex, default FrontRow)  only read in TwoRows formation
+      unitLevel     (int, min 1, default 1)  the PROGRESSION level for this
+                    entry (feeds ProgressionConfigSO growth, distinct from the
+                    stage-based CP weighting)
+
+HOW IT CONNECTS
+---------------
+  - EnemySpawner reads levelNumber, startDelay and waves to drive the whole
+    stage's enemy timeline.
+  - WaveEntry.statsBase and enemyPrefab are handed to EnemyManager.Initialize.
+  - Assets: "Assets/Scriptable Objects/Spawner/Spawner1.asset",
+    "Spawner2.asset".
+
+NOTES
+-----
+  - unitLevel here (per-entry progression level) is INDEPENDENT of stageLevel
+    (the CP-weighting lens EnemySpawner computes from LevelManager.CurrentStage
+    at runtime and passes separately into EnemyManager.Initialize). A designer
+    could set a low unitLevel on a strong late-stage entry and get a
+    combination that does not scale the way expected - the two numbers are easy
+    to confuse.
+  - concurrencyCap is authored in the Inspector but has no effect - EnemySpawner
+    never reads it.

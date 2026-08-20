@@ -11,6 +11,19 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/doc-reminder.js\"",
+            "statusMessage": "Checking script docs...",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

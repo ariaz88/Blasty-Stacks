@@ -1,0 +1,153 @@
+================================================================================
+  WinPanel.cs
+  Path : Assets/Scripts/UI/WinLose/WinPanel.cs
+  Type : MonoBehaviour  (+ nested RewardValues class)
+  Layer: UI / WinLose
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The stage-victory panel: computes and displays the reward (coins/gems/heroXP)
+earned for this win, plays a "resources flying into the HUD" animation on
+Claim, actually credits the currency, advances the global stage index, and
+returns to the menu.
+
+NESTED TYPE
+-----------
+  class RewardValues  [Serializable]
+      coins, gems, heroXP  (int)
+      Add(other)               in-place accumulation
+      FromScaled(source, factor) -> RewardValues   [static]  scales all three
+                                fields by factor, rounding each independently
+      This is the shared currency-bundle type used across WinPanel,
+      StageRewardCalculator and HomeManager.
+
+INSPECTOR FIELDS
+----------------
+  rewardConfigOverride  (StageRewardConfig)  used only if HomeManager's shared
+                        config is unavailable
+  coinsText, gemsText, heroXPText  (TMP_Text)
+  chapterStageText      (TMP_Text)
+  chapterLabelFormat    (string, default "{1}")  DECLARED but see NOTES - the
+                        actual header text ignores this format entirely
+  claimButton           (Button)
+  targetSceneName       (string, default "MenuScene")
+  canvasGroup           (CanvasGroup, optional fade)
+  fadeDuration          (float, default 0.35)
+  coinSpawnPoint / gemSpawnPoint / xpSpawnPoint  (RectTransform)  where the fly-
+                        in animation for each currency originates
+  resourceAnimDuration  (float, default 0.8)
+  progressionConfig     (ProgressionConfigSO)  declared, not used in this file
+
+RUNTIME STATE
+-------------
+  hpCase           (int, 1-3)
+  totalRewardRow   (RewardValues)  what is DISPLAYED
+  totalGiven       (RewardValues)  what is ACTUALLY CREDITED (currently always
+                   equal to totalRewardRow - see NOTES)
+  rewardsClaimed   (bool)  guards against double-claiming
+
+LIFECYCLE
+---------
+  Awake()
+      Wires claimButton.onClick to OnClaimPressed (clearing old listeners
+      first), starts the canvasGroup fully transparent and non-interactive if
+      one is assigned, and deactivates the whole GameObject - the panel is
+      invisible until Show() is called.
+
+  Show(hpPercent)
+      Clamps hpPercent to 0..1, resets rewardsClaimed, re-enables the claim
+      button, computes hpCase via CalculateHpCase, then
+      CalculateAllRewards() -> UpdateRewardTexts() -> UpdateLevelHeaderText(),
+      makes the canvasGroup fully visible/interactive, and activates the panel.
+
+  CalculateHpCase(hpPercent) -> int
+      >= 99.99% -> 3 (full HP), >= 50% -> 2, else -> 1. The tiny epsilon on the
+      full-HP check guards against floating-point rounding just under 1.0.
+
+  CalculateAllRewards()
+      Reads the current stage from HomeManager.CurrentStage1Based, and the
+      config from HomeManager.SharedRewardConfig (falling back to
+      rewardConfigOverride, then to a hard warning + zeroed rewards if both are
+      missing). Calls StageRewardCalculator.GetRewardForStageAndHpCase and
+      copies the result into BOTH totalRewardRow and totalGiven.
+
+  UpdateRewardTexts()
+      Writes the three plain numbers into their TMP_Text fields.
+
+  UpdateLevelHeaderText()  (the live version)
+      Prefers LevelManager.Instance.GlobalToLevelStage to derive (chapter,
+      stage) from the global stage index; falls back to HomeManager's static
+      properties if LevelManager is absent (e.g. testing the scene in
+      isolation). Sets chapterStageText.text to just the stage number in BOTH
+      branches of its own if/else (see NOTES).
+
+CLAIMING
+--------
+  OnClaimPressed()
+      Guarded by rewardsClaimed. Hides the claim button and starts
+      ClaimRoutine().
+
+  ClaimRoutine()  (the live version)  [coroutine]
+      1. Plays the resource fly-in animations and WAITS for them
+         (PlayResourceFlyAnimations).
+      2. ApplyRewardsToPlayer() - actually credits CurrencyManager.
+      3. Fades canvasGroup to 0 over fadeDuration using UNSCALED time (so it
+         still animates even if something paused Time.timeScale).
+      4. Deactivates the panel.
+      5. Advances the stage: if LevelManager.Instance exists, calls
+         SetStage(CurrentStage + 1, loadScene: false) - explicitly NOT loading
+         a scene here, since the very next line does that manually.
+      6. SceneManager.LoadScene(targetSceneName, Single) - returns to the menu.
+
+  PlayResourceFlyAnimations()  [coroutine]
+      For each currency with a non-zero amount AND an assigned spawn point,
+      calls the matching ResourcesAnimationManager.instance.Add*FromUI method,
+      then waits resourceAnimDuration in REAL time (WaitForSecondsRealtime) so
+      the player sees the animation regardless of any pause.
+
+  ApplyRewardsToPlayer()
+      Adds totalGiven.coins/gems/heroXP to CurrencyManager.Instance, each only
+      if non-zero. Warns loudly if CurrencyManager.Instance is null (rewards
+      would silently be lost otherwise).
+
+HOW IT CONNECTS
+---------------
+  - LevelGameManager.OnEnemyGateDestroyed calls Show(hpPercent) - the sole
+    entry point.
+  - HomeManager supplies both the shared reward config and the current stage
+    number.
+  - StageRewardCalculator computes the actual numbers.
+  - ResourcesAnimationManager plays the fly-in visuals.
+  - CurrencyManager receives the actual credit.
+  - LevelManager.SetStage advances global progress.
+
+NOTES
+-----
+  - totalRewardRow and totalGiven are always set to the SAME values in
+    CalculateAllRewards - the split exists (per the field comments) so a future
+    change could reduce what is actually given without changing what is
+    displayed, but as written there is no such divergence.
+  - chapterLabelFormat is authored in the Inspector as a format STRING
+    (default "{1}"), but neither UpdateLevelHeaderText nor its dead sibling
+    UpdateLevelHeaderText1 actually uses string.Format with it - both simply
+    write $"{stage}" directly regardless of the format field's value. The field
+    is effectively decorative.
+  - !! MISSING STAR/RESULT RECORD CALL: unlike RevivePanel and LoseGame, this
+  !! file's claim flow does NOT call SaveSystem.RecordStageResult anywhere.
+  !! Star recording appears to happen via HomeManager.NotifyStageWon (called
+  !! separately by LevelGameManager BEFORE Show() is even invoked) rather than
+  !! from WinPanel itself - worth confirming in HomeManager's own doc that the
+  !! hpPercent passed there is what ultimately produces the star count, since
+  !! WinPanel's own hpCase (used only for the reward tier) is a SEPARATE
+  !! computation from whatever HomeManager does with the same hpPercent value.
+  - A dead numbered sibling ClaimRoutine1() remains - it called
+    LevelManager.Instance.MarkLevelWon() (which both advances the stage AND
+    loads that stage's own scene) instead of the live version's more surgical
+    SetStage(..., loadScene:false) followed by an explicit menu-scene load.
+    The live version is deliberately going to the MENU after a win, not
+    directly into the next stage.
+  - UpdateLevelHeaderText1() is another unused sibling using the older
+    HomeManager-only header logic, superseded by the LevelManager-aware
+    version.
