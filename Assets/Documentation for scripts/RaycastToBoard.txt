@@ -1,0 +1,60 @@
+================================================================================
+  RaycastToBoard.cs
+  Path : Assets/Scripts/Puzzle/Input/RaycastToBoard.cs
+  Type : MonoBehaviour   [DisallowMultipleComponent]
+  Layer: Puzzle / Input
+================================================================================
+
+PURPOSE
+-------
+A helper that converts screen positions (mouse or touch) into board world
+positions and grid cells. It is a reusable utility layer over BoardGridXY, kept
+separate so several input scripts could share one conversion implementation.
+
+INSPECTOR FIELDS
+----------------
+  targetCamera     (Camera)       defaults to Camera.main in Awake
+  board            (BoardGridXY)  auto-found, logs a warning if missing
+  clampInsideGrid  (bool, default true)  clamp out-of-range cells to the nearest
+                   valid cell instead of failing
+  drawHitGizmo     (bool, default true)  draw the last hit point in the Scene view
+
+METHODS
+-------
+  TryScreenToBoardWorld(screenPos, out worldPos) -> bool
+      Builds a ray from the camera and intersects it with the board plane.
+      Returns false if the plane is behind the camera or refs are missing.
+      Caches the hit for the gizmo.
+
+  TryScreenToCell(screenPos, out cell) -> bool
+      Converts to world, then to a cell via board.TryWorldToCell.
+      If the point is outside and clampInsideGrid is true, clamps X to
+      0..Width-1 and Y to 0..Height-1 and returns true.
+
+  CellCenterWorld(cell) -> Vector3
+      Passthrough to the board, returning Vector3.zero if the board is missing.
+
+  TryGetAnchorForPieceFromScreen(Piece piece, screenPos, out anchorCell) -> bool
+      Returns the cell under the cursor as the anchor. Note it takes the OLDER
+      Piece type, not PieceSimple.
+
+  OnDrawGizmos()  [Editor only]
+      Draws a small green wire sphere at the last hit point.
+
+NOTES / BUGS
+------------
+  !! AXIS MISMATCH: the class was written for a HORIZONTAL (XZ) board and never
+  !! fully converted to this XY board. Its own summary comment still says
+  !! "world position on the board's horizontal plane (XZ at board Y)" and refers
+  !! to a "BoardGridXZ" type that no longer exists.
+  !! Concretely, TryScreenToBoardWorld builds:
+  !!     Plane plane = new Plane(Vector3.up, new Vector3(0f, y, 0f));
+  !! using board.BoardWorldZ as a Y coordinate and Vector3.up as the normal.
+  !! For this 2D XY board the plane normal should be the board's forward
+  !! (-Z / +Z), not up. The conversions will therefore be wrong on this board.
+
+  - BoardInputController does NOT use this class - it performs its own
+    ScreenToWorldPoint conversion inline. So this helper is effectively
+    unused by the live input path, which is why the bug has gone unnoticed.
+  - Depends on the older Piece type in one method, another sign it predates the
+    PieceSimple rewrite.

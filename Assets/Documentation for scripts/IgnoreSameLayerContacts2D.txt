@@ -1,0 +1,49 @@
+================================================================================
+  IgnoreSameLayerContacts2D.cs
+  Path : Assets/Scripts/Combat/Shared/IgnoreSameLayerContacts2D.cs
+  Type : MonoBehaviour
+  Layer: Combat / Shared
+  Scenes: all 9 build scenes
+================================================================================
+
+PURPOSE
+-------
+Stops friendly units from shoving each other. When many units of the same side
+spawn together they would otherwise collide and scatter; this component makes
+every collider pair between two same-layer characters permanently ignore each
+other on first contact.
+
+FIELDS
+------
+  myColliders  (Collider2D[])  every collider under this character, captured in
+               Awake with includeInactive: true so disabled hitboxes are included
+
+FLOW
+----
+  Awake()             caches this character's colliders
+  OnCollisionEnter2D  -> TryIgnore(other.gameObject)
+  OnTriggerEnter2D    -> TryIgnore(other.gameObject)
+
+  TryIgnore(other)
+      1. Returns immediately unless the other object is on the SAME layer -
+         so players still collide with enemies, only same-side contact is
+         suppressed.
+      2. Collects the other character's colliders.
+      3. Calls Physics2D.IgnoreCollision(a, b, true) for EVERY pair.
+
+HOW IT CONNECTS
+---------------
+  - Purely physical; no other script depends on it.
+  - Relies on the project's layer setup (PlayerLayer, EnemyLayer, etc.).
+
+NOTES
+-----
+  - The cost is O(myColliders * otherColliders) per NEW pair of characters that
+    touch. With large waves this is quadratic in the number of units that ever
+    bump into each other. It only runs once per pair, but the first frame a big
+    wave lands can be spiky.
+  - Physics2D.IgnoreCollision settings are NOT persisted across scene loads and
+    are lost if a collider is destroyed and recreated.
+  - A cheaper alternative for a whole side is the Physics2D layer collision
+    matrix in Project Settings - it costs nothing at runtime. This component is
+    only necessary if same-layer objects must sometimes collide.

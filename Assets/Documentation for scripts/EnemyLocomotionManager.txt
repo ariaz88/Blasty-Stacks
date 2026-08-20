@@ -1,0 +1,57 @@
+================================================================================
+  EnemyLocomotionManager.cs
+  Path : Assets/Scripts/Combat/Enemy/EnemyLocomotionManager.cs
+  Type : MonoBehaviour
+  Layer: Combat / Enemy
+  STATUS: legacy 3D implementation - superseded by EnemyLocoMotion
+================================================================================
+
+PURPOSE
+-------
+An older enemy movement/detection helper written for a 3D game. It detects a
+player with a physics sphere, drives an animator blend tree, and rotates toward
+the target. The live 2D equivalent is EnemyLocoMotion (note the different
+capitalisation).
+
+FIELDS
+------
+  enemyRigidbody       (Rigidbody)  - the 3D Rigidbody, not Rigidbody2D
+  enemyAnimatorManager (EnemyAnimatorManager)
+  enemyManager         (EnemyManager)
+  currentTarget        (PlayerStats)
+  playerDetectionLayer (LayerMask)
+  distanceFromTarget   (float, HideInInspector)
+  stoppingDistance     (float, default 0.5)
+
+METHODS
+-------
+  Awake()   caches the manager and animator, resolves the Rigidbody if unset
+  Start()   sets enemyRigidbody.isKinematic = false
+
+  HandleDetection()
+      Physics.OverlapSphere (3D) against playerDetectionLayer, assigning the
+      last PlayerStats found as currentTarget.
+
+  HandleMoveToTarget()
+      Early-returns while performing an action or interacting. Otherwise
+      computes distance and sets the animator "Vertical" float to 1 when farther
+      than stoppingDistance, or 0 when within it.
+
+  HandleRotatesTowardTarget()
+      Slerps the transform toward the target using Quaternion.LookRotation.
+
+NOTES / WHY IT IS LEGACY
+------------------------
+  - Uses 3D physics and a 3D Rigidbody throughout (Physics.OverlapSphere,
+    Quaternion.LookRotation, direction.y = 0). This project is 2D.
+  - HandleMoveToTarget only drives ANIMATION - it never actually moves the
+    Rigidbody, so on its own it cannot make an enemy travel.
+  - HandleDetection assigns the LAST matching collider rather than the nearest,
+    and computes viewableAngle without using it.
+  - HandleRotatesTowardTarget divides by Time.deltaTime instead of multiplying,
+    which produces an enormous slerp factor - effectively an instant snap.
+  - It contains a leftover Debug.Log(" Move the Enemy") that would fire every
+    frame while moving.
+  - It is not attached in any of the 7 gameplay scenes; EnemyManager and
+    EnemyLocoMotion handle the real 2D behaviour. Treat this file as reference
+    only.

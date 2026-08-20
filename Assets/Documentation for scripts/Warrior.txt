@@ -1,0 +1,51 @@
+================================================================================
+  Warrior.cs
+  Path : Assets/Scripts/Puzzle/Match/Warrior.cs
+  Type : MonoBehaviour   [DisallowMultipleComponent]
+  Layer: Puzzle / Match
+================================================================================
+
+PURPOSE
+-------
+Marks a warrior figure that rides on top of a puzzle piece, and remembers which
+piece it belongs to. When the piece is cleared the warrior can be DETACHED so it
+survives independently and joins the battle instead of being destroyed with its
+piece.
+
+PROPERTIES
+----------
+  Home        (PieceSimple, public get / private set)
+              The piece this warrior currently sits on. Null once detached.
+  IsDetached  (bool, public get / private set, default false)
+              Becomes true after Detach() is called.
+
+METHODS
+-------
+  Start()
+      If Home was not assigned, finds it with GetComponentInParent<PieceSimple>.
+      This lets designers simply nest the warrior under a piece in the scene and
+      have the link resolve itself.
+
+  SetHome(PieceSimple home)
+      Explicit assignment, for warriors created at runtime.
+
+  Detach(Transform newParent = null)
+      Re-parents the warrior (worldPositionStays: true, so it does not visually
+      jump), sets IsDetached = true, and clears Home.
+      Passing null re-parents to the scene root.
+
+HOW IT CONNECTS
+---------------
+  - Lives as a child of a PieceSimple in the puzzle scene.
+  - Read by MatchResolver's merge logic conceptually - though note that
+    FindNearestWithWarriors does NOT actually inspect this component despite its
+    name.
+
+NOTES
+-----
+  - There is a commented-out call to Home.RegisterWarrior(this) in Start,
+    suggesting an earlier design where pieces tracked their warriors. That
+    registration does not exist today, so nothing keeps a list of warriors per
+    piece - anything needing that must search the children.
+  - Detach only changes parenting and flags. It does not add combat components;
+    whatever spawns the battle unit must do that separately.

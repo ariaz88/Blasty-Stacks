@@ -1,0 +1,108 @@
+================================================================================
+  BoardInputController.cs
+  Path : Assets/Scripts/Puzzle/Input/BoardInputController.cs
+  Type : MonoBehaviour
+  Layer: Puzzle / Input
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The PRIMARY input handler for the puzzle board. It picks up a piece under the
+pointer, drags it around the grid with smoothing, refuses illegal moves, drops
+it, and then asks MatchResolver to check for a match. This is the script the
+player interacts with on every turn.
+
+INSPECTOR FIELDS
+----------------
+  Refs
+    board            (BoardGridXY)
+    cam              (Camera)  defaults to Camera.main
+  Picking Layers
+    pieceLayer3D     (LayerMask, default Everything) legacy 3D collider support
+    pieceLayer2D     (LayerMask, default Everything) SET THIS to your Pieces
+                     layer - leaving it as Everything makes picking slower and
+                     can grab unintended colliders.
+  Visuals
+    liftWhileDragging (float, default 0.10)  lift along the board normal (+Z)
+  Smoothing
+    smoothTime       (float 0.01-0.35, default 0.12) SmoothDamp time
+    maxSpeed         (float, default 100)
+
+RUNTIME STATE
+-------------
+  activePiece      the piece currently held
+  lastValidAnchor  the most recent LEGAL anchor
+  grabbedOffset    WHICH sub-cell of the piece the player grabbed, in grid space.
+                   This is what makes dragging feel correct: the piece keeps the
+                   same cell under the finger instead of snapping its origin to
+                   the pointer.
+  _velX, _velY     SmoothDamp velocity temporaries
+  tmpFootprint     reused list
+
+INPUT ROUTING
+-------------
+  Update() selects the input path by platform:
+      UNITY_EDITOR || UNITY_STANDALONE  ->  MouseUpdate()
+      otherwise (mobile)                ->  TouchUpdate()
+  MouseUpdate  maps GetMouseButtonDown/GetMouseButton/GetMouseButtonUp.
+  TouchUpdate  maps touch 0 Began / Moved+Stationary / Ended+Canceled.
+  Both funnel into TryBeginDrag, TryDrag and EndDrag.
+
+PICKING
+-------
+  TryPickPiece(screenPos, out piece, out col2D, out col3D)
+      Prefers a 2D pick: converts the screen point to world at the board's depth
+      and uses Physics2D.OverlapPoint, then walks up with
+      GetComponentInParent<PieceSimple>.
+      Falls back to a 3D Physics.Raycast for any legacy prefabs that still have
+      3D colliders.
+
+  TryBeginDrag(screenPos)
+      Picks the piece, resolves its current anchor, then works out grabbedOffset
+      from the actual collider that was hit (so grabbing the far end of an
+      L-shape behaves naturally). Resets the smoothing velocities and lifts the
+      piece toward the camera.
+
+DRAGGING  (the interesting part)
+--------------------------------
+  IsAnchorLegal(anchor, piece)
+      Builds the footprint and calls AreCellsPlaceableForMover with the piece's
+      own id, so its current cells never block itself.
+
+  TryDrag(screenPos)
+      1. Converts the pointer to a grid cell.
+      2. desiredAnchor = pointerCell - grabbedOffset.
+      3. Applies the piece's axis constraints (AllowsX / AllowsY), freezing the
+         locked axis to its current value.
+      4. STEPS ONE CELL AT A TIME toward the desired anchor - first along X,
+         then along Y - and STOPS at the first illegal cell.
+         This is the key design decision: it means a piece can never "teleport"
+         through a wall or another piece when the player flicks the pointer
+         quickly. Movement is collision-swept, not snapped.
+      5. Smooth-damps the visual position toward the cell centre on each axis
+         and re-applies the lift along the board normal.
+
+  EndDrag()
+      Commits with TryPlace(lastValidAnchor), removes the lift so the piece sits
+      exactly on the plane, then finds a MatchResolver (on this object first,
+      else in the scene) and calls ResolveFrom(piece) - which is what can trigger
+      a blast and therefore a warrior wave.
+
+HOW IT CONNECTS
+---------------
+  - Reads and moves PieceSimple; validates through BoardGridXY.
+  - Calls MatchResolver.ResolveFrom on release -> may fire MatchResolver.OnBlast
+    -> PlayerWaveManager spawns units. This is the start of the whole game loop.
+
+NOTES
+-----
+  - Uses the LEGACY Input class (Input.mousePosition, Input.GetTouch) even though
+    the project has com.unity.inputsystem installed. Works, but is inconsistent
+    with the package set and will break if the project ever switches the Active
+    Input Handling setting to "Input System Package (New)" only.
+  - TryDrag converts using board.CellSize rather than board.CellPitch. When
+    cellPadding is greater than 0 the pointer-to-cell mapping will drift across
+    the board. It is correct only while cellPadding is 0.
+  - The per-frame cost is small: the step loops are bounded by how far the
+    pointer moved in one frame.

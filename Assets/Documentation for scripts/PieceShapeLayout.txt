@@ -1,0 +1,66 @@
+================================================================================
+  PieceShapeLayout.cs
+  Path : Assets/Scripts/Puzzle/Pieces/PieceShapeLayout.cs
+  Type : MonoBehaviour
+  Layer: Puzzle / Pieces
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+An authoring helper that positions a piece's child objects correctly for its
+shape. Given a shapeId like "B2" or "B5", it moves every "Cell_x_y" child to the
+right local position and re-centres the "Visual" child over the shape.
+
+Without this, a designer would have to hand-place every sub-cell and every art
+object, and any change to cell size or padding would break the alignment.
+
+ENTRY POINT
+-----------
+  ApplyLayout(PieceSimple piece)
+      Aborts if the piece or its board is null.
+      Computes  pitch = board.CellSize + board.CellPadding  (the true
+      centre-to-centre spacing) and then dispatches on piece.ShapeId:
+          "B1" -> single cell, nothing to do
+          "B2" -> ApplyB2   (vertical domino)
+          "B3" -> ApplyB3   (horizontal domino)
+          "B4" -> ApplyB4
+          "B5" -> ApplyB5
+          "B6" -> ApplyB6
+          "B7" -> ApplyB7
+          default -> does nothing
+
+PER-SHAPE METHODS  (ApplyB2 ... ApplyB7)
+----------------------------------------
+  Each follows the same pattern:
+    1. Iterate the piece's DIRECT children.
+    2. If the child name parses as a cell offset (TryCellOffset, e.g.
+       "Cell_0_1" -> (0,1)), set its localPosition to offset * pitch on the
+       relevant axes, preserving the child's existing Z.
+    3. If the child name starts with "Visual", remember it.
+    4. After the loop, centre the visual over the shape - for example ApplyB2
+       (a vertical 2-cell piece) offsets the visual by pitch * 0.5 in Y, and
+       ApplyB3 (horizontal) by pitch * 0.5 in X.
+
+  TryCellOffset(name, out offset)
+      Parses a child name into a grid offset.
+
+HOW IT CONNECTS
+---------------
+  - PieceSimple.Start() looks for this component and calls ApplyLayout(this)
+    BEFORE offsets are derived or the piece is placed, so the children are
+    already in the right relative positions.
+  - Reads BoardGridXY.CellSize and CellPadding through the piece.
+
+NOTES
+-----
+  - Shape ids are MAGIC STRINGS ("B1".."B7") shared with MatchResolver, which
+    also hard-codes the compatible pairs B6<->B7 and B4<->B5. Renaming a shape
+    means editing both files, and nothing warns you if they disagree.
+  - Only DIRECT children are examined (foreach over piece.transform), so a cell
+    nested deeper in the hierarchy is silently ignored.
+  - An unknown shapeId falls through to default and does nothing at all - no
+    warning. A typo in the shapeId therefore produces a piece whose art is
+    simply misaligned.
+  - Because it uses CellSize + CellPadding it is padding-correct, unlike some
+    other scripts that use CellSize alone.

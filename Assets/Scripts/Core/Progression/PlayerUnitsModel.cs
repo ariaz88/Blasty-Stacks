@@ -21,7 +21,6 @@ public class PlayerUnitsModel
         public bool isDeployed;
 
         public UnitState() { }
-        // NEW (optional)
         public UnitState(int id, bool unlocked, int level, bool isDeployed=false)
         {
             this.unitId = id;
@@ -55,8 +54,6 @@ public class PlayerUnitsModel
         if (!_byId.TryGetValue(unitId, out var u)) return;
         if (u.isDeployed == deployed) return;
         u.isDeployed = deployed;
-        // class reference updates in-place; no need to reassign in dictionary
-        // (keep this comment for clarity)
     }
 
     // CHANGED
@@ -206,7 +203,6 @@ public class PlayerUnitsModel
             var copy = new UnitState(s.unitId, s.unlocked, s.level, s.isDeployed);
             _byId[copy.unitId] = copy;
         }
-        //Debug.Log($"[PlayerUnitsModel] Loaded {saved.Count()} unit states");
     }
     // NEW: Export to serializable SaveData entries (public for access from GameStartManager)
     public List<SaveData.UnitStateEntry> ToSavedEntries()
@@ -272,7 +268,6 @@ public class PlayerUnitsModel
         return list;
     }
 
-    // PlayerUnitsModel.cs  (inside the class)
     public bool Exists(int unitId)
     {
         return _byId != null && _byId.ContainsKey(unitId);

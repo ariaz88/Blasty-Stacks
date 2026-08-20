@@ -29,13 +29,11 @@ public class BoardInputController : MonoBehaviour
     private void Reset()
     {
         if (!cam) cam = Camera.main;
-        //if (!board) board = FindObjectOfType<BoardGridXY>();
     }
 
     private void Awake()
     {
         if (!cam) cam = Camera.main;
-        //if (!board) board = FindObjectOfType<BoardGridXY>();
     }
 
     private void Update()
@@ -212,4 +210,3 @@ public class BoardInputController : MonoBehaviour
         if (resolver) resolver.ResolveFrom(p);
     }
 }
-

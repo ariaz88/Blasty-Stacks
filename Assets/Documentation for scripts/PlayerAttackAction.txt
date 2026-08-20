@@ -1,0 +1,45 @@
+================================================================================
+  PlayerAttackAction.cs
+  Path : Assets/Scripts/Combat/Player/PlayerAttackAction.cs
+  Type : ScriptableObject, extends PlayerAction
+         (menu: "AI/Enemy Actions / Attack Action")
+  Layer: Combat / Player
+================================================================================
+
+PURPOSE
+-------
+The design-time definition of one attack: which animation to play, how long the
+recovery is, and the distance band in which it may be used. One asset per
+character attack, authored under "Assets/Scriptable Objects/Attacks/".
+
+FIELDS
+------
+  (inherited from PlayerAction)
+    animationName  (string) the Animator state to play
+
+  attackScore                 (int, default 3)  priority weight for choosing
+                              between several attacks
+  recoveryTime                (float, default 2) seconds of cooldown after the
+                              swing - written into pm.currentRecoveryTimer
+  maxAttackAngle              (float, default 35)
+  minAttackAngle              (float, default -35)  angular cone for validity
+  minDistanceNeededToAttack   (float, default 0)
+  maxDistanceNeededToAttack   (float, default 3)  the usable distance band
+  speedMultiplier             (float, default 1.5) per-attack animation speed
+
+HOW IT CONNECTS
+---------------
+  - PlayerAttackState.GetNewAttack checks the distance band before selecting it.
+  - recoveryTime feeds the attack cooldown.
+  - Assets: Player_Dark_Oracle_01_Attack, Player_Minotaur_01-Attack, etc.
+
+NOTES
+-----
+  - The CreateAssetMenu path says "AI/Enemy Actions" even though this is the
+    PLAYER attack type - a copy-paste leftover that makes the asset menu
+    confusing.
+  - attackScore, maxAttackAngle and minAttackAngle are not read by
+    PlayerAttackState in its current form; only the distance band, recoveryTime
+    and animationName are used. The angle fields imply a planned cone check.
+  - speedMultiplier is also unused - PlayerAttackState instead uses
+    pm.unitStats.attackSpeed as the animation speed multiplier.

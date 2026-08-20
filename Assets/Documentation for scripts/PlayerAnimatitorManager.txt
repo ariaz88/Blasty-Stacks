@@ -1,0 +1,45 @@
+================================================================================
+  PlayerAnimatitorManager.cs
+  Path : Assets/Scripts/Combat/Player/PlayerAnimatitorManager.cs
+  Type : MonoBehaviour, extends AnimatorManager
+  Layer: Combat / Player
+  (note: the class name contains a typo - "Animatitor" - but it is used in 11
+   files, so it is left as-is.)
+================================================================================
+
+PURPOSE
+-------
+The player's animation controller wrapper. It inherits PlayTargetAnimation and
+the Animator reference from AnimatorManager, and adds the ANIMATION EVENT hooks
+that turn the damage hitbox on and off.
+
+FIELDS
+------
+  PlayerManager  found in Awake with GetComponentInParent - note "InParent",
+                 because the Animator usually lives on a child visual object
+                 while PlayerManager sits on the root.
+
+ANIMATION EVENT METHODS
+-----------------------
+  EnableDamageCollier()    [sic - typo for "Collider"]
+      Enables PlayerManager.playerDamageCollider.
+  DisableDamageCollider()
+      Disables it.
+
+  These two are called FROM THE ANIMATION CLIPS via Animation Events, not from
+  code. This is the standard "active frames" pattern: the hitbox exists only
+  during the swing, so timing the events inside the clip is what decides whether
+  an attack connects.
+
+HOW IT CONNECTS
+---------------
+  - Extends AnimatorManager (shared base with EnemyAnimatorManager).
+  - PlayerAttackState calls the inherited PlayTargetAnimation to start a swing.
+  - The clip's own events then call these two methods.
+
+NOTES
+-----
+  - Because these are invoked by name from animation clips, renaming either
+    method silently breaks all attacks - Unity only logs a warning at runtime.
+    The existing typo "EnableDamageCollier" must therefore be preserved unless
+    every clip event is updated too.

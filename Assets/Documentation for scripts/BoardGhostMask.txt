@@ -1,0 +1,68 @@
+================================================================================
+  BoardGhostMask.cs
+  Path : Assets/Scripts/Puzzle/Board/BoardGhostMask.cs
+  Type : MonoBehaviour   [ExecuteAlways] [DisallowMultipleComponent]
+         [DefaultExecutionOrder(100)]  - runs AFTER BoardGridXY
+  Layer: Puzzle / Board
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+Lets a designer PAINT which cells of the grid are unusable, giving each stage a
+custom board silhouette instead of a plain rectangle. The painted mask is stored
+with the component and pushed into BoardGridXY as blocked cells.
+
+It is edited through a custom inspector (BoardGhostMaskEditor) that draws a
+clickable grid.
+
+INSPECTOR FIELDS
+----------------
+  board            (BoardGridXY)  auto-found via GetComponentInChildren
+  autoApply        (bool, default true)  re-apply the mask on every edit
+  alsoMarkBlocked  (bool, default true)  also set the cell as blocked, which is
+                   safer because most systems only test IsBlocked
+  mask             (List<bool>, hidden)  row-major, indexed y * width + x
+  lastWidth / lastHeight (hidden)  remembered so a resize can preserve painting
+
+LIFECYCLE
+---------
+  Reset()      first-time setup: find the board and size the mask
+  OnEnable()   finds the board, calls board.EnsureReady(), resizes, applies
+  OnValidate() same as OnEnable, so Inspector edits take effect immediately
+  The EnsureReady() calls matter: this component runs at execution order 100 and
+  in Edit mode, so the board's arrays might not exist yet.
+
+METHODS
+-------
+  ResizeMaskToBoard()
+      Rebuilds the mask when the board dimensions change, COPYING the overlapping
+      region so previously painted cells survive a resize.
+
+  ApplyGhostMask()
+      Walks every cell and calls board.SetBlocked(cell, painted) - note it sets
+      BOTH true and false, so the mask fully owns the blocked state rather than
+      adding to it. Afterwards it calls BoardGridCubes.RefreshColors() if that
+      renderer is present, so the visual updates.
+
+  ClearMask()  all cells unpainted, then apply
+  FillMask()   all cells painted, then apply
+
+  GetCell(x, y) / SetCell(x, y, value)
+      Bounds-checked accessors used by the custom inspector. SetCell re-applies
+      immediately when autoApply is on.
+
+HOW IT CONNECTS
+---------------
+  - Writes into BoardGridXY.SetBlocked.
+  - Edited by BoardGhostMaskEditor (Assets/Scripts/Editor).
+  - Refreshes BoardGridCubes visuals.
+
+NOTES
+-----
+  - Despite the name it currently only drives BLOCKED, not the board's separate
+    ghost state. The commented-out board.SetGhost(...) call shows the intended
+    richer API that was never finished. So "ghost" here effectively means
+    "blocked".
+  - Because ApplyGhostMask clears as well as sets, any blocked cells set by
+    another system will be wiped the next time the mask is applied.

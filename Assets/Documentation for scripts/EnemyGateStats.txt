@@ -1,0 +1,63 @@
+================================================================================
+  EnemyGateStats.cs
+  Path : Assets/Scripts/Combat/Enemy/EnemyGateStats.cs
+  Type : MonoBehaviour, extends CharacterStats
+  Layer: Combat / Enemy
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The enemy's BASE / castle. Destroying it is the WIN condition of a stage. It
+mirrors PlayerGateStats: health, a bar, a numeric label, and a static event
+broadcast on destruction.
+
+THE KEY EVENT
+-------------
+  public static event Action OnGateDestroyed;
+      LevelGameManager subscribes to this and moves the game into the Won state.
+
+FIELDS
+------
+  enemyManager      cached in Awake
+  healthBar         (HealthBar)
+  isDestroyed       (bool) latch
+  EnemyOffsetLeft / EnemyOffsetRight  approach slots, same idea as EnemyStats
+  baseTxt           (TextMeshProUGUI) numeric HP label
+
+LIFECYCLE
+---------
+  Awake()  caches the EnemyManager
+  Start()  initialises the bar (null-checked) and writes currentHP into baseTxt
+
+METHODS
+-------
+  GetOffsetFacingPlayer(Vector2 playerPos) -> Transform
+      Identical logic to EnemyStats: returns the nearer side offset, falling
+      back to a single offset, then to its own transform.
+
+  ApplyDamageToEnemy(float damageAmount)
+      Returns immediately if already destroyed. Clamped subtraction, updates the
+      floored label and the bar, then calls HandleCastleDestroyed at zero.
+
+  HandleCastleDestroyed()  [private]
+      Guarded by isDestroyed. Disables its Collider2D and SpriteRenderer so the
+      gate visually and physically disappears at once, raises OnGateDestroyed,
+      then Destroy(gameObject, 0.1f).
+
+HOW IT CONNECTS
+---------------
+  - PlayerDamageCollider damages it (only while the attacker is in AttackState).
+  - PlayerAttackState checks currentGateTarget.isDestroyed to enter
+    PlayerGameCompleteState.
+  - LevelGameManager subscribes to OnGateDestroyed -> WIN.
+
+NOTES
+-----
+  - baseTxt is not null-checked, so a gate prefab missing the label throws on
+    the first hit (same issue as PlayerGateStats).
+  - The 0.1s destroy delay is very short. Because OnGateDestroyed fires just
+    before it, any subscriber that needs data from this object must read it
+    synchronously.
+  - A dead numbered variant HandleCastleDestroyed1 remains - it did NOT disable
+    the collider or sprite. The un-numbered version is the live one.

@@ -1,0 +1,126 @@
+================================================================================
+  BoardGridXY.cs
+  Path : Assets/Scripts/Puzzle/Board/BoardGridXY.cs
+  Type : MonoBehaviour   [DisallowMultipleComponent] [ExecuteAlways]
+  Layer: Puzzle / Board
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+THE authority on the puzzle grid. It owns the grid dimensions, converts between
+world positions and cell coordinates, and tracks what occupies every cell.
+Every other puzzle script asks this class where things are - nothing else is
+allowed to guess cell maths.
+
+[ExecuteAlways] means it also runs in Edit mode, so designers see the grid gizmos
+and correct snapping while building a stage.
+
+INSPECTOR FIELDS
+----------------
+  Grid Dimensions
+    width, height   (int, min 1, default 8 x 8)
+
+  Cell Metrics
+    cellSize     (float, min 0.01, default 1)  the size of one square cell
+    cellPadding  (float, min 0, default 0)     visual gap BETWEEN cells. This
+                 space belongs to no cell - a pointer there hits nothing.
+    localZ       (float)  board plane depth in local Z
+
+  Debug & Gizmos
+    drawCellGizmos, cellWireColor
+    drawStateOverlays, blockedFillColor, occupiedFillColor, ghostFillColor
+
+INTERNAL DATA  (three parallel 2D arrays)
+-----------------------------------------
+  blocked[x,y]    (bool) permanently unusable cell
+  ghost[x,y]      (bool) temporarily reserved / preview cell
+  occupancy[x,y]  (int)  0 = empty, otherwise the pieceId of the owner
+
+DERIVED GEOMETRY
+----------------
+  CellPitch   = cellSize + cellPadding   distance from one cell start to the next
+  BoardSizeX  = width  * CellPitch - cellPadding   (no trailing gap)
+  BoardSizeY  = height * CellPitch - cellPadding
+  BoardWorldZ = world Z of the board plane
+  InnerCellSize / OuterCellSize  backward-compatible aliases for cellSize and
+                                 CellPitch, kept for older scripts like
+                                 PieceSimple.
+
+LIFECYCLE / SAFETY
+------------------
+  EnsureReady()
+      Lazily allocates (or reallocates) all three arrays whenever their size no
+      longer matches width x height. Called at the top of nearly every public
+      method, which is why changing the grid size in the Inspector at runtime
+      does not crash.
+
+  ClearAll()             wipes blocked, ghost and occupancy
+  ClearAllOccupancy()    wipes only occupancy
+
+CELL STATE API
+--------------
+  IsInside(cell)                  bounds test
+  SetBlocked / IsBlocked
+  SetGhost / IsGhost
+  GetOccupant(cell) -> int        returns -1 for out-of-bounds, 0 for empty
+  OccupyCells(cells, ownerId)     stamps ownerId into every listed cell
+  ReleaseCellsOwnedBy(cells, ownerId)
+      Clears ONLY the cells that this owner actually holds - so a piece can
+      never accidentally free another piece's cells.
+
+  AreCellsPlaceableForMover(cells, moverId) -> bool
+      The core placement test. Every target cell must be inside the board, not
+      blocked, not ghosted, and either empty or already owned by the mover
+      itself (so a piece can slide within its own footprint).
+
+SHAPE HELPERS
+-------------
+  ShapeToCells(anchor, offsets, outCells)
+      Converts a shape (anchor + relative offsets) into absolute cells. Writes
+      into a caller-supplied list to avoid allocating.
+
+  ClampAnchorToFitShape(anchor, offsets) -> Vector2Int
+      Computes the shape's bounding box and clamps the anchor so the WHOLE shape
+      stays on the board. This is what stops a piece being dragged off an edge.
+
+OCCUPANCY QUERIES
+-----------------
+  HasAnyOccupiedCells() -> bool   early-outs on the first occupied cell
+  CountOccupiedCells() -> int     full scan
+
+GRID <-> WORLD CONVERSION
+-------------------------
+  CellCenterWorld(cell) -> Vector3      the snap target for a placed piece
+  TryWorldToCell(worldPos, out cell) -> bool
+      Projects the point onto the board plane, converts to local space, divides
+      by CellPitch to get a candidate cell, then verifies the point is inside
+      that cell's SQUARE rather than in the padding gap. Returns false for both
+      out-of-bounds points and points that land in a gap.
+  BoardPlaneNormal() -> transform.forward
+  ProjectToBoardPlane(world) / SnapToPlane(world)
+      Projects an arbitrary world point onto the board plane, which is what lets
+      a camera ray be turned into a board position.
+
+EDITOR GIZMOS  (#if UNITY_EDITOR)
+---------------------------------
+  OnDrawGizmos draws every cell as a wire square, plus optional coloured
+  overlays: ghost cells grey, blocked red, occupied blue. Small Z epsilons keep
+  the lines from z-fighting with the board art. Fills are faked with a border
+  plus both diagonals, since Gizmos has no filled-quad primitive.
+
+HOW IT CONNECTS
+---------------
+  - PieceSimple asks it for placement validity and snap positions.
+  - BoardInputController / RaycastToBoard convert pointer rays through it.
+  - MatchResolver reads occupancy to find groups.
+  - BoardBootstrapper snaps all authored pieces onto it at Start.
+
+NOTES
+-----
+  - Because [ExecuteAlways] is set, this component's code runs in the Editor.
+    Avoid adding anything with side effects outside Play mode.
+  - isBoardEmpty is a private field set inside HasAnyOccupiedCells but never
+    read anywhere - dead state.
+  - Arrays are allocated lazily rather than in Awake, so the very first call in
+    a frame may allocate. Fine at 8x8.

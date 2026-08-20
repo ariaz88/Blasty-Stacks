@@ -12,7 +12,6 @@ using System.Collections;
 /// </summary>
 
 
-//[DefaultExecutionOrder(-50)]
 public class PlayerStatsApplier : MonoBehaviour
 {
     [Header("Design-Time Data (assign in Inspector)")]
@@ -43,7 +42,6 @@ public class PlayerStatsApplier : MonoBehaviour
 
     private void Awake()
     {
-        // Existing: playerManager = GetComponent<PlayerManager>();  
 
         _gsm = GameStartManager.Instance;
         if (_gsm == null)
@@ -62,10 +60,6 @@ public class PlayerStatsApplier : MonoBehaviour
         {
             StartCoroutine(WaitForServicesAndApply());
         }
-        //else
-        //{
-        //    ApplyNow();
-        //}
     }
 
     // NEW: Coroutine to wait for readiness  
@@ -116,11 +110,6 @@ public class PlayerStatsApplier : MonoBehaviour
     /// </summary>
     public void ApplyNow()
     {
-        //if (_gsm == null || _gsm.PlayerUnits == null || unitsDatabase == null || progressionConfig == null)
-        //{
-        //    Debug.LogWarning("[PlayerStatsApplier] Missing references (GSM/UnitsDB/ProgressionConfig). Cannot apply stats.");
-        //    return;
-        //}
 
         if (_gsm == null || _gsm.PlayerUnits == null || unitsDatabase == null || progressionConfig == null)
         {
@@ -152,18 +141,7 @@ public class PlayerStatsApplier : MonoBehaviour
         rt.attackRange *= g.gR;
 
         CurrentStats = rt;
-        //playerManager.unitStats = CurrentStats;
-        // NEW: Null check for playerManager  
-        //if (playerManager != null)
-        //{
-        //    playerManager.unitStats = CurrentStats;
-        //}
-        //else
-        //{
-        //    Debug.LogWarning("[PlayerStatsApplier] PlayerManager missing—attach to same GameObject.");
-        //}
 
-        // Try to push HP into a health component if present
         TryApplyHealth(rt.maxHP);
     }
 
@@ -185,30 +163,7 @@ public class PlayerStatsApplier : MonoBehaviour
             return;
         }
 
-        // Case 2: Generic fallback via reflection on a component named "*Health*"
-        // (kept minimal; you can replace with your actual player health component later)
-        //var comps = GetComponentsInChildren<MonoBehaviour>();
-        //foreach (var c in comps)
-        //{
-        //    if (c == null) continue;
-        //    var t = c.GetType();
-        //    if (!t.Name.ToLower().Contains("health")) continue;
 
-        //    var maxField = t.GetField("maxHealth");
-        //    var curField = t.GetField("currentHP");
-        //    if (maxField != null && curField != null &&
-        //        maxField.FieldType == typeof(float) &&
-        //        curField.FieldType == typeof(float))
-        //    {
-        //        maxField.SetValue(c, newMaxHp);
-        //        float cur = (float)curField.GetValue(c);
-        //        cur = Mathf.Min(cur, newMaxHp);
-        //        if (cur <= 0f) cur = newMaxHp;
-        //        curField.SetValue(c, cur);
-        //        return;
-        //    }
-        //}
-        // If nothing found, it's fine—your combat scripts can read CurrentStats instead.
     }
     public void SetUnitId(int id)
     {

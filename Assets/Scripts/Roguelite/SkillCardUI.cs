@@ -55,10 +55,6 @@ public class SkillCardUI : MonoBehaviour
             firstUI?.SetActive(false);
             starsContainer.gameObject.SetActive(true);
             newRibbon.SetActive(false);
-            //for (int i = 0; i < starImages.Length; i++)
-            //{
-            //    starImages[i].enabled = i < timesSelected;
-            //}
             for (int i = 0; i < starImages.Length; i++)
             {
                 bool showOn = i < timesSelected;
@@ -77,7 +73,7 @@ public class SkillCardUI : MonoBehaviour
 
     /// <summary>
     /// Called by the button component when the card is clicked.
-    /// Invokes the callback with this card’s SkillData.
+    /// Invokes the callback with this cardï¿½s SkillData.
     /// </summary>
     public void OnClick()
     {

@@ -232,7 +232,6 @@ public class HomeManager : MonoBehaviour
     }
     private void Start()
     {
-        //StartCoroutine(CachePendingCharacterUnlocks1());
         CachePendingCharacterUnlocks();
         StartCoroutine(CheckNewCharacterUnlocksDelayed());
 
@@ -338,11 +337,7 @@ public class HomeManager : MonoBehaviour
         yield return new WaitForSeconds(0.5f);
         Debug.Log("Start showing");
 
-        //if (GameState.PendingUnlockedUnits == null ||
-        //    GameState.PendingUnlockedUnits.Count == 0)
-        //    yield break;
 
-        //int unitId = GameState.PendingUnlockedUnits[0]; // one at a time
 
         if (GameState.HasAny())
         {
@@ -355,7 +350,6 @@ public class HomeManager : MonoBehaviour
         }
 
 
-        //ShowNewCharacterPanel(unitId);
     }
 
 
@@ -366,7 +360,6 @@ public class HomeManager : MonoBehaviour
             return;
 
         panel.gameObject.SetActive(true);
-        //ModalCanvasUtil.PromoteToOverlayCanvas(panel.gameObject);
 
 
         panel.Show(unitId);
@@ -384,7 +377,6 @@ public class HomeManager : MonoBehaviour
     }
 
 
-    // HomeManager.cs (add inside class)
 
     public static void NotifyStageWon(float hp01)
     {
@@ -396,8 +388,6 @@ public class HomeManager : MonoBehaviour
         int stars = Hp01ToStars(hp01);   // ✅ CORRECT conversion
 
 
-        // record win + unlock next
-        //SaveSystem.RecordStageResult(levelId, idx0, castleHpPercent);
         SaveSystem.RecordStageResult(levelId, idx0, stars);
 
 
@@ -485,8 +475,6 @@ public class HomeManager : MonoBehaviour
         CurrentLevelId = levelId;
         CurrentStage1Based = idx0 + 1;
 
-        // Tell LevelManager which global stage we are entering
-        // globalStage = additive index: 1..N across all levels
         if (LevelManager.Instance != null)
         {
             int globalStage = (levelId - 1) * stagesPerLevel + CurrentStage1Based;
@@ -505,9 +493,7 @@ public class HomeManager : MonoBehaviour
     public void ReportStageResult_1Based(int stage1Based, float castleHpPercent)
     {
         int idx0 = Mathf.Clamp(stage1Based - 1, 0, stagesPerLevel - 1);
-        //SaveSystem.RecordStageResult(levelId, idx0, castleHpPercent);
 
-        // Refresh current Home UI
         RefreshAllVisuals();
         HandleSelectionChanged(pager.CurrentIndex);
 
@@ -523,9 +509,7 @@ public class HomeManager : MonoBehaviour
 
     }
 
-    // public so pager can call it
 
-    // ******* THIS METHOD MAKE THE TEXT FLOATING AND SHAKING ******
     public void ShowLockedStageToast1(RectTransform anchorParent)
     {
         if (!lockedToastPrefab) return;
@@ -587,7 +571,6 @@ public class HomeManager : MonoBehaviour
         var cg = go.GetComponent<CanvasGroup>();
         if (!cg) cg = go.AddComponent<CanvasGroup>();
 
-        // Text (we’ll tint this; if prefab has no TMP_Text, we’ll try any Graphic)
         var tmp = go.GetComponentInChildren<TMPro.TMP_Text>(true);
         if (tmp) tmp.text = lockedStageText;
 
@@ -745,9 +728,6 @@ public class HomeManager : MonoBehaviour
             progressFillImage.type = Image.Type.Filled;
             if (progressFillImage.fillMethod == Image.FillMethod.Radial360)
             {
-                // fine if you want radial, but most progress bars are horizontal:
-                // progressFillImage.fillMethod = Image.FillMethod.Horizontal;
-                // progressFillImage.fillOrigin = (int)Image.OriginHorizontal.Left;
             }
         }
 
@@ -760,7 +740,6 @@ public class HomeManager : MonoBehaviour
 
         void SetLabel(int unlocked)
         {
-            //if (progressText) progressText.text = $"{unlocked}/{total}";
         }
 
         if (!progressFillImage)
@@ -928,168 +907,3 @@ public class HomeManager : MonoBehaviour
 
 
 }
-
-
-//public class HomeManager1 : MonoBehaviour
-//{
-//    [Header("Pager & Content")]
-//    [SerializeField] private HomeCardsPager pager;
-//    [SerializeField] private RectTransform contentRoot; // same object pager uses for Content
-//    [SerializeField, Min(1)] private int stagesPerLevel = 20;
-
-//    [Header("Start Button")]
-//    [SerializeField] private Button startButton;
-//    [SerializeField] private GameObject startLockedOverlay; // optional: overlay/icon when locked
-//    [SerializeField] private TMP_Text startLabel;           // optional label, e.g. "START"
-
-//    [Header("Stage Label (center selection)")]
-//    [SerializeField] private TMP_Text stageTitle; // e.g., "STAGE 1-18"
-
-//    [Header("Scene Loading")]
-//    [Tooltip("Prefix or pattern to resolve scene names. Example: 'Stage_{0}' => 'Stage_18'")]
-//    [SerializeField] private string sceneNamePattern = "Stage_{0}";
-//    // If you load with Addressables or a custom scene loader, replace the LoadSelectedStage() body.
-
-//    private StageProgressData progress;
-
-//    private void Awake()
-//    {
-//        // Load progress
-//        progress = StageProgress.Load(stagesPerLevel);
-//    }
-
-//    private void OnEnable()
-//    {
-//        if (pager == null)
-//        {
-//            Debug.LogError("HomeManager: pager reference missing.");
-//            return;
-//        }
-
-//        // Build (creates the cards)
-//        pager.BuildIfNeeded();
-
-//        // Number & prepare cards
-//        InitializeStageCards();
-
-//        // Hook pager selection changes
-//        pager.OnIndexChanged += HandleSelectionChanged;
-
-//        // Hook Start button
-//        if (startButton)
-//        {
-//            startButton.onClick.RemoveAllListeners();
-//            startButton.onClick.AddListener(LoadSelectedStage);
-//        }
-
-//        // First visual pass
-//        RefreshAllVisuals();
-//        HandleSelectionChanged(pager.CurrentIndex);
-//    }
-
-//    private void OnDisable()
-//    {
-//        if (pager != null) pager.OnIndexChanged -= HandleSelectionChanged;
-//    }
-
-//    /// <summary>
-//    /// After pager builds, assign StageCard.stageIndex & set titles.
-//    /// </summary>
-//    private void InitializeStageCards()
-//    {
-//        int childCount = contentRoot.childCount;
-//        for (int i = 0; i < childCount; i++)
-//        {
-//            var card = contentRoot.GetChild(i).GetComponent<StageCard>();
-//            if (!card)
-//            {
-//                // auto-add if forgotten
-//                card = contentRoot.GetChild(i).gameObject.AddComponent<StageCard>();
-//            }
-//            card.stageIndex = i;
-//            card.SetTitle($"STAGE 1-{i + 1}");
-//        }
-//    }
-
-//    /// <summary>
-//    /// Called whenever selection moves left/right.
-//    /// </summary>
-//    private void HandleSelectionChanged(int selectedIndex)
-//    {
-//        // Update header label
-//        if (stageTitle) stageTitle.text = $"STAGE 1-{selectedIndex + 1}";
-
-//        // Enable/disable Start based on unlock
-//        bool unlocked = selectedIndex <= progress.highestUnlocked;
-//        if (startButton) startButton.interactable = unlocked;
-//        if (startLockedOverlay) startLockedOverlay.SetActive(!unlocked);
-
-//        // (Optional) Change Start label text
-//        if (startLabel) startLabel.text = unlocked ? "START" : "LOCKED";
-
-//        // You may also want to emphasize the selected card’s lock state, but
-//        // the scaling is already handled by your pager.
-//    }
-
-//    /// <summary>
-//    /// Refresh stars + lock overlays for all cards from current progress.
-//    /// </summary>
-//    private void RefreshAllVisuals()
-//    {
-//        int childCount = contentRoot.childCount;
-//        for (int i = 0; i < childCount; i++)
-//        {
-//            var card = contentRoot.GetChild(i).GetComponent<StageCard>();
-//            if (!card) continue;
-
-//            bool locked = i > progress.highestUnlocked;
-//            card.SetLocked(locked);
-
-//            int stars = progress.stars != null && i < progress.stars.Length ? progress.stars[i] : 0;
-//            card.SetStars(stars);
-//        }
-//    }
-
-//    /// <summary>
-//    /// Called by Start button. Loads the selected stage if unlocked; otherwise you could show a popup.
-//    /// </summary>
-//    private void LoadSelectedStage()
-//    {
-//        int idx = pager.CurrentIndex;
-
-//        if (idx > progress.highestUnlocked)
-//        {
-//            // Locked: either do nothing or show feedback.
-//            Debug.Log("Selected stage is locked.");
-//            return;
-//        }
-
-//        string sceneName = string.Format(sceneNamePattern, idx + 1); // human 1-based
-//        Debug.Log($"Loading scene: {sceneName}");
-//        // TODO: Replace with your scene loader
-//        UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
-//    }
-
-//    // ============================
-//    // Public API for game results
-//    // ============================
-
-//    /// <summary>
-//    /// Call this from your gameplay scene when a stage finishes.
-//    /// hpPercent is Castle HP % at victory (0..100). Use 0 if failed.
-//    /// </summary>
-//    public void ReportStageResult(int stageIndex_1Based, float hpPercent)
-//    {
-//        int idx = Mathf.Clamp(stageIndex_1Based - 1, 0, stagesPerLevel - 1);
-
-//        StageProgress.RecordStageResult(progress, idx, hpPercent);
-//        StageProgress.Save(progress);
-
-//        // If the Home scene is open, refresh visuals
-//        RefreshAllVisuals();
-
-//        // If the player finished the currently selected stage, update Start button state
-//        if (pager != null && pager.CurrentIndex == idx)
-//            HandleSelectionChanged(idx);
-//    }
-//}

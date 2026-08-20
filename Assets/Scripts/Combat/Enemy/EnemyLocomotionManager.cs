@@ -7,7 +7,6 @@ public class EnemyLocomotionManager : MonoBehaviour
     public EnemyManager enemyManager;
 
 
-    //[HideInInspector]
     public PlayerStats currentTarget;
 
     public LayerMask playerDetectionLayer;
@@ -49,9 +48,6 @@ public class EnemyLocomotionManager : MonoBehaviour
                 Vector3 targetDirection = playerStats.transform.position - transform.position;
                 float viewableAngle = Vector3.Angle(targetDirection, transform.forward);
                     currentTarget = playerStats;
-                //if (viewableAngle > enemyManager.minimumDetectionAngle && viewableAngle < enemyManager.maximumDetectionAngle)
-                //{
-                //}
             }
         }
 
@@ -88,11 +84,9 @@ public class EnemyLocomotionManager : MonoBehaviour
             else if (distanceFromTarget <= stoppingDistance)
             {
                 enemyAnimatorManager.anim.SetFloat("Vertical", 0, 0.1f, Time.deltaTime);
-                //playerManager.AttackTarget();
 
             }
         }
-        //HandleRotatesTowardTarget();
 
     
     }

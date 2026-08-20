@@ -27,7 +27,6 @@ public class HealthBar : MonoBehaviour
         if (transform.parent != null)
         {
             float parentSign = Mathf.Sign(transform.parent.lossyScale.x);
-            // localSign = parentSign >= 0 ? +1 : -1
             float localSign = (parentSign >= 0f) ? 1f : -1f;
 
             Vector3 ls = transform.localScale;

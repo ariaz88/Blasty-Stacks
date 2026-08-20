@@ -71,16 +71,12 @@ public class UIButtonPressScaler : MonoBehaviour,
 
     public void OnPointerEnter(PointerEventData eventData)
     {
-        //if (!pressed || !CanInteract()) return;
-        //inside = true;
-        //AnimateTo(pressedScale, pressDuration, pressEase);
     }
 
     public void OnPointerExit(PointerEventData eventData)
     {
         if (!pressed) return;
         inside = false;
-        //AnimateTo(normalScale, releaseDuration, releaseEase);
         AnimateTo(pressedScale, pressDuration, pressEase);
 
     }

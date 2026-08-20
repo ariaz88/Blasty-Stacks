@@ -1,0 +1,40 @@
+================================================================================
+  PlayerLockState.cs
+  Path : Assets/Scripts/Combat/Player/States/PlayerLockState.cs
+  Type : PlayerState (MonoBehaviour)
+  Layer: Combat / Player / States
+================================================================================
+
+PURPOSE
+-------
+Holds a freshly spawned unit completely still until the game decides to release
+it. This is what lets a whole wave appear at the gates and then charge together
+when the unlock animation plays, instead of trickling out one at a time.
+
+Tick()
+------
+  1. Zero linearVelocity and angularVelocity, and set the Rigidbody2D to Static -
+     fully immovable, immune to being pushed by other units.
+  2. pm.canMove = false and pm.SetAnimMoving(false).
+  3. Disable applyRootMotion so no animation can translate the body.
+  4. Clamp Z back to 0 if anything nudged the unit off the 2D plane - a useful
+     safety net in a 2D game that uses 3D transforms.
+  5. return this - stay locked until external code assigns a different state.
+
+HOW IT CONNECTS
+---------------
+  - PlayerWaveManager spawns units into this state and later flips pm.isUnlocked.
+  - PlayerPursueTargetState and PlayerCombatState both check
+    "if (playerLockState && !pm.isUnlocked) return playerLockState", so a unit
+    cannot escape the lock by any route while isUnlocked is false.
+  - StageUnlockRelay -> PlayerWaveManager.OnOneStageUnlockEventFired() is the
+    animation event that ultimately releases the wave.
+
+NOTES
+-----
+  - This file used to sit loose at Assets/PlayerLockState.cs, outside the Scripts
+    folder. It was moved here during the 2026-08-20 reorganisation. It is a live,
+    core state referenced by 7 other files and present in all 9 build scenes.
+  - Nothing inside this state ever returns a different state - releasing a unit
+    is done entirely by other code setting pm.isUnlocked and reassigning the
+    current state.

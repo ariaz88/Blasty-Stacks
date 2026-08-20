@@ -1,0 +1,114 @@
+================================================================================
+  SaveSystem.cs
+  Path : Assets/Scripts/Core/SaveLoad/SaveSystem.cs
+  Type : static class
+  Layer: Core / SaveLoad
+================================================================================
+
+PURPOSE
+-------
+The one and only gateway to persistence. It keeps a single cached SaveData object
+in memory, serializes it to JSON with JsonUtility, and stores that JSON in ONE
+PlayerPrefs key ("GAME_SAVE_V1"). Every system that needs to remember something
+goes through here - gameplay code must never touch PlayerPrefs directly for save
+data.
+
+STATE
+-----
+  _cache     (SaveData)  the single in-memory copy
+  KEY        "GAME_SAVE_V1"  the PlayerPrefs key holding the whole JSON blob
+  saveDepth  (int)  re-entrancy counter for the recursion guard
+
+  Data  ->  SaveData
+      Lazy accessor:  _cache ??= LoadInternal()
+      The first read of Data triggers a load from PlayerPrefs.
+
+UNIT PERSISTENCE
+----------------
+  GetUnitEntry(unitId)      LINQ FirstOrDefault lookup, may return null
+  EnsureUnitEntry(unitId)   creates a default entry (locked, level 1) if missing
+
+  SetUnitLevel(unitId, level)
+      Clamps to >=1, writes only if changed, then auto-saves.
+
+  SetUnitUnlocked(unitId, unlocked)
+      Writes only if changed. Locking a unit also forces isDeployed = false,
+      so a locked unit can never remain on the deployed team.
+
+  SetUnitDeployed(unitId, deployed)
+      Deploying a unit IMPLIES unlocking it (marked [FIX] in the source).
+      Writes only if changed, then auto-saves.
+
+  SetUnitOrders(deployedOrder, undeployedOrder)
+      Bulk-saves the player's card arrangement. Sanitizes both lists: drops
+      negative ids and removes duplicates. Null input becomes an empty list.
+
+CURRENCY
+--------
+  SetCoins / SetGems / SetHeroXP   clamp to >=0 and auto-save
+  GetCoins / GetGems / GetHeroXP   plain reads
+
+STAGE / LEVEL PROGRESS
+----------------------
+  EnsureLevel(levelId, stagesPerLevel) -> LevelProgress
+      Finds or creates the record for a level. If the stars array exists but is
+      the wrong length it is RESIZED while preserving existing stars, and
+      highestUnlocked is re-clamped. This makes it safe to change the number of
+      stages per level later without wiping player progress.
+
+  GetHighestUnlocked(levelId) -> int      0 if the level is unknown
+  GetStars(levelId, stageIndex0) -> int   0 if out of range
+
+  RecordStageResult(levelId, stageIndex0, stars)
+      The live scoring entry point.
+      - clamps stars to 0..3
+      - keeps only the BEST result ever achieved for that stage
+      - if stars >= 1, unlocks the next stage
+      - saves
+
+SAVING
+------
+  Save()
+      Stamps savedAtUtc, serializes Data to JSON, writes the PlayerPrefs key and
+      calls PlayerPrefs.Save(). Wrapped in a recursion guard: if saveDepth
+      exceeds 10 it logs an error and returns instead of saving.
+
+  ResetAll()
+      Deletes the PlayerPrefs key and nulls the cache - a true wipe.
+
+  LoadInternal()  [private]
+      Returns a fresh SaveData if no key exists. Otherwise deserializes the JSON.
+      Then runs a version-gated migration: for saves with version < 2 it forces
+      isDeployed = false on every locked unit, sets version = 2, and calls Save().
+
+  ResetAllIfRequested(bool)
+      Full "new game" reset used by debug tooling: ResetAll(), then
+      LevelManager.ResetProgressToStart(), then restores CurrencyManager to its
+      starting values, then re-seeds PlayerUnits from the units database.
+
+HOW IT CONNECTS
+---------------
+  - CurrencyManager mirrors its balances here.
+  - GameStartManager reads units[] on boot and writes the seeded roster back.
+  - WinPanel / LevelGameManager call RecordStageResult when a stage is won.
+  - HomeManager / StageCard read stars and highestUnlocked to build the map UI.
+  - SaveOnStop calls Save() on quit and on exiting Play mode.
+
+NOTES / RISKS
+-------------
+  !! LATENT RECURSION BUG: LoadInternal() calls Save() during migration, but
+  !! Save() reads the Data property, and Data is still null at that moment
+  !! (LoadInternal has not returned yet) - so Data calls LoadInternal() again.
+  !! This is exactly why the saveDepth > 10 guard exists. The guard prevents a
+  !! stack overflow but the migration path still performs ~10 redundant loads
+  !! and logs an error. The clean fix is to assign _cache before migrating.
+
+  - Almost every setter calls Save() immediately, so a screen that updates many
+    units in a loop writes the entire JSON blob once PER UNIT. For bulk edits
+    prefer mutating Data directly and calling Save() once at the end.
+  - Numbered leftover methods still exist here: Save1, SetUnitDeployed1,
+    RecordStageResul1 (note the typo), ResetAllIfRequested1, ResetAllIfRequested2.
+    None of them is called - the un-numbered versions are the live ones.
+  - A brand-new SaveData is created with version = 1, so the very first load of
+    a fresh save also runs the migration branch. Harmless but wasteful.
+  - PlayerPrefs on Android/iOS is not a secure store. Anyone can edit currency.

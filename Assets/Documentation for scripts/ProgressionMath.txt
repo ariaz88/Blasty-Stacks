@@ -1,0 +1,40 @@
+================================================================================
+  ProgressionMath.cs
+  Path : Assets/Scripts/Data/Stats/ProgressionMath.cs
+  Type : static class
+  Layer: Data
+================================================================================
+
+PURPOSE
+-------
+Turns a ProgressionConfigSO curve set plus a unit level into concrete multipliers
+for each stat. Pure math - no Unity objects, no side effects.
+
+TYPES
+-----
+  struct Growth { gA, gH, gMv, gAS, gD, gR }
+      Multiplier for Attack, HP, MoveSpeed, AttackSpeed, Defense, Range.
+      A value of 1.0 means "no change".
+
+METHODS
+-------
+  GetGrowthMultipliers(int level, ProgressionConfigSO cfg) -> Growth
+      Walks every level from 2 up to 'level' and COMPOUNDS the per-level percent:
+          multiplier = product over l=2..L of (1 + pct(l))
+      Returns all-1.0 if cfg is null or level <= 1, so level 1 is always base.
+      Each evaluated percent is clamped by cfg.pctClamp before being applied.
+
+  ClampPct(v, clampRange)  [private]
+      Mathf.Clamp helper.
+
+HOW IT CONNECTS
+---------------
+  - PlayerProgressionService uses it to preview "current vs next level" stats
+    in the unit upgrade UI.
+  - The same numbers feed UnitStatsRuntime.ApplyLevelGrowth at spawn time.
+
+NOTES
+-----
+  - The loop is O(level). It is called from UI code, so at very high levels this
+    is a linear cost per query. Fine at the current cap, worth caching if levels
+    ever reach the hundreds.

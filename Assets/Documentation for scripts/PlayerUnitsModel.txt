@@ -1,0 +1,88 @@
+================================================================================
+  PlayerUnitsModel.cs
+  Path : Assets/Scripts/Core/Progression/PlayerUnitsModel.cs
+  Type : plain C# class, [Serializable]   (NOT a MonoBehaviour)
+  Layer: Core / Progression
+================================================================================
+
+PURPOSE
+-------
+The runtime model of the player's roster: for every unit, is it unlocked, what
+level is it, and is it currently deployed to the battle team. It deliberately
+holds ONLY mutable player state - all design data (stats, portraits, prefabs)
+stays in UnitDefinitionSO / UnitsDatabaseSO.
+
+Being a plain C# class rather than a MonoBehaviour is an intentional and good
+design choice: the model is testable and independent of the Unity scene.
+
+NESTED TYPE
+-----------
+  UnitState { unitId, unlocked, level, isDeployed }
+      The constructor clamps level to a minimum of 1.
+
+STORAGE
+-------
+  _byId  (Dictionary<int, UnitState>)  O(1) lookup by unitId.
+  AllStates -> IEnumerable<UnitState>  enumeration for saving.
+
+INITIALIZATION
+--------------
+  InitializeFromDatabase(db, params initiallyUnlockedUnitIds)
+      Clears the dictionary and creates one UnitState per database entry.
+      A unit is unlocked if its id appears in initiallyUnlockedUnitIds, and is
+      deployed only if BOTH def.startsDeployed is true AND it is unlocked.
+      All units start at level 1.
+
+  LoadFromSavedStates(IEnumerable<UnitState> saved)
+      Clears and rebuilds the dictionary from saved data, copying every field
+      including isDeployed. Skips null entries and negative unitIds.
+
+QUERIES
+-------
+  HasUnit(id) / Exists(id) -> bool     is this id tracked
+  GetState(id) -> UnitState            null if unknown
+  GetLevel(id) -> int                  returns 1 for unknown units
+  IsUnlocked(id) -> bool               false for unknown units
+  IsDeployed(id) -> bool               false for unknown units
+  GetAll(deployed, unlockedOnly = true) -> List<int>
+      All ids matching a deployed/undeployed filter. This is how the roster UI
+      builds its two buckets.
+  GetAllUnlocked() -> List<int>        every owned unit, deployed or not
+  GetAllIds() -> List<int>             every tracked id including locked ones
+
+MUTATION
+--------
+  Unlock(id)          sets unlocked = true. No-op for unknown ids.
+  Lock(id)            sets unlocked = false AND forces isDeployed = false, so a
+                      locked unit can never stay on the team.
+  SetDeployed(id, b)  no-op if unknown or unchanged.
+  SeedInitialDeployed(ids)  bulk helper that unlocks, deploys and floors level
+                      to 1 for each supplied id.
+  SetLevel(id, level) clamps to >=1. CREATES a locked entry if the id is unknown.
+  LevelUp(id)         increments by 1 and returns the new level. Also creates a
+                      missing entry. Deliberately ignores currency and level
+                      caps - PlayerProgressionService enforces those.
+
+EXPORT
+------
+  ToSavedEntries() -> List<SaveData.UnitStateEntry>
+      Converts to the save-file type. Used by GameStartManager on first run.
+  ToSavedStates() -> List<UnitState>
+      Returns the LIVE instances (not copies) - mutating them mutates the model.
+
+HOW IT CONNECTS
+---------------
+  - Created and owned by GameStartManager.
+  - PlayerProgressionService mutates it when the player buys an upgrade.
+  - PlayerWaveManager reads IsUnlocked / IsDeployed to decide what to spawn.
+  - UnitsPanelController / DeployOverlayController drive the deploy buckets.
+
+NOTES
+-----
+  - Dead numbered leftovers remain: InitializeFromDatabase1 and
+    LoadFromSavedStates1. Neither is called.
+  - Mutating methods do NOT write to disk. Persistence is a separate step -
+    the caller must push changes through SaveSystem. That separation is
+    deliberate, but it means a forgotten save silently loses changes.
+  - GetLevel returns 1 for an unknown unit rather than throwing or returning 0,
+    so a typo in a unitId fails quietly rather than loudly.

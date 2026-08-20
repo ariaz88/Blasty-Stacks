@@ -1,0 +1,106 @@
+================================================================================
+  GameStartManager.cs
+  Path : Assets/Scripts/Core/Boot/GameStartManager.cs
+  Type : MonoBehaviour - singleton, DontDestroyOnLoad
+  Layer: Core / Boot
+  Scene: StarterScene
+================================================================================
+
+PURPOSE
+-------
+The COMPOSITION ROOT of the game. It is the one place where the runtime object
+graph is built: it creates PlayerUnitsModel, decides first-run vs normal boot,
+constructs PlayerProgressionService with all its dependencies, and loads the
+saved currency into CurrencyManager.
+
+This is the closest thing the project has to dependency injection, and it is one
+of the better-architected files in the codebase.
+
+SINGLETON
+---------
+  Instance   guard-and-destroy in Awake, then DontDestroyOnLoad.
+
+INSPECTOR FIELDS
+----------------
+  Design-Time Data
+    unitsDatabase       (UnitsDatabaseSO)   the master roster
+    upgradeCostConfig   (UpgradeCostSO)     gem prices
+    progressionConfig   (ProgressionConfigSO) stat growth curves
+
+  Initial Unlocks (First Run Defaults)
+    initiallyUnlockedUnitIds (int[], default {0})
+        Unit ids unlocked AND deployed on a fresh save.
+    initiallyUndeployedIds   (int[], default empty)
+        Unit ids unlocked but left on the bench.
+
+RUNTIME SERVICES (public, read-only)
+------------------------------------
+  PlayerUnits        (PlayerUnitsModel)        live roster state
+  ProgressionService (PlayerProgressionService) upgrade API for the UI
+
+FLOW
+----
+  Awake()
+      1. Singleton guard + DontDestroyOnLoad.
+      2. resetBool = true;  OnResetButtonClicked();     <-- SEE CRITICAL NOTE
+      3. InitializeServices().
+
+  OnEnable() -> WaitForLevelManager() coroutine
+      Polls each frame until LevelManager.Instance exists, then subscribes to
+      OnLevelStageChanged. This handles the fact that the two singletons live in
+      different scenes and have no guaranteed Awake order.
+      NOTE: the handler OnLevelStageChanged(...) is currently EMPTY - the
+      subscription exists but does nothing yet.
+
+  InitializeServices()
+      1. Creates PlayerUnitsModel and seeds it from unitsDatabase.
+      2. Constructs PlayerProgressionService.
+      3. Reads SaveSystem.Data.units:
+           - IF saved units exist -> converts them to PlayerUnitsModel.UnitState
+             and calls LoadFromSavedStates (normal boot).
+           - ELSE (first run) -> locks every unit in the database, then unlocks
+             and deploys initiallyUnlockedUnitIds, unlocks but benches
+             initiallyUndeployedIds, and writes the seeded roster to the save.
+      4. Currency: works out isFirstRunEconomy (no saved units AND coins, gems
+         and heroXp are all zero). If so it uses CurrencyManager's Starting*
+         values and seeds them into the save; otherwise it loads the saved
+         values - including legitimate zeros.
+      5. Constructs PlayerProgressionService a SECOND time with the same
+         arguments (redundant - the first construction at step 2 is discarded).
+
+  OnResetButtonClicked()
+      Calls SaveSystem.ResetAllIfRequested(resetBool).
+
+HOW IT CONNECTS
+---------------
+  - Depends on CurrencyManager.Instance existing in the scene; logs an error and
+    aborts currency setup if it is missing.
+  - PlayerWaveManager reads GameStartManager.PlayerUnits to know which units are
+    deployed and should spawn.
+  - The Units UI reads ProgressionService for upgrade costs and to apply levels.
+
+NOTES / CRITICAL ISSUES
+-----------------------
+  !!! CRITICAL - THE GAME WIPES ITS SAVE ON EVERY LAUNCH !!!
+  !!! In Awake() the code does:
+  !!!         resetBool = true;
+  !!!         OnResetButtonClicked();
+  !!! resetBool is hard-coded to true, and OnResetButtonClicked forwards it to
+  !!! SaveSystem.ResetAllIfRequested(true), which performs a FULL wipe:
+  !!! deletes the save key, resets LevelManager progress to the starting stage,
+  !!! resets currency to starting values and re-seeds the unit roster.
+  !!! Consequence: every time the game boots, all player progress is erased.
+  !!! Stage stars, unlocked units, upgrade levels and currency never survive a
+  !!! restart. This is almost certainly a development/debug leftover.
+  !!! FIX: expose resetBool as a [SerializeField] set to false, or delete these
+  !!! two lines, so the reset only happens when a debug button is pressed.
+
+  - InitializeServices() constructs PlayerProgressionService twice. Harmless but
+    wasteful; the second one is the instance actually kept.
+  - Two dead numbered variants, InitializeServices1() and InitializeServices2(),
+    remain in the file. They are never called - the un-numbered one is live.
+    (These are methods, not classes, so the class-level cleanup did not remove
+    them.)
+  - upgradeCostConfig and progressionConfig are public fields with their
+    [SerializeField] attributes commented out, so they are Inspector-assignable
+    but also writable from any other script.

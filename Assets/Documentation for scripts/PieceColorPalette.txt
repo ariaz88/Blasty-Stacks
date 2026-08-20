@@ -1,0 +1,55 @@
+================================================================================
+  PieceColorPalette.cs
+  Path : Assets/Scripts/Puzzle/Pieces/PieceColorPalette.cs
+  Type : MonoBehaviour - singleton
+         [DefaultExecutionOrder(-100)] [DisallowMultipleComponent]
+  Layer: Puzzle / Pieces
+================================================================================
+
+PURPOSE
+-------
+Central lookup that maps a piece's integer colorId to a MATERIAL. Pieces store
+only a number; this palette is the single place that decides what that number
+looks like, so blocks, their shatter debris and any other visual all agree.
+
+The [DefaultExecutionOrder(-100)] makes it initialise EARLY, before anything
+tries to read a material from it.
+
+TYPES
+-----
+  enum ColorId { Blue=0, Green=1, Orange=2, Pink=3, Purple=4, Red=5, Yellow=6 }
+      Seven colours, explicitly numbered to match the array index.
+
+INSPECTOR FIELDS
+----------------
+  materials  (Material[7])  indexed by colorId 0..6. Entries may be left null
+             for colours not yet used.
+  fallback   (Material)     returned whenever the requested id is out of range
+             or its slot is empty.
+
+SINGLETON
+---------
+  Instance  (static PieceColorPalette)
+      Awake destroys the COMPONENT (not the GameObject) if a second instance
+      appears - slightly unusual but harmless.
+
+METHODS
+-------
+  Get(int colorId) -> Material
+      Returns materials[colorId] when the index is valid AND the slot is
+      non-null; otherwise returns fallback. It can never throw an
+      IndexOutOfRange, which makes it safe to call with an unvalidated id.
+
+HOW IT CONNECTS
+---------------
+  - PieceSimple stores the integer colorId only.
+  - Piece painting scripts and FractureObject ask for the matching material so
+    the debris matches the block that broke.
+
+NOTES
+-----
+  - Because the fallback is returned silently, a mis-numbered piece shows the
+    fallback material rather than erroring. Convenient, but a wrong colour in
+    game is easy to miss - consider a warning log while developing.
+  - Unlike most singletons in this project it does NOT use DontDestroyOnLoad,
+    so each gameplay scene needs its own palette object.

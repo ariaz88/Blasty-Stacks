@@ -71,7 +71,6 @@ public class GameStartManager : MonoBehaviour
 
     private void OnLevelStageChanged(int levelIndex, int stageIndex, int globalStage)
     {
-        //ProgressionService.ProcessStageUnlocks();
     }
 
     public void OnResetButtonClicked()
@@ -114,8 +113,6 @@ public class GameStartManager : MonoBehaviour
 
         if (hasUnitsSave)
         {
-            // ===== NORMAL BOOT =====
-            // [FIX] Load saved unlock/level/deploy state into the runtime model
             var modelStates = savedUnits
                 .Select(u => new PlayerUnitsModel.UnitState(u.unitId, u.unlocked, u.level, u.isDeployed))
                 .ToList();
@@ -123,13 +120,9 @@ public class GameStartManager : MonoBehaviour
             PlayerUnits.LoadFromSavedStates(modelStates);
             Debug.Log($"[GameStartManager] Loaded {savedUnits.Count} saved unit states");
 
-            // [FIX] IMPORTANT: DO NOT lock everything or reseed here
-            // That would overwrite saved isDeployed and make upgrades show “Locked”
         }
         else
         {
-            // ===== FIRST RUN ONLY =====
-            // [FIX] Lock all first
             foreach (var def in unitsDatabase.Units)
             {
                 if (!def) continue;
@@ -216,8 +209,6 @@ public class GameStartManager : MonoBehaviour
         }
 
         Debug.Log($"[GameStartManager] Loaded currency: Coins={loadedCoins}, Gems={loadedGems}, HeroXP={loadedHeroXp}");
-        // 4) Progression service (ALWAYS construct it at the end)
-        // [FIX] Ensure we always wire this, regardless of first-run or normal boot
         ProgressionService = new PlayerProgressionService(
             units: PlayerUnits,
             currency: currencyMgr,
@@ -242,8 +233,6 @@ public class GameStartManager : MonoBehaviour
 
         if (hasUnitsSave)
         {
-            // ===== NORMAL BOOT =====
-            // [FIX] Load saved unlock/level/deploy state into the runtime model
             var modelStates = savedUnits
                 .Select(u => new PlayerUnitsModel.UnitState(u.unitId, u.unlocked, u.level, u.isDeployed))
                 .ToList();
@@ -251,13 +240,9 @@ public class GameStartManager : MonoBehaviour
             PlayerUnits.LoadFromSavedStates(modelStates);
             Debug.Log($"[GameStartManager] Loaded {savedUnits.Count} saved unit states");
 
-            // [FIX] IMPORTANT: DO NOT lock everything or reseed here
-            // That would overwrite saved isDeployed and make upgrades show “Locked”
         }
         else
         {
-            // ===== FIRST RUN ONLY =====
-            // [FIX] Lock all first
             foreach (var def in unitsDatabase.Units)
             {
                 if (!def) continue;
@@ -313,8 +298,6 @@ public class GameStartManager : MonoBehaviour
             Debug.Log("[GameStartManager] Seeded SaveData with starting currency.");
         }
 
-        // 4) Progression service (ALWAYS construct it at the end)
-        // [FIX] Ensure we always wire this, regardless of first-run or normal boot
         ProgressionService = new PlayerProgressionService(
             units: PlayerUnits,
             currency: currencyMgr,
@@ -452,350 +435,3 @@ public class GameStartManager : MonoBehaviour
 
 
 }
-
-
-//public class GameStartManager2 : MonoBehaviour
-//{
-//    public static GameStartManager Instance { get; private set; }
-
-//    [Header("Design-Time Data (Assign in Inspector)")]
-//    [SerializeField] private UnitsDatabaseSO unitsDatabase;
-//    [SerializeField] private UpgradeCostSO upgradeCostConfig;
-//    [SerializeField] private ProgressionConfigSO progressionConfig;
-
-//    [Header("Initial Roster (IDs from UnitsDatabaseSO)")]
-//    [Tooltip("Units that start unlocked AND deployed.")]
-//    [SerializeField] private int[] initiallyDeployedIds = new int[0];
-
-//    [Tooltip("Units that start unlocked BUT NOT deployed (appear in Undeployed).")]
-//    [SerializeField] private int[] initiallyUndeployedIds = new int[0];
-
-//    // Runtime singletons/services
-//    public PlayerUnitsModel PlayerUnits { get; private set; }
-//    public PlayerProgressionService ProgressionService { get; private set; }
-
-//    private void Awake()
-//    {
-//        // Singleton pattern
-//        if (Instance != null && Instance != this)
-//        {
-//            Destroy(gameObject);
-//            return;
-//        }
-//        //Instance = this;
-//        DontDestroyOnLoad(gameObject);
-
-
-
-//        InitializeServices();
-
-
-
-
-//    }
-
-//    private void Awake2()
-//    {
-//        // Singleton
-//        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
-//        //Instance = this;
-//        DontDestroyOnLoad(gameObject);
-
-//        // Make sure the save cache exists
-//        var _ = SaveSystem.Data;
-
-//        // 1) Build services & empty model (your current behavior)
-//        InitializeServices();
-
-//        // 2) Currencies: overlay from save if present, otherwise seed the save from manager
-//        if (CurrencyManager.Instance)
-//        {
-//            // saved values
-//            int savedCoins = SaveSystem.GetCoins();
-//            int savedGems = SaveSystem.GetGems();
-
-//            if (savedCoins > 0 || savedGems > 0)
-//            {
-//                CurrencyManager.Instance.SetCoins(savedCoins, silent: true);
-//                CurrencyManager.Instance.SetGems(savedGems);
-//            }
-//            else
-//            {
-//                // first run – take whatever is in the manager and write it to save
-//                SaveSystem.SetCoins(CurrencyManager.Instance.Coins);
-//                //SaveSystem.SetGems(CurrencyManager.Instance.Gems);
-//            }
-//        }
-
-//        // 3) UNITS: if we have any saved unit entries, APPLY them.
-//        //    Otherwise seed from your inspector arrays and WRITE them once.
-//        var savedUnits = SaveSystem.Data.units; // List<SaveData.UnitStateEntry>
-//        bool hasUnitSave = savedUnits != null && savedUnits.Count > 0;
-
-//        if (hasUnitSave)
-//        {
-//            // Overlay saved state onto the already-built PlayerUnits model
-//            foreach (var e in savedUnits)
-//            {
-//                if (!PlayerUnits.Exists(e.unitId)) continue;
-
-//                if (e.unlocked) PlayerUnits.Unlock(e.unitId);
-//                else PlayerUnits.Lock(e.unitId);
-
-//                PlayerUnits.SetLevel(e.unitId, Mathf.Max(1, e.level));
-
-//                // support either boolean isDeployed or deckSlot>=0 pattern
-//                bool deployed = e.isDeployed || (e.deckSlot >= 0);
-//                PlayerUnits.SetDeployed(e.unitId, deployed);
-//            }
-//        }
-//        else
-//        {
-//            // FIRST RUN: seed from inspector arrays
-//            if (initiallyDeployedIds != null)
-//            {
-//                foreach (var id in initiallyDeployedIds)
-//                {
-//                    if (!PlayerUnits.Exists(id)) continue;
-//                    PlayerUnits.Unlock(id);
-//                    PlayerUnits.SetDeployed(id, true);
-//                    if (PlayerUnits.GetLevel(id) < 1) PlayerUnits.SetLevel(id, 1);
-//                }
-//            }
-
-//            if (initiallyUndeployedIds != null)
-//            {
-//                foreach (var id in initiallyUndeployedIds)
-//                {
-//                    if (!PlayerUnits.Exists(id)) continue;
-//                    // skip if also in deployed list
-//                    bool dup = Array.IndexOf(initiallyDeployedIds, id) >= 0;
-//                    if (dup) continue;
-
-//                    PlayerUnits.Unlock(id);
-//                    PlayerUnits.SetDeployed(id, false);
-//                    if (PlayerUnits.GetLevel(id) < 1) PlayerUnits.SetLevel(id, 1);
-//                }
-//            }
-
-//            // Write the seeded roster to save ONCE so future boots load from it
-//            SaveSystem.ImportFromModel(PlayerUnits);
-//        }
-
-//        // (optional) keep a consistent deck capacity
-//        SaveSystem.EnsureDeckSize(5);
-//    }
-
-//    private void InitializeServices(bool firstRun)
-//    {
-//        if (!unitsDatabase)
-//        {
-//            Debug.LogError("[GameStartManager] UnitsDatabaseSO is not assigned.", this);
-//            return;
-//        }
-
-//        // 1) PlayerUnitsModel
-//        PlayerUnits = new PlayerUnitsModel();
-//        PlayerUnits.InitializeFromDatabase(unitsDatabase, System.Array.Empty<int>());
-
-//        // Build a fast lookup of valid IDs (unchanged)
-//        var validIds = new HashSet<int>();
-//        foreach (var def in unitsDatabase.Units)
-//        {
-//            if (!def) continue;
-//            validIds.Add(def.unitId);
-//        }
-
-//        // --- ONLY DO THIS ON FIRST RUN ---
-//        if (firstRun)
-//        {
-//            // Lock everything by default
-//            foreach (var def in unitsDatabase.Units)
-//            {
-//                if (!def) continue;
-//                PlayerUnits.Lock(def.unitId);
-//                PlayerUnits.SetDeployed(def.unitId, false);
-//                if (PlayerUnits.GetLevel(def.unitId) < 1) PlayerUnits.SetLevel(def.unitId, 1);
-//            }
-
-//            // Unlock + DEPLOY
-//            if (initiallyDeployedIds != null)
-//            {
-//                foreach (var id in initiallyDeployedIds)
-//                {
-//                    if (!validIds.Contains(id)) continue;
-//                    PlayerUnits.Unlock(id);
-//                    PlayerUnits.SetDeployed(id, true);
-//                    if (PlayerUnits.GetLevel(id) < 1) PlayerUnits.SetLevel(id, 1);
-//                }
-//            }
-
-//            // Unlock but UNDEPLOYED
-//            if (initiallyUndeployedIds != null)
-//            {
-//                foreach (var id in initiallyUndeployedIds)
-//                {
-//                    if (!validIds.Contains(id)) continue;
-//                    if (System.Array.IndexOf(initiallyDeployedIds, id) >= 0) continue;
-//                    PlayerUnits.Unlock(id);
-//                    PlayerUnits.SetDeployed(id, false);
-//                    if (PlayerUnits.GetLevel(id) < 1) PlayerUnits.SetLevel(id, 1);
-//                }
-//            }
-//        }
-//        // --- END firstRun block ---
-
-//        // 5) CurrencyManager must exist
-//        if (CurrencyManager.Instance == null)
-//        {
-//            Debug.LogError("[GameStartManager] CurrencyManager.Instance not found in scene.");
-//            return;
-//        }
-
-//        // 6) ProgressionService (unchanged)
-//        ProgressionService = new PlayerProgressionService(
-//            units: PlayerUnits,
-//            currency: CurrencyManager.Instance,
-//            costConfig: upgradeCostConfig,
-//            unitsDb: unitsDatabase,
-//            progressionCfg: progressionConfig
-//        );
-//    }
-
-//    private void InitializeServices()
-//    {
-//        if (!unitsDatabase)
-//        {
-//            Debug.LogError("[GameStartManager] UnitsDatabaseSO is not assigned.", this);
-//            return;
-//        }
-
-//        // 1) PlayerUnitsModel (runtime state for unlocked/levels)
-//        PlayerUnits = new PlayerUnitsModel();
-
-//        // If you previously passed a list of auto-unlocks to InitializeFromDatabase,
-//        // pass an empty list now; we'll do explicit seeding below.
-//        PlayerUnits.InitializeFromDatabase(unitsDatabase, System.Array.Empty<int>());
-
-//        // Build a fast lookup of valid IDs from the database
-//        var validIds = new HashSet<int>();
-//        foreach (var def in unitsDatabase.Units)
-//        {
-//            if (!def) continue;
-//            validIds.Add(def.unitId);
-//        }
-
-//        // 2) Lock EVERYTHING by default
-//        foreach (var def in unitsDatabase.Units)
-//        {
-//            if (!def) continue;
-//            PlayerUnits.Lock(def.unitId);
-//            PlayerUnits.SetDeployed(def.unitId, false);
-//            // Optional: ensure level baseline
-//            if (PlayerUnits.GetLevel(def.unitId) < 1) PlayerUnits.SetLevel(def.unitId, 1);
-//        }
-
-//        // Helper: avoid double-processing if an ID appears in both arrays
-//        bool IsDuplicate(int id)
-//        {
-//            if (initiallyDeployedIds != null)
-//            {
-//                for (int i = 0; i < initiallyDeployedIds.Length; i++)
-//                    if (initiallyDeployedIds[i] == id) return true;
-//            }
-//            return false;
-//        }
-
-//        // 3) Unlock + DEPLOY
-//        if (initiallyDeployedIds != null)
-//        {
-//            foreach (var id in initiallyDeployedIds)
-//            {
-//                if (!validIds.Contains(id))
-//                {
-//                    Debug.LogWarning($"[GameStartManager] initiallyDeployedIds contains unknown unitId {id}. Skipping.", this);
-//                    continue;
-//                }
-
-//                PlayerUnits.Unlock(id);
-//                PlayerUnits.SetDeployed(id, true);
-//                if (PlayerUnits.GetLevel(id) < 1) PlayerUnits.SetLevel(id, 1);
-//            }
-//        }
-
-//        // 4) Unlock but leave UNDEPLOYED (→ shows in Undeployed bucket)
-//        if (initiallyUndeployedIds != null)
-//        {
-//            foreach (var id in initiallyUndeployedIds)
-//            {
-//                if (!validIds.Contains(id))
-//                {
-//                    Debug.LogWarning($"[GameStartManager] initiallyUndeployedIds contains unknown unitId {id}. Skipping.", this);
-//                    continue;
-//                }
-
-//                // Skip if it's also listed as deployed
-//                if (IsDuplicate(id)) continue;
-
-//                PlayerUnits.Unlock(id);
-//                PlayerUnits.SetDeployed(id, false);
-//                if (PlayerUnits.GetLevel(id) < 1) PlayerUnits.SetLevel(id, 1);
-//            }
-//        }
-
-//        // 5) CurrencyManager must exist
-//        if (CurrencyManager.Instance == null)
-//        {
-//            Debug.LogError("[GameStartManager] CurrencyManager.Instance not found in scene. " +
-//                           "Please add a Managers/CurrencyManager GameObject with CurrencyManager component.");
-//            return;
-//        }
-
-//        // 6) ProgressionService (central upgrade API for UI)
-//        ProgressionService = new PlayerProgressionService(
-//            units: PlayerUnits,
-//            currency: CurrencyManager.Instance,
-//            costConfig: upgradeCostConfig,
-//            unitsDb: unitsDatabase,
-//            progressionCfg: progressionConfig
-//        );
-//    }
-
-//    // ADD inside GameStartManager.cs (e.g., under your other private methods)
-//    // Inside GameStartManager.cs (same class), replace your PlayerUnits_LoadFromSave with this:
-
-//    private void PlayerUnits_LoadFromSave(UnitsDatabaseSO db)
-//    {
-//        if (db == null || PlayerUnits == null) return;
-
-//        // Walk through public Units property (NOT the private field)
-//        foreach (var def in db.Units) // <-- Uses UnitsDatabaseSO.Units (public)
-//        {
-//            if (!def) continue;
-
-//            int id = def.unitId; // <-- UnitDefinitionSO.unitId
-
-//            // Pull the saved entry (created if missing)
-//            var e = SaveSystem.EnsureUnit(id);
-
-//            // Apply unlock + level into the runtime model
-//            if (e.unlocked)
-//                PlayerUnits.Unlock(id);                              // no SetUnlocked in API
-//            else
-//                PlayerUnits.Lock(id);                                // keeps it consistent
-
-//            PlayerUnits.SetLevel(id, Mathf.Max(1, e.level));         // set saved level
-//            PlayerUnits.SetDeployed(id, e.deckSlot >= 0);            // deployed flag from save
-//        }
-
-//        // (Optional) If you manage exact deck slots elsewhere, you can also read:
-//        // var slots = SaveSystem.GetDeckSlots();
-//        // ...use slots[] if you later add a deck-order UI.
-//    }
-
-//}
-
-
-
-
-

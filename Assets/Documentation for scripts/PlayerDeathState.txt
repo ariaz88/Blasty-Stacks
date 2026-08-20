@@ -1,0 +1,38 @@
+================================================================================
+  PlayerDeathState.cs
+  Path : Assets/Scripts/Combat/Player/States/PlayerDeathState.cs
+  Type : PlayerState (MonoBehaviour)
+  Layer: Combat / Player / States
+================================================================================
+
+PURPOSE
+-------
+Terminal state for a killed unit: stop it, play the death animation, and remove
+the GameObject shortly afterwards.
+
+Tick()
+------
+  1. If a Rigidbody2D exists, zero linearVelocity and set the body to Kinematic
+     so the corpse does not slide or get pushed around.
+  2. Zero the "Vertical" and "Horizontal" animator floats so the movement blend
+     tree snaps to idle rather than blending into the death clip.
+  3. anim.Play("Dying")  - direct clip play, bypassing any transition.
+  4. Destroy(playerManager.gameObject, 0.5f) - despawn after half a second.
+  5. return this.
+
+HOW IT CONNECTS
+---------------
+  - Entered by PlayerManager when health reaches zero.
+  - Depends on an animation state literally named "Dying" existing in the
+    Animator controller.
+
+NOTES
+-----
+  - The 0.5s destroy delay is HARD-CODED and must be kept longer than the death
+    animation, otherwise units vanish mid-animation. It is not derived from the
+    clip length.
+  - Destroy is called every Tick while in this state. Unity ignores repeat
+    Destroy calls on the same object, so this is harmless in practice, but
+    calling it once on entry would be cleaner.
+  - "Dying" is a magic string; renaming the animation state silently breaks the
+    death visual.

@@ -1,0 +1,37 @@
+================================================================================
+  ResetAnimationsBool.cs
+  Path : Assets/Scripts/Combat/Shared/ResetAnimationsBool.cs
+  Type : StateMachineBehaviour  (attached to an Animator STATE, not a GameObject)
+  Layer: Combat / Shared
+  Scenes: all 9 build scenes
+================================================================================
+
+PURPOSE
+-------
+Automatically clears an Animator bool when a state is entered. This is the
+standard way to reset a one-shot trigger flag such as "isInteracting" so a
+character cannot get stuck in an action state forever.
+
+FIELDS
+------
+  targetBool  (string)  the Animator parameter to clear
+  status      (bool)    exposed in the Inspector but NOT used by the code
+
+METHODS
+-------
+  OnStateEnter(animator, stateInfo, layerIndex)
+      Calls animator.SetBool(targetBool, false).
+
+HOW IT CONNECTS
+---------------
+  - Added to Animator states in the controller asset (typically the Idle or
+    locomotion state), so returning there always clears the action flag set by
+    AnimatorManager.PlayTargetAnimation.
+
+NOTES
+-----
+  - It always sets FALSE and ignores the 'status' field. The field's presence
+    suggests it was meant to be configurable; as written, setting status = true
+    in the Inspector does nothing.
+  - targetBool is a string that must match a real Animator parameter; a typo
+    fails silently.

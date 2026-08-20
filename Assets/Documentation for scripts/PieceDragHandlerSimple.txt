@@ -1,0 +1,74 @@
+================================================================================
+  PieceDragHandlerSimple.cs
+  Path : Assets/Scripts/Puzzle/Pieces/PieceDragHandlerSimple.cs
+  Type : MonoBehaviour   [RequireComponent(typeof(PieceSimple))]
+  Layer: Puzzle / Pieces
+================================================================================
+
+PURPOSE
+-------
+A self-contained mouse-drag implementation for a single piece, using Unity's
+OnMouseDown/Drag/Up messages. It lets the player pick a piece up, slide it
+around the grid, and drop it - refusing to enter illegal cells along the way.
+
+INSPECTOR FIELDS
+----------------
+  board              (BoardGridXY)  falls back to GetComponentInParent
+  cam                (Camera)       falls back to Camera.main
+  liftWhileDragging  (float, default 0.12)  visual lift so the dragged piece
+                     floats above the board
+
+RUNTIME STATE
+-------------
+  piece            the PieceSimple being dragged
+  startAnchor      where the drag began
+  lastValidAnchor  the most recent LEGAL anchor - the key to the whole design
+  dragging         drag in progress
+  tmpFootprint     reused list, avoids per-frame allocation
+
+FLOW
+----
+  OnMouseDown()
+      Records startAnchor and lastValidAnchor, and lifts the piece visually.
+
+  OnMouseDrag()
+      1. Builds a plane at the board height and raycasts the mouse onto it.
+         If the ray misses, the piece stays at lastValidAnchor.
+      2. Converts the hit point to a cell, with a manual local-space fallback
+         when TryWorldToCell fails (e.g. the pointer is in a padding gap).
+      3. ClampAnchorToFitShape keeps the whole shape on the board.
+      4. Builds the footprint and tests AreCellsPlaceableForMover, passing the
+         piece's own id so its current cells do not block itself.
+      5. If legal, updates lastValidAnchor and moves the visual there.
+         If not, the piece VISUALLY STICKS at lastValidAnchor - so it can never
+         be seen overlapping an illegal tile.
+
+  OnMouseUp()
+      Commits with piece.TryPlace(lastValidAnchor), which properly releases the
+      old cells and claims the new ones.
+
+  OnMouseDownProxy / OnMouseDragProxy / OnMouseUpProxy
+      Public wrappers so another object (for example a parent collider or an
+      input router) can forward mouse events into this handler.
+
+HOW IT CONNECTS
+---------------
+  - Drives PieceSimple.TryPlace.
+  - Queries BoardGridXY for conversion and validity.
+  - An alternative to the centralised BoardInputController; both approaches
+    exist in the project.
+
+NOTES / BUGS
+------------
+  !! AXIS BUG: this script was ported from a 3D (XZ) board and not fully
+  !! converted. Two places still treat Y as the "up" axis:
+  !!   - the drag plane is built at new Vector3(0f, board.BoardWorldZ, 0f) and
+  !!     uses board.transform.up as the normal;
+  !!   - the fallback cell calculation reads local.z for the vertical axis
+  !!     instead of local.y.
+  !! On this XY board those are wrong. The code mostly still works because the
+  !! primary TryWorldToCell path succeeds, but the fallback path and the plane
+  !! maths are incorrect. BoardInputController is the more reliable input route.
+
+  - OnMouse* messages require a Collider on the object and do not work on touch
+    devices as reliably as the Input System.

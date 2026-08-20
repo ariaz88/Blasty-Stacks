@@ -8,7 +8,6 @@ public class NewCharacterStats : MonoBehaviour
 
     private int currentUnitId;
     [Header("Header UI")]
-    //[Header("Header Visual (Animated)")]
     private GameObject currentVisualInstance;
 
 
@@ -56,12 +55,7 @@ public class NewCharacterStats : MonoBehaviour
     [SerializeField] private TMPro.TMP_Text popupAtkSpdDelta;
     [SerializeField] private TMPro.TMP_Text popupRangeDelta;
 
-    //[Header("Formatting")]
-    //[Tooltip("Number of decimals for continuous stats (damage, speeds, range).")]
-    //[Range(0, 3)] public int decimals = 2;
 
-    //[Tooltip("Color used for +Δ labels.")]
-    //public Color deltaColor = new Color(0.2f, 0.85f, 0.2f); // green
    
 
     void Awake()
@@ -187,8 +181,6 @@ public class NewCharacterStats : MonoBehaviour
     {
         currentUnitId = unitId;
 
-        //SetHeader(unitId);
-        //SetStatRows(unitId);
 
         gameObject.SetActive(true);
     }
@@ -256,16 +248,9 @@ public class NewCharacterStats : MonoBehaviour
 
     public void OnClaimClicked()
     {
-        //var progression = GameStartManager.Instance.ProgressionService;
-        //if (progression != null)
-        //{
-        //    progression.UnlockUnit(currentUnitId);
-        //}
 
-        //GameState.PendingUnlockedUnits.Remove(currentUnitId);
         ClaimCharacter(currentUnitId);
 
-        //ModalCanvasUtil.RemoveOverlayCanvas(gameObject);
 
         gameObject.SetActive(false);
     }
@@ -280,5 +265,3 @@ public class NewCharacterStats : MonoBehaviour
 
 
 }
-
-

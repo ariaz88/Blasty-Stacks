@@ -1,0 +1,35 @@
+================================================================================
+  PlayerIdleState.cs
+  Path : Assets/Scripts/Combat/Player/States/PlayerIdleState.cs
+  Type : PlayerState (MonoBehaviour)
+  Layer: Combat / Player / States
+================================================================================
+
+PURPOSE
+-------
+The resting state. The unit stands still, keeps its facing correct, and watches
+for an enemy to appear. As soon as one is found it hands over to pursuit.
+
+INSPECTOR FIELDS
+----------------
+  PlayerPursueTargetState   the state to enter once a target exists
+
+Tick()
+------
+  1. pm.UpdateFacing() - keep the sprite oriented correctly.
+  2. Ask pm.targetDetectionForPlayer.EnsureTarget(true) whether a target is
+     available.
+  3. If yes -> return PlayerPursueTargetState.
+     If no  -> return this (keep idling).
+
+HOW IT CONNECTS
+---------------
+  - Delegates ALL detection work to TargetDetectionForPlayer rather than doing
+    its own physics query. This is the cleanest of the states - 5 lines of logic.
+
+NOTES
+-----
+  - Two older variants, PlayerIdleState1 and PlayerIdleState2, used to live in
+    this file and each reimplemented enemy detection inline with
+    Physics2D.OverlapCircleAll. Both were removed in the 2026-08-20 cleanup;
+    the delegating version above is the live one.

@@ -66,7 +66,6 @@ public class BucketStatRow : MonoBehaviour
 
     private void HandleClick()
     {
-        //_onClicked?.Invoke(_unitId, _bucketType);
         Debug.Log($"[BucketStatRow {gameObject.name}] Clicked unitId {_unitId} in {_bucketType}");  // Log per row
         _onClicked?.Invoke(_unitId, _bucketType);
         if (_onClicked == null) Debug.LogError($"[BucketStatRow {gameObject.name}] _onClicked is null!");

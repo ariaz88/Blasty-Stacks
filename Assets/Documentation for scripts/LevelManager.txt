@@ -1,0 +1,85 @@
+================================================================================
+  LevelManager.cs
+  Path : Assets/Scripts/Core/Progression/LevelManager.cs
+  Type : MonoBehaviour - singleton, DontDestroyOnLoad
+  Layer: Core / Progression
+  Scene: MenuScene
+================================================================================
+
+PURPOSE
+-------
+Owns "which stage is the player on" for the whole game, and converts between two
+ways of naming a stage:
+  - GLOBAL stage:  a single running number, 1, 2, 3, ...
+  - (LEVEL, STAGE-IN-LEVEL): e.g. Stage 1-16, with 20 stages per level.
+It also optionally loads the scene that belongs to a stage.
+
+SINGLETON
+---------
+  Instance          standard guard-and-destroy in Awake, then DontDestroyOnLoad.
+
+INSPECTOR FIELDS
+----------------
+  stagesPerLevel  (int, default 20)  how many stages make up one "level"
+  startingStage   (int, default 1)
+  maxStage        (int, default 999) upper clamp
+  stageSceneNames (string[])  optional scene name per stage; index = stage - 1.
+                  Leave empty to manage scene loading yourself.
+
+STATIC CONVENIENCE ACCESSORS
+----------------------------
+  CurrentStage             the global stage number (1 if no instance yet)
+  CurrentLevelIndex        derived level  (1-based)
+  CurrentStageIndexInLevel derived stage within that level (1-based)
+  StagesPerLevel           20 if no instance yet
+  These all fall back to sane defaults when Instance is null, so UI can read
+  them safely during boot.
+
+EVENTS
+------
+  OnStageChanged(int newGlobalStage)
+  OnLevelStageChanged(int levelIndex, int stageInLevel, int globalStage)
+      Raised immediately after OnStageChanged, giving the split form too.
+
+METHODS
+-------
+  MarkLevelWon()          advances to CurrentStage + 1 and loads its scene
+  RestartStage()          reloads the scene for the current stage
+  SetStage(stage, loadScene = true)
+      Clamps to 1..maxStage, persists to PlayerPrefs immediately, raises both
+      events, then optionally loads the stage scene.
+
+  LoadSceneForStage(stage)  [private]
+      Uses stageSceneNames[stage-1] when a non-empty name exists, otherwise
+      reloads the CURRENT active scene by build index.
+
+  GlobalToLevelStage(global, out level, out stageInLevel)
+  LevelStageToGlobal(level, stageInLevel) -> int
+  GetLevelIndex(global) -> int
+  GetStageIndexInLevel(global) -> int
+      The four conversion helpers. All are pure integer math using
+      stagesPerLevel, and all guard against global < 1.
+
+  HasReached(requiredLevel, requiredStageInLevel) -> bool
+      "Is the player at or past Stage X-Y?" Used for unit unlock requirements.
+
+  ResetProgressToStart()   [static]
+      Resets to startingStage, rewrites PlayerPrefs and re-fires both events.
+      If the singleton does not exist yet it simply deletes the PlayerPrefs key
+      so the next Awake starts fresh.
+
+PERSISTENCE
+-----------
+  Uses its OWN PlayerPrefs key: "LM.CurrentStage".
+  !! NOTE: this is the one place in the project that persists outside
+  !! SaveSystem. The current stage therefore lives in a different key from the
+  !! rest of the save file, and the two can get out of sync - for example if
+  !! SaveSystem.ResetAll() runs without LevelManager.ResetProgressToStart().
+  !! ResetAllIfRequested() in SaveSystem deliberately calls both to avoid this.
+
+HOW IT CONNECTS
+---------------
+  - PlayerProgressionService.ProcessStageUnlocks() calls HasReached().
+  - HomeManager / StageCard use the conversion helpers to build the stage map.
+  - GameStartManager subscribes to OnLevelStageChanged.
+  - WinPanel advances progress after a victory.

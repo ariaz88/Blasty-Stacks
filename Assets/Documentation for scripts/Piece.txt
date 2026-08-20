@@ -1,0 +1,84 @@
+================================================================================
+  Piece.cs
+  Path : Assets/Scripts/Puzzle/Pieces/Piece.cs
+  Type : MonoBehaviour   [DisallowMultipleComponent] [ExecuteAlways]
+  Layer: Puzzle / Pieces
+  STATUS: legacy / superseded by PieceSimple - not used by the 7 build scenes
+================================================================================
+
+PURPOSE
+-------
+An earlier, more ambitious piece implementation. Its distinguishing feature over
+PieceSimple is LAYERED pieces: a block can have an OUTER shell that must be
+cleared first, revealing an INNER piece with its own shape and colour underneath.
+
+It is retained because RaycastToBoard still references the type, but the live
+gameplay path uses PieceSimple.
+
+IDENTITY FIELDS
+---------------
+  pieceId    (int)     runtime id assigned by a spawner
+  shapeId    (string, default "L3")  matching key
+  colorId    (int)     matching key
+  cellSize   (float, min 0.01)  must match the board's cell size
+  normalizeOffsets (bool, default true)
+      Shift computed offsets so the minimum becomes (0,0), WITHOUT moving the
+      visuals.
+
+LAYERING
+--------
+  layered          (bool)  enable the two-layer behaviour
+  layerOuter       (Transform) parent holding the OUTER unit cells. If null, the
+                   outer layer is the unit cells directly under the root.
+  layerInner       (Transform) parent for the INNER cells. If null while layered
+                   is true, there is simply no inner layer.
+  startActiveLayer (enum ActiveLayer { Outer, Inner }, default Outer)
+  outerShapeId / outerColorId / innerShapeId / innerColorId
+      Separate matching keys per layer, so the shell and the core can match
+      different things.
+
+RUNTIME DATA
+------------
+  _outerRaw / _innerRaw   offsets exactly as read from children, may be negative
+  _outer / _inner         normalized offsets
+  _union                  every cell covered by ANY layer - used for occupancy,
+                          so a layered piece reserves its full footprint even
+                          when only the inner layer is active
+  _activeLayer            which layer is currently exposed
+  _scratch                reusable buffer to avoid GC
+
+LIFECYCLE
+---------
+  Awake()      rebuilds footprints, sets the active layer, applies visibility
+  OnValidate() defaults outerShapeId/innerShapeId to shapeId when blank, rebuilds
+               footprints, and (outside Play mode) refreshes layer visibility so
+               the designer sees the change immediately
+
+KEY METHODS
+-----------
+  GetActiveMatchKey() -> (string shape, int color)
+      Returns the matching key for the CURRENTLY active layer, falling back to
+      the base shapeId when a layer-specific id is blank. Non-layered pieces
+      simply return (shapeId, colorId).
+
+  GetActiveOffsets() -> IReadOnlyList<Vector2Int>
+      The footprint of the active layer only.
+
+  (plus footprint rebuilding, union computation and layer visibility helpers)
+
+HOW IT CONNECTS
+---------------
+  - RaycastToBoard.TryGetAnchorForPieceFromScreen takes this type as a
+    parameter - the only remaining live reference.
+  - Not placed in any of the 7 gameplay scenes; PieceSimple does the real work.
+
+NOTES
+-----
+  - The class name "Piece" also collides with the nested UpgradeCostSO.Piece
+    struct (a piecewise cost-curve segment). Both are in the global namespace.
+    Unrelated concepts, confusingly identical names.
+  - Its tooltips still refer to "BoardGridXZ", the older horizontal-board type,
+    confirming this predates the 2D XY conversion.
+  - If the layered-block mechanic is ever wanted, this file is the starting
+    point - but it would need auditing against the current BoardGridXY API
+    before use.

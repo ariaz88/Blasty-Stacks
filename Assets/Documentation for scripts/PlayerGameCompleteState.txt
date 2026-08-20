@@ -1,0 +1,30 @@
+================================================================================
+  PlayerGameCompleteState.cs
+  Path : Assets/Scripts/Combat/Player/States/PlayerGameCompleteState.cs
+  Type : PlayerState (MonoBehaviour)
+  Layer: Combat / Player / States
+================================================================================
+
+PURPOSE
+-------
+The victory / end-of-stage freeze. When the stage is over, every surviving unit
+is parked here so nothing keeps moving or attacking behind the win panel.
+
+Tick()
+------
+  1. Zero linearVelocity and angularVelocity, and set the Rigidbody2D to Static.
+  2. pm.canMove = false and pm.SetAnimMoving(false) so the animator returns to
+     idle.
+  3. Disable applyRootMotion so the animation cannot translate the body.
+  4. return this - the unit stays frozen until higher-level game flow moves it.
+
+HOW IT CONNECTS
+---------------
+  - Entered when LevelGameManager reports the stage is won.
+  - Mirrors PlayerLockState almost exactly; the difference is intent - Lock is
+    "not started yet", GameComplete is "finished".
+
+NOTES
+-----
+  - Because the body becomes Static, the unit will not fall or react to physics.
+    Correct for a victory pose.

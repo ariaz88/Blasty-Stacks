@@ -1,0 +1,82 @@
+================================================================================
+  BoardGridCubes.cs
+  Path : Assets/Scripts/Puzzle/Board/BoardGridCubes.cs
+  Type : MonoBehaviour   [DisallowMultipleComponent]
+  Layer: Puzzle / Board
+================================================================================
+
+PURPOSE
+-------
+Builds the VISIBLE board: it spawns one small cube per grid cell so the player
+can see the playfield, and outlines blocked cells. It is purely presentational -
+all logic lives in BoardGridXY.
+
+INSPECTOR FIELDS
+----------------
+  Refs
+    board        (BoardGridXY)  defaults to a component on the same object
+
+  Appearance
+    freeMat      (Material) normal, usually semi-transparent
+    blockedMat   (Material) fill for blocked cells
+    strokeMat    (Material) outline material
+    thickness    (float, default 0.08) cube height
+    inset        (float, default 0.03) shrink so cell borders stay visible
+    zOffset      (float, default 0.003) small lift to avoid z-fighting
+    holder       (Transform) parent for spawned visuals, auto-created if null
+
+  Stroke (blocked cells only)
+    drawStrokeForBlocked (bool, default true)
+    strokeWidth  (float, default 0.02) border strip thickness
+    strokeHeight (float, default 0.08)
+
+  Behavior
+    autoGenerateOnStart (bool, default true)
+    addColliderToBlocked (bool, default false) make blocked cells physical
+    gridLayerName        (string, default "Board")
+    blockedHeightExtra   (float, default 0.06) blocked cells stand slightly proud
+
+  Ghost integration
+    ghostMask         (BoardGhostMask)  assign the painted mask
+    hideGhostedCells  (bool, default true) skip cubes for masked-out cells,
+                      which is what gives each stage its custom silhouette
+
+INTERNAL DATA
+-------------
+  cells   (GameObject[,]) the visual cube per cell
+  strokes (GameObject[,]) the 4-strip outline root, blocked cells only
+
+METHODS
+-------
+  Reset() / Start()
+      Resolve the board reference; Start calls Regenerate when
+      autoGenerateOnStart is set.
+
+  IsGhosted(x, y) -> bool
+      Returns ghostMask.GetCell(x, y) when hideGhostedCells is on, else false.
+
+  Regenerate()
+      Clears everything and rebuilds all cell cubes and strokes. Logs a warning
+      and aborts if no board is assigned.
+
+  Clear()
+      Destroys previously spawned visuals.
+
+  RefreshColors()
+      Re-applies materials without rebuilding the whole grid - the cheap update
+      path called by BoardGhostMask.ApplyGhostMask after a paint edit.
+
+HOW IT CONNECTS
+---------------
+  - Reads BoardGridXY for dimensions and cell state.
+  - Reads BoardGhostMask to know which cells to hide.
+  - BoardGhostMask calls RefreshColors() when the mask changes.
+
+NOTES
+-----
+  - Spawning one GameObject per cell means an 8x8 board creates 64 objects, plus
+    up to 4 strip objects per blocked cell. Acceptable at this size, but it does
+    not scale to large boards.
+  - Not referenced by the 7 gameplay scenes' script list directly - the board
+    art in those stages may be authored by hand instead. Treat it as a tool for
+    prototyping board layouts.

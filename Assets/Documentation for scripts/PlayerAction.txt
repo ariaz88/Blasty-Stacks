@@ -1,0 +1,26 @@
+================================================================================
+  PlayerAction.cs
+  Path : Assets/Scripts/Combat/Player/PlayerAction.cs
+  Type : ScriptableObject  (base class)
+  Layer: Combat / Player
+================================================================================
+
+PURPOSE
+-------
+The minimal base class for any player action asset. It carries only the name of
+the animation to play, so that different action types (attacks today, perhaps
+dodges or abilities later) share one field.
+
+FIELDS
+------
+  animationName  (string)  the Animator state name passed to PlayTargetAnimation
+
+HOW IT CONNECTS
+---------------
+  - PlayerAttackAction extends it and adds timing and range data.
+  - PlayerAnimatitorManager.PlayTargetAnimation consumes animationName.
+
+NOTES
+-----
+  - It has no [CreateAssetMenu], so it cannot be created directly in the Editor -
+    correct, since it is meant only as a base class.

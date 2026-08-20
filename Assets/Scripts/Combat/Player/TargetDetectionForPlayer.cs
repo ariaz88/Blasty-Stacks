@@ -110,8 +110,6 @@ public class TargetDetectionForPlayer : MonoBehaviour
 
         if (doFOV && !IsWithinFOV(target.transform.position)) return false;
 
-        // If you track death on EnemyStats, add it here:
-        // if (target.enemyIsdead) return false;
 
         return true;
     }
@@ -172,7 +170,6 @@ public class TargetDetectionForPlayer : MonoBehaviour
     {
         if (es == null || es == exclude) return false;
         if (!es.gameObject.activeInHierarchy) return false;
-        // if (es.enemyIsdead) return false;
 
         if (doFOV && !IsWithinFOV(es.transform.position)) return false;
 
@@ -244,131 +241,5 @@ public class TargetDetectionForPlayer : MonoBehaviour
         return false;
     }
 
-
-}
-
-
-public class TargetDetectionForPlayer1 : MonoBehaviour
-{
-    PlayerManager playerManager;
-    private bool use2D = true;
-    public LayerMask enemyDetectionLayer;
-
-    private void Awake()
-    {
-        playerManager = GetComponent<PlayerManager>();
-    }
-    public bool EnsureValidTarget(bool respectFOV = true)
-    {
-        if (!IsTargetValid(playerManager.currentTarget, respectFOV))
-        {
-            playerManager.currentTarget = AcquireNearestEnemy(respectFOV);
-        }
-        return playerManager.currentTarget != null;
-    }
-
-    /// Conservative validity check (null, active, radius, optional FOV, optional death flag)
-    public bool IsTargetValid(EnemyStats target, bool respectFOV = true)
-    {
-        if (target == null) return false;
-
-        var go = target.gameObject;
-        if (!go.activeInHierarchy) return false;
-
-        // If you track death: if (TargetIsDead(target)) return false;
-
-        float dist = Vector3.Distance(playerManager.transform.position, target.transform.position);
-        if (dist > playerManager.detectionRadius) return false;
-
-        //if (respectFOV && !IsWithinFOV(target.transform.position)) return false;
-
-        return true;
-    }
-
-    /// Pick nearest enemy within radius (and FOV if requested).
-    public EnemyStats AcquireNearestEnemy(bool respectFOV = true)
-    {
-        Vector3 origin = playerManager.transform.position;
-
-        EnemyStats best = null;
-        float bestDistSq = float.PositiveInfinity;
-
-        if (!use2D)
-        {
-            // ------------- 3D -------------
-            var hits = Physics.OverlapSphere(origin, playerManager.detectionRadius, enemyDetectionLayer);
-            for (int i = 0; i < hits.Length; i++)
-            {
-                if (hits[i] == null) continue;
-
-                EnemyStats es = hits[i].GetComponent<EnemyStats>() ?? hits[i].GetComponentInParent<EnemyStats>();
-                if (es == null) continue;
-                if (!IsTargetValidBasic(es)) continue; // quick checks without FOV first
-
-                //if (respectFOV && !IsWithinFOV(es.transform.position)) continue;
-
-                float dsq = (es.transform.position - origin).sqrMagnitude;
-                if (dsq < bestDistSq)
-                {
-                    bestDistSq = dsq;
-                    best = es;
-                }
-            }
-        }
-        else
-        {
-            // ------------- 2D -------------
-            var hits = Physics2D.OverlapCircleAll((Vector2)origin, playerManager.detectionRadius, enemyDetectionLayer);
-            for (int i = 0; i < hits.Length; i++)
-            {
-                if (hits[i] == null) continue;
-
-                EnemyStats es = hits[i].GetComponent<EnemyStats>() ?? hits[i].GetComponentInParent<EnemyStats>();
-                if (es == null) continue;
-                if (!IsTargetValidBasic(es)) continue;
-
-                //if (respectFOV && !IsWithinFOV(es.transform.position)) continue;
-
-                float dsq = ((Vector2)es.transform.position - (Vector2)origin).sqrMagnitude;
-                if (dsq < bestDistSq)
-                {
-                    bestDistSq = dsq;
-                    best = es;
-                }
-            }
-        }
-
-        return best;
-    }
-
-    // --- internals ---
-
-    // Fast checks used during scanning; no FOV here to keep it cheap.
-    private bool IsTargetValidBasic(EnemyStats target)
-    {
-        if (target == null) return false;
-        if (!target.gameObject.activeInHierarchy) return false;
-        // if (TargetIsDead(target)) return false;
-        return true;
-    }
-
-    private bool IsWithinFOV(Vector3 targetPos)
-    {
-        if (!use2D)
-        {
-            // 3D: use forward
-            Vector3 to = targetPos - transform.position;
-            float angle = Vector3.Angle(to, transform.forward);
-            return angle >= playerManager.minimumDetectionAngle && angle <= playerManager.maximumDetectionAngle;
-        }
-        else
-        {
-            // 2D: choose which direction your sprite "faces"
-            // If your sprite artwork faces UP, use transform.up; if it faces RIGHT, use transform.right
-            Vector2 to = (Vector2)(targetPos - transform.position);
-            float angle = Vector2.Angle(to, (Vector2)transform.up);
-            return angle >= playerManager.minimumDetectionAngle && angle <= playerManager.maximumDetectionAngle;
-        }
-    }
 
 }

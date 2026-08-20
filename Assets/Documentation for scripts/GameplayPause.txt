@@ -1,0 +1,36 @@
+================================================================================
+  GameplayPause.cs
+  Path : Assets/Scripts/Core/SaveLoad/GameplayPause.cs
+  Type : static class
+  Layer: Core / SaveLoad
+================================================================================
+
+PURPOSE
+-------
+The single switch for pausing gameplay. Keeps the "are we paused" flag and the
+Time.timeScale change together so they can never disagree.
+
+STATE
+-----
+  IsPaused  (static bool, public get / private set)
+
+METHODS
+-------
+  SetPaused(bool paused)
+      Sets IsPaused and drives Time.timeScale to 0 when pausing, 1 when resuming.
+
+HOW IT CONNECTS
+---------------
+  - RevivePanel and the level-up / skill-select overlay pause the game while a
+    modal choice is on screen.
+  - Anything that must keep running while paused must use unscaled time - for
+    example EnemyManager uses a real-time delay coroutine so its delayed destroy
+    still fires during a pause.
+
+NOTES
+-----
+  - Because it forces timeScale back to exactly 1, it will overwrite any
+    slow-motion or speed-up effect. If the game ever adds a speed multiplier,
+    this must store and restore the previous scale instead.
+  - Static, so the paused flag persists across scene loads. A scene that loads
+    while paused would start frozen unless someone calls SetPaused(false).

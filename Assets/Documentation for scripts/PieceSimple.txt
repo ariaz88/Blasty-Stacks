@@ -1,0 +1,151 @@
+================================================================================
+  PieceSimple.cs
+  Path : Assets/Scripts/Puzzle/Pieces/PieceSimple.cs
+  Type : MonoBehaviour   [DisallowMultipleComponent]
+  Layer: Puzzle / Pieces
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+One placeable multi-cell puzzle piece. It knows its shape (a set of grid
+offsets), its colour and shape id for matching, its movement constraints, and
+how to claim and release cells on the board. It is the single most-used class in
+the puzzle layer.
+
+STATIC REGISTRY
+---------------
+  NextId    (static int, starts at 1)
+  Registry  (static Dictionary<int, PieceSimple>)
+  GetById(int id) -> PieceSimple
+      The board stores only an integer owner id per cell. This registry is how
+      MatchResolver turns that id back into the actual piece object.
+      Ids are assigned in Start (if pieceId == 0) and removed in OnDestroy.
+
+INSPECTOR FIELDS
+----------------
+  paddingPerCell   (float, min 0)  shrinks child colliders to leave a visual gap
+  snapRootXYToCellCenterOnPlace (bool, default false)
+  pieceId          (int)  serialized; 0 means "assign me at runtime"
+
+  Movement
+    movementAxis   (enum Both / HorizontalOnly / VerticalOnly)
+    isFrozen       (bool)  completely immovable when true
+    AllowsX        => !isFrozen && axis != VerticalOnly
+    AllowsY        => !isFrozen && axis != HorizontalOnly
+
+  Identity
+    shapeLayout    (PieceShapeLayout) optional authoring helper
+    shapeId        (string, default "P")  matched by MatchResolver
+    colorId        (int, default 0)       matched by MatchResolver
+
+  Shape
+    shapeOffsets   (List<Vector2Int>) cells relative to the anchor. MUST contain
+                   (0,0).
+    autoBuildOffsetsFromChildren (bool, default true)
+
+  Board & Placement
+    board          (BoardGridXY)  auto-found in Awake if unassigned
+    InitialAnchor  (Vector2Int)   last-resort starting cell
+
+  Sub-Block Enforcement
+    enforceSubBlocksToOffsets (bool, default true)
+        Force child blocks to sit exactly at offset * cellSize in local space.
+
+RUNTIME STATE
+-------------
+  _footprint     reused buffer of the current absolute cells
+  _lastOccupied  the cells currently claimed on the board
+  _isPlaced      whether the piece currently owns cells
+  _anchor        the current anchor cell
+
+LIFECYCLE
+---------
+  Awake()  finds the board and snaps the transform onto the board plane.
+  Start()
+      1. Assigns a unique pieceId and registers it.
+      2. Applies PieceShapeLayout if present.
+      3. Re-snaps to the board plane.
+      4. Builds offsets from children if they were never authored.
+      5. Solves the anchor (children first, then world position, then
+         InitialAnchor), clamps it, and places the piece.
+  OnDestroy()  removes itself from the registry, but only if the registry entry
+      still points at this instance (guards against id reuse).
+
+SHAPE DERIVATION
+----------------
+  CollectChildCells(outCells)
+      Converts every enabled child Collider2D/Collider bounds centre into a grid
+      cell. Handles both 2D and 3D colliders, with a manual local-space fallback
+      if TryWorldToCell rejects the point (e.g. it landed in a padding gap).
+
+  AutoBuildOffsetsFromChildren() -> bool
+      Collects child cells, picks the lowest-then-leftmost cell as the anchor,
+      converts all cells to offsets relative to it, guarantees (0,0) is present,
+      and sorts the list for stable ordering.
+
+  TrySolveAnchorFromChildren(out anchor) -> bool
+      The inverse problem: given known offsets and the actual child cells, find
+      the anchor A such that {A + offset} exactly equals the child cell set.
+      Brute-forces every (childCell - offset) candidate. This is what lets a
+      designer nudge a piece in the scene and still have it placed correctly.
+
+SUB-BLOCK SNAPPING
+------------------
+  SnapSubBlocksToOffsets()
+      Forces each cell-like child to its exact local position.
+      - Builds target local positions from the offsets.
+      - Collects "cell-like" children (name starts with "Cell", or has any
+        collider).
+      - If the child count does not match the offset count it bails out to
+        NormalizeCollidersOnly rather than mangling the hierarchy - a good
+        safety valve.
+      - Binds children to targets by NAME first (parsing "Cell_1_0",
+        "Cell(1,0)", "cell1.0" etc. via TryGetOffsetFromName), then greedily by
+        nearest position for anything unbound.
+      - Finally resets rotation/scale, sets local position, and resizes the
+        collider to TargetColliderSize().
+
+  TargetColliderSize()
+      board.InnerCellSize * 0.97 (a 3% cushion so neighbouring colliders never
+      touch), further reduced by paddingPerCell if set, floored at 0.01.
+
+  NormalizeCollidersOnly(children, s)
+      Fallback that only resizes colliders to the full cell size.
+
+PLACEMENT
+---------
+  TryPlace(anchor) -> bool
+      1. If already placed, enforces the movement axis lock - a horizontal-only
+         piece cannot change Y, etc.
+      2. Builds the footprint and asks board.AreCellsPlaceableForMover.
+      3. Releases the previously owned cells, then claims the new ones.
+      4. Snaps the root transform to board.CellCenterWorld(anchor).
+      5. Re-snaps sub-blocks if enabled.
+      Returns false without side effects if the move is illegal.
+
+  ReleaseFromBoard()
+      Frees the claimed cells and clears _isPlaced. Called by MatchResolver
+      before the clear animation, so the cells become usable immediately.
+
+HOW IT CONNECTS
+---------------
+  - BoardGridXY validates and stores its occupancy.
+  - BoardBootstrapper places all authored pieces at Start.
+  - PieceDragHandlerSimple / BoardInputController move it.
+  - MatchResolver reads ShapeId / ColorId / Anchor / ShapeOffsets and calls
+    ReleaseFromBoard.
+  - PieceShapeLayout can author the offsets.
+
+NOTES
+-----
+  - SnapSubBlocksToOffsets uses targets[k].GetHashCode() as the key in its
+    "already assigned" set instead of the index k. It works today because the
+    offsets are distinct, but it is fragile - two equal tuples would collide.
+    Using the index would be correct and cheaper.
+  - SnapSubBlocksToOffsets2() is an alternative implementation that resizes
+    colliders WITHOUT moving children. It is never called.
+  - GuessOffsetFromLocal() is defined but unused.
+  - The static Registry is never cleared on scene unload. Entries remove
+    themselves in OnDestroy, so this is safe in practice, but a piece destroyed
+    without OnDestroy running (e.g. editor domain reload quirks) could leak.

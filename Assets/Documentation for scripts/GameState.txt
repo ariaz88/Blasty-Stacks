@@ -1,0 +1,36 @@
+================================================================================
+  GameState.cs
+  Path : Assets/Scripts/Core/SaveLoad/GameState.cs
+  Type : static class
+  Layer: Core / SaveLoad
+================================================================================
+
+PURPOSE
+-------
+A tiny static hand-off queue used to carry a list of unit ids ACROSS a scene
+load. Because it is static it survives scene changes without needing a
+DontDestroyOnLoad object.
+
+Typical use: the gameplay scene decides "these units were just unlocked", pushes
+their ids here, and the menu scene pops them one at a time to show unlock
+popups.
+
+STATE
+-----
+  _pending  (static List<int>)  the queue.
+
+METHODS
+-------
+  Set(List<int> ids)   Replaces the queue with a COPY of the supplied list
+                       (copying avoids aliasing the caller's list).
+  HasAny() -> bool     True while items remain.
+  Pop() -> int         Removes and returns the first id, or -1 when empty.
+  Clear()              Empties the queue.
+
+NOTES
+-----
+  - The class name "GameState" also appears as an enum inside LevelGameManager.
+    They are different things in the same global namespace - a naming collision
+    worth resolving with namespaces.
+  - Static state is never reset automatically. If a scene is reloaded without
+    draining the queue, stale ids remain. Call Clear() when abandoning a flow.

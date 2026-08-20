@@ -1,0 +1,38 @@
+================================================================================
+  ProgressionConfigSO.cs
+  Path : Assets/Scripts/Data/Stats/ProgressionConfigSO.cs
+  Type : ScriptableObject   (menu: "TD/Progression Config (Curves)")
+  Layer: Data
+================================================================================
+
+PURPOSE
+-------
+Holds the designer-authored curves that decide HOW MUCH each stat grows per
+upgrade level. It stores percentages, not absolute values, so the same config
+works for a weak unit and a strong one.
+
+FIELDS
+------
+  Curves - x axis = level (1..Max), y axis = per-level percent (0.08 means +8%)
+    atkPctByLevel      attack growth per level      (default 1->+8%, 50->+3%)
+    hpPctByLevel       HP growth per level          (default 1->+10%, 50->+4%)
+    movePctByLevel     move speed growth            (default 1->+2%, 50->+1%)
+    atkSpdPctByLevel   attack speed growth          (default 1->+2%, 50->+1%)
+    defPctByLevel      defense growth               (default 1->+2%, 50->+0.5%)
+    rangePctByLevel    attack range growth          (default 1->+1%, 50->+0.3%)
+
+  Safety
+    pctClamp  (Vector2, default -0.25 .. 0.50)
+        Every evaluated percentage is clamped into this window so a mis-drawn
+        curve cannot produce absurd stats.
+
+DESIGN INTENT
+-------------
+The defaults are front-loaded: early levels give bigger percentage gains than
+later ones. That makes the first few upgrades feel impactful while keeping late
+levels from exploding.
+
+HOW IT CONNECTS
+---------------
+  - Read only by ProgressionMath.GetGrowthMultipliers().
+  - Injected into PlayerProgressionService by GameStartManager.

@@ -27,7 +27,7 @@ public class EnemySpawner : MonoBehaviour
         return HudCurrencyView.Instance != null && HudCurrencyView.Instance.IsGameplayPaused;
     }
 
-    // Wait for duration seconds, but don’t advance while the game is paused
+    // Wait for duration seconds, but donï¿½t advance while the game is paused
     IEnumerator WaitForSecondsGameplay(float duration)
     {
         float elapsed = 0f;
@@ -46,7 +46,6 @@ public class EnemySpawner : MonoBehaviour
 
     IEnumerator RunLevel1()
     {
-        //yield return new WaitForSeconds(levelConfig.startDelay);
         yield return WaitForSecondsGameplay(levelConfig.startDelay);
 
 
@@ -55,7 +54,6 @@ public class EnemySpawner : MonoBehaviour
             var wave = levelConfig.waves[i];
 
             if (wave.delayBeforeWave > 0f)
-                //yield return new WaitForSeconds(wave.delayBeforeWave);
                 yield return WaitForSecondsGameplay(wave.delayBeforeWave);
 
 
@@ -74,12 +72,10 @@ public class EnemySpawner : MonoBehaviour
             yield return new WaitUntil(() => _alive == 0);
         }
 
-        // Stage complete — call your level manager here if desired
-        // LevelManager.Instance.MarkLevelWon();
     }
     IEnumerator RunLevel()
     {
-        // Use LevelManager’s global additive stage index as the stage/CP level.
+        // Use LevelManagerï¿½s global additive stage index as the stage/CP level.
         // Fallback to levelConfig.levelNumber if LevelManager is not present
         // (e.g. when testing the scene directly).
         int stageLevel = LevelManager.Instance != null
@@ -112,7 +108,7 @@ public class EnemySpawner : MonoBehaviour
             yield return new WaitUntil(() => _alive == 0);
         }
 
-        // Stage complete – if you ever want to auto-advance directly from here,
+        // Stage complete ï¿½ if you ever want to auto-advance directly from here,
         // you would call LevelManager.Instance?.MarkLevelWon();
         // (Right now WinPanel handles it after the player presses Claim.)
     }
@@ -139,7 +135,7 @@ public class EnemySpawner : MonoBehaviour
                 if (ValidateEntry(e) && i < e.count)
                     toSpawn.Add((e, i));
 
-        // 2) Generate grid positions inside the wave’s spawn area
+        // 2) Generate grid positions inside the waveï¿½s spawn area
         var positions = GenerateGridPositions(wave.spawnMin, wave.spawnMax, total, wave.gridColumns, wave.minSlotSpacing);
 
         // 3) Instantiate all at once (tiny stagger just for VFX ordering if you like)
@@ -163,17 +159,8 @@ public class EnemySpawner : MonoBehaviour
             if (e.row == RowIndex.FrontRow) front.Add(e); else back.Add(e);
         }
 
-        // Row Y coordinates
-        //var yMin = Mathf.Min(wave.spawnMin.y, wave.spawnMax.y);
-        //var yMax = Mathf.Max(wave.spawnMin.y, wave.spawnMax.y);
-        //float ySpan = Mathf.Max(0.01f, yMax - yMin);
 
-        //float frontY = yMax; // closer to “front” depending on your camera; swap if needed
-        //float backY;
-        //if (wave.rowYOffset > 0f) backY = frontY - wave.rowYOffset;
-        //else backY = yMax - (ySpan * 0.5f); // auto halfway below front
 
-        // Row Y coordinates
         var yMin = Mathf.Min(wave.spawnMin.y, wave.spawnMax.y);
         var yMax = Mathf.Max(wave.spawnMin.y, wave.spawnMax.y);
         float ySpan = Mathf.Max(0.01f, yMax - yMin);
@@ -212,7 +199,6 @@ public class EnemySpawner : MonoBehaviour
 
         // optional delay between rows
         if (back.Count > 0 && wave.secondRowDelay > 0f)
-            //yield return new WaitForSeconds(wave.secondRowDelay);
             yield return WaitForSecondsGameplay(wave.secondRowDelay);
 
 
@@ -288,7 +274,7 @@ public class EnemySpawner : MonoBehaviour
         dy = Mathf.Max(dy, (minSpacing.y > 0f ? minSpacing.y : dy));
 
         // recompute effective cols/rows to keep positions inside area
-        // we’ll center within the rectangle
+        // weï¿½ll center within the rectangle
         float xStart = xMin + dx;
         float yStart = yMin + dy;
 

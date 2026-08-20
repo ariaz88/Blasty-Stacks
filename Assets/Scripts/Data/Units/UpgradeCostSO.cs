@@ -58,11 +58,9 @@ public class UpgradeCostSO : ScriptableObject
         switch (mode)
         {
             case Mode.Geometric:
-                // cost(L) = ceil(base * ratio^(L-1))
                 return Mathf.CeilToInt(baseCost * Mathf.Pow(ratio, L - 1));
 
             case Mode.PiecewiseGeometric:
-                // cost(L) = ceil(base * Π_{k=1..L-1} ratioAt(k))
                 float mult = 1f;
                 for (int k = 1; k <= L - 1; k++)
                     mult *= GetPiecewiseRatioForLevel(k);

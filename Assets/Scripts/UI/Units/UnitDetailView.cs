@@ -49,7 +49,6 @@ public class UnitDetailView : MonoBehaviour
 
 
     [Header("Header UI")]
-    //[Header("Header Visual (Animated)")]
     [SerializeField] private RectTransform visualRoot;   // empty UI container
     private GameObject currentVisualInstance;
 
@@ -286,17 +285,7 @@ public class UnitDetailView : MonoBehaviour
         SetNumber(hpText, hpCurrent, 0);            // HP looks cleaner as integer
         SetNumber(atkText, atkCurrent, 0);
         SetNumber(defText, defCurrent, 0);
-        //SetNumber(atkSpdText, asCurrent, 0);
-        //SetNumber(moveSpdText, mvCurrent, 0);
-        //SetNumber(rangeText, rgCurrent, 0);
 
-        // Deltas (+Δ)
-        //SetDelta(hpDeltaText, hpDelta, 0);
-        //SetDelta(atkDeltaText, atkDelta, 0);
-        //SetDelta(defDeltaText, defDelta, 0);
-        //SetDelta(atkSpdDeltaText, asDelta, 0);
-        //SetDelta(moveSpdDeltaText, mvDelta, 0);
-        //SetDelta(rangeDeltaText, rgDelta, 0);
     }
 
     // ---------- Helpers ----------
@@ -346,13 +335,10 @@ public class UnitDetailView : MonoBehaviour
         return v.ToString();
     }
 
-    // Needed (green) / Owned (white)
     public void SetCoinsCost(int costNeeded, int coinsOwned)
     {
         if (!coinsText) return;
         if (!coinsTextDelta) return;
-        //coinsText.text =
-        //    $"<color=#2EDC71>{Compact(costNeeded)}</color>/<color=#FFFFFF>{Compact(coinsOwned)}</color>";
 
         coinsText.text = $"/ {coinsOwned}" ;
         coinsTextDelta.text = costNeeded.ToString();
@@ -418,7 +404,6 @@ public class UnitDetailView : MonoBehaviour
 
         // Text reference(s); set starting color
         var tmps = go.GetComponentsInChildren<TMPro.TMP_Text>(true);
-        //foreach (var t in tmps) t.color = toastStartColor;
         foreach (var t in tmps)
         {
             t.color = toastStartColor;
@@ -491,7 +476,6 @@ public class UnitDetailView : MonoBehaviour
         }
     }
 
-    // for the normal “locked / coming soon” on these buttons:
     private void ShowGearToast()
     {
         ShowLockedStageToast(gearToastAnchor, DesigeredTextSize, commingSoonText);

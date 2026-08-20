@@ -1,0 +1,60 @@
+================================================================================
+  UnitDefinitionSO.cs
+  Path : Assets/Scripts/Data/Units/UnitDefinitionSO.cs
+  Type : ScriptableObject   (menu: "Units/Unit Definition")
+  Layer: Data
+================================================================================
+
+PURPOSE
+-------
+The complete design-time description of ONE playable unit: who it is, what it
+looks like, what prefab to spawn, when it unlocks, and which stat sheet it uses.
+This is the asset a designer creates when adding a new hero to the game.
+
+FIELDS
+------
+  Identity
+    unitId        (int, >=0)  UNIQUE id. This is the key used by the save file
+                              and by PlayerUnitsModel - never reuse or renumber
+                              it once players have saves.
+    displayName   (string)    name shown on cards and the detail panel
+    portrait      (Sprite)    card / detail artwork
+
+  Visual
+    runtimePrefab (GameObject) the FULL battle prefab - colliders, animator,
+                              PlayerManager, state machine. This is what
+                              PlayerWaveManager spawns into a stage.
+    visualPrefab  (GameObject) a display-only version (animator + art) used in
+                              menus where no gameplay logic is wanted.
+    uiVisualScale (Vector3)   per-unit scale correction for the menu preview.
+
+  Unlock Requirement
+    requiredLevelIndex            (int) e.g. 1
+    requiredStageIndexWithinLevel  (int) e.g. 16
+        Together these mean "unlocks at Stage 1-16".
+
+  Design Stats
+    baseStats     (UnitStatsSO)  the level-1 stat sheet.
+
+  Startup State
+    startsDeployed (bool)  if true, this unit begins in the Deployed bucket on a
+                           fresh save (used to seed the starting team).
+
+  Tags
+    classType     (FighterType)  mirrors baseStats.type for quick UI filtering.
+
+METHODS
+-------
+  GetRequirementText() -> string
+      Returns "Stage {level}-{stage}" for display on locked unit cards.
+
+  OnValidate()  [Editor only]
+      Auto-copies baseStats.type into classType so the two can never drift apart.
+
+HOW IT CONNECTS
+---------------
+  - Listed in UnitsDatabaseSO, which defines the roster and card order.
+  - PlayerProgressionService.ProcessStageUnlocks() compares the required stage
+    against LevelManager to unlock units as the player advances.
+  - PlayerWaveManager reads runtimePrefab when spawning a wave.
+  - UnitCardView / UnitDetailView read portrait, displayName and baseStats.

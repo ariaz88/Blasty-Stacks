@@ -17,7 +17,6 @@ public class BucketStatsPanel : MonoBehaviour
 
     private void Awake()
     {
-        // if you forgot to assign root in inspector, fall back to this GameObject
         if (root == null)
             root = gameObject;
 
@@ -63,56 +62,8 @@ public class BucketStatsPanel : MonoBehaviour
         {
             var child = content.GetChild(i);
 
-            // don’t delete the skeleton background
+            // donï¿½t delete the skeleton background
             if (skeletonImage != null && child == skeletonImage)
-                continue;
-
-            Destroy(child.gameObject);
-        }
-    }
-}
-
-public class BucketStatsPanel1 : MonoBehaviour
-{
-    [SerializeField] private TMP_Text titleText;
-    [SerializeField] private RectTransform content;  // ScrollRect/Viewport/Content
-    [SerializeField] private GameObject root;        // whole overlay (canvas group/panel)
-    [SerializeField] private UnityEngine.UI.Button closeButton;
-
-    public RectTransform Content => content;
-
-    [SerializeField] private RectTransform skeletonImage;   // drag Skeleton here
-
-    private void Awake()
-    {
-        if (closeButton) closeButton.onClick.AddListener(Hide);
-        Hide();
-    }
-
-    public void Show(string title)
-    {
-        if (titleText) titleText.text = title.ToUpper();
-        if (root) root.SetActive(true);
-    }
-
-    public void Hide()
-    {
-        if (root) root.SetActive(false);
-    }
-
-    public void Clear1()
-    {
-        for (int i = content.childCount - 1; i >= 0; i--)
-            Destroy(content.GetChild(i).gameObject);
-    }
-    public void Clear()
-    {
-        for (int i = content.childCount - 1; i >= 0; i--)
-        {
-            var child = content.GetChild(i);
-
-            // don’t delete the skeleton background
-            if (child == skeletonImage)
                 continue;
 
             Destroy(child.gameObject);

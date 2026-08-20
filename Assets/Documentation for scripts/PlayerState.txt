@@ -1,0 +1,51 @@
+================================================================================
+  PlayerState.cs
+  Path : Assets/Scripts/Combat/Player/States/PlayerState.cs
+  Type : abstract MonoBehaviour   -  the FSM base class
+  Layer: Combat / Player / States
+================================================================================
+
+PURPOSE
+-------
+The base class for every player behaviour state. It defines the entire contract
+of the player state machine in a single method.
+
+THE CONTRACT
+------------
+  public abstract PlayerState Tick(PlayerManager playerManager,
+                                   PlayerStats playerStats,
+                                   PlayerAnimatitorManager playerAnimatitorManager);
+
+  Each state's Tick does its work for this frame and RETURNS THE NEXT STATE:
+      return this;         -> stay in this state
+      return someOtherState -> transition
+  PlayerManager calls Tick every FixedUpdate and assigns the result back.
+
+WHY IT IS A MonoBehaviour
+-------------------------
+  States are components sitting on the player prefab, and each state holds
+  INSPECTOR REFERENCES to the states it can transition into (for example
+  PlayerIdleState has a PlayerPursueTargetState field). The state graph is
+  therefore wired visually in the prefab rather than in code.
+
+  IMPORTANT CONSEQUENCE: states are allocated ONCE when the prefab spawns. There
+  is no "new SomeState()" anywhere in the codebase, so the state machine
+  produces ZERO garbage per frame. That is the correct and performant approach.
+
+THE STATES
+----------
+  PlayerIdleState          waiting, scanning for a target
+  PlayerPursueTargetState  walking toward a target or the enemy gate
+  PlayerCombatState        in range, deciding whether to swing
+  PlayerAttackState        executing an attack
+  PlayerLockState          frozen before the wave is released
+  PlayerDeathState         dying and despawning
+  PlayerGameCompleteState  frozen because the stage ended
+
+NOTES
+-----
+  - Because states are components, two units cannot share a state instance -
+    each prefab carries its own. That is what makes the per-instance Inspector
+    wiring safe.
+  - The trade-off is that a state cannot hold per-unit data separately from the
+    component, and adding a state means editing every player prefab.

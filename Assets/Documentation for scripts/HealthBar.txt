@@ -1,0 +1,55 @@
+================================================================================
+  HealthBar.cs
+  Path : Assets/Scripts/Combat/Player/HealthBar.cs
+  Type : MonoBehaviour
+  Layer: Combat / Player
+  Scenes: all 9 build scenes
+================================================================================
+
+PURPOSE
+-------
+The floating health bar above a unit or gate. It fills a UI Image proportionally
+to current health, and - importantly - keeps itself readable when the parent
+character flips to face the other direction.
+
+FIELDS
+------
+  healthBar         (Image) the filled bar; falls back to GetComponent<Image>
+  _baseLocalScaleX  (float) the original absolute X scale, captured in Awake
+
+LIFECYCLE
+---------
+  Awake()
+      Resolves the Image if unassigned and FORCES its configuration:
+          type        = Image.Type.Filled
+          fillMethod  = FillMethod.Horizontal
+          fillOrigin  = OriginHorizontal.Left
+      Doing this in code means a designer cannot accidentally mis-configure the
+      prefab. Then it stores the absolute base X scale.
+
+  LateUpdate()
+      Reads the sign of the parent's lossyScale.x. If the character has been
+      flipped (negative X scale, the usual 2D way to face left), the bar's own
+      localScale.x is inverted to cancel it out - so the bar always renders
+      left-to-right in world space and never appears mirrored.
+      Running in LateUpdate ensures it happens AFTER any facing logic has
+      flipped the parent this frame.
+
+METHODS
+-------
+  SetCurrentHealth(currentHealth, maxHealth)
+      Clamps currentHealth to >= 0 and maxHealth to >= 0.0001 to avoid a
+      divide-by-zero, then sets fillAmount = current / max.
+
+HOW IT CONNECTS
+---------------
+  - PlayerStats, EnemyStats, PlayerGateStats and EnemyGateStats all call
+    SetCurrentHealth after taking damage.
+
+NOTES
+-----
+  - The counter-flip runs every LateUpdate for every unit on screen. It is only
+    a few float operations, but with large waves it is worth remembering that
+    this is per-unit per-frame work.
+  - A code comment says "fill from right -> left" while the code sets
+    fillOrigin = Left; the code is what matters - it fills left to right.

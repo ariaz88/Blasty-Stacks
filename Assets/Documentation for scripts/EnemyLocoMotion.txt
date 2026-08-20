@@ -1,0 +1,93 @@
+================================================================================
+  EnemyLocoMotion.cs
+  Path : Assets/Scripts/Combat/Enemy/EnemyLocoMotion.cs
+  Type : MonoBehaviour   [RequireComponent(typeof(Rigidbody2D))]
+  Layer: Combat / Enemy
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The LIVE 2D enemy movement driver. Enemies march down the lane toward the
+player's gate, optionally divert to chase a nearby player unit, and stop
+permanently once they reach the gate. (The older 3D EnemyLocomotionManager is
+not used.)
+
+INSPECTOR FIELDS
+----------------
+  enemyRigidbody2D     (Rigidbody2D) resolved in Awake if unset
+  currentTarget        (PlayerStats, HideInInspector) the player unit being chased
+  distanceFromTarget   (float) published for EnemyManager to read
+  playerDetectionLayer (LayerMask) visual only - detection logic lives in
+                       EnemyManager
+  detectionRadius      (float, default 6) gizmo radius
+  moveSpeed            (float, default 1.5) units per second
+  stoppingDistance     (float, default 0.5) how close before halting
+  fairDistanceToPlayer (float, default 1.6) only chase a player unit within this
+                       distance - stops enemies being pulled far off their lane
+
+LIFECYCLE
+---------
+  Awake()  caches EnemyManager, Rigidbody2D and a child Animator
+  Start()  forces correct top-down 2D physics:
+               gravityScale = 0, freezeRotation = true,
+               interpolation = Interpolate
+
+  Update()
+      Respects GameplayPause.IsPaused - stops the walk animation and returns
+      early, so enemies freeze correctly while a modal panel is open.
+      Otherwise calls HandleMoveToTarget() and republishes distanceFromTarget
+      (20f when there is no target, i.e. "very far").
+
+HandleMoveToTarget()  - the live version, evaluated in order
+------------------------------------------------------------
+  1. GATE LATCH
+     If enemyManager.reachedGate is true, force the body Kinematic, snap the
+     position back to enemyManager.gateStopPosition and stop animating.
+     This is a hard clamp: once an enemy arrives at the gate it can NEVER move
+     again or drift past it.
+
+  2. CHASE A PLAYER UNIT
+     If currentTarget exists and is not dead, and distance > stoppingDistance:
+       - laneDir = -transform.up  (the default "march down the lane" direction)
+       - isRealPlayer  = currentTarget.CompareTag("Player") - the gate uses the
+         tag "PlayerGate", so this distinguishes a real unit from the gate
+       - withinFair    = dist <= fairDistanceToPlayer
+       - shouldChasePlayer = isRealPlayer && withinFair
+     If chasing, the move direction becomes the direct vector to the player
+     (diagonal); otherwise the enemy keeps marching straight along the lane.
+     Body becomes Dynamic and moves with MovePosition.
+     Within stoppingDistance it becomes Kinematic and stops.
+
+  3. MARCH TO THE GATE
+     With no player target, and the gate alive:
+       - if distance to the gate <= enemyManager.gateStopDistance, latch
+         reachedGate = true, record gateStopPosition, go Kinematic and stop.
+         (A distance-based fallback in case the trigger never fired.)
+       - otherwise keep walking along -transform.up.
+
+  SetAnimMoving(bool)
+      Sets Horizontal = 0 and Vertical = 1 (walk) or 0 (idle), driving the blend
+      tree. Null-safe if no Animator is present.
+
+  OnDrawGizmosSelected()
+      Draws the detection radius as an orange wire sphere.
+
+HOW IT CONNECTS
+---------------
+  - Reads EnemyManager.reachedGate, gateStopPosition, gateStopDistance and
+    currentGateTarget - the manager owns the state, this script owns the motion.
+  - Publishes distanceFromTarget back for the manager's attack decisions.
+  - Honours GameplayPause.
+
+NOTES
+-----
+  - There is an unused field 'enemyPassedPlayerInY' computed inside the chase
+    branch and then commented out of the condition - a rule that was tried and
+    disabled ("enemy tracks player only after it has passed the player in Y").
+  - Two dead numbered variants remain: Update1() (which also considered the gate
+    when computing distanceFromTarget) and HandleMoveToTarget1() (an earlier
+    design that chased the gate directly rather than marching along the lane).
+    Neither is called - Unity only invokes the exactly-named Update().
+  - The lane direction is hard-coded to -transform.up, so enemy prefabs must be
+    rotated correctly or they will walk the wrong way.

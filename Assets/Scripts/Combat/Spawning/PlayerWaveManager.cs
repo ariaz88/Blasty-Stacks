@@ -10,7 +10,6 @@ public class PlayerWaveManager : MonoBehaviour
 
     [Header("Refs")]
     [SerializeField] private MatchResolver matchResolver;    // assign your MatchResolver
-    //[SerializeField] private GameObject playerPrefab;        // your Player character prefab
     [SerializeField] private GameObject[] playerPrefabs;     // assign multiple Player prefabs here
     [SerializeField] private GameObject playerRootPrefab;
 
@@ -22,11 +21,6 @@ public class PlayerWaveManager : MonoBehaviour
     [SerializeField] private int minPerWave = 1;   // inclusive
     [SerializeField] private int maxPerWave = 4;   // inclusive
 
-    //[Header("Lock/Unlock Wiring (pick what you have)")]
-    //[Tooltip("If you have a dedicated Lock state in your FSM, assign it to force on spawn.")]
-    //[SerializeField] private PlayerLockState lockState;                 // optional
-    //[Tooltip("State to switch to when unlocking (e.g., Pursue or Idle). Leave null to just unfreeze flags.")]
-    //[SerializeField] private PlayerPursueTargetState unlockState;               // optional
 
     [Tooltip("If true, we also freeze physics while locked (Rigidbody2D.Static).")]
     [SerializeField] private bool freezePhysicsWhileLocked = true;
@@ -191,18 +185,10 @@ public class PlayerWaveManager : MonoBehaviour
         for (int i = 0; i < toSpawn; i++)
         {
             int gi = freeIndices[i];
-            //var pm = SpawnOneAt(gatePoints[gi].position, gatePoints[gi].rotation);
-            //GameObject.FindObjectOfType<RogueliteManager>().RegisterPlayer(pm.GetComponent<PlayerStatsApplier>());
 
-            //if (pm != null)
-            //{
-            //    ApplyLock(pm, true);
-            //    currentWave.Add(pm);
-            //}
 
             var stage = gatePoints[gi];
             var pm = SpawnOneAt(stage.position, stage.rotation);
-            //GameObject.FindObjectOfType<RogueliteManager>().RegisterPlayer(pm.GetComponent<PlayerStatsApplier>());
 
             if (pm != null)
             {
@@ -353,7 +339,6 @@ public class PlayerWaveManager : MonoBehaviour
             Debug.LogWarning("Spawned prefab has no PlayerManager.", go);
             return null;
         }
-        //pm.SetVisualScale(1.1f);
 
         return pm;
     }
@@ -423,9 +408,6 @@ public class PlayerWaveManager : MonoBehaviour
             return null;
         }
 
-        // OPTIONAL: apply level here
-        //int level = PlayerUnits.GetLevel(def.unitId);
-        //pm.ApplyLevel(level);
 
         return pm;
     }
@@ -485,10 +467,8 @@ public class PlayerWaveManager : MonoBehaviour
                 ?.SetValue(statsApplier, def.unitId);
 
             //// Force immediate recompute (safe even if Awake already ran)
-            //statsApplier.ApplyNow();
 
             //// Sync PlayerManager runtime cache
-            //pm.unitStats = statsApplier.CurrentStats;
             statsApplier.SetUnitId(def.unitId);
             statsApplier.ApplyNow();
             pm.unitStats = statsApplier.CurrentStats;
@@ -605,8 +585,6 @@ public class PlayerWaveManager : MonoBehaviour
         if (pm.playerRigidbody != null && freezePhysicsWhileLocked)
             pm.playerRigidbody.bodyType = locked ? RigidbodyType2D.Static : RigidbodyType2D.Dynamic;
 
-        // If you also want to block attacking or inputs, set flags here as needed.
-        // e.g., pm.isPerformingAction = locked;
     }
 
     private void UnlockCurrentWave1()
@@ -615,8 +593,6 @@ public class PlayerWaveManager : MonoBehaviour
         {
             if (pm == null) continue;
 
-            // Option A: go to an explicit unlock state if assigned
-            //if (unlockState != null)
                 pm.SwitchToNextState(pm.PlayerPursueTargetState); // <-- use your state-machine API
                pm.isUnlocked = true;
 
@@ -657,7 +633,6 @@ public class PlayerWaveManager : MonoBehaviour
 
         PlayStageUnlockAnimations();
 
-        //UnlockCurrentWave();
     }
 
 

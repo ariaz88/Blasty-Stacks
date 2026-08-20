@@ -1,0 +1,46 @@
+================================================================================
+  TopDownMover2D.cs
+  Path : Assets/Scripts/Combat/Shared/TopDownMover2D.cs
+  Type : MonoBehaviour   [RequireComponent(typeof(Rigidbody2D))]
+  Layer: Combat / Shared
+================================================================================
+
+PURPOSE
+-------
+A simple "walk straight up or down the lane" mover, independent of the full
+state machine. Useful for background characters, test units, or anything that
+just needs to march in one direction.
+
+FIELDS
+------
+  moveSpeed  (float, default 0.4)  units per second
+  direction  (int, default 1)      1 = up, -1 = down
+  isMoving   (bool, default true)  toggle at runtime
+
+LIFECYCLE
+---------
+  Awake()
+      Caches the Rigidbody2D and a child Animator, then FORCES a correct 2D
+      top-down physics setup:
+          gravityScale  = 0        (no falling in a top-down view)
+          interpolation = Interpolate  (smooth visual motion)
+          freezeRotation = true    (never spins from collisions)
+      Doing this in code protects against a mis-configured prefab.
+
+  Update()
+      Drives the animator blend tree. When moving it sets Horizontal = 0 and
+      Vertical = 1; when stopped both are 0 (idle).
+
+  FixedUpdate()
+      Returns early when not moving. Otherwise moves with
+      rb.MovePosition(rb.position + (0, direction * moveSpeed * fixedDeltaTime)) -
+      the physics-correct way to move a kinematic-style body.
+
+NOTES
+-----
+  - The Update logic contains a redundant branch: "if (direction > 0 ||
+    direction < 0)" sets Vertical = 1, else 0. That else only triggers when
+    direction is exactly 0, in which case FixedUpdate would move the unit by
+    zero anyway. It effectively always sets Vertical = 1 while isMoving.
+  - anim is fetched with GetComponentInChildren and never null-checked in
+    Update; a prefab without an Animator would throw every frame.

@@ -1,0 +1,67 @@
+================================================================================
+  UpgradeCostSO.cs
+  Path : Assets/Scripts/Data/Units/UpgradeCostSO.cs
+  Type : ScriptableObject   (menu: "Progression/Upgrade Cost")
+  Layer: Data
+================================================================================
+
+PURPOSE
+-------
+Defines how many GEMS it costs to upgrade a unit from level L to level L+1, and
+where the level cap sits. Pure economy tuning data.
+
+TYPES
+-----
+  enum Mode
+    Geometric           cost(L) = ceil(baseCost * ratio^(L-1))
+    PiecewiseGeometric  cost(L) = ceil(baseCost * product of per-segment ratios)
+
+  struct Piece   { fromLevelInclusive, toLevelInclusive, ratio }
+      One segment of the piecewise curve.
+      NOTE: this type is named "Piece", which COLLIDES conceptually with the
+      puzzle-board Piece class. Both live in the global namespace. They compile
+      because this one is nested inside UpgradeCostSO, but it is confusing when
+      reading code - see the project's namespace recommendation.
+
+FIELDS
+------
+  mode        (Mode, default Geometric)
+  levelCap    (int, default 50)   maximum level a unit can reach
+  baseCost    (int, default 2)    gem cost of the very first upgrade (1 -> 2)
+  ratio       (float 1.0-2.0, default 1.20)  used only in Geometric mode
+  pieces      (List<Piece>) used only in PiecewiseGeometric mode. Defaults:
+                  levels 1-5   ratio 1.22
+                  levels 6-10  ratio 1.20
+                  levels 11-20 ratio 1.18
+                  levels 21-50 ratio 1.16
+              i.e. cost growth SLOWS at higher levels.
+
+METHODS
+-------
+  IsAtCap(currentLevel) -> bool
+      True when the unit can no longer be upgraded.
+
+  GetCostForLevel(currentLevel) -> int
+      Returns the gem price of the next upgrade, or 0 when already at cap.
+      Geometric: single pow() call.
+      PiecewiseGeometric: multiplies the ratio for every level from 1 to L-1.
+
+  GetPiecewiseRatioForLevel(level) -> float  [private]
+      Finds the segment containing 'level'. If none matches it falls back to the
+      LAST segment's ratio (or 1.0 if the list is empty), so a gap in the
+      segment table silently uses the final ratio rather than erroring.
+
+  OnValidate()  [Editor only]
+      Clamps levelCap and baseCost to >=1, fixes segments where 'to' < 'from',
+      and clamps every ratio into 1.0-2.0.
+
+HOW IT CONNECTS
+---------------
+  - Injected into PlayerProgressionService by GameStartManager.
+  - UpgradeButtonController / UnitDetailView display the cost from here.
+  - CurrencyManager.TrySpendGems() actually charges the player.
+
+NOTES
+-----
+  - The PiecewiseGeometric branch loops from 1 to L-1 on every call. Called from
+    UI refreshes it is cheap at cap 50, but it is not cached.

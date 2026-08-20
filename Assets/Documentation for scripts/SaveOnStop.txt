@@ -1,0 +1,37 @@
+================================================================================
+  SaveOnStop.cs
+  Path : Assets/Scripts/Core/SaveLoad/SaveOnStop.cs
+  Type : MonoBehaviour  (+ a nested Editor-only static hook)
+  Layer: Core / SaveLoad
+  Scene: StarterScene
+================================================================================
+
+PURPOSE
+-------
+Guarantees the save file is flushed to disk when the game ends, so progress is
+not lost if nothing else called Save() recently.
+
+BEHAVIOUR
+---------
+  OnApplicationQuit()
+      Calls SaveSystem.Save(). Covers real builds and the editor's normal quit.
+
+  EditorAutoSaveHook   [Editor only, #if UNITY_EDITOR]
+      A static class marked [InitializeOnLoad]. Its static constructor subscribes
+      to EditorApplication.playModeStateChanged and calls SaveSystem.Save() when
+      the state becomes ExitingPlayMode.
+      This matters because OnApplicationQuit is not always reliable when you
+      simply press Stop in the Editor - without this hook, testing changes could
+      appear "not to save".
+
+HOW IT CONNECTS
+---------------
+  - Lives on a GameObject in StarterScene (the boot scene).
+  - Depends only on SaveSystem.
+
+NOTES
+-----
+  - The whole editor hook is compiled out of player builds by the #if guard, so
+    shipping is unaffected.
+  - This is a safety net, not the primary save path. Normal saving happens
+    whenever gameplay systems mutate SaveSystem.Data and call Save().

@@ -1,0 +1,38 @@
+================================================================================
+  CPWeightMath.cs
+  Path : Assets/Scripts/Data/CombatPower/CPWeightMath.cs
+  Type : static class
+  Layer: Data
+================================================================================
+
+PURPOSE
+-------
+Evaluates the CP weight curves at a given level and returns a plain struct of
+numbers. Separating this from CPCalculator keeps the curve sampling in one place.
+
+TYPES
+-----
+  struct Weights { wA, wH, wMv, wAS, wD, wR, meleeMult, rangedMult }
+
+METHODS
+-------
+  Evaluate(int level, CPWeightsConfigSO cfg) -> Weights
+      Starts from hard-coded fallback defaults (wA=1, wH=0.15, wMv=0.25,
+      wAS=0.40, wD=0, wR=0.05, meleeMult=1, rangedMult=1.05) so that a null
+      config still yields sensible CP.
+      Otherwise samples every curve at 'level', clamps each by cfg.wClamp, and
+      multiplies them all by globalWeightScaleByLevel (itself clamped to 1..10).
+
+NOTES / BUGS
+------------
+  !! BUG: meleeMult is never read from the config. The line that should sample
+  !! cfg.meleeMultByLevel is missing, and instead rangedMult is assigned TWICE
+  !! (the identical statement appears on two consecutive lines). Consequence:
+  !! the meleeMultByLevel curve in the ScriptableObject is completely ignored -
+  !! melee units always use the hard-coded fallback of 1.0. If a designer edits
+  !! that curve, nothing happens.
+  !! Fix would be: w.meleeMult = Mathf.Clamp(cfg.meleeMultByLevel.Evaluate(L), 1, 5f);
+  !! and delete the duplicated rangedMult line.
+
+  - rangedMult is clamped to 1..5, so a curve value below 1 is silently raised
+    to 1. Ranged units can therefore never be weighted BELOW melee.

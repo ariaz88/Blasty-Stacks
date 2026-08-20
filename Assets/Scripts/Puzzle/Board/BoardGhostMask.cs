@@ -89,10 +89,7 @@ public class BoardGhostMask : MonoBehaviour
     public void ApplyGhostMask()
     {
         if (!board) return;
-        //ResizeMaskToBoard();
 
-        // If you added ghost support to BoardGridXY (recommended), clear old ghosts first:
-        // board.ClearGhost();
         board.EnsureReady();       // < be safe
 
 
@@ -120,8 +117,6 @@ public class BoardGhostMask : MonoBehaviour
                 }
                 else
                 {
-                    // Optional: un-block if it was blocked by mask earlier (comment out if you don't want this)
-                    // board.SetGhost(new Vector2Int(x, y), false, alsoMarkBlocked);
                     if (alsoMarkBlocked) board.SetBlocked(new Vector2Int(x, y), false);
                 }
             }

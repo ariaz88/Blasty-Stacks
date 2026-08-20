@@ -1,0 +1,68 @@
+================================================================================
+  PlayerPursueTargetState.cs
+  Path : Assets/Scripts/Combat/Player/States/PlayerPursueTargetState.cs
+  Type : PlayerState (MonoBehaviour)
+  Layer: Combat / Player / States
+================================================================================
+
+PURPOSE
+-------
+The movement brain. It decides whether the unit should walk forward, chase a
+specific enemy, attack the enemy gate, or close in and start fighting.
+
+INSPECTOR FIELDS
+----------------
+  PlayerCombatState    entered when within attack range of a target
+  playerAttackState    entered when attacking the gate
+  playerLockState      optional gate; if assigned, an un-released unit is forced
+                       back into lock
+  distanceToFaceOff    (float, default 3) declared but not used in the current
+                       logic
+
+Tick()  - evaluated in this order
+---------------------------------
+  0. LOCK GATE
+     If playerLockState is assigned and pm.isUnlocked is false, return the lock
+     state immediately. This is what keeps a freshly spawned wave frozen until
+     the unlock animation releases it.
+
+  1. BUSY CHECK
+     If pm.isPerformingAction or pm.isInteracting, stay in this state (do not
+     interrupt an in-progress action).
+
+  2. GATE ATTACK
+     noEnemiesLeft = !targetDetectionForPlayer.AnyEnemyAliveInScene()
+     If pm.attackPlayerGate AND noEnemiesLeft:
+         stop moving, zero the velocity, set the Rigidbody2D to Static,
+         and return playerAttackState.
+     The "no enemies left" condition is important - units will not ignore live
+     enemies to hit the gate.
+
+  3. NO TARGET -> ROAM FORWARD
+     If pm.currentTarget is null: set canMove, make the body Dynamic, and drive
+     linearVelocity along transform.up at pm.moveSpeed, playing the move
+     animation. The unit advances up the lane looking for something to fight.
+     NOTE the comment: use transform.right instead if the sprite art faces right.
+
+  4. HAVE TARGET -> CHASE OR ENGAGE
+     Measures distance from the Rigidbody2D position (falling back to the
+     transform) to the target.
+       distance > pm.maxAttackRange  -> stay Dynamic, HandleMoveToTarget(true),
+                                        play move animation, remain in pursue.
+       distance <= pm.maxAttackRange -> stop, zero velocity, set body Static,
+                                        and return PlayerCombatState.
+
+HOW IT CONNECTS
+---------------
+  - Reads pm.isUnlocked, attackPlayerGate, currentTarget, maxAttackRange,
+    moveSpeed; calls pm.HandleMoveToTarget and pm.SetAnimMoving.
+  - Uses TargetDetectionForPlayer.AnyEnemyAliveInScene().
+
+NOTES
+-----
+  - Switching the Rigidbody2D between Dynamic and Static every time a unit
+    engages or disengages is unusual. It reliably stops all motion and physics
+    push-back, but it also means the unit cannot be shoved by anything while
+    fighting. Consider freezing constraints instead if push-back is ever wanted.
+  - distanceToFaceOff is dead configuration - it is serialized (so it shows in
+    the Inspector and invites tuning) but never read.

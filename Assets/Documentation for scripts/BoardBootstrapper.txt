@@ -1,0 +1,52 @@
+================================================================================
+  BoardBootstrapper.cs
+  Path : Assets/Scripts/Puzzle/Board/BoardBootstrapper.cs
+  Type : MonoBehaviour
+  Layer: Puzzle / Board
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+Takes the puzzle pieces a designer placed by hand in the scene and snaps them
+onto the grid at startup, registering their occupancy. Without it, authored
+pieces would sit at arbitrary world positions and the board would think every
+cell was empty.
+
+INSPECTOR FIELDS
+----------------
+  autoBuildOffsets (bool, default true)
+      If a piece's shape offsets were never authored, derive them from the
+      piece's child colliders.
+
+FLOW  (Start)
+-------------
+  1. Finds the BoardGridXY in the scene. Logs an error and aborts if missing.
+  2. Finds every ACTIVE PieceSimple in the scene.
+  3. For each piece:
+       a. p.SetBoard(board)  - assign the board reference BEFORE any placement
+          attempt, otherwise TryPlace would have nothing to validate against.
+       b. Optionally p.AutoBuildOffsetsFromChildren().
+       c. Work out the anchor cell, preferring the most authoritative source:
+            - TrySolveAnchorFromChildren() - derive it from where the sub-blocks
+              actually are (authoritative, survives sloppy root placement).
+            - else TryWorldToCell on the root transform position.
+            - else fall back to the serialized InitialAnchor.
+       d. ClampAnchorToFitShape so the piece cannot start off-board.
+       e. p.TryPlace(anchor) - this writes occupancy and snaps the transform to
+          the exact cell centre.
+
+HOW IT CONNECTS
+---------------
+  - Reads BoardGridXY and drives PieceSimple.
+  - Runs before gameplay input begins, so BoardInputController always sees a
+    consistent board.
+
+NOTES
+-----
+  - Uses FindObjectOfType and FindObjectsOfType, but only once at Start, so the
+    cost is negligible.
+  - Order matters and is correct here: board reference, then offsets, then
+    anchor, then clamp, then place.
+  - Inactive pieces are deliberately skipped (includeInactive: false), so a
+    disabled piece will not reserve cells.

@@ -1,0 +1,34 @@
+================================================================================
+  StageUnlockRelay.cs
+  Path : Assets/Scripts/Core/Progression/StageUnlockRelay.cs
+  Type : MonoBehaviour
+  Layer: Core / Progression
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+A tiny adapter that lets an ANIMATION EVENT talk to PlayerWaveManager.
+Unity animation events can only call a method on a component attached to the
+same GameObject as the Animator. PlayerWaveManager usually lives elsewhere in the
+scene, so this relay sits on the animated object and forwards the call.
+
+METHODS
+-------
+  OnStageUnlockAnimationEvent()
+      Called from an Animation Event on the unlock animation clip.
+      Finds the PlayerWaveManager in the scene and calls
+      OnOneStageUnlockEventFired(). Does nothing if none is found.
+
+HOW IT CONNECTS
+---------------
+  - Invoked by an Animation Event, never from code.
+  - Target: PlayerWaveManager.OnOneStageUnlockEventFired().
+
+NOTES
+-----
+  - Uses FindObjectOfType every time the event fires. Because unlock animations
+    are occasional this is acceptable, but caching the reference in Awake would
+    be cheaper and safer.
+  - Silently no-ops if PlayerWaveManager is absent, so a missing manager
+    produces no error - just a wave that never unlocks. Worth a warning log.

@@ -19,8 +19,6 @@ public class PlayerGateStats : CharacterStats
     }
     void Start()
     {
-        //maxHealth = enemyManager.statsBase.maxHP;
-        //currentHP = maxHealth;
         if (healthBar != null)
         {
             healthBar.SetCurrentHealth(currentHP, maxHealth);
@@ -42,10 +40,8 @@ public class PlayerGateStats : CharacterStats
         healthBar.SetCurrentHealth(currentHP, maxHealth);
         if (currentHP <= 0)
         {
-            //isDestroyed = true;
             DestroyGate();
             currentHP = 0;
-            //Destroy(gameObject);
         }
     }
     private void DestroyGate()
@@ -59,18 +55,12 @@ public class PlayerGateStats : CharacterStats
 
 
         //// optional: turn off collider to stop further triggers
-        //var col = GetComponent<Collider2D>();
-        //if (col) col.enabled = false;
 
         ////if (destroyVFX) Instantiate(destroyVFX, transform.position, Quaternion.identity);
 
         //// optional: hide mesh/sprite
-        //var sr = GetComponent<SpriteRenderer>();
-        //if (sr) sr.enabled = false;
 
-        //StartCoroutine(DeactivateGate());
 
-        //Destroy(gameObject, 0.1f);
 
 
     }

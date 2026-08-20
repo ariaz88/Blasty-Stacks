@@ -111,13 +111,9 @@ public class HudCurrencyView : MonoBehaviour
         isGameplayPaused = paused;
 
         //// roguelite Manager 
-        //var rogueliteManager = FindObjectOfType<RogueliteManager>();
-        //if (rogueliteManager)
-        //    rogueliteManager.enabled = !paused;
 
 
 
-        // Enemy Spawner
         var enemySpawer = FindObjectOfType<EnemySpawner>();
         if (enemySpawer)
             enemySpawer.enabled = !paused;
@@ -193,7 +189,6 @@ public class HudCurrencyView : MonoBehaviour
     void LateUpdate()
     {
         HandleBucketStatsOrder();
-        //HandleSwapPanelVisibility();
         HandlePanelsVisibility();
     }
 

@@ -104,9 +104,6 @@ public class PlayerManager : MonoBehaviour
     {
         playerStatsApplier = GetComponent<PlayerStatsApplier>();
 
-        //if (statsBase == null)
-        //    Debug.LogWarning($"{name}: missing UnitStatsSO.");
-        //unitStats.FromSO(statsBase);
 
 
         targetDetectionForPlayer = GetComponent<TargetDetectionForPlayer>();
@@ -137,7 +134,6 @@ public class PlayerManager : MonoBehaviour
 
         if (faceCenterOnStart) SetFacingByScreenHalf();
 
-        //unitStats = playerStatsApplier.CurrentStats;
 
         if (playerStatsApplier == null)
         {
@@ -163,7 +159,6 @@ public class PlayerManager : MonoBehaviour
             playerRigidbody.bodyType = RigidbodyType2D.Static;
         }
         SetAnimMoving(false);
-        //Time.timeScale = 0f;
         HudCurrencyView.Instance?.PauseGameplay();
 
 
@@ -187,7 +182,6 @@ public class PlayerManager : MonoBehaviour
             playerRigidbody.isKinematic = true;
         }
 
-        //isMoving = false;
         SetAnimMoving(false);
         HudCurrencyView.Instance?.PauseGameplay();
 
@@ -248,8 +242,6 @@ public class PlayerManager : MonoBehaviour
         // Option A: nearest side (recommended)
         chosenEnemyOffset = currentTarget.GetOffsetFacingPlayer(playerPos);
 
-        // Option B (deterministic by side): uncomment this line and remove Option A above
-        // chosenEnemyOffset = currentTarget.GetSideByFacing(enemyIsInLeft);
     }
     public void UpdateFacingAndOffset()
     {
@@ -283,7 +275,6 @@ public class PlayerManager : MonoBehaviour
         var cam = Camera.main;
         if (!cam) return;
 
-        // Viewport (0..1, 0..1). x<0.5 => left half, x>=0.5 => right half.
         Vector3 vp = cam.WorldToViewportPoint(transform.position);
         bool isOnLeftHalf = vp.x <= 0.5f;
 
@@ -323,24 +314,14 @@ public class PlayerManager : MonoBehaviour
         isInteracting = playerAnimatitorManager.anim.GetBool("isInteracting");
         }
 
-        //if (warrior.IsDetached && currentTarget == null)
-        //{
-        //    SwitchToNextState(playerUnlcock);
-        //    CapsuleCollider.enabled = true;
-        //}
 
  
         if (PlayerStats!=null && PlayerStats.playerIsdead)
         {
             SwitchToNextState(PlayerDeathState);
         }
-        //if (enemyStats != null && enemyStats.enemyIsdead)
-        //{
-        //    SwitchToNextState(playerIdleState);
 
-        //}
 
-        // 🔥 SINGLE SOURCE OF TRUTH
         UpdateTargetSelection();
 
         UpdateFacing(); // ONLY facing call
@@ -422,12 +403,6 @@ public class PlayerManager : MonoBehaviour
 
         if (nearest != null)
         {
-            // Update target ONLY if changed or closer
-            //if (currentTarget == null || nearest != currentTarget)
-            //{
-            //    currentTarget = nearest;
-            //    lastKnownTarget = nearest;
-            //}
             if (currentTarget == null)
             {
                 currentTarget = nearest;
@@ -630,17 +605,6 @@ public class PlayerManager : MonoBehaviour
         ResolveHorizontalOverlap();
 
         //// Gentle horizontal unstick: Only for extreme overlaps, X-only nudge
-        //if (separationRadius > 0f)  // Guard
-        //{
-        //    Collider2D[] tightOverlaps = Physics2D.OverlapCircleAll(transform.position, 0.05f, friendlyLayerMask);  // Tiny radius
-        //    if (tightOverlaps.Length > 1)  // Heavily overlapped
-        //    {
-        //        // Pure X-separation (no forward bias, no Y)
-        //        Vector2 xNudge = ApplyFriendlySeparation(Vector2.right);  // Horizontal arbitrary dir
-        //        xNudge.y = 0f;  // Force zero Y
-        //        playerRigidbody.MovePosition(playerRigidbody.position + xNudge * 0.02f);  // Tiny step (1/5th of original)
-        //    }
-        //}
     }
 
     private void HandleStateMachine()

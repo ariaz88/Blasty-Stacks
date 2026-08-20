@@ -1,0 +1,42 @@
+================================================================================
+  UnitStatsSO.cs
+  Path : Assets/Scripts/Data/Stats/UnitStatsSO.cs
+  Type : ScriptableObject   (menu: "TD/Unit Stats")
+  Layer: Data
+================================================================================
+
+PURPOSE
+-------
+The design-time stat sheet for one unit archetype (player character or enemy).
+This is the "level 1 / base" data a designer authors in the Editor. It is never
+modified at runtime - it is the source that UnitStatsRuntime copies from.
+
+Also declares the enum FighterType { Warrior, Archer, Horseman, Mage }, which is
+used across the whole project for class filtering (skills, CP flavour, UI icons).
+
+FIELDS
+------
+  Core
+    attack        (float, default 20)   ATK - raw damage per hit
+    defense       (float, default 10)   DEF - damage reduction, see CombatMath
+    maxHP         (float, default 100)  maximum health
+
+  Dynamics
+    attackSpeed   (float, default 1.0)  hits per second
+    moveSpeed     (float, default 3.5)  world units per second
+    attackRange   (float, default 1.5)  attack reach in world units
+
+  type            (FighterType)         class of this unit
+
+HOW IT CONNECTS
+---------------
+  - UnitDefinitionSO.baseStats points at one of these assets per player unit.
+  - WaveEntry.statsBase (LevelConfig) points at one per enemy archetype.
+  - UnitStatsRuntime.FromSO() copies these values into a mutable runtime object.
+  - Assets live under "Assets/Scriptable Objects/Stats/BaseStats/".
+
+NOTES
+-----
+  - Because this is a ScriptableObject, ANY runtime write to it would persist in
+    the Editor between play sessions. Never assign to these fields at runtime -
+    always go through UnitStatsRuntime instead.

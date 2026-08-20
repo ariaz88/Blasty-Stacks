@@ -1,0 +1,32 @@
+================================================================================
+  ChildLocalSnapshot.cs
+  Path : Assets/Scripts/Combat/Player/ChildLocalSnapshot.cs
+  Type : [System.Serializable] struct   (plain data, not a MonoBehaviour)
+  Layer: Combat / Player
+================================================================================
+
+PURPOSE
+-------
+A tiny value type that records one child Transform's LOCAL pose, so it can be
+restored later. Used when something temporarily reparents or deforms a
+character's hierarchy (for example a jump or an attack that moves bones) and the
+original layout must be put back exactly.
+
+FIELDS
+------
+  t           (Transform)  which child this snapshot belongs to
+  localPos    (Vector3)    localPosition at capture time
+  localRot    (Quaternion) localRotation
+  localScale  (Vector3)    localScale
+
+HOW IT CONNECTS
+---------------
+  - Used by the player movement/jump code that needs to capture a hierarchy pose
+    and restore it afterwards.
+
+NOTES
+-----
+  - Being [System.Serializable] means arrays of these show up in the Inspector,
+    which is handy for debugging a captured pose.
+  - It stores a direct Transform reference. If the child is destroyed the
+    reference goes null, so always null-check before restoring.

@@ -11,7 +11,6 @@ public class Warrior : MonoBehaviour
         if (!Home)
         {
             Home = GetComponentInParent<PieceSimple>();
-            //if (Home != null) Home.RegisterWarrior(this);
         }
     }
 

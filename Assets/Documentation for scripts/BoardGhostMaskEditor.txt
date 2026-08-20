@@ -1,0 +1,46 @@
+================================================================================
+  BoardGhostMaskEditor.cs
+  Path : Assets/Scripts/Editor/BoardGhostMaskEditor.cs
+  Type : Editor  [CustomEditor(typeof(BoardGhostMask))]   -  EDITOR ONLY
+  Layer: Editor tooling
+================================================================================
+
+PURPOSE
+-------
+The custom Inspector that turns BoardGhostMask into a PAINTING TOOL. Instead of
+editing a flat list of booleans, the designer sees a clickable grid matching the
+board and toggles cells directly.
+
+This file is wrapped in #if UNITY_EDITOR and lives in a folder named "Editor",
+so it is excluded from player builds.
+
+CONSTANTS
+---------
+  CellPx = 20    on-screen size of each painted cell button, in pixels
+
+OnInspectorGUI()
+----------------
+  1. Draws a bold "Ghost Mask Painter" header.
+  2. Calls DrawDefaultInspector() so the normal refs and flags are still editable.
+  3. Draws a row of control buttons:
+       "Resize to Board"  - records an Undo, calls mask.ResizeMaskToBoard(),
+                            marks the object dirty
+       "Apply Now"        - calls mask.ApplyGhostMask()
+       "Clear All"        - records Undo, calls mask.ClearMask(), marks dirty
+  4. Draws the interactive grid of cells, reading mask.GetCell(x, y) and writing
+     back through mask.SetCell(x, y, value) when a cell is clicked.
+
+HOW IT CONNECTS
+---------------
+  - Drives the public API of BoardGhostMask: ResizeMaskToBoard, ApplyGhostMask,
+    ClearMask, FillMask, GetCell, SetCell.
+  - Those calls end up writing blocked cells into BoardGridXY.
+
+NOTES
+-----
+  - It correctly uses Undo.RecordObject and EditorUtility.SetDirty so painting
+    is undoable and survives a save - easy things to get wrong in editor tools.
+  - This file used to live under
+    "Assets/Arts/2D Arts & Animations/OldArts/Editor/". It was moved into
+    Assets/Scripts/Editor during the 2026-08-20 reorganisation. The folder must
+    stay named "Editor" or the project will fail to build.

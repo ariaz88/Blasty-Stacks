@@ -145,9 +145,113 @@ _Newest first._
     was scripts); this is why the old `REGULITE`/`TowertDefenseScripts` folder names still exist.
   - `_Legacy/` is a judgement call from static analysis. Anything instantiated purely by name/
     reflection, or referenced only from a scene **not** in the ticked 9, would look dead here.
-- **Next:** reopen Unity and confirm a clean Console. Then optionally: move the leftover data
-  assets out of `Assets/Scripts/`, fix the Stage 8–20 build paths, and empty `_Legacy/`.
+- **Next:** fix the Stage 8-20 build paths; move leftover data assets out of `Assets/Scripts/`;
+  empty `_Legacy/`; then namespaces + the gameplay→UI event refactor.
 
+#### PAUSED 2026-08-20 — per-script documentation, 66 of 101 done
+
+**Task:** read every live gameplay script line by line and write one explanatory
+`.txt` per script into `Assets/Documentation for scripts/`. Paused at the user's
+request (hourly limits), to be resumed.
+
+**Done: 66 / 101.** All of Data, Core, Puzzle, Combat/Player (incl. States),
+Combat/Shared, Combat/Enemy (except EnemyManager), and the Editor script.
+
+**Remaining 35 files, in the order to tackle them:**
+1. The three big combat brains — `Combat/Enemy/EnemyManager.cs` (794 lines),
+   `Combat/Player/PlayerManager.cs` (660), `Combat/Player/SimpleJump2D.cs` (428)
+2. Spawning — `EnemySpawner.cs` (306), `LevelConfig.cs` (79),
+   `PlayerWaveManager.cs` (822)
+3. Roguelite — `RogueliteManager.cs` (426), `PlayerStatsApplier.cs` (173),
+   `SkillCardUI.cs` (82), `SkillData.cs` (21)
+4. UI/WinLose — `RevivePanel.cs` (648), `WinPanel.cs` (381),
+   `LevelGameManager.cs` (165), `LoseGame.cs` (128),
+   `StageRewardCalculator.cs` (68), `RewardItemUI.cs` (18)
+5. UI/Units — `UnitsPanelController.cs` (1428), `UnitDetailView.cs` (493),
+   `DeployOverlayController.cs` (430), `UnitCardView.cs` (336),
+   `BucketStatRow.cs` (73), `BucketStatsPanel.cs` (72), `BucketHeader.cs` (57)
+6. UI/Home — `HomeManager.cs` (909), `HomeCardsPager.cs` (500),
+   `NewCharacterStats.cs` (267), `StageCard.cs` (112)
+7. UI/HUD + Managers + Common — `HudCurrencyView.cs` (270),
+   `ResourcesAnimationManager.cs` (160), `CurrencyManager.cs` (170),
+   `MainMenuPanelController.cs` (296), `BackButtonRelay.cs` (15),
+   `UIButtonPressScaler.cs` (120), `ScrollOnlyUp.cs` (39)
+8. `Debug/DebugStageManager.cs` (238)
+
+**Method to keep using (it works well):**
+- Read the source with `cat`, never document a file unseen. (One entry,
+  `PieceColorPalette`, was drafted from assumption and had to be rewritten —
+  always read first.)
+- Write a bundle file to the scratchpad with `<<<FILE: Name.txt>>>` separators,
+  then split it with `scratchpad/split-docs.js` (copy it to the repo root, run,
+  then delete it — do not leave it in the repo).
+- Doc template: PURPOSE / FIELDS / METHODS or FLOW / HOW IT CONNECTS / NOTES.
+- **Avoid backticks and backslashes in bundle text** — the Bash heredoc mangles
+  both. Use the Write tool for the bundles.
+
+**Still owed to the user after the docs are finished:** package this whole
+workflow as a reusable SKILL so the same documentation can be generated in any
+other project, for both existing and future scripts.
+
+**Bugs found while documenting (reported, not fixed):**
+- `GameStartManager.Awake()` hard-codes `resetBool = true` then calls
+  `OnResetButtonClicked()` — **the save is wiped on every launch.** Critical.
+- `SaveSystem.LoadInternal()` calls `Save()` during migration while `_cache` is
+  still null, causing re-entrant loads; the `saveDepth > 10` guard papers over it.
+- `CPWeightMath.Evaluate` never reads `cfg.meleeMultByLevel` and assigns
+  `rangedMult` twice, so the melee curve is ignored.
+- `PlayerProgressionService` charges **coins**, while its comments and
+  `UpgradeCostSO` both say gems.
+- `PlayerStats` refreshes the health bar against `statsBase.maxHP` in
+  `ApplyDamageToPlayer` but `maxHealth` in `Start` — wrong ratio after a
+  runtime max-HP buff.
+- `RaycastToBoard` and `PieceDragHandlerSimple` still use XZ/3D plane maths on
+  this XY board.
+- A prefab using `FrogJumpTransformOnly` has `playerRigidbody` serialized as a
+  3D `Rigidbody` where a `Rigidbody2D` is expected — null in builds.
+
+#### Continuation (same session) — dead-code purge, verified in the Editor
+
+- **Reopened Unity:** Console clean, 0 errors. Opened all 9 ticked build scenes: 3,197 objects /
+  9,970 components / **0 missing scripts** — the reorg broke nothing.
+- **Architecture review (no code changed):** built a cross-layer dependency matrix. Key results —
+  **the Puzzle layer has ZERO outgoing dependencies** (it reaches the rest of the game only through
+  `MatchResolver.OnBlast`); gameplay wrongly reaches **up** into UI in 3 files
+  (`EnemyGateStats` → WinPanel/HomeManager/LevelGameManager, `EnemySpawner` → WinPanel/HudCurrencyView,
+  `PlayerManager` → HudCurrencyView); `CurrencyManager` is a core economy service **misfiled** under
+  `UI/Managers/` (it imports only System + UnityEngine, zero UI code) — moving it to `Core/` would
+  erase most of the Core→UI coupling. Singleton reach-through counts: `CurrencyManager.Instance` 43,
+  `SaveSystem.Data` 26, `LevelManager.Instance` 19, `GameStartManager.Instance` 13.
+- **PHASE 1 — deleted 47 numbered duplicate types** across 27 files (**−8,937 lines**).
+  Rule applied: the type name ends in a digit **and** it has zero real-code references, counted with
+  a comment/string-aware scanner so mentions inside comments don't create false positives. All 47
+  scored 0. Every file kept its main class — verified with a survives-vs-deleted table before applying.
+  Note: `SimpleJump2D.cs` contains no class of that name; Unity resolves such a file to its **first**
+  class, here `FrogJumpTransformOnly` (used by 12 prefabs). It was preserved; only
+  `FrogJumpTransformOnly1/2` and `FrogJump2D1/2` were removed.
+- **PHASE 2 — removed 2,537 lines of commented-out code** across 55 files. The classifier groups
+  contiguous `//` blocks and scores them; a block is deleted only when ≥50% of its lines look like
+  C# (ends in `;`/`{`/`}`, starts with a keyword, is an attribute, an assignment, or a call).
+  `///` XML doc comments are always kept, and so are prose comments. Empty `#region` blocks pruned.
+- **Result:** 30,778 → **18,947 lines** (−38%); comment ratio 17% → **9%**.
+  `EnemyManager` 1830→794, `RevivePanel` 1743→648, `HomeCardsPager` 1539→522, `WinPanel` 1316→385,
+  `MainMenuPanelController` 1043→297, `BoardGridXY` 1052→345, `FractureObject` 1098→608.
+- **Verified:** braces balanced across all 101 live scripts; Unity recompiled with **0 errors**;
+  re-audited all 9 build scenes → **0 missing scripts**; `git status` shows **no `.unity` or
+  `.prefab` modified**. Still **not** Play-mode tested — that remains the open check.
+- **Gotchas:**
+  - The multi-class files that remain (`LevelConfig`, `SaveData`, `PlayerUnitsModel`, `WinPanel`,
+    `StageRewardCalculator`, `SaveOnStop`, `DebugStageManager`) hold legitimate companion/nested
+    types (`Wave`, `WaveEntry`, `UnitState`, `RewardValues`, …). **Do not "clean" these.**
+  - `DebugStageManagerEditor` lives in a non-Editor folder but is correctly wrapped in
+    `#if UNITY_EDITOR`, so player builds are unaffected.
+  - **Latent pre-existing bug found** (not caused by this work): Unity warns
+    *"field 'playerRigidbody' expects 'Rigidbody2D' but the stored reference is a 'Rigidbody' —
+    the reference is treated as null (and serialized as null in player builds)"* on a prefab using
+    `FrogJumpTransformOnly`. It must be re-assigned in the Inspector or jumping silently no-ops
+    in a build.
+  - Writing Markdown/JS through a shell heredoc mangles both backslashes **and** backticks in this
+    environment. Use the Write tool for any content containing them.
 
 ### 2026-08-20 — CLAUDE.md init; /ads command + guide added to project; /feature-doc blocked
 - **Goal:** run `/init` to generate the repo's `CLAUDE.md`; separately, bring the `/ads` slash

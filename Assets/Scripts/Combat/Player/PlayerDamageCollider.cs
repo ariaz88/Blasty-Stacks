@@ -56,37 +56,3 @@ public class PlayerDamageCollider : MonoBehaviour
 
 
 }
-
-public class PlayerDamageCollider1 : MonoBehaviour
-{
-    PlayerManager PlayerManager;
-
-    private float damageToEnemy ;
-
-    private void Awake()
-    {
-        PlayerManager = GetComponent<PlayerManager>();
-    }
-
-
-    public void OnTriggerEnter2D(Collider2D other)
-    {
-        
-        EnemyStats enemyStats = other.GetComponent<EnemyStats>();
-        //EnemyGateStats enemyGateStats = other.GetComponentInChildren<EnemyGateStats>();
-        EnemyGateStats enemyGateStats = other.GetComponent<EnemyGateStats>();
-
-        if (enemyStats != null)
-        {
-            damageToEnemy = PlayerManager.DamageApplying(enemyStats.enemyManager);
-            enemyStats.ApplyDamageToEnemy(damageToEnemy);
-
-        }
-        if (enemyGateStats != null)
-        {
-            damageToEnemy = PlayerManager.DamageApplying(enemyGateStats.enemyManager);
-            enemyGateStats.ApplyDamageToEnemy(damageToEnemy);
-        }
-    }
-
-}

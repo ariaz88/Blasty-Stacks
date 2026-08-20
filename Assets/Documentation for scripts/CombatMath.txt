@@ -1,0 +1,42 @@
+================================================================================
+  CombatMath.cs
+  Path : Assets/Scripts/Combat/Shared/CombatMath.cs
+  Type : static class
+  Layer: Combat / Shared
+================================================================================
+
+PURPOSE
+-------
+The pure combat formulas, isolated from any Unity object so the balance maths
+lives in exactly one readable place.
+
+METHODS
+-------
+  DamagePerHit(UnitStatsRuntime attacker, UnitStatsRuntime defender) -> float
+      The DIMINISHING-RETURNS armour formula:
+          damage = attack * (100 / (100 + defense))
+      then clamped to a minimum of 1 so a hit always does something.
+      Defense is floored at 0, so negative defense cannot amplify damage.
+      Interpretation: 100 defense halves incoming damage, 200 defense reduces it
+      to a third, and so on - defense never reaches full immunity.
+
+  TimeBetweenAttacks(UnitStatsSO attacker) -> float
+      1 / attackSpeed, or Infinity when attackSpeed is 0 (never attacks) -
+      avoiding a divide-by-zero.
+
+  InRange(UnitStatsSO attacker, Vector3 a, Vector3 b) -> bool
+      Distance <= attackRange, with a 1e-4 epsilon so a unit standing at exactly
+      max range still counts as in range.
+
+HOW IT CONNECTS
+---------------
+  - The damage formula is mirrored by CPCalculator.EffectiveHP, which uses the
+    same 100/(100+DEF) expression to convert HP+defense into effective HP for
+    the UI. If this formula changes, that one must change too or the displayed
+    numbers will lie.
+
+NOTES
+-----
+  - DamagePerHit takes UnitStatsRuntime (live values) while the other two take
+    UnitStatsSO (design values). That asymmetry means TimeBetweenAttacks and
+    InRange ignore any runtime buff to attackSpeed or range.

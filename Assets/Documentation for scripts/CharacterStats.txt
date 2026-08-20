@@ -1,0 +1,41 @@
+================================================================================
+  CharacterStats.cs
+  Path : Assets/Scripts/Combat/Shared/CharacterStats.cs
+  Type : MonoBehaviour  (base class)
+  Layer: Combat / Shared
+================================================================================
+
+PURPOSE
+-------
+The shared health base class for everything that can be damaged: player units,
+enemies, and both gates. It holds the two health numbers and nothing else, so
+each subclass can add its own damage rules and death behaviour.
+
+FIELDS
+------
+  currentHP   (float)  live health
+  maxHealth   (float, default 100)
+
+METHODS
+-------
+  Init(float maxHP)
+      Sets currentHP to at least 1, so a unit can never spawn already dead.
+      Note it sets currentHP, NOT maxHealth - the caller must set maxHealth
+      separately if it differs from the default.
+  IsAlive => currentHP > 0f
+
+SUBCLASSES
+----------
+  PlayerStats      + healthBar, playerIsdead, ApplyDamageToPlayer
+  EnemyStats       + enemyIsdead, ApplyDamageToEnemy
+  PlayerGateStats  + OnGateDestroyed event, ApplyDamageToPlayerGate
+  EnemyGateStats   + OnGateDestroyed event, ApplyDamageToEnemy
+
+NOTES
+-----
+  - The file lives in "Combat/Shared" but previously sat in a folder whose name
+    contained an invisible Arabic diacritic (U+064F), which made it hard to find
+    by path. That folder is gone as of the 2026-08-20 reorganisation.
+  - IsAlive is available to all subclasses but most of them track their own
+    separate boolean (playerIsdead, enemyIsdead, isPlayerGateDestroyed) instead.
+    Two sources of truth for "is it dead" is a small inconsistency to watch.

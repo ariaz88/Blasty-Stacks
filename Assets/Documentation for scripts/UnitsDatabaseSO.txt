@@ -1,0 +1,48 @@
+================================================================================
+  UnitsDatabaseSO.cs
+  Path : Assets/Scripts/Data/Units/UnitsDatabaseSO.cs
+  Type : ScriptableObject   (menu: "Units/Units Database")
+  Layer: Data
+================================================================================
+
+PURPOSE
+-------
+The single, shared master roster of the game. It holds an ordered list of every
+UnitDefinitionSO. The ORDER of this list is also the left-to-right order of the
+cards in the Units screen, so it is both data and presentation ordering.
+
+FIELDS
+------
+  units  (List<UnitDefinitionSO>, private + SerializeField)
+      Exposed read-only through the Units property.
+
+PROPERTIES
+----------
+  Units  ->  IReadOnlyList<UnitDefinitionSO>
+      Read-only view so no other system can mutate the roster at runtime.
+
+METHODS
+-------
+  GetById(int unitId) -> UnitDefinitionSO
+      Linear search for the definition with that id. Returns null if not found.
+
+  IndexOf(int unitId) -> int
+      Linear search returning the list position, or -1.
+
+  OnValidate()  [Editor only]
+      Scans for DUPLICATE unitIds and logs a warning naming the offending asset.
+      This is an important safety net: duplicate ids would silently corrupt save
+      data, because the save file keys everything by unitId.
+
+HOW IT CONNECTS
+---------------
+  - GameStartManager holds a reference and uses it to build PlayerUnitsModel.
+  - PlayerProgressionService iterates it for stage-based unlocks.
+  - PlayerWaveManager iterates it to find which deployed units to spawn.
+  - The Units UI iterates it to build the card list.
+
+NOTES
+-----
+  - Both lookups are O(n) linear scans. The roster is small (about 9 units) so
+    this is fine, but they are called from UI refresh paths - avoid calling them
+    inside tight per-frame loops.

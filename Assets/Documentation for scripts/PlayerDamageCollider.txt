@@ -1,0 +1,50 @@
+================================================================================
+  PlayerDamageCollider.cs
+  Path : Assets/Scripts/Combat/Player/PlayerDamageCollider.cs
+  Type : MonoBehaviour
+  Layer: Combat / Player
+  Scenes: all 9 build scenes
+================================================================================
+
+PURPOSE
+-------
+The player's attack HITBOX. It is enabled only during the active frames of an
+attack animation (via the Enable/DisableDamageCollider animation events) and
+applies damage to whatever enemy it overlaps.
+
+FIELDS
+------
+  playerManager  cached in Awake with GetComponentInParent
+  damageToEnemy  scratch value
+
+OnTriggerEnter2D(Collider2D other)   - the live handler
+-------------------------------------------------------
+  1. LAYER FILTER: returns immediately unless the other object is on
+     "EnemyLayer" or "EnemyCastle". This is what stops a player from damaging
+     other players or scenery.
+  2. ENEMY UNIT: if the collider has an EnemyStats, computes damage through
+     playerManager.DamageApplying(enemyStats.enemyManager) and applies it, then
+     returns.
+  3. ENEMY GATE: otherwise looks for EnemyGateStats in the parents. Damage is
+     applied ONLY IF playerManager.currentState == playerManager.AttackState -
+     an extra guard so a unit merely walking into the gate does not chip it.
+
+HOW IT CONNECTS
+---------------
+  - Enabled/disabled by animation events on the attack clips.
+  - Damage value comes from PlayerManager.DamageApplying, which uses CombatMath.
+  - Targets EnemyStats.ApplyDamageToEnemy and EnemyGateStats.ApplyDamageToEnemy.
+
+NOTES
+-----
+  - The layer names "EnemyLayer" and "EnemyCastle" are magic strings resolved
+    with LayerMask.NameToLayer. If a layer is renamed or missing,
+    NameToLayer returns -1 and the comparison silently never matches, so all
+    damage stops with no error. Worth a one-time validation log.
+  - The enemy-unit branch has NO state guard, unlike the gate branch. A player
+    could in principle damage an enemy whenever the collider happens to be
+    enabled, not strictly while attacking. In practice the animation events keep
+    the collider off outside attacks.
+  - A dead numbered variant, OnTriggerEnter2D1, remains in the file. Unity calls
+    only the exactly-named OnTriggerEnter2D, so the numbered one never runs. It
+    differs in that it had no layer filter and no state guard.

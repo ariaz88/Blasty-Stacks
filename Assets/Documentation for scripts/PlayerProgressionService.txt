@@ -1,0 +1,107 @@
+================================================================================
+  PlayerProgressionService.cs
+  Path : Assets/Scripts/Core/Progression/PlayerProgressionService.cs
+  Type : plain C# class   (NOT a MonoBehaviour)
+  Layer: Core / Progression
+================================================================================
+
+PURPOSE
+-------
+The single API the UI talks to for everything about upgrading and unlocking
+units. It answers "can I upgrade this, and what does it cost", performs the
+purchase, persists the result, and produces the current-vs-next stat numbers the
+detail panel shows.
+
+It is constructed ONCE by GameStartManager with all its dependencies passed in
+through the constructor - genuine constructor injection, and the cleanest piece
+of architecture in the project.
+
+CONSTRUCTOR
+-----------
+  PlayerProgressionService(units, currency, costConfig, unitsDb, progressionCfg)
+      Every argument is stored in a readonly field and every one throws
+      ArgumentNullException if null. Fail-fast: a mis-wired boot crashes
+      immediately with a clear message rather than misbehaving later.
+
+EVENT
+-----
+  OnUnitUpgraded(int unitId, int oldLevel, int newLevel, int costSpent)
+      Raised after a successful upgrade so UI, SFX and VFX can react.
+
+UNLOCK LOGIC
+------------
+  ProcessStageUnlocks()
+      Walks the whole units database. For each still-locked unit it asks
+      LevelManager.HasReached(def.requiredLevelIndex,
+      def.requiredStageIndexWithinLevel). If the player has reached that stage,
+      the unit is unlocked and placed in the UNDEPLOYED bucket (the player must
+      choose to field it). Logs each unlock.
+
+  GetReachableButLockedUnits() -> List<int>
+      Same scan but read-only: returns the ids that COULD be unlocked right now.
+      Used to drive "new unit available!" prompts without mutating state.
+
+QUERIES
+-------
+  GetLevel(unitId)        passthrough to the model
+  IsUnlocked(unitId)      passthrough to the model
+  IsAtCap(unitId)         true when the unit is at UpgradeCostSO.levelCap
+  GetUpgradeCost(unitId)  price of the next level, 0 at cap
+  CanUpgrade(unitId, out string reason) -> bool
+      Returns false with reason "Locked", "AtCap" or "NotEnoughCoins".
+      The reason string is what the UI shows the player.
+
+COMMANDS
+--------
+  TryUpgrade(unitId) -> bool
+      1. Rejects if locked or at cap.
+      2. Reads old level and cost.
+      3. Calls _currency.TrySpendCoins(cost) - aborts if the player cannot pay.
+      4. Increments the level via PlayerUnitsModel.LevelUp.
+      5. Persists immediately with SaveSystem.SetUnitLevel.
+      6. Raises OnUnitUpgraded inside a try/catch so a throwing subscriber
+         cannot corrupt the purchase that already happened.
+
+  UnlockUnit(unitId)
+      Unlocks in the model and persists via SaveSystem.SetUnitUnlocked.
+      Charges nothing - the caller owns the unlock rules.
+
+UI HELPERS
+----------
+  struct StatSnapshot     { current, next, delta (computed) }
+  struct UnitStatsSnapshot { attack, defense, hp, attackSpeed, moveSpeed,
+                             attackRange }
+
+  TryGetUnitStatsSnapshot(unitId, out UnitStatsSnapshot) -> bool
+      Computes the "+X in green" preview for the upgrade screen:
+        current = baseStats * growthMultipliers(level)
+        next    = baseStats * growthMultipliers(level + 1)
+      for all six stats. Returns false if the unit, its baseStats or the
+      progression config is missing.
+      IMPORTANT: this reads UnitStatsSO (design base) and applies growth fresh -
+      it does NOT read the live UnitStatsRuntime of a spawned unit, so roguelite
+      in-run buffs correctly do not appear in the menu preview.
+
+HOW IT CONNECTS
+---------------
+  - Built by GameStartManager, exposed as GameStartManager.ProgressionService.
+  - UnitDetailView / UpgradeButtonController call CanUpgrade and TryUpgrade.
+  - Reads UpgradeCostSO for prices, ProgressionConfigSO for stat curves,
+    UnitsDatabaseSO for definitions, and PlayerUnitsModel for live state.
+  - Writes through SaveSystem and CurrencyManager.
+
+NOTES / INCONSISTENCIES
+-----------------------
+  !! CURRENCY MISMATCH: the class summary comment says "Spends gems via
+  !! CurrencyManager", and UpgradeCostSO's own comment says it defines "how many
+  !! gems an upgrade costs". But the actual implementation charges COINS:
+  !! CanUpgrade compares against _currency.Coins and returns "NotEnoughCoins",
+  !! and TryUpgrade calls TrySpendCoins(). Coins are what the player really
+  !! pays. Either the comments or the code should be corrected so designers are
+  !! not misled when tuning UpgradeCostSO.
+
+  - A dead numbered leftover, UnlockUnit1(), remains. It is identical to
+    UnlockUnit() and is never called.
+  - TryGetUnitStatsSnapshot calls ProgressionMath twice per query, and that
+    function loops over every level. Cheap at the current cap of 50, but it runs
+    on every UI refresh.

@@ -1,0 +1,81 @@
+================================================================================
+  PlayerAttackState.cs
+  Path : Assets/Scripts/Combat/Player/States/PlayerAttackState.cs
+  Type : PlayerState (MonoBehaviour)
+  Layer: Combat / Player / States
+================================================================================
+
+PURPOSE
+-------
+Executes attacks. It handles TWO distinct targeting paths - swinging at a normal
+enemy, and battering the enemy GATE - and manages the attack cooldown and
+animation triggering for both.
+
+INSPECTOR FIELDS
+----------------
+  PlayerDeathState         entered if the unit dies mid-attack
+  PlayerCombatState        returned to when the attack cannot proceed
+  playerAttackAction       (PlayerAttackAction SO) the attack definition
+  playerLockState          lock gate
+  PlayerGameCompleteState  entered when the gate is destroyed
+
+RUNTIME
+-------
+  currentAttack  the PlayerAttackAction currently selected, cleared when the
+                 target moves out of range
+
+Tick()  - order of checks
+-------------------------
+  1. LOCK GATE: if !pm.isUnlocked -> return lock state.
+  2. gateEngagement = pm.attackPlayerGate && pm.currentGateTarget != null
+  3. If NOT a gate engagement and pm.currentTarget is null -> back to Combat.
+  4. If pm.isPerformingAction -> back to Combat (do not stack attacks).
+  5. If ps.playerIsdead -> PlayerDeathState.
+  6. Measure distance and angle to the ACTIVE target via
+     pm.GetActiveTargetPosition() - one helper that returns either the gate or
+     the enemy position.
+  7. RANGE BAIL-OUT: if not a gate engagement and distance > pm.maxAttackRange,
+     clear currentAttack and return to Combat.
+     The source comments note this specifically fixes a "stands still after
+     kill" bug - without it the unit could stay in Attack forever aiming at a
+     target that had died or moved away.
+  8. Select an attack if none is held (GetNewAttack).
+
+  GATE ATTACK PATH
+      Zeroes velocity and sets the body Kinematic, then if the recovery timer
+      has expired and no action is in progress:
+        - marks isPerformingAction and resets currentRecoveryTimer from the
+          attack's recoveryTime
+        - zeroes the Vertical/Horizontal animator floats so the locomotion blend
+          does not bleed into the attack clip
+        - plays the attack animation with a speed multiplier taken from
+          pm.unitStats.attackSpeed, so the attackSpeed stat literally changes
+          how fast the swing animates
+        - if pm.currentGateTarget.isDestroyed -> return PlayerGameCompleteState
+
+  REGULAR ENEMY PATH
+      If distance < currentAttack.maxDistanceNeededToAttack and the cooldown is
+      ready, performs the same sequence (flag, timer, zero floats, play clip).
+
+GetNewAttack(pm, gateEngagement)
+--------------------------------
+  A) Gate engagements always use playerAttackAction.
+  B) Otherwise requires a live target, and only selects the attack when the
+     distance falls between minDistanceNeededToAttack and
+     maxDistanceNeededToAttack. Outside that band currentAttack stays null and
+     the unit waits.
+
+HOW IT CONNECTS
+---------------
+  - Reads the PlayerAttackAction ScriptableObject for timing and range.
+  - Drives PlayerAnimatitorManager.PlayTargetAnimation.
+  - The animation itself enables/disables the damage collider through animation
+    events (see PlayerAnimatitorManager), which is what actually deals damage.
+
+NOTES
+-----
+  - viewableAngle is computed from pm.transform.forward but never used. In 2D,
+    transform.forward points into the screen, so this value would be meaningless
+    anyway - harmless dead code.
+  - Damage is NOT applied here. This state only plays the animation; the hit is
+    delivered by PlayerDamageCollider while the animation window is open.

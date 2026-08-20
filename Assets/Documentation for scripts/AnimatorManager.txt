@@ -1,0 +1,44 @@
+================================================================================
+  AnimatorManager.cs
+  Path : Assets/Scripts/Combat/Shared/AnimatorManager.cs
+  Type : MonoBehaviour  (base class)
+  Layer: Combat / Shared
+================================================================================
+
+PURPOSE
+-------
+The shared animation-playing helper for both players and enemies. It wraps the
+four things that must always happen together when starting an action animation,
+so no caller can forget one.
+
+FIELDS
+------
+  anim  (Animator)  assigned in the Inspector
+
+METHODS
+-------
+  PlayTargetAnimation(string targetAnim, bool isInteracting, float speedMult = 1f)
+      1. anim.applyRootMotion = isInteracting
+         Root motion is enabled only during "interacting" actions such as
+         attacks, so the clip can drive movement; normal locomotion keeps it off.
+      2. anim.SetBool("isInteracting", isInteracting)
+         Lets the Animator graph block other transitions during the action.
+      3. anim.SetFloat("ClipSpeed", speedMult)
+         The Animator states multiply their playback speed by this parameter,
+         which is how the attackSpeed stat visually speeds up a swing.
+      4. anim.CrossFade(targetAnim, 0.2f)
+         Blends into the target state over 0.2 seconds.
+
+SUBCLASSES
+----------
+  PlayerAnimatitorManager  adds Enable/DisableDamageCollider animation events
+  EnemyAnimatorManager     the enemy equivalent
+
+NOTES
+-----
+  - The Animator controller MUST expose an "isInteracting" bool and a
+    "ClipSpeed" float, and contain a state matching every animationName used by
+    the attack ScriptableObjects. These are string contracts with no compile-time
+    checking.
+  - The 0.2s crossfade is hard-coded. A very short attack clip will spend a
+    large fraction of its length blending.

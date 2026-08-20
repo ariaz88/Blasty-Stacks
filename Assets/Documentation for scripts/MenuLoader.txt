@@ -1,0 +1,54 @@
+================================================================================
+  MenuLoader.cs
+  Path : Assets/Scripts/Core/Boot/MenuLoader.cs
+  Type : MonoBehaviour
+  Layer: Core / Boot
+  Scene: StarterScene (the preload/boot scene)
+================================================================================
+
+PURPOSE
+-------
+Drives the loading screen. It sits in the small StarterScene, gives the boot
+managers a frame to initialize, then asynchronously loads the main menu while
+showing a progress bar that is deliberately paced.
+
+INSPECTOR FIELDS
+----------------
+  targetSceneName  (string, default "MenuScene")  must match Build Settings
+  delaySeconds     (float, default 0)  extra pause before loading, e.g. a logo
+  minLoadTime      (float, default 8)  MINIMUM seconds the bar takes to fill
+  loadAdditiveThenUnloadPreload (bool, default false)
+        false = Single mode, the preload scene is replaced.
+        true  = Additive, then the preload scene is unloaded afterwards.
+  loadingFillImage (Image)   must be set to Image Type = Filled
+  loadingText      (TMP_Text) shows "45%" etc.
+
+FLOW  (all inside the Start coroutine)
+--------------------------------------
+  1. yield return null - one frame so GameStartManager, CurrencyManager and
+     friends can finish Awake/Start before the menu needs them.
+  2. Optional WaitForSeconds(delaySeconds).
+  3. Begin SceneManager.LoadSceneAsync in the chosen mode and immediately set
+     allowSceneActivation = false, so Unity loads but does not switch yet.
+  4. Loop each frame computing two progress values:
+       sceneProgress = loadOp.progress / 0.9   (Unity stops at 0.9 when
+                                                activation is blocked)
+       timeProgress  = elapsed / minLoadTime
+     The bar shows Mathf.Min of the two, so it can never reach 100% until BOTH
+     the scene is ready and the minimum time has elapsed.
+  5. When the displayed progress hits 1, allowSceneActivation = true.
+  6. In additive mode only: make the menu the active scene and unload preload.
+
+HOW IT CONNECTS
+---------------
+  - Runs in StarterScene alongside GameStartManager and CurrencyManager.
+  - Loads MenuScene, where MainMenuPanelController and HomeManager take over.
+
+NOTES
+-----
+  - minLoadTime defaults to 8 seconds. On a fast device the game will WAIT the
+    full 8 seconds even though the scene loaded instantly. This is an
+    intentional pacing choice, but it is the first thing to lower if boot feels
+    slow.
+  - The file has a duplicated block of using-directives near the top (a harmless
+    leftover) and a large XML comment describing the older design.

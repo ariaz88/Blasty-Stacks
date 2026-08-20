@@ -43,8 +43,6 @@ public class BoardGridCubes : MonoBehaviour
     private void Start()
     {
         if (!board) board = GetComponent<BoardGridXY>();
-        //board.SetBlocked(new Vector2Int(2, 2), true);
-        //board.SetBlocked(new Vector2Int(4, 3), true);
         if (autoGenerateOnStart) Regenerate();
     }
 
@@ -53,8 +51,6 @@ public class BoardGridCubes : MonoBehaviour
         if (!hideGhostedCells) return false;
         if (ghostMask) return ghostMask.GetCell(x, y);   // use the mask you paint in the Inspector
 
-        // If you ALSO added IsGhosted to BoardGridXY, prefer that:
-        // return board && board.IsGhosted(new Vector2Int(x, y));
 
         return false;
     }
@@ -93,7 +89,6 @@ public class BoardGridCubes : MonoBehaviour
 
         float s = board.CellSize;
         float sxy = Mathf.Max(0.01f, s - 2f * inset);
-        //float yCenter = board.BoardWorldZ + zOffset + thickness * 0.5f;
 
         for (int x = 0; x < board.Width; x++)
         {
@@ -123,7 +118,6 @@ public class BoardGridCubes : MonoBehaviour
                 go.transform.rotation = board.transform.rotation;
                 go.transform.localScale = new Vector3(sxy, sxy, h);
 
-                // remove default collider => visual-only grid
                 var col = go.GetComponent<Collider>();
                 if (col) Destroy(col);
 
@@ -368,4 +362,3 @@ return root;
         go.layer = gridLayer;
     }
 }
-

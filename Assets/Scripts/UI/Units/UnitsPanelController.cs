@@ -113,9 +113,6 @@ public class UnitsPanelController : MonoBehaviour
             Debug.LogWarning("[UnitsPanelController] GameStartManager not found in scene.");
 
 
-        //deployedHeader.Title = "Deployed Heroes";
-        //undeployedHeader.Title = "Undeployed Heroes";
-        //unachievedHeader.Title = "Unachieved Heroes";
 
         deployedHeader.Wire(OpenBucketPanel);
         undeployedHeader.Wire(OpenBucketPanel);
@@ -136,8 +133,6 @@ public class UnitsPanelController : MonoBehaviour
         if (_gsm != null && _gsm.ProgressionService != null)
             _gsm.ProgressionService.OnUnitUpgraded += HandleUnitUpgraded;
 
-        //if (LevelManager.Instance)
-        //    LevelManager.Instance.OnLevelStageChanged += HandleLevelStageChanged;
     }
 
     private void OnDisable()
@@ -148,8 +143,6 @@ public class UnitsPanelController : MonoBehaviour
         if (_gsm != null && _gsm.ProgressionService != null)
             _gsm.ProgressionService.OnUnitUpgraded -= HandleUnitUpgraded;
 
-        //if (LevelManager.Instance)
-        //    LevelManager.Instance.OnLevelStageChanged -= HandleLevelStageChanged;
     }
 
     private void AdjustUnachievedPanelPosition()
@@ -263,7 +256,6 @@ public class UnitsPanelController : MonoBehaviour
             _spawnedCards.Add(card);
             _cardsByUnitId[id] = card;
         }
-        //RefreshDeployedUpgradeCues();
         ApplySavedOrder(deployedContainer as RectTransform, _deployedSlotByUnit);
         ApplySavedOrder(undeployedContainer as RectTransform, _undeployedSlotByUnit);
 
@@ -343,7 +335,6 @@ public class UnitsPanelController : MonoBehaviour
         if (unAchivedDetailView) unAchivedDetailView.gameObject.SetActive(false);
 
 
-        //BuildUnlockedStats(unitId);
         BuildUnlockedStats(unitId, detailView);
 
 
@@ -365,7 +356,6 @@ public class UnitsPanelController : MonoBehaviour
         if (unAchivedDetailView) unAchivedDetailView.gameObject.SetActive(false);
 
 
-        //BuildUnlockedStats(unitId);
         BuildUnlockedStats(unitId, undeployedDetailView);
 
 
@@ -379,27 +369,10 @@ public class UnitsPanelController : MonoBehaviour
     // Unachieved: locked message only
     private void ShowDetail_Unachieved2(int unitId)
     {
-        //if (cardsScreen) cardsScreen.SetActive(false);
-        //if (detailScreen) detailScreen.SetActive(true);
 
-        //if (detailView) detailView.gameObject.SetActive(false);
-        //if (undeployedDetailView) undeployedDetailView.gameObject.SetActive(false);
 
-        //if (lockedMsgGroup) lockedMsgGroup.SetActive(true);
 
-        //var def = unitsDatabase.GetById(unitId);
-        //if (def)
-        //{
-        //    if (lockedPortraitImage) lockedPortraitImage.sprite = def.portrait;
-        //    if (lockedNameText) lockedNameText.text = def.displayName ?? "Unknown";
-        //    if (lockedLevelText) lockedLevelText.text = "Lv 1";
-        //    detailView.SetRequirementDetail(def.GetRequirementText());
-        //}
 
-        //WireBackButton();
-        //HideButton(upgradeButton);
-        //HideButton(deployButton);
-        //HideButton(undeployButton);
     }
 
     // Unachieved: use a normal UnitDetailView layout
@@ -471,7 +444,6 @@ public class UnitsPanelController : MonoBehaviour
             {
                 upgradeButton.onClick.AddListener(() =>
                 {
-                    //Debug.Log(" Click On Upgrade Button");
 
                     if (_gsm?.ProgressionService == null) return;
                     bool ok = _gsm.ProgressionService.TryUpgrade(unitId);
@@ -536,8 +508,6 @@ public class UnitsPanelController : MonoBehaviour
         if (!def || targetView == null) return;
 
         int level = GetLevelSafe(unitId);
-        // NOTE: keep your header arg order exactly as you had it:
-        //targetView.SetHeader(def.displayName, def.portrait, level);
         targetView.SetHeader(def, level);
 
         // CURRENT @ level
@@ -548,11 +518,7 @@ public class UnitsPanelController : MonoBehaviour
         cur.maxHP *= gCur.gH;
         cur.moveSpeed *= gCur.gMv;
         cur.attackSpeed *= gCur.gAS;
-        // If you later add growth for these, apply them here:
-        // cur.defense     *= gCur.gDef;
-        // cur.attackRange *= gCur.gRng;
 
-        // NEXT @ level+1
         var nxt = new UnitStatsRuntime();
         nxt.FromSO(def.baseStats);
         var gNxt = ProgressionMath.GetGrowthMultipliers(level + 1, progressionConfig);
@@ -560,8 +526,6 @@ public class UnitsPanelController : MonoBehaviour
         nxt.maxHP *= gNxt.gH;
         nxt.moveSpeed *= gNxt.gMv;
         nxt.attackSpeed *= gNxt.gAS;
-        // nxt.defense     *= gNxt.gDef;
-        // nxt.attackRange *= gNxt.gRng;
 
         float dHP = nxt.maxHP - cur.maxHP;
         float dATK = nxt.attack - cur.attack;
@@ -605,8 +569,6 @@ public class UnitsPanelController : MonoBehaviour
 
         int level = 1; // always show as level 1 preview
 
-        // Header
-        //unAchivedDetailView.SetHeader(def.displayName, def.portrait, level);
         unAchivedDetailView.SetHeader(def, level);
 
 
@@ -885,7 +847,6 @@ public class UnitsPanelController : MonoBehaviour
             BucketHeader.BucketType.Undeployed => undeployedHeader.Title,
             _ => unachievedHeader.Title
         };
-        //statsPanel.Clear();
         ClearContainer(statsPanel.Content);  // <-- ADD THIS: Force destroy-based clear before building rows
         statsPanel.Show(title);
 
@@ -921,11 +882,7 @@ public class UnitsPanelController : MonoBehaviour
             cur.maxHP *= g.gH;
             cur.moveSpeed *= g.gMv;
             cur.attackSpeed *= g.gAS;
-            // (Defense/range growth only if your ProgressionConfig has those fields)
-            // cur.defense   *= g.gDef;
-            // cur.attackRange *= g.gRng;
 
-            // 4) CP and upgrade cost
             int cp = CPCalculator.UnitCP(cur, lvl, cpWeights);
             int cost = upgradeCost.GetCostForLevel(lvl);
 
@@ -956,25 +913,9 @@ public class UnitsPanelController : MonoBehaviour
 
         }
 
-        //for (int i = 0; i < bucketParent.childCount; i++)
-        //{
-        //    var card = bucketParent.GetChild(i).GetComponent<UnitCardView>();
-        //    if (!card) continue;
 
-        //    int unitId = card.UnitId;
 
-        //    // Pull data
-        //    var def = unitsDatabase.GetDefinition(unitId); // your SO accessor
-        //    int lvl = _gsm.PlayerUnits.GetLevel(unitId);
-        //    // Use your existing stat calculators (same ones used in detail view):
-        //    var stats = ComputeUnitStats(unitId, lvl); // hp/atk/def (you already compute for detail)
-        //    int cp = ComputeCP(unitId, lvl);        // you already have CPWeights/progression
-        //    int cost = upgradeCost.GetCostForLevel(lvl);
 
-        //    // Row
-        //    var row = Instantiate(rowPrefab, statsPanel.Content);
-        //    row.Bind(def.icon, def.displayName, lvl, stats.hp, stats.atk, stats.def, cp, cost);
-        //}
     }
     private void OpenBucketPanel(BucketHeader.BucketType type)
     {
@@ -1215,7 +1156,6 @@ public class UnitsPanelController : MonoBehaviour
     {
         if (PlayerUnits == null) return;
 
-        // [FIX] Validate IDs early
         if (candidateId < 0 || replacedId < 0) return;
         if (!PlayerUnits.Exists(candidateId) || !PlayerUnits.Exists(replacedId)) return;
 
@@ -1223,8 +1163,6 @@ public class UnitsPanelController : MonoBehaviour
         int replacedLevel = Mathf.Max(1, PlayerUnits.GetLevel(replacedId));
         int candidateLevel = Mathf.Max(1, PlayerUnits.GetLevel(candidateId));
 
-        // --- Update the order lists first (source of truth)
-        // [FIX] remove from the correct lists (they were reversed before!)
         _undeployedOrder.Remove(candidateId);   // [FIX]
         _deployedOrder.Remove(replacedId);     // [FIX]
 
@@ -1244,7 +1182,6 @@ public class UnitsPanelController : MonoBehaviour
         PlayerUnits.SetLevel(candidateId, replacedLevel);
         PlayerUnits.SetLevel(replacedId, 1);
 
-        // [FIX] Persist flags + levels (candidate inherits level, replaced resets)
         SaveSystem.SetUnitUnlocked(candidateId, true);                 // [ADDED] ensure unlocked
         SaveSystem.SetUnitDeployed(candidateId, true);                 // [ADDED]
         SaveSystem.SetUnitLevel(candidateId, replacedLevel);           // [ADDED]
@@ -1252,7 +1189,6 @@ public class UnitsPanelController : MonoBehaviour
         SaveSystem.SetUnitDeployed(replacedId, false);                 // [ADDED]
         SaveSystem.SetUnitLevel(replacedId, 1);                        // [ADDED]
 
-        // [FIX] Sanitize + persist orders now (unique, valid)
         var gsm = GameStartManager.Instance;
         if (gsm?.PlayerUnits != null)
         {
@@ -1264,9 +1200,7 @@ public class UnitsPanelController : MonoBehaviour
             SaveSystem.SetUnitOrders(_deployedOrder, _undeployedOrder); // [ADDED]
         }
 
-        // [FIX] Remove the redundant “swap list entries” block — it broke ordering
 
-        // --- Refresh overlay in-place with the SAME lists (no re-sorting inside overlay)
         if (deployOverlay && deployOverlay.gameObject.activeSelf)
         {
             // Note: candidate now lives in Deployed grid; replaced lives in Undeployed.
@@ -1299,9 +1233,6 @@ public class UnitsPanelController : MonoBehaviour
         EnsureOrderListsSync();
 
         //// Clear
-        //ClearChildren(deployedContainer);
-        //ClearChildren(undeployedContainer);
-        //ClearChildren(unachievedContainer);
   
 
         DestroyAllChildren(deployedContainer);
@@ -1495,10 +1426,3 @@ public class UnitsPanelController : MonoBehaviour
 
 
 }
-
-
-
-
-
-
-

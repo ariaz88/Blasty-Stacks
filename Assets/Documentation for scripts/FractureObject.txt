@@ -1,0 +1,87 @@
+================================================================================
+  FractureObject.cs
+  Path : Assets/Scripts/Puzzle/Match/FractureObject.cs
+  Type : MonoBehaviour  (scene-level VFX manager)
+  Layer: Puzzle / Match
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The "juice" of the puzzle board. When a block is matched away, this manager
+sprays a burst of tiny coloured drops - a Blasty-style confetti explosion -
+tinted to match the block that broke.
+
+It is a single scene-level manager rather than a component per piece:
+MatchResolver finds it and calls Explode() for each cleared block.
+
+MAIN ENTRY POINT
+----------------
+  Explode(Transform at, int colorId)
+      Spawns one burst of particles at the given transform, coloured according
+      to colorId. Called from MatchResolver.ScaleDownAndExplode.
+
+INSPECTOR FIELDS  (extensive - this is a tuning-heavy script)
+-------------------------------------------------------------
+  Drop / Particle Template
+    fracturedPrefab  (GameObject) a parent prefab whose CHILDREN are the small
+                     drop shapes. The script clones random children as particles,
+                     so variety comes from the prefab rather than from code.
+
+  Blasty-Style Particle Count
+    particlesPerBurstMin / Max   (int, default 24 / 36) drops per matched block
+
+  Particle Size
+    particleBaseScale        (float, default 0.18) master size multiplier
+    particleScaleRandomRange (Vector2, default 0.65-1.35) per-drop size variety
+    particleStretchRange     (Vector2, default 0.85-1.2) squash / stretch
+
+  Burst Timing
+    burstDuration      (float, default 0.48) particle lifetime
+    durationJitter     (0-0.8, default 0.18) +/- lifetime randomness
+    popDuration        (float, default 0.055) fast pop at the start
+    fadeStartFraction  (0-1, default 0.52) when shrink + fade begins
+
+  Burst Movement
+    spawnRadius               (float, default 0.045) so drops do not start stacked
+    speedMin / speedMax       (default 1.25 / 3.15)
+    horizontalSpeedMultiplier (default 0.85)
+    verticalSpeedMultiplier   (default 1.15)
+    gravity                   (default -6.2) applied after the burst
+    drag                      (default 2.6) higher = stops faster
+    upwardBias                (0-1, default 0.72) 0 = full circle, 1 = mostly up
+    turbulence                (default 0.22) extra random drift over time
+
+  Impact Punch
+    popScaleBoost   (default 1.28) brief scale-up at spawn
+    startDelayMax   (default 0.025) tiny stagger so drops do not all move on the
+                    same frame
+
+  Rotation
+    maxRandomSpin   (default 520) degrees per second
+
+  Sorting / Layer
+    sortingOrderOffset (int, default 2) SpriteRenderer order offset
+
+  Color Mapping
+    blueColor, crimsonColor, greenColor, pinkColor, ... one Color per colorId,
+    used to tint the spawned drops so the debris matches the broken block.
+
+HOW IT CONNECTS
+---------------
+  - MatchResolver.ScaleDownAndExplode finds this manager with FindObjectOfType
+    and calls Explode(piece.transform, piece.ColorId) once per cleared piece.
+  - The colour mapping here parallels PieceColorPalette - two separate colour
+    tables that must be kept in agreement by hand.
+
+NOTES
+-----
+  - MatchResolver calls FindObjectOfType<FractureObject>() once PER PIECE per
+    clear. Caching the reference would avoid a scene search during the most
+    visually busy moment of the game.
+  - With 24-36 particles per block and a group of several blocks, a single blast
+    can instantiate well over a hundred GameObjects at once. There is no object
+    pooling, so this is the largest single source of GC pressure in the game.
+    Pooling the drops would be the highest-value performance change on mobile.
+  - Colours are individual named fields rather than an array indexed by colorId,
+    so adding an eighth colour requires editing the script.

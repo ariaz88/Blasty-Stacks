@@ -1,0 +1,46 @@
+================================================================================
+  PlayerStats.cs
+  Path : Assets/Scripts/Combat/Player/PlayerStats.cs
+  Type : MonoBehaviour, extends CharacterStats
+  Layer: Combat / Player
+================================================================================
+
+PURPOSE
+-------
+Holds a player unit's live health and handles incoming damage. Inherits the
+shared health fields from CharacterStats.
+
+FIELDS
+------
+  PlayerManager  cached in Awake via GetComponent
+  healthBar      (HealthBar) the floating bar above the unit
+  playerIsdead   (bool) set once HP reaches zero; polled by PlayerAttackState
+
+LIFECYCLE
+---------
+  Awake()  caches the PlayerManager
+  Start()  initialises the health bar from currentHP / maxHealth
+
+METHODS
+-------
+  ApplyDamageToPlayer(float damageAmount)
+      Subtracts damage, clamped so HP never goes below zero and a negative
+      damage value cannot heal. Updates the health bar, and sets playerIsdead
+      when HP hits zero.
+
+HOW IT CONNECTS
+---------------
+  - EnemyDamageCollider calls ApplyDamageToPlayer on contact.
+  - PlayerAttackState reads playerIsdead to route into PlayerDeathState.
+  - PlayerManager reads and writes the inherited health fields.
+
+NOTES
+-----
+  - INCONSISTENCY: Start() initialises the bar with maxHealth (from
+    CharacterStats), but ApplyDamageToPlayer refreshes it with
+    PlayerManager.statsBase.maxHP (the design-time SO value). If a roguelite
+    skill raises max HP at runtime, those two denominators disagree and the bar
+    will render at the wrong ratio after the first hit. Using the same source in
+    both places would fix it.
+  - Setting playerIsdead does not itself trigger the death state - PlayerManager
+    or PlayerAttackState must notice it on a later tick.

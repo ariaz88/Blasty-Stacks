@@ -1,0 +1,52 @@
+================================================================================
+  UnitStatsRuntime.cs
+  Path : Assets/Scripts/Data/Stats/UnitStatsRuntime.cs
+  Type : plain C# class, [System.Serializable]  (NOT a MonoBehaviour)
+  Layer: Data
+================================================================================
+
+PURPOSE
+-------
+The per-instance, mutable copy of a unit's stats. Every spawned player or enemy
+gets its own UnitStatsRuntime so that buffs, upgrade levels and roguelite skill
+multipliers can change its numbers WITHOUT touching the shared UnitStatsSO asset.
+
+This "SO = design data / Runtime = live data" split is the backbone of the whole
+stat system.
+
+FIELDS
+------
+  attack, defense, maxHP            copied from the SO, then modified
+  attackSpeed, moveSpeed, attackRange
+  type            (FighterType)
+  initialized     (bool)  set true once FromSO has run
+
+METHODS
+-------
+  FromSO(UnitStatsSO so)
+      Copies every value out of the design-time asset and sets initialized=true.
+      Safely does nothing if 'so' is null.
+
+  ApplyMultipliers(atkMult, defMult, hpMult, moveMult, atkSpdMult, rangeMult)
+      Multiplies the current values in place. All parameters default to 1.
+      This is what the roguelite skill layer calls when a skill card is picked -
+      effects therefore STACK multiplicatively across picks.
+
+  ApplyLevelGrowth(level, atkPct, hpPct, movePct, atkSpdPct, defPct, rangePct)
+      Applies compound growth for an upgrade level: each stat is multiplied by
+      (1 + pct) raised to the power (level - 1). So level 1 = no change.
+
+HOW IT CONNECTS
+---------------
+  - PlayerStats / EnemyStats each hold one of these as their live stat block.
+  - PlayerStatsApplier and RogueliteManager call ApplyMultipliers().
+  - ProgressionMath.GetGrowthMultipliers() produces the growth used for upgrades.
+  - CPCalculator.UnitCP() reads these live values to compute Combat Power.
+
+NOTES
+-----
+  - ApplyMultipliers and ApplyLevelGrowth both mutate in place and are NOT
+    idempotent. Calling either twice applies the effect twice. Order of
+    operations therefore matters: base -> level growth -> skill multipliers.
+  - There is no "reset to base" method. To recompute cleanly you must call
+    FromSO() again and re-apply everything.

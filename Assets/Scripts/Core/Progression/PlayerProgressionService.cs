@@ -159,8 +159,6 @@ public class PlayerProgressionService
         int oldLevel = _units.GetLevel(unitId);
         int cost = GetUpgradeCost(unitId);
 
-        //if (!_currency.TrySpendGems(cost))
-        //    return false;
 
         if (!_currency.TrySpendCoins(cost)) return false;
 

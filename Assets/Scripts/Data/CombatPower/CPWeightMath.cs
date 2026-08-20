@@ -38,8 +38,6 @@ public static class CPWeightMath
         // NEW: range
         w.wR = Mathf.Clamp(cfg.wRangeByLevel.Evaluate(L), clampMin, clampMax) * s;
 
-        //w.meleeMult = Mathf.Clamp(cfg.meleeMultByLevel.Evaluate(L), 0.1f, 5f);
-        //w.meleeMult = Mathf.Clamp(cfg.meleeMultByLevel.Evaluate(L), 0.1f, 5f);
         w.rangedMult = Mathf.Clamp(cfg.rangedMultByLevel.Evaluate(L), 1, 5f);
         w.rangedMult = Mathf.Clamp(cfg.rangedMultByLevel.Evaluate(L), 1, 5f);
 

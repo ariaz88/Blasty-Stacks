@@ -1,0 +1,62 @@
+================================================================================
+  PlayerGateStats.cs
+  Path : Assets/Scripts/Combat/Player/PlayerGateStats.cs
+  Type : MonoBehaviour, extends CharacterStats
+  Layer: Combat / Player
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The player's BASE / castle. Its destruction is the LOSE condition of a stage.
+It tracks health, shows a health bar and a numeric label, and broadcasts a
+static event when it falls.
+
+THE KEY EVENT
+-------------
+  public static event Action OnGateDestroyed;
+      A static event, so LevelGameManager can subscribe without any scene
+      wiring. This is the clean event seam between gameplay and game-flow.
+
+FIELDS
+------
+  playerManager        cached in Awake
+  healthBar            (HealthBar) the visual bar
+  isPlayerGateDestroyed (bool) latch preventing double-destruction
+  baseTxt              (TextMeshProUGUI) numeric HP label on the gate
+
+LIFECYCLE
+---------
+  Awake()  caches the PlayerManager
+  Start()  initialises the health bar (null-checked) and writes currentHP into
+           baseTxt
+
+METHODS
+-------
+  ApplyDamageToPlayerGate(float damageAmount)
+      Returns immediately if already destroyed. Subtracts damage clamped so HP
+      cannot go below 0 and negative damage cannot heal. Updates the label
+      (floored to an int) and the bar. At zero HP calls DestroyGate().
+
+  DestroyGate()  [private]
+      Guarded by isPlayerGateDestroyed so it can only fire once, then raises
+      OnGateDestroyed.
+
+  DeactivateGate()  [coroutine]
+      Waits 0.5s then deactivates the GameObject. NOTE: it is defined but never
+      started - the gate currently stays visible after destruction.
+
+HOW IT CONNECTS
+---------------
+  - EnemyDamageCollider calls ApplyDamageToPlayerGate.
+  - LevelGameManager subscribes to OnGateDestroyed and moves the game into the
+    ReviveOffer / Lost state.
+
+NOTES
+-----
+  - baseTxt is NOT null-checked in Start or in ApplyDamageToPlayerGate, unlike
+    healthBar. A gate prefab without the label assigned will throw a
+    NullReferenceException on the first hit.
+  - Because it is a STATIC event, a subscriber that fails to unsubscribe will
+    leak across scene loads. LevelGameManager correctly unsubscribes in
+    OnDisable.

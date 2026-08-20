@@ -1,0 +1,51 @@
+================================================================================
+  EnemyStats.cs
+  Path : Assets/Scripts/Combat/Enemy/EnemyStats.cs
+  Type : MonoBehaviour, extends CharacterStats
+  Layer: Combat / Enemy
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+An enemy's live health, plus the "approach slots" that tell attacking players
+where to stand. Extends CharacterStats for the HP fields.
+
+FIELDS
+------
+  enemyManager      cached in Awake
+  healthBar         (HealthBar) floating bar
+  enemyIsdead       (bool) set when HP reaches zero
+  EnemyOffsetLeft   (Transform) a stand-here point on the enemy's left
+  EnemyOffsetRight  (Transform) the same on its right
+
+LIFECYCLE
+---------
+  Awake()  caches the EnemyManager
+  Start()  initialises the health bar if one is assigned (null-checked)
+
+METHODS
+-------
+  GetOffsetFacingPlayer(Vector2 playerPos) -> Transform
+      Returns whichever side offset is NEARER the given player position, using
+      squared distance (no sqrt). Falls back to whichever single offset exists,
+      and finally to the enemy's own transform if neither is set.
+      This is what makes attackers surround an enemy from the correct side
+      instead of all piling onto one point.
+
+  ApplyDamageToEnemy(float damageAmount)
+      Subtracts damage clamped so HP cannot fall below zero and negative damage
+      cannot heal. Refreshes the bar. Sets enemyIsdead at zero HP.
+
+HOW IT CONNECTS
+---------------
+  - PlayerDamageCollider calls ApplyDamageToEnemy.
+  - EnemyManager polls enemyIsdead to run the death sequence and award XP.
+  - TargetDetectionForPlayer uses GetOffsetFacingPlayer to pick an approach slot.
+
+NOTES
+-----
+  - healthBar is null-checked in Start but NOT in ApplyDamageToEnemy, so an
+    enemy prefab without a bar throws on its first hit.
+  - Unlike PlayerStats, the bar is refreshed against maxHealth consistently
+    here, so it does not suffer the denominator mismatch PlayerStats has.

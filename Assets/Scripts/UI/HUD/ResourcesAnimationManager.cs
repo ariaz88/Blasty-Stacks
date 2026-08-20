@@ -16,9 +16,6 @@ public class ResourcesAnimationManager : MonoBehaviour
     [SerializeField] RectTransform coinTargetUI;
     [SerializeField] RectTransform gemTargetUI;
     [SerializeField] RectTransform XPTargetUI;
-    //[SerializeField] RectTransform coinStartPos;
-    //[SerializeField] RectTransform gemStartPos;
-    //[SerializeField] RectTransform XPStartPos;
 
     [Header("Available Items")]
     [SerializeField] int MaxCoin;
@@ -52,7 +49,6 @@ public class ResourcesAnimationManager : MonoBehaviour
 
     private void Animate1(Vector3 collectedItemPosition, RectTransform targetUI, Queue<GameObject> itemQueue, int amount)
     {
-        //GameObject canvas = GameObject.Find("Canvas");
         if (canvas == null) return;
 
         RectTransform canvasRect = canvas.GetComponent<RectTransform>();
@@ -162,5 +158,3 @@ public class ResourcesAnimationManager : MonoBehaviour
 
 
 }
-
-

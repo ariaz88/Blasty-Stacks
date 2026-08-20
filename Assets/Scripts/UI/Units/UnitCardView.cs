@@ -101,7 +101,6 @@ public class UnitCardView : MonoBehaviour
     {
         _selected = selected;
         if (selectedHighlight) selectedHighlight.SetActive(selected);
-        //ApplyVisuals();
         if (bgHighlighted) bgHighlighted.enabled = selected;
         if (BGNormal) BGNormal.enabled = !selected;
     }
@@ -129,11 +128,9 @@ public class UnitCardView : MonoBehaviour
 
     private void SetLevelText(int level)
     {
-        //if (levelText) levelText.text = $"{Mathf.Max(1, level)}";
 
         if (levelText)
         {
-            //string valueColorHex = ColorUtility.ToHtmlStringRGBA(stageValueColor);
 
             levelText.text =
                 $"<color=#FFFFFF>LVL.</color>\u2009" +
@@ -146,19 +143,13 @@ public class UnitCardView : MonoBehaviour
         // Backgrounds
         if (BGNormal) BGNormal.gameObject.SetActive(_unlocked);
         if (bgGrayOut) bgGrayOut.gameObject.SetActive(!_unlocked);
-        //if (bgHighlighted) bgHighlighted.gameObject.SetActive(_unlocked/* && _selected*/);
-
-        // IMPORTANT: let overlay methods control the border; keep it off by default here
-        //if (bgHighlighted) bgHighlighted.enabled = false;
 
 
 
 
 
 
-        // Portrait tint (dim when locked)  this code gray outs the BG by code!!!!!!!
-        //if (portraitImage)
-        //    portraitImage.color = _unlocked ? Color.white : new Color(1f, 1f, 1f, 0.5f);
+
     }
 
     /// <summary>
@@ -207,10 +198,8 @@ public class UnitCardView : MonoBehaviour
         if (!visible) return;
 
        
-        //if (stageValueText) stageValueText.text = $"STAGE {requiredLevelIndex}-{requiredStageIndexWithinLevel}";
         if (stageValueText)
         {
-            //string valueColorHex = ColorUtility.ToHtmlStringRGBA(stageValueColor);
 
             stageValueText.text =
                 $"<color=#FFFFFF>STAGE</color>\u2009" +
@@ -279,33 +268,13 @@ public class UnitCardView : MonoBehaviour
     }
 
 
-    // === Overlay helpers ===
 
-    // Called for UNDEPLOYED candidate: turn on green border; make sure full overlay is off
-    //public void SetOverlayCandidate(bool on)
-    //{
-    //    //if (selectedHighlight) selectedHighlight.SetActive(false);
-    //    if (bgHighlighted) bgHighlighted.enabled = on;
-    //    if (BGNormal) BGNormal.enabled = false;
-    //}
 
     //// Called for DEPLOYED targets: turn on full green overlay on ALL deployed cards
-    //public void SetDeployedTargetStyle(bool on)
-    //{
-    //    if (selectedHighlight) selectedHighlight.SetActive(on);
-    //    if (bgHighlighted) bgHighlighted.enabled = false; // no border on deployed
-    //}
 
     //// Clear both decorations (used when leaving overlay)
-    //public void ClearOverlayMarks()
-    //{
-    //    if (selectedHighlight) selectedHighlight.SetActive(false);
-    //    if (bgHighlighted) bgHighlighted.enabled = false;
-    //    if (BGNormal) BGNormal.enabled = true;
-    //    if (selectedHighlight) selectedHighlight.SetActive(false);
 
 
-    //}
 
     public void SetOverlayCandidate1(bool on)
     {
@@ -361,105 +330,7 @@ public class UnitCardView : MonoBehaviour
     }
 
 
-    //public void DeactiveNormalBG()
-    //{
-    //    if (BGNormal) BGNormal.gameObject.SetActive(false);
 
-    //}
 
 
 }
-
-//public class UnitCardView1 : MonoBehaviour
-//{
-//    [Header("UI Refs (assign in Prefab)")]
-//    [SerializeField] private Image portraitImage;
-//    [SerializeField] private TMP_Text levelText;
-//    [SerializeField] private GameObject lockOverlay;
-//    [SerializeField] private Button clickButton;
-//    [SerializeField] private GameObject selectedHighlight;
-
-//    /// <summary> The unit this card represents. </summary>
-//    public int UnitId { get; private set; }
-
-//    // Internal
-//    private bool _unlocked;
-//    private Action _onClick;
-
-//    /// <summary>
-//    /// Binds this card's visuals to a unit definition and initial state.
-//    /// Also wires the click callback (only fires when unlocked).
-//    /// </summary>
-//    public void Bind(UnitDefinitionSO def, bool unlocked, int level, Action onClick)
-//    {
-//        if (def == null)
-//        {
-//            Debug.LogWarning("[UnitCardView] Bind called with null UnitDefinitionSO.");
-//            return;
-//        }
-
-//        UnitId = def.unitId;
-//        _unlocked = unlocked;
-//        _onClick = onClick;
-
-//        if (portraitImage) portraitImage.sprite = def.portrait;
-//        SetLevelText(level);
-//        ApplyLockVisual(unlocked);
-
-//        // Ensure selected highlight starts off
-//        if (selectedHighlight) selectedHighlight.SetActive(false);
-
-//        // Wire click
-//        if (clickButton)
-//        {
-//            clickButton.onClick.RemoveAllListeners();
-//            clickButton.onClick.AddListener(HandleClick);
-//        }
-//    }
-
-//    /// <summary>
-//    /// Updates only the lock badge and level label (used after upgrades/unlocks).
-//    /// </summary>
-//    public void RefreshBadge(bool unlocked, int level)
-//    {
-//        _unlocked = unlocked;
-//        ApplyLockVisual(unlocked);
-//        SetLevelText(level);
-//    }
-
-//    /// <summary>
-//    /// Toggles the visual state for "selected" (e.g., a glow frame).
-//    /// </summary>
-//    public void SetSelected(bool selected)
-//    {
-//        if (selectedHighlight) selectedHighlight.SetActive(selected);
-//    }
-
-//    /// <summary>
-//    /// Click handler: only forwards the click if this unit is unlocked.
-//    /// (Locked cards are visible but uninteractable.)
-//    /// </summary>
-//    private void HandleClick()
-//    {
-//        if (!_unlocked) return;
-//        _onClick?.Invoke();
-//    }
-
-//    private void SetLevelText(int level)
-//    {
-//        if (levelText) levelText.text = $"Lv. {Mathf.Max(1, level)}";
-//    }
-
-//    private void ApplyLockVisual(bool unlocked)
-//    {
-//        if (lockOverlay) lockOverlay.SetActive(!unlocked);
-
-//        // Disable the button if locked so it's not interactable
-//        if (clickButton) clickButton.interactable = unlocked;
-
-//        // Optional: dim portrait when locked
-//        if (portraitImage) portraitImage.color = unlocked ? Color.white : new Color(1f, 1f, 1f, 0.5f);
-//    }
-
-
-//}

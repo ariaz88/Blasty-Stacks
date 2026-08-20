@@ -1,0 +1,40 @@
+================================================================================
+  CPConfigSO.cs
+  Path : Assets/Scripts/Data/CombatPower/CPConfigSO.cs
+  Type : ScriptableObject   (menu: "TD/CP Weights (Curves)")
+  Layer: Data
+================================================================================
+
+  !! FILENAME MISMATCH: the file is CPConfigSO.cs but the class inside is named
+  !! CPWeightsConfigSO. This is legal for a ScriptableObject (unlike a
+  !! MonoBehaviour) but it makes the class hard to find by filename.
+
+PURPOSE
+-------
+Holds the weighting curves used to convert a unit's raw stats into a single
+"Combat Power" (CP) number - the score shown in the UI so the player can compare
+units and judge whether they are strong enough for a stage.
+
+FIELDS
+------
+  Stat weights - x = level, y = how much that stat counts toward CP
+    wAttackByLevel        (default 1.00 -> 0.90)   attack dominates CP
+    wHPByLevel            (default 0.15 -> 0.12)
+    wMoveSpeedByLevel     (default 0.25 -> 0.20)
+    wAttackSpeedByLevel   (default 0.40 -> 0.45)   grows in importance
+    wDefenseByLevel       (default 0.00 -> 0.05)   ignored at low level
+    wRangeByLevel         (default 0.05 -> 0.04)   deliberately small
+
+  Type flavour
+    meleeMultByLevel      (default flat 1.00)
+    rangedMultByLevel     (default flat 1.05)  ranged units score ~5% higher
+
+  Safety
+    wClamp                (Vector2, default -10..10) clamps each evaluated weight
+    globalWeightScaleByLevel  (default flat 1.00) scales ALL weights at once
+
+HOW IT CONNECTS
+---------------
+  - Consumed by CPWeightMath.Evaluate(), which is called by CPCalculator.
+  - Assets: "Assets/Scriptable Objects/CP/Player CP.asset" and "EnemyCP.asset"
+    (player and enemy CP can be weighted differently).

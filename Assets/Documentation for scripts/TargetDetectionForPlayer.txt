@@ -1,0 +1,84 @@
+================================================================================
+  TargetDetectionForPlayer.cs
+  Path : Assets/Scripts/Combat/Player/TargetDetectionForPlayer.cs
+  Type : MonoBehaviour
+  Layer: Combat / Player
+  Scenes: all 9 build scenes
+================================================================================
+
+PURPOSE
+-------
+All of the player's enemy-finding logic in one place. The FSM states call a
+single method, EnsureTarget(), and this class decides whether the current target
+is still valid, acquires a new one, and optionally switches to a nearer enemy
+without jittering back and forth.
+
+Centralising this is why PlayerIdleState is only five lines long.
+
+INSPECTOR FIELDS
+----------------
+  Detection
+    enemyDetectionLayer  (LayerMask) which layers count as enemies
+    use2D                (bool, default true) use Physics2D.OverlapCircleAll
+                         instead of the 3D Physics.OverlapSphere
+
+  Retargeting
+    allowNearestSwitch   (bool, default false) may abandon a valid target for a
+                         closer one
+    onlySwitchIfInFront  (bool, default true) candidate must be inside the FOV
+    respectFOV           (bool, default false) apply the FOV test when
+                         validating or searching
+    retargetHysteresis   (float, min 0, default 0.35)
+                         A candidate must be at least this much NEARER before a
+                         switch happens. This is the anti-jitter guard: without
+                         it, two enemies at nearly equal distance would make the
+                         unit flip target every frame.
+
+KEY METHODS
+-----------
+  EnsureTarget(bool? overrideAllowNearestSwitch = null) -> bool
+      The single entry point called from the states.
+      1. If the current target is invalid, acquire the nearest enemy. If one is
+         found, set playerManager.hasDetectedEnemyOnce = true (a latch other
+         systems use to know the unit has engaged at least once).
+      2. If retargeting is allowed, find the nearest OTHER enemy and switch only
+         when it passes the FOV gate AND is nearer by more than the hysteresis.
+      Returns whether a valid target exists afterwards.
+      The optional parameter lets a caller force retargeting on or off - for
+      example PlayerIdleState calls EnsureTarget(true).
+
+  IsTargetValid(EnemyStats target, bool doFOV) -> bool
+      Conservative checks in order: not null, activeInHierarchy, within
+      playerManager.detectionRadius, and optionally inside the FOV.
+
+  AcquireNearestEnemy(bool doFOV, EnemyStats exclude, out float bestDist)
+      Runs an overlap query (2D or 3D depending on use2D) against
+      enemyDetectionLayer within playerManager.detectionRadius, and returns the
+      nearest valid EnemyStats using squared distance. Can exclude one candidate
+      (used to find "the nearest OTHER enemy").
+
+  AnyEnemyAliveInScene() -> bool
+      Used by PlayerPursueTargetState to decide whether it is allowed to switch
+      to attacking the enemy gate - units only go for the gate once no enemies
+      remain.
+
+  IsWithinFOV(Vector3 pos) / Distance2D3D(a, b)
+      Helpers shared by the above, honouring the use2D flag.
+
+HOW IT CONNECTS
+---------------
+  - PlayerIdleState, PlayerPursueTargetState and PlayerCombatState all rely on
+    it instead of running their own physics queries.
+  - Writes playerManager.currentTarget and hasDetectedEnemyOnce.
+
+NOTES
+-----
+  - A dead numbered variant EnsureTarget1() remains. It is identical except that
+    it does not set hasDetectedEnemyOnce. The un-numbered version is live.
+  - The overlap queries allocate an array on every call (OverlapCircleAll rather
+    than the NonAlloc variant). Because they run per unit per state tick, using
+    Physics2D.OverlapCircleNonAlloc with a reusable buffer would remove a
+    meaningful amount of per-frame garbage when many units are alive.
+  - respectFOV defaults to FALSE, so by default units will target enemies behind
+    them. That is probably intentional for an auto-battler, but it means the FOV
+    fields have no effect unless explicitly enabled.

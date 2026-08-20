@@ -1,0 +1,40 @@
+================================================================================
+  PlayerCombatState.cs
+  Path : Assets/Scripts/Combat/Player/States/PlayerCombatState.cs
+  Type : PlayerState (MonoBehaviour)
+  Layer: Combat / Player / States
+================================================================================
+
+PURPOSE
+-------
+The "in range, what now" decision state. It sits between pursuing and swinging:
+it checks the attack cooldown and the target's distance each frame and routes to
+the right place.
+
+INSPECTOR FIELDS
+----------------
+  PlayerAttackState        entered when the cooldown is ready and the target is
+                           in range
+  PlayerPursueTargetState  entered when the target is lost or has moved away
+  playerLockState          entered if the unit is not yet released
+
+Tick()
+------
+  1. If playerLockState is assigned and !pm.isUnlocked -> return lock.
+  2. If pm.currentTarget is null -> return PlayerPursueTargetState (reacquire).
+  3. Measure distance to the target.
+  4. If pm.currentRecoveryTimer <= 0 AND distance <= pm.maxAttackRange
+         -> return PlayerAttackState   (swing now)
+  5. If distance > pm.maxAttackRange
+         -> return PlayerPursueTargetState  (chase again)
+  6. Otherwise return this - in range but still on cooldown, so wait here.
+
+HOW IT CONNECTS
+---------------
+  - currentRecoveryTimer is decremented by PlayerManager; this state only reads
+    it. That keeps the attack-rate logic in one place.
+
+NOTES
+-----
+  - Step 6 is the attack cooldown wait. The unit stands in range doing nothing
+    until the recovery timer expires, which is what makes attackSpeed matter.

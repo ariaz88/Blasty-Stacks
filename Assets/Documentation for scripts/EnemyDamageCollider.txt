@@ -1,0 +1,60 @@
+================================================================================
+  EnemyDamageCollider.cs
+  Path : Assets/Scripts/Combat/Enemy/EnemyDamageCollider.cs
+  Type : MonoBehaviour
+  Layer: Combat / Enemy
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The enemy's attack HITBOX. Enabled only during the active frames of an attack
+animation, it damages the player unit or the player's gate on contact.
+
+FIELDS
+------
+  enemyManager       cached in Awake from parents
+  damageToPlayer     scratch value
+  playerBodyLayer    (int) resolved ONCE in Awake from "PlayerLayer"
+  playerCastleLayer  (int) resolved ONCE in Awake from "PlayerCastle"
+  enemyDmgCollider   (CapsuleCollider2D) the actual hitbox, assigned in Inspector
+
+LIFECYCLE
+---------
+  Awake()  caches the manager and RESOLVES THE LAYER INDICES ONCE. This is
+           better practice than the player's collider, which calls
+           LayerMask.NameToLayer on every trigger event.
+  Start()  disables enemyDmgCollider so the enemy starts harmless - the hitbox
+           only turns on during an attack animation.
+
+OnTriggerEnter2D(Collider2D other)
+----------------------------------
+  Branches purely on the other object's layer:
+
+  PLAYER BODY (playerBodyLayer)
+      1. Requires a PlayerStats component and a non-null PlayerManager.
+      2. STATE GUARD: returns if pm.currentState == pm.PlayerLockState - so a
+         player unit that has not been released yet cannot be damaged. This
+         protects freshly spawned waves waiting at the gate.
+      3. Computes damage via enemyManager.DamageApplying(pm) and applies it.
+
+  PLAYER CASTLE (playerCastleLayer)
+      Finds PlayerGateStats in the parents, computes damage using the gate's own
+      playerManager, and calls ApplyDamageToPlayerGate.
+
+HOW IT CONNECTS
+---------------
+  - Enabled/disabled by EnemyAnimatorManager's animation events.
+  - Damage flows to PlayerStats.ApplyDamageToPlayer and
+    PlayerGateStats.ApplyDamageToPlayerGate.
+  - Losing the gate raises PlayerGateStats.OnGateDestroyed -> LevelGameManager
+    shows the revive/lose flow. This class is therefore the direct cause of the
+    lose condition.
+
+NOTES
+-----
+  - Layer names "PlayerLayer" and "PlayerCastle" are magic strings. If either is
+    missing, NameToLayer returns -1, no branch matches, and enemies silently
+    deal no damage at all.
+  - Two dead numbered variants (EnemyDamageCollider1 / EnemyDamageCollider2)
+    were removed from this file in the 2026-08-20 cleanup.

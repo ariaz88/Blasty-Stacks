@@ -11,8 +11,6 @@ public class PlayerStats : CharacterStats
     }
     void Start()
     {
-        //maxHealth = PlayerManager.statsBase.maxHP;
-        //currentHP = maxHealth;
         healthBar.SetCurrentHealth(currentHP, maxHealth);
 
     }
@@ -20,7 +18,6 @@ public class PlayerStats : CharacterStats
 
     public void ApplyDamageToPlayer(float damageAmount)
     {
-        //currentHP -= damageAmount;
         currentHP = Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount));
         healthBar.SetCurrentHealth(currentHP , PlayerManager.statsBase.maxHP);
         if (currentHP <= 0)

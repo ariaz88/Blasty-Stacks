@@ -1,0 +1,59 @@
+================================================================================
+  SaveData.cs
+  Path : Assets/Scripts/Core/SaveLoad/SaveData.cs
+  Type : plain C# class, [Serializable]   (NOT a MonoBehaviour)
+  Layer: Core / SaveLoad
+================================================================================
+
+PURPOSE
+-------
+The complete shape of the player's save file. One instance of this object is
+serialized to JSON by JsonUtility and stored in a single PlayerPrefs key.
+Everything the game remembers between sessions lives here.
+
+FIELDS
+------
+  version              (int, =1)  schema version, used by SaveSystem migration.
+
+  Economy
+    gems               (int) premium currency - used for upgrades and revives
+    coins              (int) soft currency
+    heroXp             (int) hero experience
+
+  Units
+    units              (List<UnitStateEntry>) per-unit unlock / level / deployed
+    deployedUnitOrder   (List<int>) unitIds in the player's chosen display order
+    undeployedUnitOrder (List<int>) same for the bench
+        These two exist so the roster screen remembers how the player arranged
+        their cards, which is presentation state rather than pure progression.
+
+  Stages
+    stages             (StageSection) legacy single-chapter progress
+    levels             (List<LevelProgress>) per-level progress, the current path
+
+  savedAtUtc           (string) timestamp of last save
+
+NESTED TYPES
+------------
+  UnitStateEntry { unitId, unlocked, level, isDeployed }
+      The constructor clamps level to a minimum of 1, so a corrupt 0 can never
+      enter the model.
+
+  LevelProgress  { levelId, highestUnlocked (0-based), stars[] }
+      stars array length equals the number of stages in that level.
+
+  StageSection   { highestUnlocked (0-based), stars[] }
+      An earlier, single-chapter representation kept alongside 'levels'.
+
+HOW IT CONNECTS
+---------------
+  - SaveSystem owns exactly one cached instance and serializes it.
+  - GameStartManager converts UnitStateEntry into PlayerUnitsModel.UnitState.
+  - HomeManager / StageCard read levels[] for stars and unlock state.
+
+NOTES
+-----
+  - Two overlapping stage representations ('stages' and 'levels') coexist. New
+    code should use 'levels'; 'stages' is the older single-chapter form.
+  - JsonUtility does not serialize properties or dictionaries, which is why
+    everything here is a public field or a List.

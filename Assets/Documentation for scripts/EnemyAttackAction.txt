@@ -1,0 +1,33 @@
+================================================================================
+  EnemyAttackAction.cs
+  Path : Assets/Scripts/Combat/Enemy/EnemyAttackAction.cs
+  Type : ScriptableObject   (menu: "AI/Enemy/Attack Action")
+  Layer: Combat / Enemy
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The design-time definition of one enemy attack. One asset per enemy archetype,
+stored under "Assets/Scriptable Objects/Attacks/EnemyAttacks/".
+
+FIELDS
+------
+  animationName              (string, default "Attack_01") Animator state to play
+  minDistanceNeededToAttack  (float, default 0)
+  maxDistanceNeededToAttack  (float, default 3)  usable distance band
+  recoveryTime               (float, default 0.6) cooldown after the swing
+  speedMultiplier            (float, default 1.0) animation speed
+
+HOW IT CONNECTS
+---------------
+  - EnemyManager selects and executes one of these.
+  - Existing assets: Enemy_Orc_Attack, Enemy_Golem_01_Attack,
+    Enemy_Reaper_Man_01_Attack, Enemy_Skeleton_Crusader_1_Attack, etc.
+
+NOTES
+-----
+  - Simpler than PlayerAttackAction - it has no attackScore or angle fields,
+    which matches the fact that enemy AI is intentionally less sophisticated.
+  - Its default recoveryTime (0.6s) is much shorter than the player's (2s),
+    so enemies swing considerably faster by default.

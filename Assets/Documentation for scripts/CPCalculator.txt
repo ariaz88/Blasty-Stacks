@@ -1,0 +1,43 @@
+================================================================================
+  CPCalculator.cs
+  Path : Assets/Scripts/Data/CombatPower/CPCalculator.cs
+  Type : static class
+  Layer: Data
+================================================================================
+
+PURPOSE
+-------
+Computes "Combat Power" - the single number the UI shows to summarise how strong
+a unit or a squad is. CP is a weighted sum of live stats, adjusted by a
+melee/ranged multiplier.
+
+METHODS
+-------
+  UnitCP(UnitStatsRuntime s, int level, CPWeightsConfigSO cfg) -> int
+      1. Samples the weights for this level via CPWeightMath.Evaluate.
+      2. baseScore = wA*attack + wH*maxHP + wMv*moveSpeed
+                   + wAS*attackSpeed + wD*defense + wR*attackRange
+      3. Classifies the unit: Archer and Mage count as RANGED, Warrior and
+         Horseman as MELEE, and applies the matching multiplier.
+      4. Returns the rounded integer.
+      Returns 0 if either argument is null.
+
+  SquadCP(UnitStatsRuntime[] squad, int level, cfg) -> int
+      Sums UnitCP over the array using ONE shared level for all units.
+
+  SquadCP(UnitStatsRuntime[] squad, int[] levels, cfg) -> int
+      Same, but with a per-unit level array. Returns 0 if the array lengths
+      do not match - a silent failure worth being aware of.
+
+  EffectiveHP(UnitStatsRuntime s) -> float
+      Converts HP + defense into an "effective HP" figure using the same damage
+      formula as combat:  dmgFraction = 100 / (100 + defense)
+      effectiveHP = maxHP / dmgFraction  (so defense multiplies survivability).
+      NOTE: this mirrors CombatMath - if the damage formula there ever changes,
+      this must change with it or the UI will lie to the player.
+
+HOW IT CONNECTS
+---------------
+  - Called by the unit roster / detail UI (UnitCardView, UnitDetailView,
+    BucketStatsPanel) to display CP.
+  - Reads live UnitStatsRuntime values, so CP reflects upgrades and buffs.

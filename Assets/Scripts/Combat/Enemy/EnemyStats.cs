@@ -15,8 +15,6 @@ public class EnemyStats : CharacterStats
     }
     void Start()
     {
-        //maxHealth = enemyManager.statsBase.maxHP;
-        //currentHP = maxHealth;
         if (healthBar != null)
         {
         healthBar.SetCurrentHealth(currentHP, maxHealth);

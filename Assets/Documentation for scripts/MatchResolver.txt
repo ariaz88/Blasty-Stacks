@@ -1,0 +1,126 @@
+================================================================================
+  MatchResolver.cs
+  Path : Assets/Scripts/Puzzle/Match/MatchResolver.cs
+  Type : MonoBehaviour
+  Layer: Puzzle / Match
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The BRIDGE between the puzzle half and the combat half of the game. It detects
+groups of matching connected pieces, clears them, and - crucially - fires the
+static OnBlast event that causes a wave of player warriors to spawn.
+
+This single event is the ONLY outbound dependency of the entire Puzzle layer.
+Everything else in Puzzle knows nothing about combat, which is why the puzzle
+module is so cleanly decoupled.
+
+THE KEY EVENT
+-------------
+  public static System.Action<int> OnBlast;
+      Raised with the number of groups cleared (always 1 in current code).
+      PlayerWaveManager subscribes to it and spawns a wave of units in response.
+      Being static means no wiring is needed between the two systems.
+
+INSPECTOR FIELDS
+----------------
+  board                        (BoardGridXY) auto-found in Awake if unassigned
+  minGroupSize                 (int, min 2, default 3) how many connected pieces
+                               are needed before a match resolves
+  preferMergeIfImmovablePresent (bool, default true) prefer sliding pieces
+                               together over blasting them in place
+  killAnimTime                 (float, default 0.15) clear animation duration
+  enableDebug                  (bool) verbose logging
+
+REUSED BUFFERS
+--------------
+  _footprint      (List<Vector2Int>)   reused to avoid per-call allocation
+  _neighborCells  (HashSet<Vector2Int>) same
+
+PUBLIC ENTRY POINTS
+-------------------
+  HasAnyStacksLeft() -> bool
+      "Are there still any playable pieces on the board?" Re-finds the board if
+      needed, then calls HasAnyActiveBlocksOnBoard.
+
+  HasAnyActiveBlocksOnBoard()  [private]
+      Calls FindObjectsOfType<PieceSimple>(false), then for each active piece
+      asks board.TryWorldToCell to see whether it currently sits on the grid.
+      Returns true on the first hit.
+      !! PERFORMANCE: PlayerWaveManager.WaveLoop() calls HasAnyStacksLeft()
+      !! inside a "while (...) yield return null" loop - i.e. ONCE PER FRAME
+      !! while waiting. Each call allocates an array of every PieceSimple in the
+      !! scene. This is the one genuine per-frame allocation in the project.
+      !! A registration list on the board (pieces add/remove themselves in
+      !! OnEnable/OnDisable) would remove it entirely.
+
+  ResolveFrom(PieceSimple origin)
+      The normal path, called after a piece is dropped.
+      1. Flood-fills to find the connected group of matching pieces.
+      2. Aborts if the group is smaller than minGroupSize.
+      3. If preferMergeIfImmovablePresent, picks the nearest other group member
+         and MERGES into it (an animated slide) instead of blasting.
+      4. Otherwise clears the whole group.
+
+  ResolveAll()
+      Sweeps every piece in the scene, builds all groups with a visited-set so
+      no piece is processed twice, and clears each qualifying group.
+
+CORE SEARCH
+-----------
+  FindConnectedIdenticalGroup(seed) -> List<PieceSimple>
+      Breadth-first search over the BOARD OCCUPANCY (not colliders). From each
+      piece it builds the 4-adjacent cell ring around its footprint, reads the
+      occupant id out of the grid, resolves it back to a piece via
+      PieceSimple.GetById, and enqueues it when the shape and colour match.
+
+  BuildFootprintNeighbors4(anchor, shape, outNeighbors)
+      Collects every 4-neighbour cell of every cell in the footprint, then
+      REMOVES the footprint's own cells so a piece never rediscovers itself.
+
+  AreShapesMatchCompatible(a, b) -> bool
+      Shapes match if their ids are equal, OR they are one of two hard-coded
+      compatible pairs:  B6 <-> B7,  and  B4 <-> B5.
+      !! These shape ids are magic strings in code. A designer renaming a shape
+      !! in the Inspector would silently break matching with no error.
+
+  FindNearestWithWarriors(origin, group) -> PieceSimple
+      Despite the name it does NOT check for warriors - it simply returns the
+      nearest OTHER piece in the group by squared distance. Misleading name.
+
+ACTIONS
+-------
+  ClearGroup(group)  [coroutine]
+      Releases every piece's cells FIRST, so the player can keep moving other
+      pieces while the clear animation plays. Then fires OnBlast(1), then plays
+      the clear animation for each piece and destroys them.
+      Two animation paths exist, selected by the DOTWEEN_ENABLED compile symbol
+      (currently NOT defined, so the manual coroutine path is live).
+
+  ScaleDownAndExplode(p)  [coroutine, non-DOTween path]
+      Lerps the piece scale down to 5% over killAnimTime, then finds the
+      FractureObject manager in the scene and calls Explode(transform, colorId)
+      to spawn the debris VFX, then destroys the piece after 0.05s.
+      !! Calls FindObjectOfType<FractureObject>() once PER PIECE per clear.
+
+  MergePieceInto(mover, target)  [coroutine]
+      Computes a simple L-shaped path, steps the mover one cell per frame along
+      it, then releases the target, fires OnBlast(1), and fades/destroys both.
+      If no clear path exists it falls back to simply clearing both pieces.
+
+  TryComputeStraightPath(from, to, shape, outPath) -> bool
+      Greedy L path: all X movement first, then all Y. Every intermediate anchor
+      must have a free footprint or the whole path fails. There is no
+      pathfinding around obstacles.
+
+  IsFootprintFreeAt(anchor, shape) -> bool
+      Uses moverId 0, i.e. "treat the mover as nothing", so the mover's own
+      current cells count as occupied during the check.
+
+HOW IT CONNECTS
+---------------
+  - Reads BoardGridXY occupancy; resolves ids through PieceSimple.GetById.
+  - Triggers FractureObject for the shatter VFX.
+  - Fires OnBlast -> PlayerWaveManager spawns a warrior wave. THE core link
+    between puzzle and combat.

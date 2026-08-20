@@ -237,7 +237,6 @@ public class RogueliteManager : MonoBehaviour
         isPaused = true;
         Time.timeScale = 0f;
 
-        //if (levelUpOverlay != null) levelUpOverlay.SetActive(true);
         if (skillSelectPanel != null) skillSelectPanel.SetActive(true);
 
 
@@ -267,8 +266,6 @@ public class RogueliteManager : MonoBehaviour
             cardSlots[i].Init(skill, timesSelected, OnSkillChosen);
         }
 
-        //if (levelUpOverlay != null) levelUpOverlay.SetActive(false);
-        //if (skillSelectPanel != null) skillSelectPanel.SetActive(true);
     }
 
     /// <summary>
@@ -427,5 +424,3 @@ public class RogueliteManager : MonoBehaviour
         UpdateActiveEnemies();
     }
 }
-
-

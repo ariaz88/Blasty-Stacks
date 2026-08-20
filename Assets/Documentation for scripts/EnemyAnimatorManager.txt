@@ -1,0 +1,42 @@
+================================================================================
+  EnemyAnimatorManager.cs
+  Path : Assets/Scripts/Combat/Enemy/EnemyAnimatorManager.cs
+  Type : MonoBehaviour, extends AnimatorManager
+  Layer: Combat / Enemy
+  Scenes: all 7 gameplay stages
+================================================================================
+
+PURPOSE
+-------
+The enemy counterpart to PlayerAnimatitorManager. It inherits
+PlayTargetAnimation from AnimatorManager and adds the ANIMATION EVENT hooks that
+switch the enemy's damage hitbox on and off during a swing.
+
+FIELDS
+------
+  locomotion           (EnemyLocomotionManager) found in parents
+  enemyDamageCollider  (EnemyDamageCollider) found in children
+
+ANIMATION EVENT METHODS
+-----------------------
+  EnableEnemyDamageCollier()   [sic - typo for "Collider"]
+      Enables enemyDamageCollider.enemyDmgCollider.
+  DisableEnemyDamageCollider()
+      Disables it.
+
+  Both are invoked from the attack animation clips, defining the "active frames"
+  during which the enemy can actually hurt something.
+
+HOW IT CONNECTS
+---------------
+  - Extends AnimatorManager.
+  - EnemyManager calls the inherited PlayTargetAnimation to start an attack.
+  - Note it reaches THROUGH EnemyDamageCollider to the CapsuleCollider2D field
+    inside it, rather than enabling the component itself.
+
+NOTES
+-----
+  - Same fragility as the player version: these methods are called BY NAME from
+    animation clips, so renaming one silently breaks every enemy attack. The
+    typo "Collier" must be preserved unless all clips are updated.
+  - The 'locomotion' field is assigned in Awake but never used.
