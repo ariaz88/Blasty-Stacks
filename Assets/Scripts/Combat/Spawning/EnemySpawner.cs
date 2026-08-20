@@ -10,8 +10,19 @@ public class EnemySpawner : MonoBehaviour
     [Header("CP weighting (optional)")]
     public CPWeightsConfigSO cpWeights;
 
+    [Header("Battle Gate")]
+    [Tooltip("ON  = puzzle-only start; nothing spawns until StartBattle() is called " +
+             "(the BATTLE button, through BattleStartController).\n" +
+             "OFF = old behaviour, waves begin as soon as the level loads.")]
+    [SerializeField] private bool waitForBattleStart = false;
+
     // Track wave-alive count if you still want to wait for clear
     int _alive;
+
+    bool _battleStarted;
+
+    /// <summary>True once the wave loop has actually been kicked off.</summary>
+    public bool BattleStarted => _battleStarted;
 
     void Start()
     {
@@ -20,6 +31,29 @@ public class EnemySpawner : MonoBehaviour
             Debug.LogWarning($"{name}: missing LevelConfig.");
             return;
         }
+
+        // Puzzle-only phase: hold every wave until the player presses BATTLE.
+        if (waitForBattleStart)
+            return;
+
+        StartBattle();
+    }
+
+    /// <summary>
+    /// Kicks off the wave loop. Safe to call repeatedly - only the first call runs.
+    /// Called by BattleStartController when the BATTLE button is pressed.
+    /// </summary>
+    public void StartBattle()
+    {
+        if (_battleStarted) return;
+
+        if (!levelConfig)
+        {
+            Debug.LogWarning($"{name}: missing LevelConfig.");
+            return;
+        }
+
+        _battleStarted = true;
         StartCoroutine(RunLevel());
     }
     bool IsGameplayPaused()

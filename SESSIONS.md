@@ -79,6 +79,18 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   `highlightDeployedId` arguments when refreshing the deploy overlay post-swap — cosmetic only
   (save data is correct) but the just-swapped cards probably lose their highlight. See
   `Assets/Documentation for scripts/UnitsPanelController.txt`.
+- **The TMP Static bake has not been proven end-to-end.** All font assets are Static with
+  clear-on-build off as of `ab1297e`, but nobody has yet deleted `Library/` and confirmed the fonts
+  survive the reimport without a manual "Generate Font Atlas". Do that once and this closes.
+  Re-run `Tools/Blasty/Fonts/Bake All TMP Fonts To Static` after adding or regenerating any font —
+  it is idempotent and skips assets that are already correct.
+- Duplicate `.ttf` files with no live reference: `Assets/Arts/FONTS/Lilita_One/LilitaOne-Regular.ttf`
+  duplicates `LILITAONE-REGULAR.TTF`, and `Dangrek/Dangrek-Regular.ttf` duplicates
+  `Dangrek-Regular 1.ttf`. Confirm which is unused and delete, so name-based font matching stops
+  being ambiguous.
+- `Dangrek-Regular 1 SDF.asset` uses a 2048×2048 atlas for ~42 characters (~8 MB of hex in the
+  repo). Shrink to 512 or 1024 by hand in Font Asset Creator — the bake tool does not change atlas
+  dimensions.
 - A full per-script reference now exists at `Assets/Documentation for scripts/` (101 `.txt`
   files, one per live script reachable from the 9 build scenes). Read the target file's doc
   there before editing it blind — each one lists dead numbered siblings, magic strings, and
@@ -95,12 +107,104 @@ _Durable choices with their reasons, so no session reopens them blindly._
 | 2026-08-20 | Cross-session state lives in `SESSIONS.md` at the repo root. | One file, tracked by git, readable by a human and by every session. |
 | 2026-08-20 | The **read** half is automated by a `SessionStart` hook (`.claude/hooks/inject-sessions.js`, wired in `.claude/settings.json`) that injects this file's contents into every session. | Relying on each session to remember to open the file made awareness optional; the hook makes it unconditional. |
 | 2026-08-20 | The **write** half is triggered by the `/wrap` slash command (`.claude/commands/wrap.md`), not by a hook. | No hook event reliably means "the session is ending", and a `Stop` hook fires after every response — far too noisy. An explicit one-word command is the honest mechanism. |
+| 2026-08-20 | TMP font assets in this project are **Static** atlas population, not Dynamic, with `ClearDynamicDataOnBuild` off (including the project-wide default in `TMP Settings.asset`). | Dynamic treats the glyph atlas as a rebuildable cache, so it does not survive a `Library/` wipe, a fresh clone, or a build — it forced a manual "Generate Font Atlas" every time. Static bakes glyphs into the `.asset`. Accepted cost: Static cannot add glyphs at runtime, so any font that must render Persian/Arabic or player-typed text is an explicit exception and stays Dynamic **with its Source Font File assigned**. |
+| 2026-08-20 | The conversion is done by a repeatable editor tool (`Assets/Scripts/Editor/TMPFontAssetStaticBaker.cs`), not by hand-editing the Inspector or patching the `.asset` YAML directly. | Hand-editing does not scale and is not reproducible for the next font added; direct YAML patching was considered and rejected because it cannot repopulate an atlas — only TMP's `TryAddCharacters` can, and it needs a loaded font face. The tool also re-runs safely on assets that are already correct. |
 
 ---
 
 ## Session Log
 
 _Newest first._
+
+### 2026-08-20 — TMP fonts go blank after deleting `Library/`: root cause + bulk Static-bake editor tool
+- **Goal:** user reported that every time they delete `Library/`, the game's fonts render wrong and
+  they have to manually re-open Font Asset Creator and press "Generate Font Atlas". Explain why,
+  then fix it for **all** fonts at once — explicitly not by selecting each asset by hand.
+- **Status:** done — tool written, documented, run by the user in the Editor, and committed as
+  `ab1297e "Bake Fonts Attlas"`.
+- **Root cause (read out of the raw `.asset` YAML, not inferred) — describes the state BEFORE the
+  bake; all of this is fixed as of `ab1297e`:** every TMP font asset in this project was
+  `m_AtlasPopulationMode: 1` (Dynamic) with `m_ClearDynamicDataOnBuild: 1`. In Dynamic
+  mode TextMeshPro treats the glyph table + atlas texture as a *rebuildable cache*: on import it
+  re-opens the source `.ttf` face to validate the cached atlas and discards it on failure. Deleting
+  `Library/` forces a reimport of every `.ttf`, the validation fails, the atlas is dropped, and the
+  only recovery is a manual Generate. Confirmed field-by-field:
+  - `Assets/Arts/FONTS/LILITAONE-REGULAR SDF.asset` — Dynamic, clear-on-build on, and
+    **`m_SourceFontFileGUID` empty + `m_SourceFontFile: {fileID: 0}`** — a Dynamic font asset with
+    no font to be dynamic *from*. It can never self-repair, and with clear-on-build set it would
+    have shipped with **empty text in a player build**, not just in the Editor.
+  - `Assets/Arts/FONTS/Dangrek/Dangrek-Regular 1 SDF.asset` — Dynamic, clear-on-build on, source
+    GUID intact (`cb7b19cc…` → `Dangrek-Regular 1.ttf`). 2048×2048 atlas for ~42 characters.
+  - `Assets/TextMesh Pro/Resources/TMP Settings.asset` — carries its own
+    `m_ClearDynamicDataOnBuild: 1`, which `TMP_FontAsset.CreateFontAsset()` seeds onto every
+    **newly created** font asset. So the bug reproduces itself on the next font anyone generates.
+  - Only **4** TMP font assets exist project-wide (found via the `TMP_FontAsset` script guid
+    `71c1514a6bd24e1e882cebbe1904ce04`): the two above plus `LiberationSans SDF` and
+    `LiberationSans SDF - Fallback`.
+- **Changed:**
+  - `Assets/Scripts/Editor/TMPFontAssetStaticBaker.cs` — **new.** Static editor class, two menu
+    items under `Tools/Blasty/Fonts/`: "Bake All TMP Fonts To Static" (confirm dialog, writes) and
+    "Report Only (Dry Run)" (logs only). Per font: resolves the source `.ttf` (live ref → stored
+    GUID → name match across the project, same-folder candidates winning ties), temporarily forces
+    Dynamic, `ReadFontAssetDefinition()` + `TryAddCharacters()` over *ASCII 32–126 ∪ every unicode
+    already in `characterTable`* (so a bake never loses previously generated glyphs), then freezes
+    to Static with clear-on-build off. Also clears the project-wide flag on `TMP Settings.asset`.
+    Handles the already-damaged case (Static but empty character table) by repopulating first.
+  - `Assets/Documentation for scripts/TMPFontAssetStaticBaker.txt` — **new**, per the project's
+    doc-sync convention (the `PostToolUse` hook fired as expected).
+- **Scene/Prefab/SO edits:** none typed by this session, but the tool the user ran **rewrote
+  `.asset` files by design** — both font assets and `TMP Settings.asset`. Those rewrites are the
+  deliverable, not a side effect. (Unrelated in-flight user work was also in the tree at wrap time:
+  ~19 modified `.prefab` files and a `Level_1_Stage_01` → `Level_1_Stage_0` scene rename. Not this
+  session's doing.)
+- **Result — confirmed post-bake by re-reading the `.asset` YAML at `ab1297e`:**
+  - `LILITAONE-REGULAR SDF.asset` → `m_AtlasPopulationMode: 0` (Static),
+    `m_ClearDynamicDataOnBuild: 0`, and **`m_SourceFontFileGUID: d2972f88bd092c046a7487e67cb80a87`
+    recovered** — exactly the `LILITAONE-REGULAR.TTF` the name-match heuristic was predicted to
+    find, and it correctly preferred it over the same-named duplicate in `Lilita_One/`. 207
+    characters retained (unchanged — printable ASCII was already a subset), atlas blob intact.
+  - `Dangrek-Regular 1 SDF.asset` → Static, clear-on-build off, source GUID intact. Character count
+    went **42 → 95**, i.e. the ASCII-baseline union worked as intended and added the missing
+    printable range rather than replacing what was there.
+  - `TMP Settings.asset` → `m_ClearDynamicDataOnBuild: 0`. Future font assets no longer inherit it.
+- **Verified:** the bake itself is **verified by asset inspection** (the six field values above) and
+  the tool compiled and ran in the Editor without failing — but the **end-to-end check is still
+  outstanding**: nobody has yet deleted `Library/` and confirmed the fonts come back clean, which
+  is the actual symptom this was meant to cure. Design-time correctness confirmed; the reimport
+  survival test is not.
+  What was verified *before* running, by reading the actual package source at
+  `Library/PackageCache/com.unity.ugui@e20f1880fa04/Runtime/TMP/TMP_FontAsset.cs`: the enum values
+  (`Static = 0, Dynamic = 1, DynamicOS = 2`), that `ReadFontAssetDefinition()` and
+  `TryAddCharacters(string, out string, bool)` are public, that `TryAddCharacters` early-returns
+  with a warning if the asset is Static (hence the temporary flip to Dynamic), and that
+  `clearDynamicDataOnBuild` / the `sourceFontFile` setter / `m_SourceFontFileGUID` /
+  `SourceFont_EditorRef` are all **`internal`** — unreachable from `Assembly-CSharp`, which is why
+  every write in the tool goes through `SerializedObject` by field name. Brace balance and API call
+  sites checked by grep; **not compiled**.
+- **Gotchas:**
+  - The Bash-heredoc hazard already noted in the reorg entry bit again, differently: `cat <<'EOF'`
+    failed outright on a C# file (`unexpected EOF while looking for matching '`) — it is not just
+    backslashes, quotes/apostrophes in the payload break it too. Use the Write tool for source
+    files, always.
+  - Setting `atlasPopulationMode = Static` through TMP's own public property **nulls
+    `m_SourceFontFile` while keeping `m_SourceFontFileGUID`** — that is TMP's convention, not a
+    bug, and it is what lets Font Asset Creator find the `.ttf` again later. The tool mirrors it.
+    A null `sourceFontFile` on a *Static* asset is normal; on a *Dynamic* one it is the bug.
+  - Both fonts have **duplicate `.ttf` files** that normalize to the same name key:
+    `LILITAONE-REGULAR.TTF` vs `Lilita_One/LilitaOne-Regular.ttf`, and `Dangrek-Regular.ttf` vs
+    `Dangrek-Regular 1.ttf`. Only the same-folder tiebreak picks the right one — check the "note"
+    lines the dry run prints.
+  - Static **cannot add glyphs at runtime.** Safe here (English UI + digits) but if this game ever
+    renders Persian/Arabic or player-typed text, that font must stay Dynamic *with its Source Font
+    File assigned*.
+  - The font `.asset` diffs are enormous because the atlas is an embedded hex blob. Expected —
+    commit once and the churn stops, which is the entire point of the change.
+  - The user's Font Asset Creator screenshot showed "Missing characters: 99" — that is just
+    Extended ASCII against a font (Lilita One) that has no glyphs for those codepoints, not a
+    symptom of this bug. The tool bakes printable ASCII only, so it will not reproduce that noise.
+- **Next:** delete `Library/` once and confirm the fonts render correctly without any manual
+  "Generate Font Atlas" — that is the one check the bake has not yet proven. The tool is idempotent
+  and safe to re-run whenever a font is added or regenerated (it skips assets already correct).
 
 ### 2026-08-20 — Script audit against the 9 ticked build scenes + full `Assets/Scripts/` reorganization
 - **Goal:** review every script, classify by whether the shipping scenes (StarterScene, MenuScene,

@@ -30,6 +30,9 @@ public class SaveData
 
     public List<LevelProgress> levels = new();   // ALL levels live here
 
+    // --- Battle allowance (BATTLE button daily cap + energy)
+    public BattleEnergyState battleEnergy = new BattleEnergyState();
+
     // --- Optional
     public string savedAtUtc;
 
@@ -58,6 +61,22 @@ public class SaveData
         public int levelId;          // e.g., 1, 2, 3...
         public int highestUnlocked;  // 0-based
         public int[] stars;          // length = stagesInThisLevel
+    }
+
+    [Serializable]
+    public class BattleEnergyState
+    {
+        // UTC instant the current 24h battle window opened, in round-trip ("o")
+        // format. Empty string = no window open yet; the next battle opens one.
+        public string windowStartUtc = "";
+
+        // Battles started inside the current window (may exceed the daily limit
+        // once the player starts paying with energy).
+        public int battlesUsed = 0;
+
+        // PLACEHOLDER: spare energy, spent once the daily allowance is used up.
+        // Nothing grants energy yet - see BattleEnergyService.
+        public int energy = 0;
     }
 
     [Serializable]

@@ -17,16 +17,30 @@ INSPECTOR FIELDS
   levelConfig  (LevelConfig)  the stage's wave data
   cpWeights    (CPWeightsConfigSO, optional)  passed through to every spawned
                enemy for CP calculation
+  waitForBattleStart (bool, default OFF)  the battle gate. OFF reproduces the
+               original behaviour (waves start on level load). ON holds every
+               wave until StartBattle() is called, which is the new
+               puzzle-first flow used by Level_1_Stage_0 - see
+               BattleStartController.
 
 RUNTIME STATE
 -------------
-  _alive  (int)  count of currently-alive spawned enemies, used as the
-          "wave clear" gate
+  _alive          (int)  count of currently-alive spawned enemies, used as the
+                  "wave clear" gate
+  _battleStarted  (bool) latch so the wave loop can only ever be started once;
+                  exposed read-only as BattleStarted
 
 LIFECYCLE
 ---------
   Start()
-      Warns and aborts if levelConfig is missing, else starts RunLevel().
+      Warns and aborts if levelConfig is missing. Then, if waitForBattleStart
+      is ON, it RETURNS without spawning anything - the stage stays in its
+      puzzle-only phase. Otherwise it calls StartBattle() immediately.
+
+  StartBattle()   [public]
+      Idempotent entry point that actually launches RunLevel(). Re-entrant
+      calls are ignored via _battleStarted, so a double-click on BATTLE cannot
+      run two wave loops. Called by BattleStartController.
 
 PAUSE-AWARE WAITING
 ---------------------
@@ -111,6 +125,10 @@ HOW IT CONNECTS
   - Reads LevelManager.CurrentStage for the CP/progression lens.
   - Drives EnemyManager.Initialize on every spawned enemy.
   - Reads HudCurrencyView.Instance.IsGameplayPaused for pause-aware waiting.
+  - BattleStartController calls StartBattle() when the BATTLE button is pressed
+    and its BattleEnergyService check passes.
+  - HudCurrencyView.SetGameplayPaused toggles this component's .enabled on
+    pause; that only halts the coroutine, it never starts one.
 
 NOTES
 -----
@@ -126,3 +144,7 @@ NOTES
     hard-coded weights via UnitCP_WithFallback in that case.
   - concurrencyCap on Wave is authored but never read here - waves always spawn
     their full count at once rather than trickling in.
+  - waitForBattleStart defaults to OFF on purpose: the field did not exist when
+    Level_1_Stage_1..20 were authored, so those scenes deserialize it as false
+    and keep their original auto-start behaviour untouched. Only the new
+    puzzle-first scenes tick it ON.

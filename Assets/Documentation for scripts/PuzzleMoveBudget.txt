@@ -1,0 +1,91 @@
+================================================================================
+  PuzzleMoveBudget.cs
+  Path : Assets/Scripts/Puzzle/Board/PuzzleMoveBudget.cs
+  Type : MonoBehaviour
+  Layer: Puzzle / Board
+  Scenes: Level_1_Stage_0 (the new puzzle-first stage)
+================================================================================
+
+PURPOSE
+-------
+The per-level cap on how many moves the player may make on the board before the
+puzzle phase is over - the "BATTLE BEGINS IN n MOVES" rule.
+
+WHAT COUNTS AS A MOVE
+---------------------
+Picking a piece up AND dropping it on a DIFFERENT anchor cell. Specifically NOT
+a move:
+  - tapping a piece and releasing it where it already sat
+  - a drag the board refused, because the piece slides back and the anchor is
+    unchanged
+This component does not decide any of that - BoardInputController.EndDrag
+compares the drop anchor against dragStartAnchor and only then calls
+RegisterMove().
+
+Running out of moves ONLY locks the board. It does not start the battle: the
+player still has to press BATTLE (BattleStartController).
+
+INSPECTOR FIELDS
+----------------
+  Budget
+    movesAllowed        (int, >=0, default 8) moves for this stage. 0 =
+                        unlimited.
+
+  Optional UI  (null-safe, leave empty and nothing breaks)
+    movesRemainingText  (TMP_Text) the label showing moves left
+    movesTextFormat     (string, default "{0}") string.Format template,
+                        {0} = moves left, {1} = total allowed. Use e.g.
+                        "{0} MOVES" or "{0}/{1}" to taste.
+
+RUNTIME STATE / PROPERTIES
+--------------------------
+  MovesUsed       (int, public get) valid moves made so far
+  MovesAllowed    (int) mirror of the serialized cap
+  IsUnlimited     (bool) movesAllowed <= 0
+  MovesRemaining  (int) max(0, allowed - used); int.MaxValue when unlimited
+  HasMovesLeft    (bool) the flag BoardInputController reads to decide whether
+                  the board is still interactable
+
+EVENTS
+------
+  OnMovesChanged    after every counted move and after ResetBudget
+  OnMovesExhausted  fired once, the moment the last move is spent
+
+METHODS
+-------
+  Start()
+      Refreshes the label so the stage opens showing the full budget.
+
+  RegisterMove()
+      Returns early when the budget is already spent, so MovesUsed can never
+      run past movesAllowed. Otherwise increments, refreshes the label, raises
+      OnMovesChanged, and raises OnMovesExhausted if that was the last one.
+
+  ResetBudget()
+      Puts MovesUsed back to 0 and refreshes. For retry / revive flows. No-ops
+      when nothing was used.
+
+  RefreshUI()
+      Writes string.Format(movesTextFormat, MovesRemaining, movesAllowed) into
+      the label; writes an empty string when the budget is unlimited.
+
+HOW IT CONNECTS
+---------------
+  - BoardInputController holds the only reference (serialized, else found via
+    FindObjectOfType in Awake) and is the only caller of RegisterMove.
+  - No PuzzleMoveBudget in a scene = unlimited moves, which is what keeps
+    Level_1_Stage_1..20 behaving exactly as before.
+
+NOTES
+-----
+  - The budget deliberately lives on the SCENE, not on LevelConfig. There are
+    only two LevelConfig assets (Spawner1/Spawner2) and they are shared by all
+    20 stage scenes, so a value there would not be per-level. Each stage IS its
+    own scene, which makes the scene the correct per-level home. If a real
+    per-stage config table ever lands, this field is the single place to
+    re-source.
+  - Both event invocations are wrapped in try/catch so one bad subscriber
+    cannot break the others or leave the counter half-updated.
+  - Exhausting the budget does not auto-start the battle by design; see the
+    OnMovesExhausted event if a future UI wants to react (pulse the BATTLE
+    button, etc).

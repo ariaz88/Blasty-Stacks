@@ -120,6 +120,24 @@ public static class SaveSystem
     public static int GetGems() => Data.gems;
     public static int GetHeroXP() => Data.heroXp;
 
+    // NEW: Battle allowance (BATTLE button daily cap + energy placeholder).
+    // Read-only accessor - all writes go through SetBattleEnergy so they persist.
+    public static SaveData.BattleEnergyState GetBattleEnergy()
+    {
+        // Old saves predate this section, so JsonUtility may leave it null.
+        Data.battleEnergy ??= new SaveData.BattleEnergyState();
+        return Data.battleEnergy;
+    }
+
+    public static void SetBattleEnergy(string windowStartUtc, int battlesUsed, int energy)
+    {
+        var state = GetBattleEnergy();
+        state.windowStartUtc = windowStartUtc ?? "";
+        state.battlesUsed = Mathf.Max(0, battlesUsed);
+        state.energy = Mathf.Max(0, energy);
+        Save();
+    }
+
 
 
 
@@ -243,6 +261,12 @@ public static class SaveSystem
                 if (!u.unlocked) u.isDeployed = false; // Default for old data
             }
             loaded.version = 2;
+
+            // Publish the cache BEFORE saving. Save() reads Data, and Data is
+            // "_cache ??= LoadInternal()" - without this line it re-enters
+            // LoadInternal, recurses until the depth guard trips, and the
+            // migration is never actually written (so it ran again every launch).
+            _cache = loaded;
             Save(); // Persist migration
         }
         return loaded;

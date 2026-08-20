@@ -7,6 +7,10 @@ public class BoardInputController : MonoBehaviour
     [SerializeField] private BoardGridXY board;
     [SerializeField] private Camera cam;
 
+    [Tooltip("Per-level move cap. Left empty, it is found in the scene at Awake. " +
+             "No PuzzleMoveBudget in the scene = unlimited moves (old stages).")]
+    [SerializeField] private PuzzleMoveBudget moveBudget;
+
     [Header("Picking Layers")]
     [SerializeField] private LayerMask pieceLayer3D = ~0; // in case any 3D colliders remain
     [SerializeField] private LayerMask pieceLayer2D = ~0; // default: Everything (set to your Pieces layer)
@@ -21,6 +25,7 @@ public class BoardInputController : MonoBehaviour
     // runtime state
     private PieceSimple activePiece;
     private Vector2Int lastValidAnchor;
+    private Vector2Int dragStartAnchor;   // anchor the piece sat on when it was picked up
     private Vector2Int grabbedOffset;     // which subcell of the piece the pointer grabbed (grid space)
     private float _velX, _velY;           // per-axis smooth damp temps
 
@@ -34,6 +39,7 @@ public class BoardInputController : MonoBehaviour
     private void Awake()
     {
         if (!cam) cam = Camera.main;
+        if (!moveBudget) moveBudget = FindObjectOfType<PuzzleMoveBudget>();
     }
 
     private void Update()
@@ -99,6 +105,10 @@ public class BoardInputController : MonoBehaviour
     {
         if (!cam || !board) return;
 
+        // Move budget spent -> the board is no longer interactable. An already
+        // running drag is unaffected; only NEW pickups are refused.
+        if (moveBudget && !moveBudget.HasMovesLeft) return;
+
         if (!TryPickPiece(screenPos, out var piece, out var col2D, out var col3D))
             return;
 
@@ -122,6 +132,7 @@ public class BoardInputController : MonoBehaviour
             hitCell = lastValidAnchor;
 
         grabbedOffset = hitCell - lastValidAnchor;
+        dragStartAnchor = lastValidAnchor;   // remembered so EndDrag can tell a real move from a tap
         _velX = _velY = 0f;
 
         // Put the visual on the exact center (Z lifted a bit for clarity)
@@ -204,6 +215,12 @@ public class BoardInputController : MonoBehaviour
         // final: exact center on plane (no lift)
         var center = board.CellCenterWorld(lastValidAnchor);
         p.transform.position = center;
+
+        // A move only counts if the piece actually ended up on a different
+        // cell. Tapping a piece and letting go, or a drag the board refused
+        // (the anchor never advanced), both land back on dragStartAnchor.
+        if (moveBudget && lastValidAnchor != dragStartAnchor)
+            moveBudget.RegisterMove();
 
         // trigger resolving if you need it
         var resolver = GetComponent<MatchResolver>() ?? FindObjectOfType<MatchResolver>();

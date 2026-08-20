@@ -43,6 +43,18 @@ UNIT PERSISTENCE
       Bulk-saves the player's card arrangement. Sanitizes both lists: drops
       negative ids and removes duplicates. Null input becomes an empty list.
 
+BATTLE ALLOWANCE
+----------------
+  GetBattleEnergy()  ->  SaveData.BattleEnergyState
+      Read-only accessor for the BATTLE button's daily window. Lazily creates
+      the section when it is missing, because saves written before this field
+      existed deserialize it as null.
+
+  SetBattleEnergy(windowStartUtc, battlesUsed, energy)
+      The single write path for that section. Null timestamp becomes "", the
+      two counters are clamped to >= 0, then Save() runs. Only
+      BattleEnergyService should call this.
+
 CURRENCY
 --------
   SetCoins / SetGems / SetHeroXP   clamp to >=0 and auto-save
@@ -79,7 +91,9 @@ SAVING
   LoadInternal()  [private]
       Returns a fresh SaveData if no key exists. Otherwise deserializes the JSON.
       Then runs a version-gated migration: for saves with version < 2 it forces
-      isDeployed = false on every locked unit, sets version = 2, and calls Save().
+      isDeployed = false on every locked unit, sets version = 2, assigns _cache
+      and calls Save(). The _cache assignment MUST stay before Save() - see the
+      fixed recursion bug in NOTES.
 
   ResetAllIfRequested(bool)
       Full "new game" reset used by debug tooling: ResetAll(), then
@@ -96,12 +110,15 @@ HOW IT CONNECTS
 
 NOTES / RISKS
 -------------
-  !! LATENT RECURSION BUG: LoadInternal() calls Save() during migration, but
-  !! Save() reads the Data property, and Data is still null at that moment
-  !! (LoadInternal has not returned yet) - so Data calls LoadInternal() again.
-  !! This is exactly why the saveDepth > 10 guard exists. The guard prevents a
-  !! stack overflow but the migration path still performs ~10 redundant loads
-  !! and logs an error. The clean fix is to assign _cache before migrating.
+  - RECURSION BUG (FIXED 2026-08-20). LoadInternal() calls Save() during
+    migration, but Save() reads the Data property, and _cache was still null at
+    that moment (LoadInternal had not returned yet) - so Data called
+    LoadInternal() again. The saveDepth > 10 guard stopped the stack overflow
+    but the migration then never persisted, so it re-ran and logged
+    "[SaveSystem] Recursion guard: Skipping save" on EVERY launch with a
+    version < 2 save. Fixed by assigning _cache = loaded immediately before
+    Save(). Do not reorder those two lines. The saveDepth guard is kept as a
+    backstop for any other re-entrant path.
 
   - Almost every setter calls Save() immediately, so a screen that updates many
     units in a loop writes the entire JSON blob once PER UNIT. For bulk edits

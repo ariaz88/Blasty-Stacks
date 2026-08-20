@@ -18,6 +18,10 @@ INSPECTOR FIELDS
   Refs
     board            (BoardGridXY)
     cam              (Camera)  defaults to Camera.main
+    moveBudget       (PuzzleMoveBudget, optional) the per-level move cap. Left
+                     empty it is resolved with FindObjectOfType in Awake. NO
+                     PuzzleMoveBudget in the scene = unlimited moves, which is
+                     what keeps the older stages unchanged.
   Picking Layers
     pieceLayer3D     (LayerMask, default Everything) legacy 3D collider support
     pieceLayer2D     (LayerMask, default Everything) SET THIS to your Pieces
@@ -33,6 +37,9 @@ RUNTIME STATE
 -------------
   activePiece      the piece currently held
   lastValidAnchor  the most recent LEGAL anchor
+  dragStartAnchor  the anchor the piece sat on when it was picked up. EndDrag
+                   compares it against lastValidAnchor to tell a real move from
+                   a tap - this is the whole definition of "a move".
   grabbedOffset    WHICH sub-cell of the piece the player grabbed, in grid space.
                    This is what makes dragging feel correct: the piece keeps the
                    same cell under the finger instead of snapping its origin to
@@ -59,10 +66,14 @@ PICKING
       3D colliders.
 
   TryBeginDrag(screenPos)
-      Picks the piece, resolves its current anchor, then works out grabbedOffset
-      from the actual collider that was hit (so grabbing the far end of an
-      L-shape behaves naturally). Resets the smoothing velocities and lifts the
-      piece toward the camera.
+      FIRST refuses the pickup entirely when moveBudget exists and
+      HasMovesLeft is false - that is how "the board stops being interactable
+      after n moves" is enforced. A drag already in flight is unaffected,
+      because only new pickups pass through here.
+      Then picks the piece, resolves its current anchor, records it as
+      dragStartAnchor, and works out grabbedOffset from the actual collider
+      that was hit (so grabbing the far end of an L-shape behaves naturally).
+      Resets the smoothing velocities and lifts the piece toward the camera.
 
 DRAGGING  (the interesting part)
 --------------------------------
@@ -84,16 +95,23 @@ DRAGGING  (the interesting part)
          and re-applies the lift along the board normal.
 
   EndDrag()
-      Commits with TryPlace(lastValidAnchor), removes the lift so the piece sits
-      exactly on the plane, then finds a MatchResolver (on this object first,
-      else in the scene) and calls ResolveFrom(piece) - which is what can trigger
-      a blast and therefore a warrior wave.
+      Commits with TryPlace(lastValidAnchor) and removes the lift so the piece
+      sits exactly on the plane.
+      Then COUNTS THE MOVE, but only when lastValidAnchor != dragStartAnchor.
+      That single comparison is the whole rule: a tap-and-release, and a drag
+      the board refused (the anchor never advanced past the start), both leave
+      the anchor unchanged and are therefore free.
+      Finally finds a MatchResolver (on this object first, else in the scene)
+      and calls ResolveFrom(piece) - which is what can trigger a blast and
+      therefore a warrior wave.
 
 HOW IT CONNECTS
 ---------------
   - Reads and moves PieceSimple; validates through BoardGridXY.
   - Calls MatchResolver.ResolveFrom on release -> may fire MatchResolver.OnBlast
     -> PlayerWaveManager spawns units. This is the start of the whole game loop.
+  - Calls PuzzleMoveBudget.RegisterMove on every counted move, and reads its
+    HasMovesLeft to gate new pickups.
 
 NOTES
 -----

@@ -1,0 +1,105 @@
+================================================================================
+  BattleStartController.cs
+  Path : Assets/Scripts/Combat/Spawning/BattleStartController.cs
+  Type : MonoBehaviour
+  Layer: Combat / Spawning   (drives a UI button, starts the combat phase)
+  Scenes: Level_1_Stage_0 (the new puzzle-first stage)
+================================================================================
+
+PURPOSE
+-------
+Drives the BATTLE button in the Feature Panel and owns the moment a stage
+switches from its puzzle-only phase into combat.
+
+New level flow: the stage opens with the board only - EnemySpawner sits idle
+because its waitForBattleStart flag is ON, so nothing attacks and the player
+can solve the puzzle for as long as they like. Pressing BATTLE charges the
+player's global daily allowance through BattleEnergyService and, if that
+succeeds, releases the spawner for the rest of the stage.
+
+INSPECTOR FIELDS
+----------------
+  Refs
+    battleButton         (Button) the BATTLE button. Left empty, Awake falls
+                         back to a Button on this same GameObject.
+    enemySpawner         (EnemySpawner) the stage's spawner. Left empty, Awake
+                         finds it with FindObjectOfType(includeInactive: true).
+
+  Optional UI  (both are null-safe, leave empty and nothing breaks)
+    energyCostText       (TMP_Text) the cost label under the BATTLE icon
+    remainingBattlesText (TMP_Text) optional "left today" label, rendered as
+                         "<remaining>/<dailyBattleLimit>"
+
+  Daily Allowance
+    dailyBattleLimit     (int, >=1, default 25) free battles per rolling 24h,
+                         shared across every stage
+    energyCostPerBattle  (int, >=0, default 25) PLACEHOLDER energy charged once
+                         the free allowance is spent
+
+  Behaviour
+    hideButtonAfterBattleStarts  (bool, default ON) deactivates the button
+                         GameObject once the battle begins
+
+RUNTIME STATE
+-------------
+  BattleStarted   (bool, public get) true once this stage's battle phase has
+                  been released. Latches - it is never reset by this component.
+
+EVENTS
+------
+  OnBattleStarted  fired the moment the battle phase begins
+  OnBattleBlocked  fired when a press was refused (allowance spent, no energy)
+
+FLOW
+----
+  Awake()
+      Resolves the two refs if they were left empty and logs an error for each
+      one it still could not find.
+
+  OnEnable()
+      Adds OnBattleButtonPressed to battleButton.onClick IN CODE, subscribes to
+      BattleEnergyService.OnAllowanceChanged, and refreshes the labels.
+
+  OnDisable()
+      Removes both subscriptions.
+
+  OnBattleButtonPressed()   [public]
+      1. Returns immediately if BattleStarted (guards double-clicks).
+      2. BattleEnergyService.Consume(dailyBattleLimit, energyCostPerBattle).
+      3. On BlockedNoEnergy: logs how long until the window resets, fires
+         OnBattleBlocked, refreshes UI, and returns WITHOUT starting anything.
+         Nothing was spent.
+      4. Otherwise calls StartBattle().
+
+  StartBattle()   [public]
+      Sets BattleStarted, calls enemySpawner.StartBattle(), optionally hides
+      the button, fires OnBattleStarted, refreshes UI. This BYPASSES the
+      allowance, so it is the right entry point for debug or revive flows that
+      must not charge the player twice.
+
+  RefreshUI()
+      Writes energyCostPerBattle into energyCostText and
+      "remaining/limit" into remainingBattlesText. Both null-checked.
+
+HOW IT CONNECTS
+---------------
+  - Calls EnemySpawner.StartBattle() - the single hand-off into the combat
+    layer.
+  - Calls BattleEnergyService.Consume / RemainingFree / TimeUntilReset and
+    listens to its OnAllowanceChanged.
+  - Sits on the Canvas under Feature Panel/Battel in Level_1_Stage_0.
+
+NOTES
+-----
+  - The onClick listener is added in code, so the button's OnClick list in the
+    Inspector must stay EMPTY. Wiring it in both places would consume the
+    allowance twice per press.
+  - This component does NOT gate PlayerWaveManager. Hero waves still spawn and
+    release on puzzle matches exactly as before; only the enemy side waits for
+    BATTLE. That is a separate, still-open change.
+  - The allowance is global and persistent, so pressing Replay / reloading the
+    scene does not refund a battle. That is intentional: the cap is per 24h
+    across the whole game, not per scene.
+  - There is a TODO in OnBattleButtonPressed where the "not enough energy"
+    popup or rewarded-ad offer should be hooked once the energy economy is
+    written.

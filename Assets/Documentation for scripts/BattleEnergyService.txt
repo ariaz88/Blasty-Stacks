@@ -1,0 +1,115 @@
+================================================================================
+  BattleEnergyService.cs
+  Path : Assets/Scripts/Core/Progression/BattleEnergyService.cs
+  Type : static class   (NOT a MonoBehaviour)
+  Layer: Core / Progression
+================================================================================
+
+PURPOSE
+-------
+Answers one question: "may the player start another battle?".
+
+The player gets a free allowance of battles (25 by default) inside a ROLLING
+24-hour window. The window opens on the first battle after a reset, not at
+midnight, so it does not depend on the device timezone or on a calendar day.
+The allowance is GLOBAL - it is shared by every stage and survives scene
+reloads and app restarts, because it lives in SaveData through SaveSystem and
+never in scene state.
+
+Once the allowance is used up, each further battle costs `energyCost` energy.
+ENERGY IS A PLACEHOLDER: no economy grants energy yet, so in practice the
+player is blocked until the window resets. When the real energy system is
+written it only needs to feed AddEnergy(); everything else here keeps working.
+
+CONSTANTS
+---------
+  DefaultDailyBattleLimit      (25) free battles per window
+  DefaultEnergyCostPerBattle   (25) PLACEHOLDER cost - the number drawn under
+                               the BATTLE icon in the Feature Panel
+  WindowHours                  (24.0) length of the rolling window
+
+  Both Default* values are only the Inspector defaults on
+  BattleStartController; the real numbers are passed in per call, so a scene
+  can tune them without touching this class.
+
+ENUM
+----
+  StartCheck
+    AllowedFree            still inside the free daily allowance
+    AllowedPaidWithEnergy  allowance spent, energy covered this battle
+    BlockedNoEnergy        allowance spent and not enough energy
+
+EVENTS
+------
+  OnAllowanceChanged   raised after any successful Consume / AddEnergy /
+                       ResetAllowance so UI can refresh. Subscribers are
+                       invoked inside a try/catch, so one bad listener cannot
+                       break the others.
+
+QUERIES  (all of these expire the window first, via RefreshWindow)
+---------------------------------------------------------------
+  BattlesUsed                   battles started in the current window
+  RemainingFree(dailyLimit)     max(0, dailyLimit - battlesUsed)
+  Energy                        PLACEHOLDER balance
+  WindowResetUtc                UTC instant the window expires, or null when no
+                                window is open
+  TimeUntilReset                TimeSpan until refill, clamped at zero
+  Peek(dailyLimit, energyCost)  what Consume would return, spending nothing
+
+MUTATIONS
+---------
+  Consume(dailyLimit, energyCost)  ->  StartCheck
+      The only way to charge a battle.
+      1. Peeks first; returns immediately on BlockedNoEnergy WITHOUT spending
+         anything.
+      2. If no window is open, stamps windowStartUtc = now - i.e. the first
+         battle is what starts the 24h clock.
+      3. On AllowedPaidWithEnergy, subtracts energyCost (floored at 0).
+      4. Writes windowStart / battlesUsed+1 / energy through
+         SaveSystem.SetBattleEnergy, then raises OnAllowanceChanged.
+      battlesUsed deliberately keeps counting past dailyLimit so the UI can
+      show how far into the paid range the player is.
+
+  AddEnergy(amount)
+      PLACEHOLDER granter for the future economy. No-ops on 0, clamps the
+      result at 0, persists, raises the event.
+
+  ResetAllowance()
+      Debug/testing helper. Clears the window (empty timestamp, 0 used) while
+      preserving the energy balance.
+
+INTERNALS
+---------
+  RefreshWindow()
+      Clears the window when 24h have elapsed. Also clears it when the saved
+      timestamp is unparseable but battlesUsed > 0, so a corrupt save can never
+      lock the player out permanently. Finally, `now < start` (the device clock
+      moved backwards) also clears it - see NOTES.
+
+  ClearWindow()        writes "" / 0 / current energy
+  TryGetWindowStart()  DateTime.TryParse with InvariantCulture +
+                       DateTimeStyles.RoundtripKind, matching the "o" format
+                       used when writing
+
+HOW IT CONNECTS
+---------------
+  - SaveSystem.GetBattleEnergy / SetBattleEnergy is its only storage; it never
+    touches PlayerPrefs itself, per the project rule.
+  - BattleStartController is the only caller today: it Consumes on a BATTLE
+    press and subscribes to OnAllowanceChanged to refresh its labels.
+  - EnemySpawner is downstream - it never sees this class, it is just released
+    by the controller.
+
+NOTES
+-----
+  - CLOCK HONESTY, NOT CLOCK PROOFING. All timing comes from
+    DateTime.UtcNow on the device. A player who moves the system clock forward
+    gets a fresh allowance, and moving it backwards also restarts the window
+    (there is no trustworthy way to interpret a backwards jump locally). Real
+    enforcement needs a server timestamp; this is a deliberate, documented
+    limitation of the offline implementation.
+  - The window is rolling from FIRST USE, not a calendar day. Playing 25
+    battles at 22:00 means the refill lands at 22:00 the next day, not at
+    midnight.
+  - Energy is a stub on purpose. Until something calls AddEnergy, Peek can only
+    ever return AllowedFree or BlockedNoEnergy, never AllowedPaidWithEnergy.

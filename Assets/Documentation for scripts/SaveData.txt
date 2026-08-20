@@ -31,6 +31,11 @@ FIELDS
     stages             (StageSection) legacy single-chapter progress
     levels             (List<LevelProgress>) per-level progress, the current path
 
+  Battle allowance
+    battleEnergy       (BattleEnergyState) the BATTLE button's rolling 24h cap
+                       and its (placeholder) energy balance. Global, not
+                       per-scene - see BattleEnergyService.
+
   savedAtUtc           (string) timestamp of last save
 
 NESTED TYPES
@@ -45,11 +50,20 @@ NESTED TYPES
   StageSection   { highestUnlocked (0-based), stars[] }
       An earlier, single-chapter representation kept alongside 'levels'.
 
+  BattleEnergyState { windowStartUtc, battlesUsed, energy }
+      windowStartUtc is a round-trip ("o") UTC string marking when the current
+      24h battle window opened; empty means no window is open and the next
+      battle opens one. battlesUsed counts battles started inside that window
+      and MAY exceed the daily limit once the player pays with energy. energy
+      is a PLACEHOLDER balance - no economy grants it yet.
+
 HOW IT CONNECTS
 ---------------
   - SaveSystem owns exactly one cached instance and serializes it.
   - GameStartManager converts UnitStateEntry into PlayerUnitsModel.UnitState.
   - HomeManager / StageCard read levels[] for stars and unlock state.
+  - BattleEnergyService is the only writer of battleEnergy (through
+    SaveSystem.SetBattleEnergy).
 
 NOTES
 -----
