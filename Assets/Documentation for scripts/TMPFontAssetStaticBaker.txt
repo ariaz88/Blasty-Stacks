@@ -1,0 +1,162 @@
+================================================================================
+  TMPFontAssetStaticBaker.cs
+  Path : Assets/Scripts/Editor/TMPFontAssetStaticBaker.cs
+  Type : static class  (MenuItem tooling, no MonoBehaviour)  -  EDITOR ONLY
+  Layer: Editor tooling
+================================================================================
+
+PURPOSE
+-------
+One-click bulk fix for the "fonts go blank whenever I delete Library/" problem.
+
+Every TMP_FontAsset in this project was authored with
+  m_AtlasPopulationMode   = 1  (Dynamic)
+  m_ClearDynamicDataOnBuild = 1 (on)
+In Dynamic mode TextMeshPro treats the glyph table and the atlas texture as a
+REBUILDABLE CACHE rather than authored data: on import it re-opens the source
+.ttf face to validate the cached atlas, and if that validation fails the atlas is
+discarded. Deleting Library/ (or cloning the repo fresh) therefore produces blank
+or garbled text until a human opens Window > TextMeshPro > Font Asset Creator and
+presses "Generate Font Atlas" by hand.
+
+Static mode bakes the glyphs + atlas texture permanently into the .asset, so the
+data survives reimports, machine changes and player builds. This tool converts
+every font asset under Assets/ to Static in one pass, repopulating the atlas
+first so nothing is lost.
+
+It lives in a folder named "Editor", so it is excluded from player builds.
+
+WHY SerializedObject AND NOT THE TMP API
+----------------------------------------
+In com.unity.ugui 2.0.0 (Unity 6) TMP marks the fields this tool needs as
+internal - they are NOT reachable from Assembly-CSharp:
+    TMP_FontAsset.clearDynamicDataOnBuild   internal property
+    TMP_FontAsset.sourceFontFile            internal setter
+    TMP_FontAsset.m_SourceFontFileGUID      internal field
+    TMP_FontAsset.SourceFont_EditorRef      internal property
+So every write goes through SerializedObject / SerializedProperty by field name.
+This is also version-proof: the tool degrades to a reported FAIL instead of a
+compile error if a field is renamed. The three public APIs it does use are
+    atlasPopulationMode, characterTable, ReadFontAssetDefinition(),
+    TryAddCharacters(string, out string, bool)
+
+MENU ITEMS
+----------
+  Tools/Blasty/Fonts/Bake All TMP Fonts To Static   (priority 10)
+      Shows a confirmation dialog, then runs for real. Rewrites .asset files.
+  Tools/Blasty/Fonts/Report Only (Dry Run)          (priority 11)
+      Same scan and same source-font resolution, but writes nothing. Logs what
+      WOULD happen. Run this first.
+
+CONSTANTS
+---------
+  k_MenuRoot        "Tools/Blasty/Fonts/"
+  k_BaseCharFirst   32    printable-ASCII range, always baked in on top of
+  k_BaseCharLast    126   whatever the asset already contains
+
+FLOW - Run(bool dryRun)
+-----------------------
+  1. AssetDatabase.FindAssets("t:TMP_FontAsset").
+  2. Skip anything not under "Assets/" (package fonts are read-only).
+  3. Process() each one, tallying Baked / Skipped / Failed.
+  4. FixTmpSettings() - clears the project-wide default flag.
+  5. SaveAssets() + Refresh() if anything was baked and this is not a dry run.
+  6. Debug.Log the report (Debug.LogWarning if anything failed).
+
+FLOW - Process(font, path, dryRun, report)
+------------------------------------------
+  Four cases, decided from mode / hasGlyphs / clearFlag:
+
+  a) Static + has glyphs + flag off  -> Skipped, already correct.
+  b) Static + has glyphs + flag on   -> flip m_ClearDynamicDataOnBuild only.
+                                        No repopulation needed.
+  c) Otherwise (Dynamic, or Static with an empty character table - i.e. already
+     damaged by an earlier Library wipe) -> full bake:
+       1. ResolveSourceFont(); FAIL and skip if none can be found.
+       2. Write m_SourceFontFileGUID + m_SourceFontFile, force mode to Dynamic.
+          BOTH are required: TryAddCharacters() logs a warning and returns false
+          on a Static asset, and it needs a loadable font face.
+       3. ReadFontAssetDefinition() to re-open the face.
+       4. TryAddCharacters(BuildCharacterSet(font), out missing,
+                           includeFontFeatures: true)
+       5. Set mode to Static, clear flag to false, null m_SourceFontFile -
+          through a FRESH SerializedObject, not the one from step 2, so the
+          glyph/atlas data TryAddCharacters just wrote onto the instance is what
+          gets serialized back out.
+          The GUID is deliberately KEPT - that is TMP's own convention for a
+          static asset (see TMP_FontAsset.atlasPopulationMode setter) and it is
+          what lets Font Asset Creator find the .ttf again later.
+       6. EditorUtility.SetDirty.
+
+BuildCharacterSet(font)
+-----------------------
+  HashSet union of:
+    - printable ASCII 32..126
+    - every non-zero unicode already in font.characterTable
+  so a bake never LOSES characters that were previously generated. Surrogate
+  halves (D800-DFFF) and values above 0x10FFFF are dropped, since
+  char.ConvertFromUtf32 throws on them.
+
+ResolveSourceFont(...)
+----------------------
+  Four-step search for the .ttf/.otf behind a font asset:
+    1. the live m_SourceFontFile object reference
+    2. m_SourceFontFileGUID, if it resolves
+    3. name match over every "t:Font" in Assets/ against either
+         Normalize(fontAsset.name)                       e.g. "lilitaoneregular"
+         Normalize(m_FaceInfo.m_FamilyName + m_StyleName) e.g. "lilitaoneregular"
+    4. same-folder candidates win ties; a multi-match logs a "note" line naming
+       which file was picked.
+  Returns null if nothing matched - the caller then reports FAIL rather than
+  guessing.
+
+Normalize(value)
+----------------
+  Lowercase, alphanumerics only, then strips the substrings "sdf" and
+  "fallback". Turns "LILITAONE-REGULAR SDF" and "LILITAONE-REGULAR.TTF" into the
+  same key, and "LiberationSans SDF - Fallback" into "liberationsans".
+
+FixTmpSettings(dryRun, report)
+------------------------------
+  Assets/TextMesh Pro/Resources/TMP Settings.asset carries its own
+  m_ClearDynamicDataOnBuild (currently 1). TMP_FontAsset.CreateFontAsset() seeds
+  that value onto every NEWLY created font asset, so clearing it here stops the
+  problem returning with the next font someone generates. Also written via
+  SerializedObject, since TMP_Settings exposes it as internal too.
+
+HOW IT CONNECTS
+---------------
+  - Reads/writes the four TMP font assets in the project:
+      Assets/Arts/FONTS/LILITAONE-REGULAR SDF.asset
+      Assets/Arts/FONTS/Dangrek/Dangrek-Regular 1 SDF.asset
+      Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset
+      Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF - Fallback.asset
+  - Touches no gameplay code. Nothing at runtime references this class.
+  - The materials next to each font asset (e.g. "LILITAONE-REGULAR Atlas
+    Material-OutLine.mat") reference the atlas texture sub-asset by fileID; the
+    bake does not create a new texture, so those references stay valid.
+
+NOTES
+-----
+  - As of 2026-08-20 LILITAONE-REGULAR SDF.asset had m_SourceFontFileGUID empty
+    and m_SourceFontFile {fileID: 0} - a Dynamic font asset with no font to be
+    dynamic FROM. It could never self-repair, and with clearDynamicDataOnBuild
+    on it would have shipped with empty text in a player build too. Step 3 of
+    ResolveSourceFont is what recovers it (matches Assets/Arts/FONTS/
+    LILITAONE-REGULAR.TTF, guid d2972f88bd092c046a7487e67cb80a87).
+  - Two fonts have DUPLICATE .ttf files in the project:
+      LILITAONE-REGULAR.TTF   vs  Lilita_One/LilitaOne-Regular.ttf
+      Dangrek-Regular.ttf     vs  Dangrek-Regular 1.ttf
+    Both pairs normalize to the same key, so the same-folder tiebreak is what
+    picks the right one. Check the "note" lines in the report.
+  - ONLY SAFE WHILE THE CHARACTER SET IS FIXED. If this game ever renders
+    Persian/Arabic or player-typed text, that particular font must stay Dynamic
+    with its Source Font File assigned - Static cannot add glyphs at runtime.
+  - Baking rewrites the embedded atlas hex blob, so these .asset files produce
+    enormous git diffs (LILITAONE alone is ~115k lines). Expected; commit them.
+  - Dangrek-Regular 1 SDF uses a 2048x2048 atlas for ~42 characters (8 MB of hex
+    in the repo). Shrinking it to 512 or 1024 is a separate manual cleanup in
+    Font Asset Creator - this tool does not change atlas dimensions.
+  - Uses ApplyModifiedPropertiesWithoutUndo, not the undoable variant: this is a
+    bulk one-shot migration, and an undo entry per font would be noise. Use git
+    to revert, which is why the dialog says to commit or stash first.
