@@ -304,7 +304,21 @@ public class PlayerManager : MonoBehaviour
     {
         Vector3 ls = transform.localScale;
         float absX = Mathf.Abs(ls.x);
-        ls.x = faceLeft ? -absX : absX;
+
+        // faceLeft is a WORLD-space intent, but localScale is LOCAL.
+        // While a hero waits on the gate, PlayerWaveManager parents it to a
+        // "Top_0" under PlayerCastle - and PlayerCastle is MIRRORED
+        // (lossyScale.x = -1), so a raw local flip renders BACKWARDS. Convert
+        // the wanted world sign into the local sign that actually produces it.
+        // Once the wave unlocks the hero is unparented, parentSign becomes +1,
+        // and this collapses back to the original behaviour.
+        float wantWorldSign = faceLeft ? -1f : 1f;
+
+        float parentSign = 1f;
+        if (transform.parent != null && transform.parent.lossyScale.x < 0f)
+            parentSign = -1f;
+
+        ls.x = absX * wantWorldSign * parentSign;
         transform.localScale = ls;
         if (currentTarget!=null)
         {

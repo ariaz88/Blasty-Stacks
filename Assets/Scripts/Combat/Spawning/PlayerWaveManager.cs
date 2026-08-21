@@ -43,6 +43,10 @@ public class PlayerWaveManager : MonoBehaviour
              "Leave empty to keep the old fixed-distance jump.")]
     [SerializeField] private Transform[] jumpLanes;
 
+    [Tooltip("Repacks the formation after each rank lands. Left empty = found in " +
+             "the scene at Awake; none in the scene = no gap filling.")]
+    [SerializeField] private FormationGapFiller gapFiller;
+
     [Tooltip("ON = waves past the last lane all reuse the last one. OFF = they fall back " +
              "to the fixed-distance jump.")]
     [SerializeField] private bool reuseLastLane = true;
@@ -94,6 +98,7 @@ public class PlayerWaveManager : MonoBehaviour
         // Resolved first: the early return below must not leave this null, or
         // CombatLive could never become true and heroes would freeze forever.
         if (!enemySpawner) enemySpawner = FindObjectOfType<EnemySpawner>(true);
+        if (!gapFiller) gapFiller = FindObjectOfType<FormationGapFiller>(true);
 
         _gsm = FindObjectOfType<GameStartManager>();
         if (_gsm == null)
@@ -777,7 +782,39 @@ public class PlayerWaveManager : MonoBehaviour
             StartCoroutine(JumpThenSwitch(pm, laneY));
         }
 
+        // Once the whole rank is down, repack the formation so this wave steps
+        // into any holes the ranks ahead of it left behind.
+        StartCoroutine(CompactWhenWaveHasLanded(new List<PlayerManager>(currentWave)));
+
         waveLocked = false;
+    }
+
+    /// <summary>
+    /// Waits for every hero of a wave to finish its jump, then runs one
+    /// formation compaction pass for the whole rank.
+    /// </summary>
+    private IEnumerator CompactWhenWaveHasLanded(List<PlayerManager> wave)
+    {
+        if (!gapFiller) yield break;
+
+        float t0 = Time.time;
+
+        // Everyone jumps together, so waiting on the slowest is enough.
+        bool StillJumping()
+        {
+            foreach (var pm in wave)
+            {
+                if (pm == null) continue;
+                var j = pm.GetComponent<FrogJumpTransformOnly>();
+                if (j != null && j.IsJumping) return true;
+            }
+            return false;
+        }
+
+        while (StillJumping() && Time.time - t0 < jumpWaitTimeout + 1f)
+            yield return null;
+
+        gapFiller.Compact();
     }
 
     /// <summary>
