@@ -250,6 +250,10 @@ public class FormationGapFiller : MonoBehaviour
             yield break;
         }
 
+        // Play the walk cycle for the step. The arrival block below puts the
+        // hero back to idle.
+        pm.SetAnimMoving(true);
+
         // Start the timeout AFTER the pause, so the delay never eats into the
         // time budget the walk itself is allowed.
         float t0 = Time.time;
