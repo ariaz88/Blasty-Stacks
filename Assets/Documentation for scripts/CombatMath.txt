@@ -40,3 +40,10 @@ NOTES
   - DamagePerHit takes UnitStatsRuntime (live values) while the other two take
     UnitStatsSO (design values). That asymmetry means TimeBetweenAttacks and
     InRange ignore any runtime buff to attackSpeed or range.
+  - [2026-08-20] DamagePerHit now NULL-GUARDS both arguments and returns 0.
+    Before that, a unit whose stats were never computed threw a
+    NullReferenceException on defender.defense, which aborted the entire
+    OnTriggerEnter2D callback in EnemyDamageCollider and spammed the console.
+    This is only a SAFETY NET - a null here still means something upstream
+    failed to build stats (see PlayerManager / PlayerStatsApplier). Dealing 0
+    damage makes that show up as "this unit does nothing" instead of a crash.

@@ -23,10 +23,32 @@ INSPECTOR FIELDS
                puzzle-first flow used by Level_1_Stage_0 - see
                BattleStartController.
 
+  Spawn Area  [2026-08-20]
+  spawnRelativeToEnemyGate (bool, default OFF)
+               ON  = the spawn box is measured FROM THE ENEMY GATE using the
+                     offsets below, so moving the gate can never strand the
+                     spawn points again.
+               OFF = each Wave's absolute spawnMin/spawnMax world coordinates.
+  enemyGateAnchor (Transform) left empty = found by the "EnemyGate" TAG, then
+               by the name "EnemyCastle".
+  gateRelativeMin / gateRelativeMax (Vector2, default (-3,-4) / (3,-2))
+               The offset box. NEGATIVE Y = below the gate, i.e. in front of it
+               facing the player.
+
+  WHY these live on the COMPONENT and not on LevelConfig: only two LevelConfig
+  assets exist (Spawner1 / Spawner2) and they are shared by all 20 stage
+  scenes, so a value there is not per-level. The component is per-scene, which
+  is the correct granularity - and it means enabling this for one stage cannot
+  disturb the other 19.
+
 RUNTIME STATE
 -------------
   _alive          (int)  count of currently-alive spawned enemies, used as the
                   "wave clear" gate
+  HasSpawnedFirstEnemy (bool, public get)  set by the first SpawnOne of the
+                  stage. PlayerWaveManager waits on this before letting heroes
+                  advance, so they never march at an empty field.
+  OnFirstEnemySpawned (event)  raised once, alongside the flag above.
   _battleStarted  (bool) latch so the wave loop can only ever be started once;
                   exposed read-only as BattleStarted
 
@@ -147,4 +169,13 @@ NOTES
   - waitForBattleStart defaults to OFF on purpose: the field did not exist when
     Level_1_Stage_1..20 were authored, so those scenes deserialize it as false
     and keep their original auto-start behaviour untouched. Only the new
-    puzzle-first scenes tick it ON.
+    puzzle-first scenes tick it ON. spawnRelativeToEnemyGate defaults OFF for
+    exactly the same reason.
+  - [2026-08-20] THE BUG THAT MOTIVATED THE RELATIVE SPAWN BOX: the enemy gate
+    was moved up to y = 14.43, but Spawner2 still carried the absolute spawn box
+    y 4.25..6.25 from when the gate was lower. Enemies therefore materialised
+    right on top of the PLAYER gate (y 2.82) instead of in front of their own.
+    Absolute world coordinates in a SHARED ScriptableObject are the root
+    problem; the relative box removes the coupling entirely.
+    With the gate at 14.43 and the default offsets, enemies now spawn at
+    y 10.43..12.43.

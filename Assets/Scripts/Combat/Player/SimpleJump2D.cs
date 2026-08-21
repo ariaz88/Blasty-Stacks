@@ -114,6 +114,11 @@ public class FrogJumpTransformOnly : MonoBehaviour
     }
 
 
+    // When set, the next BeginJump lands on this exact world Y instead of
+    // travelling the fixed jumpDistanceY. Consumed by BeginJump.
+    private bool hasTargetYOverride;
+    private float targetWorldY;
+
     public bool TriggerJump()
     {
         if (isJumping) return false;
@@ -128,6 +133,21 @@ public class FrogJumpTransformOnly : MonoBehaviour
 
         BeginJump();  // uses your existing flow (animation, timers, endPos, etc.)
         return true;
+    }
+
+    /// <summary>
+    /// Jump so the unit LANDS on <paramref name="worldY"/>, rather than moving a
+    /// fixed distance. This is how successive waves land on their own lane and
+    /// stop piling up on each other.
+    /// </summary>
+    public bool TriggerJumpTo(float worldY)
+    {
+        if (isJumping) return false;
+
+        hasTargetYOverride = true;
+        targetWorldY = worldY;
+
+        return TriggerJump();
     }
 
     private void BeginJump1()
@@ -152,7 +172,17 @@ public class FrogJumpTransformOnly : MonoBehaviour
 
         int facingY = GetFacingYSign();
         startPos = transform.position;
-        endPos = startPos + new Vector3(0f, jumpDistanceY * facingY, 0f);
+
+        if (hasTargetYOverride)
+        {
+            // Land exactly on the requested lane, whatever the distance.
+            endPos = new Vector3(startPos.x, targetWorldY, startPos.z);
+            hasTargetYOverride = false;
+        }
+        else
+        {
+            endPos = startPos + new Vector3(0f, jumpDistanceY * facingY, 0f);
+        }
 
         tElapsed = 0f;
         isJumping = true;

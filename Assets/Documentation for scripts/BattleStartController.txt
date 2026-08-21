@@ -24,6 +24,9 @@ INSPECTOR FIELDS
                          back to a Button on this same GameObject.
     enemySpawner         (EnemySpawner) the stage's spawner. Left empty, Awake
                          finds it with FindObjectOfType(includeInactive: true).
+    transition           (BattlePhaseTransition) camera pan + board hide. Left
+                         empty, Awake finds it the same way. If the scene has
+                         none, the battle starts immediately with no transition.
 
   Optional UI  (both are null-safe, leave empty and nothing breaks)
     energyCostText       (TMP_Text) the cost label under the BATTLE icon
@@ -81,10 +84,18 @@ FLOW
       4. Otherwise calls StartBattle().
 
   StartBattle()   [public]
-      Sets BattleStarted, calls enemySpawner.StartBattle(), optionally hides
-      the button, fires OnBattleStarted, refreshes UI. This BYPASSES the
-      allowance, so it is the right entry point for debug or revive flows that
-      must not charge the player twice.
+      Sets BattleStarted, optionally hides the button, fires OnBattleStarted,
+      refreshes UI, then hands off to the transition:
+          transition.Play(ReleaseSpawner)
+      so the camera pans to the battlefield FIRST and ReleaseSpawner - which is
+      what actually calls EnemySpawner.StartBattle() - only runs once it has
+      settled. With no transition in the scene it calls ReleaseSpawner directly.
+      This BYPASSES the allowance, so it is the right entry point for debug or
+      revive flows that must not charge the player twice.
+
+  ReleaseSpawner()   [private]
+      The single place EnemySpawner.StartBattle() is called. Logs an error if
+      there is no spawner.
 
   RefreshUI()
       Writes energyCostPerBattle into energyCostText and

@@ -24,6 +24,10 @@ public class BattleStartController : MonoBehaviour
     [Tooltip("The stage's EnemySpawner. Left empty = found in the scene at Awake.")]
     [SerializeField] private EnemySpawner enemySpawner;
 
+    [Tooltip("Camera pan + board hide. Left empty = found in the scene at Awake. " +
+             "If there is none, the battle starts immediately with no transition.")]
+    [SerializeField] private BattlePhaseTransition transition;
+
     [Header("Optional UI")]
     [Tooltip("The cost label under the BATTLE icon (shows '25').")]
     [SerializeField] private TMP_Text energyCostText;
@@ -66,6 +70,7 @@ public class BattleStartController : MonoBehaviour
 
         if (!battleButton) battleButton = GetComponent<Button>();
         if (!enemySpawner) enemySpawner = FindObjectOfType<EnemySpawner>(true);
+        if (!transition) transition = FindObjectOfType<BattlePhaseTransition>(true);
 
         if (!battleButton)
             Debug.LogError("[BattleStartController] No BATTLE button assigned or found.", this);
@@ -120,14 +125,22 @@ public class BattleStartController : MonoBehaviour
         if (BattleStarted) return;
         BattleStarted = true;
 
-        if (enemySpawner) enemySpawner.StartBattle();
-        else Debug.LogError("[BattleStartController] Cannot start battle: no EnemySpawner.", this);
-
         if (hideButtonAfterBattleStarts && battleButton)
             battleButton.gameObject.SetActive(false);
 
         OnBattleStarted?.Invoke();
         RefreshUI();
+
+        // The camera pans up to the battlefield first; waves are only released
+        // once it has settled, so the player is never fighting off screen.
+        if (transition != null) transition.Play(ReleaseSpawner);
+        else ReleaseSpawner();
+    }
+
+    private void ReleaseSpawner()
+    {
+        if (enemySpawner) enemySpawner.StartBattle();
+        else Debug.LogError("[BattleStartController] Cannot start battle: no EnemySpawner.", this);
     }
 
     private void RefreshUI()

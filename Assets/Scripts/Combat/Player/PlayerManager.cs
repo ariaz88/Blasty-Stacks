@@ -138,10 +138,27 @@ public class PlayerManager : MonoBehaviour
         if (playerStatsApplier == null)
         {
             playerStatsApplier = GetComponent<PlayerStatsApplier>();
-           
+
         }
 
-        unitStats = playerStatsApplier.CurrentStats;
+        // Only adopt the applier's stats once it has actually computed them.
+        // PlayerStatsApplier.ApplyNow() bails out and leaves CurrentStats NULL
+        // whenever GameStartManager / PlayerUnits is missing - which is exactly
+        // what happens when a gameplay scene is played directly instead of
+        // booting through StarterScene. Assigning that null over the serialized
+        // instance is what produced the NullReferenceException in
+        // CombatMath.DamagePerHit (the enemy hits the gate, gate stats are null).
+        if (playerStatsApplier != null && playerStatsApplier.CurrentStats != null)
+        {
+            unitStats = playerStatsApplier.CurrentStats;
+        }
+        else if (unitStats == null)
+        {
+            unitStats = new UnitStatsRuntime();
+            Debug.LogWarning($"[PlayerManager] '{name}' has no computed stats yet - " +
+                             "keeping serialized/default values. Boot through StarterScene " +
+                             "so GameStartManager exists.", this);
+        }
 
        
     }

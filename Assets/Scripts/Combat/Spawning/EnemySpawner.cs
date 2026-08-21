@@ -16,6 +16,21 @@ public class EnemySpawner : MonoBehaviour
              "OFF = old behaviour, waves begin as soon as the level loads.")]
     [SerializeField] private bool waitForBattleStart = false;
 
+    [Header("Spawn Area")]
+    [Tooltip("ON  = enemies spawn in a box measured FROM THE ENEMY GATE, using the " +
+             "offsets below. Survives moving the gate, and is per-scene so it does " +
+             "not disturb other stages that share the same LevelConfig asset.\n" +
+             "OFF = use each Wave's absolute spawnMin/spawnMax world coordinates.")]
+    [SerializeField] private bool spawnRelativeToEnemyGate = false;
+
+    [Tooltip("The enemy gate. Left empty = found by the 'EnemyGate' tag, else by name.")]
+    [SerializeField] private Transform enemyGateAnchor;
+
+    [Tooltip("Spawn box corner relative to the gate. Negative Y = below the gate, " +
+             "i.e. in front of it, facing the player.")]
+    [SerializeField] private Vector2 gateRelativeMin = new Vector2(-3f, -4f);
+    [SerializeField] private Vector2 gateRelativeMax = new Vector2(3f, -2f);
+
     // Track wave-alive count if you still want to wait for clear
     int _alive;
 
@@ -23,6 +38,48 @@ public class EnemySpawner : MonoBehaviour
 
     /// <summary>True once the wave loop has actually been kicked off.</summary>
     public bool BattleStarted => _battleStarted;
+
+    /// <summary>
+    /// True once at least one enemy actually exists. Player units wait for this
+    /// before advancing, so heroes never march at an empty field.
+    /// </summary>
+    public bool HasSpawnedFirstEnemy { get; private set; }
+
+    /// <summary>Raised the moment the very first enemy of the stage is spawned.</summary>
+    public event System.Action OnFirstEnemySpawned;
+
+    /// <summary>
+    /// Resolves a wave's spawn box, either as authored absolute world coordinates
+    /// or as an offset box around the enemy gate.
+    /// </summary>
+    void ResolveSpawnArea(Wave wave, out Vector2 min, out Vector2 max)
+    {
+        if (!spawnRelativeToEnemyGate)
+        {
+            min = wave.spawnMin;
+            max = wave.spawnMax;
+            return;
+        }
+
+        if (!enemyGateAnchor) enemyGateAnchor = FindEnemyGate();
+
+        Vector2 gate = enemyGateAnchor ? (Vector2)enemyGateAnchor.position : Vector2.zero;
+        if (!enemyGateAnchor)
+            Debug.LogWarning($"{name}: spawnRelativeToEnemyGate is ON but no gate was found - " +
+                             "spawning around the world origin.", this);
+
+        min = gate + gateRelativeMin;
+        max = gate + gateRelativeMax;
+    }
+
+    Transform FindEnemyGate()
+    {
+        var tagged = GameObject.FindGameObjectWithTag("EnemyGate");
+        if (tagged) return tagged.transform;
+
+        var byName = GameObject.Find("EnemyCastle");
+        return byName ? byName.transform : null;
+    }
 
     void Start()
     {
@@ -170,7 +227,8 @@ public class EnemySpawner : MonoBehaviour
                     toSpawn.Add((e, i));
 
         // 2) Generate grid positions inside the wave�s spawn area
-        var positions = GenerateGridPositions(wave.spawnMin, wave.spawnMax, total, wave.gridColumns, wave.minSlotSpacing);
+        ResolveSpawnArea(wave, out var areaMin, out var areaMax);
+        var positions = GenerateGridPositions(areaMin, areaMax, total, wave.gridColumns, wave.minSlotSpacing);
 
         // 3) Instantiate all at once (tiny stagger just for VFX ordering if you like)
         for (int n = 0; n < toSpawn.Count; n++)
@@ -195,8 +253,10 @@ public class EnemySpawner : MonoBehaviour
 
 
 
-        var yMin = Mathf.Min(wave.spawnMin.y, wave.spawnMax.y);
-        var yMax = Mathf.Max(wave.spawnMin.y, wave.spawnMax.y);
+        ResolveSpawnArea(wave, out var areaMin, out var areaMax);
+
+        var yMin = Mathf.Min(areaMin.y, areaMax.y);
+        var yMax = Mathf.Max(areaMin.y, areaMax.y);
         float ySpan = Mathf.Max(0.01f, yMax - yMin);
 
         float gap = Mathf.Abs(wave.rowYOffset) > 0f ? Mathf.Abs(wave.rowYOffset) : (ySpan * 0.5f);
@@ -217,8 +277,8 @@ public class EnemySpawner : MonoBehaviour
 
 
 
-        float xMin = Mathf.Min(wave.spawnMin.x, wave.spawnMax.x);
-        float xMax = Mathf.Max(wave.spawnMin.x, wave.spawnMax.x);
+        float xMin = Mathf.Min(areaMin.x, areaMax.x);
+        float xMax = Mathf.Max(areaMin.x, areaMax.x);
 
         // ---- FRONT ROW ----
         int frontCount = 0; foreach (var e in front) frontCount += e.count;
@@ -263,6 +323,12 @@ public class EnemySpawner : MonoBehaviour
     {
         var go = Instantiate(entry.enemyPrefab, pos, Quaternion.identity);
         _alive++;
+
+        if (!HasSpawnedFirstEnemy)
+        {
+            HasSpawnedFirstEnemy = true;
+            OnFirstEnemySpawned?.Invoke();
+        }
 
         var em = go.GetComponent<EnemyManager>();
         if (em)

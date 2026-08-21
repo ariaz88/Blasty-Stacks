@@ -37,6 +37,36 @@ public class PlayerWaveManager : MonoBehaviour
 
     [SerializeField, Min(0.1f)] private float jumpWaitTimeout = 0.5f; // failsafe
 
+    [Header("Jump Lanes")]
+    [Tooltip("Where each successive wave LANDS. 1st match -> element 0, 2nd -> element 1, " +
+             "and so on, so waves form ranks instead of piling onto each other. " +
+             "Leave empty to keep the old fixed-distance jump.")]
+    [SerializeField] private Transform[] jumpLanes;
+
+    [Tooltip("ON = waves past the last lane all reuse the last one. OFF = they fall back " +
+             "to the fixed-distance jump.")]
+    [SerializeField] private bool reuseLastLane = true;
+
+    [Header("Battle Gate")]
+    [Tooltip("ON = heroes still JUMP into the field on every match, but hold position " +
+             "until the battle has started and the first enemy has actually spawned. " +
+             "OFF = old behaviour, they advance the moment they land.")]
+    [SerializeField] private bool holdUntilFirstEnemySpawns = false;
+
+    [Tooltip("Used only by the flag above. Left empty = found in the scene at Awake.")]
+    [SerializeField] private EnemySpawner enemySpawner;
+
+    // How many waves have been released so far - this is the lane index.
+    private int waveUnlockIndex = 0;
+
+    /// <summary>
+    /// True when heroes are allowed to advance: either the gate is off, or the
+    /// spawner has put at least one enemy on the field.
+    /// </summary>
+    private bool CombatLive =>
+        !holdUntilFirstEnemySpawns ||
+        (enemySpawner != null && enemySpawner.HasSpawnedFirstEnemy);
+
     [Header("Stage Animation")]
     private bool unlockAnimInProgress = false;
     private int pendingStageEvents = 0;
@@ -61,6 +91,10 @@ public class PlayerWaveManager : MonoBehaviour
 
     private void Awake()
     {
+        // Resolved first: the early return below must not leave this null, or
+        // CombatLive could never become true and heroes would freeze forever.
+        if (!enemySpawner) enemySpawner = FindObjectOfType<EnemySpawner>(true);
+
         _gsm = FindObjectOfType<GameStartManager>();
         if (_gsm == null)
         {
@@ -100,6 +134,7 @@ public class PlayerWaveManager : MonoBehaviour
         running = false;
         waveLocked = false;
         currentWave.Clear();
+        waveUnlockIndex = 0;   // lanes restart from the front rank after a revive
 
         BeginWaves();   // uses WaveLoop that checks puzzle again
     }
@@ -563,7 +598,14 @@ public class PlayerWaveManager : MonoBehaviour
         {
             pm.playerStatsApplier.SetUnitId(def.unitId);
             pm.playerStatsApplier.ApplyNow();
-            pm.unitStats = pm.playerStatsApplier.CurrentStats;
+
+            // ApplyNow leaves CurrentStats null when GameStartManager/PlayerUnits
+            // is missing; never overwrite the prefab's stats with that null.
+            if (pm.playerStatsApplier.CurrentStats != null)
+                pm.unitStats = pm.playerStatsApplier.CurrentStats;
+            else
+                Debug.LogWarning($"[PlayerWaveManager] Spawned '{def.displayName}' with no " +
+                                 "computed stats - keeping prefab defaults.", pm);
         }
 
         return pm;
@@ -615,7 +657,7 @@ public class PlayerWaveManager : MonoBehaviour
             ApplyLock(pm, false);
 
             // Kick off: jump now, then pursue when done
-            StartCoroutine(JumpThenSwitch(pm));
+            StartCoroutine(JumpThenSwitch(pm, null)); // dead sibling: no lane
         }
 
         waveLocked = false;
@@ -698,13 +740,18 @@ public class PlayerWaveManager : MonoBehaviour
             pm.isUnlocked = true;
             ApplyLock(pm, false);
 
-            StartCoroutine(JumpThenSwitch(pm));
+            StartCoroutine(JumpThenSwitch(pm, null)); // dead sibling: no lane
         }
 
         waveLocked = false;
     }
     private void UnlockCurrentWaveViaAnimation()
     {
+        // One lane per match: 1st match -> lane 0, 2nd -> lane 1, ...
+        // Resolved once for the whole wave so everyone lands on the same rank.
+        float? laneY = GetLaneYForNextWave();
+        waveUnlockIndex++;
+
         foreach (var pm in currentWave)
         {
             if (pm == null) continue;
@@ -727,36 +774,69 @@ public class PlayerWaveManager : MonoBehaviour
             // 3) UNLOCK + JUMP
             pm.isUnlocked = true;
             ApplyLock(pm, false);
-            StartCoroutine(JumpThenSwitch(pm));
+            StartCoroutine(JumpThenSwitch(pm, laneY));
         }
 
         waveLocked = false;
     }
 
+    /// <summary>
+    /// The world Y the next wave should land on, or null to keep the jumper's
+    /// own fixed-distance behaviour.
+    /// </summary>
+    private float? GetLaneYForNextWave()
+    {
+        if (jumpLanes == null || jumpLanes.Length == 0) return null;
 
-    private System.Collections.IEnumerator JumpThenSwitch(PlayerManager pm)
+        int index = waveUnlockIndex;
+        if (index >= jumpLanes.Length)
+        {
+            if (!reuseLastLane) return null;
+            index = jumpLanes.Length - 1;
+        }
+
+        var lane = jumpLanes[index];
+        return lane ? lane.position.y : (float?)null;
+    }
+
+
+    private System.Collections.IEnumerator JumpThenSwitch(PlayerManager pm, float? laneY)
     {
         // Find the jumper on this player (root or children)
         var jumper = pm.GetComponent<FrogJumpTransformOnly>();
         if (jumper == null)
         {
-            // no jump component; just switch immediately
+            // No jump component: still respect the battle gate before advancing.
+            yield return WaitForCombatLive();
             pm.SwitchToNextState(pm.PlayerPursueTargetState);
             yield break;
         }
 
-        // Start a jump if not already mid-jump
+        // Start a jump if not already mid-jump. With a lane assigned the unit
+        // LANDS on it, so successive waves form ranks instead of stacking.
         if (!jumper.IsJumping)
-            jumper.TriggerJump();
+        {
+            if (laneY.HasValue) jumper.TriggerJumpTo(laneY.Value);
+            else jumper.TriggerJump();
+        }
 
         // Wait until jump completes (with timeout failsafe)
         float t0 = Time.time;
         while (jumper.IsJumping && (Time.time - t0) < jumpWaitTimeout)
             yield return null;
 
-        // Now move to pursue
-        pm.SwitchToNextState(pm.PlayerPursueTargetState);
+        // Landed - but do NOT advance until the battle is actually running.
+        // Heroes accumulate in the field during the puzzle phase and only march
+        // once BATTLE has been pressed and the first enemy exists.
+        yield return WaitForCombatLive();
 
+        pm.SwitchToNextState(pm.PlayerPursueTargetState);
+    }
+
+    private System.Collections.IEnumerator WaitForCombatLive()
+    {
+        while (!CombatLive)
+            yield return null;
     }
 
 

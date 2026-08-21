@@ -279,3 +279,14 @@ NOTES / RISKS
   - enemyStats (private field) is assigned in Awake via a scene-wide
     FindAnyObjectByType call but is never read anywhere in the class - a dead
     lookup that still costs a scene search on every unit's Awake.
+  - [2026-08-20] FIXED: the line `unitStats = playerStatsApplier.CurrentStats;`
+    used to run UNCONDITIONALLY. PlayerStatsApplier.ApplyNow() returns early and
+    leaves CurrentStats NULL whenever GameStartManager / PlayerUnits is missing,
+    which is exactly what happens when a gameplay scene is played DIRECTLY
+    instead of booting through StarterScene. That null then overwrote the
+    perfectly good serialized UnitStatsRuntime, and the next enemy hit on the
+    player gate threw a NullReferenceException inside CombatMath.DamagePerHit.
+    It now only adopts CurrentStats when non-null, falls back to a fresh
+    UnitStatsRuntime, and logs a warning naming the object.
+    NOTE this is a resilience fix, not a substitute for booting properly - a
+    unit that keeps its serialized zeros still has no real stats.

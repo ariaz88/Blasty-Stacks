@@ -238,3 +238,34 @@ NOTES / RISKS
   - "Top_0" and the "Throw" animator trigger are magic strings; a gate prefab
     missing either silently degrades (falls back to the gate root, or the wave
     unlocks immediately without a throw animation).
+  - [2026-08-20] JUMP LANES. jumpLanes[] holds one landing point per match:
+    1st match -> element 0, 2nd -> element 1, and so on, tracked by
+    waveUnlockIndex (reset to 0 by RestartAfterRevive). The lane Y is resolved
+    ONCE per wave in UnlockCurrentWaveViaAnimation so every unit in that wave
+    lands on the same rank, then passed into JumpThenSwitch, which calls
+    FrogJumpTransformOnly.TriggerJumpTo(y) instead of TriggerJump(). Past the
+    last lane, reuseLastLane decides between reusing it and reverting to the
+    fixed-distance jump. An empty array keeps the old behaviour entirely.
+    Currently wired to Jump pos 1/2/3 at y 8.96 / 7.82 / 6.68 - DESCENDING, so
+    the first wave takes the front rank nearest the enemy and later waves fill
+    in behind it.
+  - [2026-08-20] MOVEMENT GATE. holdUntilFirstEnemySpawns makes heroes still
+    JUMP into the field on every match, but hold position until
+    EnemySpawner.HasSpawnedFirstEnemy is true - i.e. BATTLE was pressed AND an
+    enemy actually exists. JumpThenSwitch yields on WaitForCombatLive() before
+    switching to PlayerPursueTargetState. Defaults OFF so the other 20 stages
+    are unaffected. NOTE the jump itself is transform-driven and runs regardless
+    of the unit's FSM state, which is why the units can visibly leap while still
+    logically locked.
+  - [2026-08-20] The enemySpawner lookup in Awake is deliberately placed BEFORE
+    the "GameStartManager not found" early return. Behind that return it would
+    stay null, CombatLive could never become true, and every hero would freeze
+    in the field forever.
+  - [2026-08-20] SpawnOneAt no longer assigns CurrentStats into pm.unitStats
+    unconditionally. ApplyNow() leaves CurrentStats null when GameStartManager /
+    PlayerUnits is missing, and writing that null over the prefab's stats caused
+    a NullReferenceException in CombatMath.DamagePerHit on the first hit. It now
+    keeps the prefab defaults and logs a warning instead. The same null-overwrite
+    still exists in the DEAD numbered siblings SpawnOneAt4 (line ~474) and
+    SpawnOneAt5 (line ~527) - harmless while they are unused, but fix them too
+    if either is ever revived.

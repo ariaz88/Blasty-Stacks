@@ -194,3 +194,13 @@ NOTES
     per instance; TriggerJump() returning false while isJumping already guards
     re-entrancy, but there is no safety net if the GameObject is destroyed
     mid-air (the shadow would remain unparented).
+  - [2026-08-20] TriggerJumpTo(worldY) added. It sets a one-shot
+    hasTargetYOverride / targetWorldY pair that BeginJump CONSUMES, making the
+    unit land on an exact world Y instead of travelling jumpDistanceY in its
+    facing direction. Everything else about the jump - arc, scale pop, shadow
+    ground-follow, animator states - is unchanged, because only endPos differs.
+    PlayerWaveManager uses this to put each successive wave on its own lane so
+    they stop piling up on one another.
+    The override is one-shot ON PURPOSE: a later plain TriggerJump() must go
+    back to the fixed-distance behaviour rather than silently reusing a stale
+    target from a previous wave.

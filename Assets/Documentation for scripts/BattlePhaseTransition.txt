@@ -1,0 +1,110 @@
+================================================================================
+  BattlePhaseTransition.cs
+  Path : Assets/Scripts/Combat/Spawning/BattlePhaseTransition.cs
+  Type : MonoBehaviour
+  Layer: Combat / Spawning
+  Scenes: Level_1_Stage_1 (on the LevelGameManager object)
+================================================================================
+
+PURPOSE
+-------
+The visual hand-off from the puzzle phase to the battle phase.
+
+  BEFORE BATTLE : camera frames the board + the player gate, Feature Panel is up.
+  AFTER  BATTLE : the camera AND the background slide UP together, the Puzzle
+                  Board GameObject is switched off entirely, and combat begins.
+
+The move is a RELATIVE OFFSET applied to an explicit list of transforms, not a
+move to an absolute target. Moving Main Camera and BackGroundImage together by
+the same amount brings the enemy gate into view while leaving every other
+object's position untouched - which is exactly the requirement.
+
+INSPECTOR FIELDS
+----------------
+  Move Up On Battle
+    moveUpTargets    (Transform[]) the transforms that slide up. Currently
+                     Main Camera and BackGroundImage. NOTHING else is touched.
+    moveUpDistance   (float, default 6.75) world units travelled upward.
+
+  Motion
+    duration         (float, default 1.1) seconds for the move. 0 = snap.
+    ease             (DOTween Ease, default InOutCubic)
+
+  Objects
+    hideWhenBattleStarts (GameObject[]) switched OFF for the battle. Currently
+                     "Puzzle Board" and "Feature Panel".
+    showWhenBattleStarts (GameObject[]) switched ON for the battle - the combat
+                     HUD, when one exists. Currently empty.
+
+  Timing
+    hideAfterCameraArrives (bool, default ON)
+        ON  = hide the board only once the camera has arrived, by which point it
+              is already off screen, so the player never sees it pop out.
+        OFF = hide it the instant BATTLE is pressed.
+
+RUNTIME STATE
+-------------
+  IsPlaying (bool, public get)  true while the camera move is running
+  sequence  (DOTween Sequence)  killed in OnDestroy so a scene change mid-pan
+                                cannot tween a destroyed transform
+
+FLOW
+----
+  Play(onComplete)
+      1. Returns immediately if already playing (double-press guard).
+      2. Enables showWhenBattleStarts.
+      3. If hideAfterCameraArrives is OFF, hides hideWhenBattleStarts now.
+      4. WARNS if moveUpTargets is empty - a silent no-move was the exact
+         failure mode that made this feature look broken once already.
+      5. If there is nothing to move, duration <= 0, or the distance is 0,
+         applies the end state instantly and finishes - it degrades to a hard
+         cut rather than breaking.
+      6. Otherwise builds a DOTween Sequence that JOINS a DOMoveY on every
+         target, so they all travel together in lockstep.
+      7. On complete -> Finish().
+
+  Finish(onComplete)
+      Clears IsPlaying, hides hideWhenBattleStarts if it was deferred, then
+      invokes the callback.
+
+  ApplyEndStateInstantly()
+      The no-tween path: adds Vector3.up * moveUpDistance to every target.
+
+  CountValidTargets()
+      Non-null count, used to decide between the tween and the instant path.
+
+HOW IT CONNECTS
+---------------
+  - BattleStartController.StartBattle() calls Play(ReleaseSpawner). The
+    callback is what actually calls EnemySpawner.StartBattle(), so WAVES ONLY
+    SPAWN ONCE THE CAMERA HAS SETTLED - the player is never fighting off screen.
+    If no BattlePhaseTransition exists in the scene, the controller falls back
+    to releasing the spawner immediately.
+  - Uses DOTween (Assets/Plugins/Demigiant/DOTween), already a project
+    dependency with the DOTWEEN define set.
+
+NOTES
+-----
+  - Hiding "Puzzle Board" also hides every piece under it, because BoardBG and
+    the Blocks are its children. That is intended, but it has a KNOCK-ON
+    EFFECT: MatchResolver.HasAnyStacksLeft() then reports no stacks, so
+    PlayerWaveManager's WaveLoop stops spawning hero waves. In the new design
+    that is correct - heroes are recruited during the puzzle phase and then
+    fight - but it is the reason hero waves go quiet after BATTLE.
+  - BoardInputController is on the separate root "Input System", so it is NOT
+    disabled by hiding the board. It simply stops hitting anything, because the
+    pieces it raycasts against are inactive.
+  - Moving the CAMERA AND THE BACKGROUND BY THE SAME AMOUNT is deliberate. The
+    background scrolls with the camera so the framing looks static against the
+    sky, while the gates and units - which do NOT move - slide into view. Adding
+    a target to moveUpTargets is how you opt an object into that scroll; leaving
+    it out is how you keep it in world space.
+  - An earlier version moved the camera to an absolute "Battle View Anchor"
+    transform. That was replaced by the relative +6.75 offset and the anchor
+    object was deleted from the scene.
+  - HARD-WON LESSON: this component was once wired up while the editor was in
+    PLAY MODE. Unity reverts all scene changes when play stops, so every
+    reference silently became null and the whole transition no-opped - the
+    battle started with no camera move and nothing hidden. ALWAYS verify
+    serialized references by reading them back from the saved .unity file, not
+    from the in-memory scene.
