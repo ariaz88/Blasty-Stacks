@@ -274,9 +274,14 @@ public class FormationGapFiller : MonoBehaviour
             if (CrowdSeparation2D.Instance != null && remaining > arriveEpsilon * 4f)
                 dir = CrowdSeparation2D.Instance.SteerAroundBlockers(pm.transform, dir);
 
-            // Face the way we are stepping, using the manager's own flip logic so
-            // the mirrored-parent handling stays in one place.
-            if (Mathf.Abs(dir.x) > 0.02f) pm.FaceLeft(dir.x < 0f);
+            // Face toward the SLOT, never along the swerved direction.
+            //
+            // Facing along `dir` meant every avoidance swerve flipped the sprite,
+            // and a blocker dead ahead could make it flip repeatedly - the spinning
+            // bug. The direction to the destination is stable, so facing follows
+            // where the unit is GOING, not the little detours it takes to get there.
+            // The 0.25 dead-zone stops a near-vertical walk from flickering.
+            if (Mathf.Abs(toTarget.x) > 0.25f) pm.FaceLeft(toTarget.x < 0f);
 
             // Never overshoot the slot, even when the swerve lengthens the path.
             float step = Mathf.Min(moveSpeed * Time.deltaTime, remaining);

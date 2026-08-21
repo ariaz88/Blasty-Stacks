@@ -49,6 +49,19 @@ public class EnemySpawner : MonoBehaviour
     public event System.Action OnFirstEnemySpawned;
 
     /// <summary>
+    /// Static mirror of the above, for things spawned at runtime that cannot hold
+    /// a reference to this spawner - unit health bars, mainly.
+    ///
+    /// DEFAULTS TO TRUE so a stage that never gates anything behaves as it always
+    /// did; Start() flips it to false only when this spawner is actually waiting
+    /// for the BATTLE button.
+    /// </summary>
+    public static bool EnemiesHaveAppeared { get; private set; } = true;
+
+    /// <summary>Static counterpart of OnFirstEnemySpawned.</summary>
+    public static event System.Action OnAnyFirstEnemySpawned;
+
+    /// <summary>
     /// Resolves a wave's spawn box, either as authored absolute world coordinates
     /// or as an offset box around the enemy gate.
     /// </summary>
@@ -91,7 +104,13 @@ public class EnemySpawner : MonoBehaviour
 
         // Puzzle-only phase: hold every wave until the player presses BATTLE.
         if (waitForBattleStart)
+        {
+            // Nothing has appeared yet, so unit health bars stay hidden until the
+            // first enemy actually shows up - not merely when BATTLE is pressed.
+            EnemiesHaveAppeared = false;
+            HasSpawnedFirstEnemy = false;
             return;
+        }
 
         StartBattle();
     }
@@ -328,6 +347,10 @@ public class EnemySpawner : MonoBehaviour
         {
             HasSpawnedFirstEnemy = true;
             OnFirstEnemySpawned?.Invoke();
+
+            // Enemies are now on screen - this is the cue unit health bars use.
+            EnemiesHaveAppeared = true;
+            OnAnyFirstEnemySpawned?.Invoke();
         }
 
         var em = go.GetComponent<EnemyManager>();

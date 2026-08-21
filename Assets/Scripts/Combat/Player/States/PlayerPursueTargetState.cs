@@ -46,17 +46,11 @@ public class PlayerPursueTargetState : PlayerState
 
         if (/*!haveTarget ||*/ pm.currentTarget == null)
         {
-
-            // Walk forward along facing
-            pm.canMove = true;
-            if (pm.playerRigidbody)
-            {
-                pm.playerRigidbody.bodyType = RigidbodyType2D.Dynamic;
-                Vector2 dir = pm.transform.up; // use transform.right if your sprite art faces right
-                pm.playerRigidbody.linearVelocity = dir * pm.moveSpeed;
-            }
-
-            pm.SetAnimMoving(true);
+            // Marching on the gate with no enemies left. This MUST go through
+            // HandleRoamForward, not a raw velocity write: that is where ally
+            // avoidance and personal space live. Setting linearVelocity directly
+            // here is what made heroes walk into the ranks already at the gate.
+            pm.HandleRoamForward();
             return this; // remain in pursue while roaming forward
         }
               

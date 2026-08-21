@@ -22,8 +22,28 @@ public class FrogJumpTransformOnly : MonoBehaviour
     [SerializeField] private float jumpDistanceY = 3.0f;
     [Tooltip("Visual arc height (does not affect landing Y).")]
     [SerializeField] private float arcHeight = 1.5f;
-    [Tooltip("Time to complete jump.")]
+    [Tooltip("Time to complete jump, for a jump of Reference Distance.")]
     [SerializeField, Min(0.05f)] private float jumpDuration = 0.45f;
+
+    [Header("Distance Scaling")]
+    [Tooltip("ON = long jumps take longer and arc higher, short jumps are quick and " +
+             "flat, so every jump moves at a believable speed.\n" +
+             "OFF = every jump takes exactly Jump Duration, which makes a long jump " +
+             "look like the unit was fired from a cannon.")]
+    [SerializeField] private bool scaleWithDistance = true;
+
+    [Tooltip("The distance that plays at exactly Jump Duration and Arc Height. " +
+             "Jumps longer than this take more time, shorter ones less.")]
+    [SerializeField, Min(0.1f)] private float referenceDistance = 3f;
+
+    [Tooltip("Hard limits on the scaled duration (x = min, y = max seconds), so a " +
+             "tiny hop is not instant and a huge leap does not float forever.")]
+    [SerializeField] private Vector2 durationClamp = new Vector2(0.28f, 0.85f);
+
+    // Per-jump values, resolved in BeginJump. The serialized fields above are the
+    // BASELINE; these are what the jump actually plays at.
+    private float activeDuration;
+    private float activeArcHeight;
 
     [Header("Timing")]
     [SerializeField] private float jumpStartToLoopDelay = 0.12f;
@@ -194,10 +214,12 @@ public class FrogJumpTransformOnly : MonoBehaviour
             endPos = startPos + new Vector3(0f, jumpDistanceY * facingY, 0f);
         }
 
+        ResolveJumpShapeForDistance();
+
         tElapsed = 0f;
         isJumping = true;
         loopPlayed = false;
-        tLoopSwapAt = Mathf.Min(jumpStartToLoopDelay, jumpDuration * 0.5f);
+        tLoopSwapAt = Mathf.Min(jumpStartToLoopDelay, activeDuration * 0.5f);
 
         // --- Shadow detach + cache ---
         if (shadow && detachShadowDuringJump)
@@ -220,6 +242,38 @@ public class FrogJumpTransformOnly : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Works out how long this particular jump should take and how high it should
+    /// arc, from the distance it actually covers.
+    ///
+    /// Duration uses a SQUARE ROOT of the distance ratio, not a straight one.
+    /// That is how a real projectile behaves: for a fixed launch angle the range
+    /// grows with the square of the launch speed while the flight time grows only
+    /// linearly with it, so time scales with sqrt(range). Straight-line scaling
+    /// makes long jumps crawl and short hops look snapped.
+    ///
+    /// Arc height scales LINEARLY, because a projectile's peak height really is
+    /// proportional to its range - so a long leap visibly goes higher.
+    /// </summary>
+    private void ResolveJumpShapeForDistance()
+    {
+        if (!scaleWithDistance)
+        {
+            activeDuration = jumpDuration;
+            activeArcHeight = arcHeight;
+            return;
+        }
+
+        float distance = Mathf.Abs(endPos.y - startPos.y);
+        float ratio = distance / Mathf.Max(0.0001f, referenceDistance);
+
+        activeDuration = Mathf.Clamp(jumpDuration * Mathf.Sqrt(ratio),
+                                     Mathf.Min(durationClamp.x, durationClamp.y),
+                                     Mathf.Max(durationClamp.x, durationClamp.y));
+
+        activeArcHeight = arcHeight * ratio;
+    }
+
     // ====== per-frame jump ======
     private void TickJump()
     {
@@ -227,7 +281,7 @@ public class FrogJumpTransformOnly : MonoBehaviour
 
         float yLinear = Mathf.Lerp(startPos.y, endPos.y, t01);
         float arcT = HeightCurve(t01);
-        float yWithArc = yLinear + arcT * arcHeight;
+        float yWithArc = yLinear + arcT * activeArcHeight;
 
         ApplyPositionY(yWithArc);
         UpdatePlayerScale(arcT, t01);
@@ -272,7 +326,7 @@ public class FrogJumpTransformOnly : MonoBehaviour
     private void UpdateTimers(out float t01)
     {
         tElapsed += Time.deltaTime;
-        t01 = Mathf.Clamp01(tElapsed / jumpDuration);
+        t01 = Mathf.Clamp01(tElapsed / activeDuration);
     }
 
     private void MaybeSwapToLoop(float t01)

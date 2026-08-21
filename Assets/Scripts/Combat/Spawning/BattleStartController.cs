@@ -56,6 +56,20 @@ public class BattleStartController : MonoBehaviour
     /// <summary>True once this stage's battle phase has been released.</summary>
     public bool BattleStarted { get; private set; }
 
+    /// <summary>
+    /// Global "the fighting has begun" flag, for things spawned at runtime that
+    /// cannot hold a reference to this component - unit health bars, mainly.
+    ///
+    /// DEFAULTS TO TRUE on purpose. A scene with no BattleStartController (every
+    /// stage authored before the puzzle-first flow) therefore behaves exactly as
+    /// it always did. Awake below flips it to false, so ONLY a stage that has
+    /// this component gates anything.
+    /// </summary>
+    public static bool BattleIsRunning { get; private set; } = true;
+
+    /// <summary>Raised when any stage's battle phase starts. Static, so runtime-spawned units can listen.</summary>
+    public static event Action OnAnyBattleStarted;
+
     /// <summary>Raised the moment the battle phase begins.</summary>
     public event Action OnBattleStarted;
 
@@ -64,6 +78,10 @@ public class BattleStartController : MonoBehaviour
 
     private void Awake()
     {
+        // This stage gates the battle, so nothing is "running" until BATTLE is
+        // pressed. Set in Awake so units spawned later read the correct value.
+        BattleIsRunning = false;
+
         // Set before anything reads the allowance, so the very first query
         // already goes to the in-memory store rather than the save file.
         BattleEnergyService.SessionOnly = doNotPersistAllowance;
@@ -127,6 +145,11 @@ public class BattleStartController : MonoBehaviour
 
         if (hideButtonAfterBattleStarts && battleButton)
             battleButton.gameObject.SetActive(false);
+
+        // Announce it globally BEFORE the transition, so unit health bars appear
+        // as the fighting begins rather than after the camera settles.
+        BattleIsRunning = true;
+        OnAnyBattleStarted?.Invoke();
 
         OnBattleStarted?.Invoke();
         RefreshUI();

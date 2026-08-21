@@ -3069,7 +3069,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 128
   occupyCheckRadius: 0.3
-  jumpWaitTimeout: 0.5
+  jumpWaitTimeout: 1.5
   jumpLanes:
   - {fileID: 1529540289}
   - {fileID: 1765837234}
@@ -13183,20 +13183,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 09316ac3f69109045858af2938aae6f2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CrowdSeparation2D
-  desiredSpacing: 0.95
-  maxCorrectionSpeed: 1.2
-  lateralBias: 0.85
-  freeSpaceProbeDistance: 0.5
-  freeSpaceProbeRadius: 0.25
   unitLayers:
     serializedVersion: 2
     m_Bits: 192
-  sameTeamOnly: 0
-  refreshInterval: 0.25
   lookAheadDistance: 1.3
   lookAheadRadius: 0.4
   avoidStrength: 0.9
-  drawGizmos: 0
 --- !u!4 &1675231179 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1406975074739654467, guid: 1a3b8675c0e378e4280b8bcbb7620165, type: 3}
@@ -17595,6 +17587,7 @@ MonoBehaviour:
   chosenEnemyOffset: {fileID: 0}
   attackPlayerGate: 0
   visualRoot: {fileID: 0}
+  attackSlotSpacing: 0.9
 --- !u!1 &1305661377585804153
 GameObject:
   m_ObjectHideFlags: 0

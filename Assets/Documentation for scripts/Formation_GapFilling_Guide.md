@@ -121,19 +121,36 @@ is standing on, or very near, one of these slots. That turns a vague art problem
 
 Every time a wave finishes landing:
 
-1. **Build the occupancy map.** Look at every hero already in the field, work out
-   which of the 16 slots it is closest to, and mark that slot as taken.
-2. **Walk the grid front-to-back** (row 0, then 1, 2, 3).
-3. For each **empty** slot, look for the **nearest hero standing in any row
-   behind it** — same column or not, diagonal is fine.
-4. If one is found: mark its old slot **empty**, mark the gap **taken**, and send
-   it walking there.
-5. Continue.
+1. **Re-claim reserved slots.** Every hero still *walking* into a gap already owns
+   its destination. Mark those slots taken first, before anything else, so no
+   second hero can be sent to the same place. (This is the fix from §8a — read it.)
+2. **Build the rest of the occupancy map.** For every other hero in the field,
+   work out which of the 16 slots it is closest to and mark that slot taken.
+   If a slot is *already* taken, the newcomer is **stacked** — it goes into a
+   `displaced` list instead of being silently dropped.
+3. **Walk the grid front-to-back** (row 0, then 1, 2, 3).
+4. For each **empty** slot, find a mover, preferring in this order:
+   * the nearest **stacked** hero sitting in a row behind the gap — they are
+     pulled out first, because being stacked is the exact defect this pass exists
+     to repair;
+   * otherwise the nearest hero **standing in any row behind it** — same column or
+     not, diagonal is fine.
+5. If one is found: mark its old slot **empty**, mark the gap **taken**, record
+   the **reservation**, and send it walking there.
+6. Continue.
 
 **Why front-to-back matters.** Because we free a mover's old slot *as we go*, and
 we haven't reached that row yet, a hero further back will naturally consider it
 when we get there. That is the cascade — we get it for free from the loop order,
 with no special recursion.
+
+**Moves are forward-only, deliberately.** Both searches in step 4 require the
+mover to sit in a row *behind* the gap. A hero never shuffles sideways within its
+own rank and never steps backwards. Without this rule a settled front rank
+visibly re-arranged itself every time a later wave landed, which read as the
+formation randomly reshuffling. The cost of the rule: a stacked hero in the
+**front** row cannot be repaired by this pass at all. That is accepted —
+`CrowdSeparation2D` nudges it apart instead.
 
 ### A worked example
 
@@ -160,7 +177,7 @@ Step by step:
 
 ## 4. The code
 
-### 4a. `FormationGapFiller.cs` — the new component
+### 4a. `FormationGapFiller.cs` — the component
 
 Path: `Assets/Scripts/Combat/Spawning/FormationGapFiller.cs`
 
@@ -197,7 +214,11 @@ public class FormationGapFiller : MonoBehaviour
 
     [Header("Movement")]
     [Tooltip("Units per second while stepping into a gap.")]
-    [SerializeField, Min(0.1f)] private float moveSpeed = 2f;
+    [SerializeField, Min(0.1f)] private float moveSpeed = 1.6f;
+
+    [Tooltip("Beat to wait after landing before stepping off, so the rank reads as " +
+             "'land, notice the gap, then move' instead of sliding the instant it touches down.")]
+    [SerializeField, Min(0f)] private float preMoveDelay = 0.4f;
 
     [Tooltip("How close counts as arrived.")]
     [SerializeField, Min(0.01f)] private float arriveEpsilon = 0.05f;
@@ -208,8 +229,11 @@ public class FormationGapFiller : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool logCompaction = false;
 
-    // Heroes currently walking into a gap - never reassigned mid-move.
-    private readonly HashSet<PlayerManager> moving = new();
+    // Heroes currently walking into a gap, mapped to the slot they RESERVED.
+    // Storing the destination (not just "is moving") is essential: a later
+    // compaction pass must treat that slot as TAKEN, otherwise it hands the same
+    // gap to a second hero and the two end up permanently stacked.
+    private readonly Dictionary<PlayerManager, Vector2Int> reserved = new();
 
     /// <summary>
     /// Repacks the formation. Safe to call after every wave lands; heroes already
@@ -230,18 +254,32 @@ public class FormationGapFiller : MonoBehaviour
         // occupants[row, col] - null means a hole.
         var occupants = new PlayerManager[rows, cols];
 
-        // 1) Snap every hero that is actually in the field onto its nearest slot.
+        // Heroes sitting on a slot somebody else already owns - they are STACKED.
+        // They stay eligible to move, but ONLY FORWARD like everyone else (see
+        // the note on same-row moves below), paired with the row they sit in.
+        var displaced = new List<(PlayerManager pm, int row)>();
+
+        // 1a) Reserved destinations first. A hero still walking owns its target
+        //     slot, so nobody else may be sent there.
+        CleanUpDeadReservations();
+        foreach (var kv in reserved)
+        {
+            var slot = kv.Value;
+            if (slot.x < 0 || slot.x >= rows || slot.y < 0 || slot.y >= cols) continue;
+            occupants[slot.x, slot.y] = kv.Key;
+        }
+
+        // 1b) Snap every other hero in the field onto its nearest slot.
         foreach (var pm in FindObjectsOfType<PlayerManager>())
         {
             if (!pm || !pm.isUnlocked) continue;   // still waiting on the gate
-            if (moving.Contains(pm)) continue;     // already has a destination
+            if (reserved.ContainsKey(pm)) continue; // already placed in 1a
 
             if (!TryFindNearestSlot(pm.transform.position, rows, cols, out int r, out int c))
                 continue;
 
-            // If two heroes land on the same slot, the first one keeps it and the
-            // second is treated as free to be reassigned below.
             if (occupants[r, c] == null) occupants[r, c] = pm;
+            else displaced.Add((pm, r));   // stacked - still eligible, forward only
         }
 
         // 2) Front rank first, so vacated slots cascade backwards.
@@ -254,24 +292,78 @@ public class FormationGapFiller : MonoBehaviour
 
                 Vector3 gap = SlotPosition(r, c);
 
-                if (!TryTakeNearestFromBehind(occupants, rows, cols, r, gap,
-                                              out var mover, out int mr, out int mc))
+                PlayerManager mover;
+                int mr = -1, mc = -1;
+
+                // MOVES ARE FORWARD-ONLY, deliberately.
+                // Both searches below require the mover to sit in a row BEHIND this
+                // gap, so a hero never shuffles sideways within its own rank and
+                // never steps backwards. Without this rule a settled front rank
+                // visibly re-arranged itself every time a later wave landed, which
+                // read as the formation randomly reshuffling.
+                // A stacked hero in the FRONT row therefore cannot be fixed here at
+                // all - that is intentional; CrowdSeparation2D nudges it apart.
+                if (!TryTakeNearestDisplaced(displaced, r, gap, out mover) &&
+                    !TryTakeNearestFromBehind(occupants, rows, cols, r, gap, out mover, out mr, out mc))
                     continue;
 
-                occupants[mr, mc] = null;      // vacate - a rank further back may take it
-                occupants[r, c] = mover;       // claim the gap
+                if (mr >= 0) occupants[mr, mc] = null;   // vacate - a rank further back may take it
+                occupants[r, c] = mover;                 // claim the gap
 
-                moving.Add(mover);
-                StartCoroutine(WalkTo(mover, gap));
+                reserved[mover] = new Vector2Int(r, c);  // hold it until arrival
+                StartCoroutine(WalkTo(mover, gap, new Vector2Int(r, c)));
                 filled++;
 
                 if (logCompaction)
-                    Debug.Log($"[FormationGapFiller] {mover.name}: row{mr}col{mc} -> row{r}col{c}", mover);
+                    Debug.Log($"[FormationGapFiller] {mover.name}: " +
+                              (mr >= 0 ? $"row{mr}col{mc}" : "stacked") + $" -> row{r}col{c}", mover);
             }
         }
 
         if (logCompaction)
             Debug.Log($"[FormationGapFiller] compaction filled {filled} gap(s).", this);
+    }
+
+    /// <summary>
+    /// Nearest hero from the stacked pile, removed from that pile if found.
+    /// These are pulled out before anyone else, because leaving them stacked is
+    /// the exact defect this pass exists to repair.
+    /// </summary>
+    private bool TryTakeNearestDisplaced(List<(PlayerManager pm, int row)> displaced,
+                                         int targetRow, Vector3 gap, out PlayerManager best)
+    {
+        best = null;
+        int bestIndex = -1;
+        float bestDist = float.MaxValue;
+
+        for (int i = 0; i < displaced.Count; i++)
+        {
+            var entry = displaced[i];
+            if (entry.pm == null) continue;
+
+            // Forward-only: the stacked hero must be BEHIND the gap it fills.
+            if (entry.row <= targetRow) continue;
+
+            float d = ((Vector2)entry.pm.transform.position - (Vector2)gap).sqrMagnitude;
+            if (d >= bestDist) continue;
+
+            bestDist = d; best = entry.pm; bestIndex = i;
+        }
+
+        if (bestIndex < 0) return false;
+
+        displaced.RemoveAt(bestIndex);
+        return true;
+    }
+
+    /// <summary>Drops reservations whose hero was destroyed, so slots are not leaked.</summary>
+    private void CleanUpDeadReservations()
+    {
+        var dead = new List<PlayerManager>();
+        foreach (var kv in reserved)
+            if (kv.Key == null) dead.Add(kv.Key);
+
+        foreach (var d in dead) reserved.Remove(d);
     }
 
     /// <summary>
@@ -329,20 +421,51 @@ public class FormationGapFiller : MonoBehaviour
         return new Vector3(columnAnchors[col].position.x, rowLanes[row].position.y, 0f);
     }
 
-    private IEnumerator WalkTo(PlayerManager pm, Vector3 target)
+    private IEnumerator WalkTo(PlayerManager pm, Vector3 target, Vector2Int slot)
     {
+        // Hold still for a beat first. The hero already holds its reservation, so
+        // the slot stays protected for the whole pause.
+        if (preMoveDelay > 0f)
+            yield return new WaitForSeconds(preMoveDelay);
+
+        if (pm == null)
+        {
+            CleanUpDeadReservations();
+            yield break;
+        }
+
+        // Play the walk cycle for the step. The arrival block below puts the
+        // hero back to idle.
+        pm.SetAnimMoving(true);
+
+        // Start the timeout AFTER the pause, so the delay never eats into the
+        // time budget the walk itself is allowed.
         float t0 = Time.time;
 
         while (pm != null &&
                Vector2.Distance(pm.transform.position, target) > arriveEpsilon &&
                Time.time - t0 < moveTimeout)
         {
+            Vector3 toTarget = target - pm.transform.position;
+            float remaining = ((Vector2)toTarget).magnitude;
+
+            Vector2 dir = ((Vector2)toTarget).normalized;
+
+            // Arc AROUND an ally standing in the way rather than walking through
+            // them. This is one of the only two places avoidance is wanted: the
+            // pre-battle formation. It is skipped on the last stretch so the unit
+            // always settles exactly on its slot instead of circling it.
+            if (CrowdSeparation2D.Instance != null && remaining > arriveEpsilon * 4f)
+                dir = CrowdSeparation2D.Instance.SteerAroundBlockers(pm.transform, dir);
+
             // Face the way we are stepping, using the manager's own flip logic so
             // the mirrored-parent handling stays in one place.
-            float dx = target.x - pm.transform.position.x;
-            if (Mathf.Abs(dx) > 0.02f) pm.FaceLeft(dx < 0f);
+            if (Mathf.Abs(dir.x) > 0.02f) pm.FaceLeft(dir.x < 0f);
 
-            Vector3 next = Vector3.MoveTowards(pm.transform.position, target, moveSpeed * Time.deltaTime);
+            // Never overshoot the slot, even when the swerve lengthens the path.
+            float step = Mathf.Min(moveSpeed * Time.deltaTime, remaining);
+
+            Vector3 next = pm.transform.position + (Vector3)(dir * step);
             next.z = pm.transform.position.z;
             pm.transform.position = next;
 
@@ -355,8 +478,12 @@ public class FormationGapFiller : MonoBehaviour
             snapped.z = pm.transform.position.z;
             pm.transform.position = snapped;
             pm.SetAnimMoving(false);
-            moving.Remove(pm);
         }
+
+        // Release the reservation only now. Until this point the slot stayed
+        // reserved, so no second hero could ever be sent to it.
+        if (pm != null) reserved.Remove(pm);
+        CleanUpDeadReservations();
     }
 }
 ```
@@ -366,12 +493,18 @@ public class FormationGapFiller : MonoBehaviour
 | Line | Why it is there |
 |---|---|
 | `if (!pm.isUnlocked) continue;` | Heroes still standing on the gate must be ignored. Without this the algorithm would try to drag a hero off the gate before it has jumped. |
-| `reserved` is a **Dictionary**, not a HashSet | See §8a. Knowing *which slot* a walking hero is heading to is what stops a second hero being sent to the same place. |
-| `displaced` list | Two heroes can end up nearest the same slot. The extra one goes here and is pulled into the next gap first — otherwise a stack could never resolve itself. |
+| `if (reserved.ContainsKey(pm)) continue;` | A hero already walking was placed in step 1a from its **reservation**, not its current position. Re-snapping it mid-walk would register the slot it is passing over rather than the one it owns. |
+| Reservations applied **before** the position snap (1a before 1b) | This is the §8a fix. A walking hero's *destination* must read as occupied, or the next pass hands the same gap to somebody else. |
+| `else displaced.Add((pm, r));` | Two heroes can end up nearest the same slot. The extra one must stay **visible** to the algorithm — the earlier version dropped it, so a stack could never repair itself. |
+| `if (entry.row <= targetRow) continue;` | Forward-only. Stacked heroes are still not allowed to move sideways or backwards; see §3. |
 | `sqrMagnitude` instead of `Distance` | We only ever *compare* distances, never display them. Skipping the square root in a double loop is free performance. |
-| `moveTimeout` | If a hero gets stuck on a collider, the coroutine must still end. Without it, that hero would stay in `moving` forever and never be considered again. |
+| `moveTimeout` | If a hero gets stuck on a collider, the coroutine must still end. Without it, that hero would hold its reservation forever and its slot would be leaked. |
+| `CleanUpDeadReservations()` | A hero destroyed mid-walk would otherwise keep its slot reserved permanently, leaving a hole nobody may fill. |
 | `next.z = pm.transform.position.z;` | We only reposition on X/Y. Overwriting Z would break 2D sprite draw order. |
-| `pm.FaceLeft(dx < 0f)` | We deliberately do **not** set `localScale` here. `FaceLeft` contains the mirrored-parent correction; duplicating the flip locally would reintroduce the backwards-facing bug. |
+| `pm.FaceLeft(dir.x < 0f)` | We deliberately do **not** set `localScale` here. `FaceLeft` contains the mirrored-parent correction; duplicating the flip locally would reintroduce the backwards-facing bug. |
+| `pm.SetAnimMoving(true)` before the loop | Without it the hero glides into the gap playing its **idle** animation. The arrival block sets it back to `false`. |
+| `remaining > arriveEpsilon * 4f` around the steer call | Avoidance is skipped on the last stretch so the unit settles exactly on its slot instead of circling it. |
+| `Mathf.Min(moveSpeed * Time.deltaTime, remaining)` | The swerve lengthens the path; clamping the step to what is left stops the hero overshooting its slot. |
 
 ### 4b. `PlayerWaveManager.cs` — the trigger
 
@@ -470,6 +603,8 @@ position and it silently broke as soon as the scene moved.
 | **Gap filling runs during the puzzle phase too**, not only after BATTLE | The formation should already look organised while the player is still solving the board. Note this is the *one* movement allowed before battle — advancing toward the enemy is still gated behind BATTLE + first enemy spawned. |
 | Grid **derived from scene transforms**, not constants | Constants rot the moment an artist moves something. |
 | Compaction triggered **after landing**, not during the jump | A hero mid-air has a meaningless position, so slot-snapping would pick the wrong cell. |
+| **Moves are forward-only** — a mover must sit in a row behind the gap | Allowing sideways or backwards moves made a settled front rank visibly re-arrange itself every time a later wave landed, which read as the formation randomly reshuffling. |
+| **Reserve the slot, not the worker** | Tracking only "is this hero busy?" let a second hero be sent to a destination already claimed. See §8a. |
 | Movement by **`transform.position`**, not physics forces | These heroes are not in a physics-driven state here, and we want an exact, predictable stop on the slot. Forces would overshoot. |
 
 ---
@@ -483,14 +618,15 @@ On the `FormationGapFiller` component:
 * **`Pre Move Delay`** (default `0.4`) — a beat held after landing before the
   hero steps off, so the rank reads as *land → notice the gap → move* rather
   than sliding the instant it touches down. The hero is already registered in
-  `moving` during this pause, so it cannot be reassigned to a different gap
+  `reserved` during this pause, so its destination slot cannot be handed to another
   while it waits. The move timeout starts **after** the pause, so the delay
   never eats into the walk's time budget.
 * **`Arrive Epsilon`** (default `0.05`) — how close counts as arrived.
 * **`Move Timeout`** (default `6`) — safety cap for a blocked mover.
 * **`Log Compaction`** — turn this **on** first when something looks wrong. It
   prints one line per move, e.g.
-  `[FormationGapFiller] Player_Valkyrie(Clone): row1col1 -> row0col1`,
+  `[FormationGapFiller] Player_Valkyrie(Clone): row1col1 -> row0col1`
+  (a mover pulled out of the stacked pile logs `stacked -> row0col1` instead),
   plus a summary count. That tells you instantly whether the algorithm decided
   nothing (grid/wiring problem) or decided something wrong (tuning problem).
 
@@ -535,19 +671,22 @@ out asynchronously, reserve the *resource*, not just the *worker*.
 
 ## 8. Known limits — please read before extending
 
-* **No collision avoidance.** Two heroes crossing diagonally can walk through
-  each other. It has not looked bad in practice because moves are short, but if
-  you add long lateral moves you will notice it.
+* **Avoidance is path-only, and only between allies.** While walking into a gap a
+  hero bends its route around an ally standing in the way (`CrowdSeparation2D.
+  SteerAroundBlockers`) and straightens out again. Standing units are never
+  pushed apart, and enemies are never avoided — see the design rule at the top of
+  `CrowdSeparation2D.cs` for why both of those were removed rather than fixed.
+* **A stacked hero in the front row cannot be repaired by compaction.** Moves are
+  forward-only and there is no row ahead of row 0 to pull it into. It is left to
+  path avoidance to separate.
 * **Compaction only runs on wave landing.** If a hero **dies** and leaves a hole,
   nothing repacks the formation. If you want that, call `gapFiller.Compact()`
   from wherever a player death is handled.
 * **Wave 5 and beyond** all land on the last lane (`reuseLastLane`), so they
   arrive already stacked on row 3 and only spread out via gap filling.
-* **Not yet verified in Play mode.** The algorithm was verified by simulating the
-  exact screenshot layout and confirming the two expected moves and the cascade.
-  The scene wiring and the grid values were read back from the saved scene. What
-  has *not* been confirmed is how it looks and feels running live — expect
-  `Move Speed` to need adjusting.
+* **Play-mode state.** The stacking bug in §8a was caught on video in Play mode
+  and fixed. The `SetAnimMoving(true)` fix listed in the guard table has *not*
+  been confirmed live yet. Expect `Move Speed` to still need tuning by feel.
 
 ---
 
@@ -557,6 +696,7 @@ out asynchronously, reserve the *resource*, not just the *worker*.
 |---|---|
 | `Assets/Scripts/Combat/Spawning/FormationGapFiller.cs` | the feature itself |
 | `Assets/Scripts/Combat/Spawning/PlayerWaveManager.cs` | picks the lane per wave, triggers compaction |
+| `Assets/Scripts/Combat/Shared/CrowdSeparation2D.cs` | `SteerAroundBlockers` — bends a walk around an ally in the way |
 | `Assets/Scripts/Combat/Player/SimpleJump2D.cs` | `TriggerJumpTo` — the X-preserving jump that creates the columns |
-| `Assets/Scripts/Combat/Player/PlayerManager.cs` | `FaceLeft` — mirrored-parent-safe sprite flipping |
+| `Assets/Scripts/Combat/Player/PlayerManager.cs` | `FaceLeft` — mirrored-parent-safe sprite flipping; `SetAnimMoving` — walk/idle blend |
 | `Assets/Documentation for scripts/PlayerWaveManager.txt` | per-script reference |
