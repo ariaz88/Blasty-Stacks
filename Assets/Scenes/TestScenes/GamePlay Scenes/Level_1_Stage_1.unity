@@ -3116,7 +3116,8 @@ MonoBehaviour:
   - {fileID: 1765837234}
   - {fileID: 1931166566}
   - {fileID: 1934330801}
-  moveSpeed: 2
+  moveSpeed: 1.6
+  preMoveDelay: 0.4
   arriveEpsilon: 0.05
   moveTimeout: 6
   logCompaction: 0
@@ -13109,6 +13110,7 @@ GameObject:
   - component: {fileID: 1666081599}
   - component: {fileID: 1666081598}
   - component: {fileID: 1666081600}
+  - component: {fileID: 1666081601}
   m_Layer: 0
   m_Name: LevelGameManager
   m_TagString: Untagged
@@ -13169,6 +13171,32 @@ MonoBehaviour:
   - {fileID: 1510000732}
   showWhenBattleStarts: []
   hideAfterCameraArrives: 1
+--- !u!114 &1666081601
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1666081597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 09316ac3f69109045858af2938aae6f2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CrowdSeparation2D
+  desiredSpacing: 0.95
+  maxCorrectionSpeed: 1.2
+  lateralBias: 0.85
+  freeSpaceProbeDistance: 0.5
+  freeSpaceProbeRadius: 0.25
+  unitLayers:
+    serializedVersion: 2
+    m_Bits: 192
+  sameTeamOnly: 0
+  refreshInterval: 0.25
+  lookAheadDistance: 1.3
+  lookAheadRadius: 0.4
+  avoidStrength: 0.9
+  drawGizmos: 0
 --- !u!4 &1675231179 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1406975074739654467, guid: 1a3b8675c0e378e4280b8bcbb7620165, type: 3}
@@ -17567,13 +17595,6 @@ MonoBehaviour:
   chosenEnemyOffset: {fileID: 0}
   attackPlayerGate: 0
   visualRoot: {fileID: 0}
-  separationRadius: 0.5
-  separationStrength: 1
-  friendlyLayerMask:
-    serializedVersion: 2
-    m_Bits: 0
-  minHorizontalSpacing: 0.35
-  spacingCheckRadius: 0.4
 --- !u!1 &1305661377585804153
 GameObject:
   m_ObjectHideFlags: 0

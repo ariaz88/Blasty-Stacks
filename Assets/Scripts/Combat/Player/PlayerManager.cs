@@ -78,19 +78,11 @@ public class PlayerManager : MonoBehaviour
     public Transform visualRoot;  // assign the 'Visual' child in the prefab
 
 
-    [Header("Separation / Avoidance")]
-    [Tooltip("Radius to check for other friendly units.")]
-    public float separationRadius = 0.5f;
-
-    [Tooltip("How strongly we steer sideways when trying to avoid.")]
-    public float separationStrength = 1.0f;
-
-    [Tooltip("LayerMask for friendly units (e.g. Player layer).")]
-    public LayerMask friendlyLayerMask;
-
-    [Header("Horizontal overlap fix")]
-    [SerializeField] private float minHorizontalSpacing = 0.35f; // how far apart in X
-    [SerializeField] private float spacingCheckRadius = 0.4f;    // radius to look for neighbors
+    // NOTE: the old "Separation / Avoidance" and "Horizontal overlap fix" fields
+    // were REMOVED on 2026-08-21. Unit spacing is now owned entirely by the
+    // scene-level CrowdSeparation2D component, which handles players and enemies
+    // with one consistent rule. See CrowdSeparation2D.cs for why the old two
+    // systems were deleted rather than repaired.
 
     private void OnEnable()
     {
@@ -99,6 +91,10 @@ public class PlayerManager : MonoBehaviour
     private void OnDisable()
     {
         EnemyGateStats.OnGateDestroyed -= HandleGateDestroyed;
+
+        // Hand the attack spot back so a later attacker can use it.
+        AttackSlotRegistry.Release(this);
+        attackSlotTarget = null;
     }
     private void Awake()
     {
@@ -475,6 +471,44 @@ public class PlayerManager : MonoBehaviour
         return transform.position; // fallback
     }
 
+    [Header("Attack Spacing")]
+    [Tooltip("Sideways gap between two heroes attacking the same target. Each " +
+             "attacker claims its own spot on arrival - they never push to make room.")]
+    [SerializeField] private float attackSlotSpacing = AttackSlotRegistry.DefaultSlotSpacing;
+
+    // The target we currently hold an attack slot on, and which slot it is.
+    private Object attackSlotTarget;
+    private int attackSlotIndex;
+
+    /// <summary>
+    /// Lateral offset of this unit's own attack spot. Claims a slot the first
+    /// time a target is engaged and keeps it until the target changes, so the
+    /// unit stands still once it arrives instead of sliding around.
+    /// </summary>
+    private float CurrentAttackSlotOffset()
+    {
+        Object target = currentTarget != null ? (Object)currentTarget : (Object)currentGateTarget;
+
+        if (target == null)
+        {
+            if (attackSlotTarget != null)
+            {
+                AttackSlotRegistry.Release(this);
+                attackSlotTarget = null;
+            }
+            return 0f;
+        }
+
+        if (target != attackSlotTarget)
+        {
+            AttackSlotRegistry.Release(this);
+            attackSlotIndex = AttackSlotRegistry.Claim(target, this);
+            attackSlotTarget = target;
+        }
+
+        return AttackSlotRegistry.OffsetForSlot(attackSlotIndex, attackSlotSpacing);
+    }
+
     public void HandleMoveToTarget(bool canMove)
 {
     if (!canMove)
@@ -486,18 +520,41 @@ public class PlayerManager : MonoBehaviour
     if (chosenEnemyOffset == null)
         return;
 
-    Vector2 toTarget = (Vector2)(chosenEnemyOffset.position - transform.position);
+    // Each attacker walks to its OWN spot beside the target instead of everyone
+    // converging on one point. The slot is claimed once and kept for as long as
+    // the target does not change, so nobody drifts sideways mid-fight - and no
+    // unit ever pushes another to make room.
+    Vector2 destination = (Vector2)chosenEnemyOffset.position
+                        + new Vector2(CurrentAttackSlotOffset(), 0f);
+
+    Vector2 toTarget = destination - (Vector2)transform.position;
     float dist = toTarget.magnitude;
 
-    if (dist < 0.0001f)
+    if (dist < 0.05f)
     {
-        // Even when "at target," apply idle separation to unstick
-        playerRigidbody.linearVelocity = ApplyFriendlySeparation(Vector2.right) * moveSpeed * 0.5f;  // Half-speed idle nudge
+        // Arrived at our own attack spot: stop dead and stay there. No shuffling,
+        // no reacting to whoever else is standing nearby.
+        playerRigidbody.linearVelocity = Vector2.zero;
         return;
     }
 
     Vector2 dir = toTarget.normalized;
-    dir = ApplyFriendlySeparation(dir);  // Always apply
+
+    // PATH AVOIDANCE IS CONTEXT-LIMITED ON PURPOSE.
+    //
+    // Mid-battle, when a hero is chasing an enemy UNIT, there is NO avoidance at
+    // all - units simply pass through each other. That is the plain behaviour
+    // asked for, and it is also what stops a hero swerving around its own kill.
+    //
+    // It is only switched on when the hero is walking at the GATE, i.e. the end
+    // of the battle, where several heroes converge on one structure and the ones
+    // coming up from behind need to arc around the ones already hitting it.
+    // The other place it runs is the pre-battle formation, handled in
+    // FormationGapFiller.
+    bool headingForGate = currentTarget == null && currentGateTarget != null;
+
+    if (headingForGate && CrowdSeparation2D.Instance != null)
+        dir = CrowdSeparation2D.Instance.SteerAroundBlockers(transform, dir);
 
     // NEW: Use velocity for smooth movement (no tunneling)
     playerRigidbody.linearVelocity = dir * moveSpeed;
@@ -506,116 +563,22 @@ public class PlayerManager : MonoBehaviour
         playerRigidbody.linearVelocity *= 0.7f;  // Slow down for attack
 }
 
-    private Vector2 ApplyFriendlySeparation(Vector2 desiredDir)
-    {
-        if (separationRadius <= 0f || friendlyLayerMask.value == 0)
-            return desiredDir;
-
-        Vector2 myPos = transform.position;
-        float totalSidePush = 0f;  // Scalar for X-push (simpler, avoids vector bloat)
-        float totalRepel = 0f;
-        int overlapCount = 0;  // NEW: Count for scaling
-
-        Collider2D[] hits = Physics2D.OverlapCircleAll(myPos, separationRadius, friendlyLayerMask);
-        if (hits == null || hits.Length == 0)
-            return desiredDir;
-
-        foreach (var hit in hits)
-        {
-            if (hit == null) continue;
-            if (hit.attachedRigidbody == playerRigidbody) continue;
-            if (!hit.CompareTag(gameObject.tag)) continue;
-
-            Vector2 otherPos = hit.transform.position;
-            Vector2 diff = myPos - otherPos;
-            float sqrDist = diff.sqrMagnitude;
-
-            if (sqrDist > separationRadius * separationRadius || sqrDist < 0.0001f)
-                continue;
-
-            // Lower/equal Y dodges (mutual for equals)
-            if (myPos.y > otherPos.y)
-                continue;
-
-            overlapCount++;  // Count valid overlaps
-
-            // Scale by closeness
-            float avoidForce = 1f - Mathf.Sqrt(sqrDist) / separationRadius;
-
-            // Horizontal side-push (away in X)
-            float horizSign = Mathf.Sign(diff.x);
-            if (horizSign == 0f) horizSign = 1f;
-            totalSidePush += horizSign * avoidForce;
-
-            // X-repel bonus
-            totalRepel += diff.normalized.x * avoidForce * 0.5f;
-        }
-
-        if (overlapCount == 0)
-            return desiredDir;
-
-        // NEW: Scale by crowd density (e.g., 1.5x for 3+ overlaps)
-        float crowdMultiplier = Mathf.Lerp(1f, 2f, (overlapCount - 1f) / 3f);  // Caps at 2x for 4+ units
-        float pushStrength = separationStrength * crowdMultiplier;
-
-        // Blend: Forward + horizontal dodge (Y=0)
-        Vector2 dodge = new Vector2(totalSidePush + totalRepel, 0f) * pushStrength;
-        Vector2 newDir = (desiredDir + dodge.normalized).normalized;
-        return newDir;
-    }
-
-    private void ResolveHorizontalOverlap()
-    {
-        if (playerRigidbody == null)
-            return;
-
-        Vector2 myPos = playerRigidbody.position;
-
-        // Find nearby same-type units
-        Collider2D[] hits = Physics2D.OverlapCircleAll(myPos, spacingCheckRadius, friendlyLayerMask);
-        if (hits == null || hits.Length == 0)
-            return;
-
-        float totalXAdjustment = 0f;
-        int count = 0;
-
-        foreach (var hit in hits)
-        {
-            if (hit == null) continue;
-            if (hit.attachedRigidbody == playerRigidbody) continue;
-            if (!hit.CompareTag(gameObject.tag)) continue;  // only same type (Player vs Player)
-
-            Vector2 otherPos = hit.attachedRigidbody.position;
-            float dx = myPos.x - otherPos.x;
-            float absDx = Mathf.Abs(dx);
-
-            // Only care if they are too close in X
-            if (absDx >= minHorizontalSpacing)
-                continue;
-
-            // Also check they are roughly same row in Y (so we don't push guys far in front/back)
-            float dy = Mathf.Abs(myPos.y - otherPos.y);
-            if (dy > spacingCheckRadius)
-                continue;
-
-            // We’re too close; figure out which side to push to
-            float pushDir = (dx >= 0f) ? 1f : -1f;  // if we are right of them, move more right; else more left
-            float needed = minHorizontalSpacing - absDx; // how much distance we need to gain
-
-            totalXAdjustment += pushDir * needed;
-            count++;
-        }
-
-        if (count == 0 || Mathf.Approximately(totalXAdjustment, 0f))
-            return;
-
-        // Average adjustment and apply a bit of smoothing
-        float avgAdjust = (totalXAdjustment / count) * 0.8f; // 0.8 = damp factor to avoid overshoot
-        Vector2 targetPos = new Vector2(myPos.x + avgAdjust, myPos.y);
-
-        playerRigidbody.MovePosition(Vector2.Lerp(myPos, targetPos, 0.5f));
-    }
-
+    // ApplyFriendlySeparation() and ResolveHorizontalOverlap() were DELETED on
+    // 2026-08-21. Both tried to keep units apart and fought each other:
+    //
+    //   * ApplyFriendlySeparation bent the MOVE DIRECTION, so a crowded unit
+    //     walked sideways instead of at its target. Worse, it ended with
+    //     "(desiredDir + dodge.normalized).normalized" - the .normalized threw
+    //     away every strength/crowd multiplier computed just above it, so the
+    //     dodge was always a full-strength sideways shove.
+    //
+    //   * ResolveHorizontalOverlap ran MovePosition() every FixedUpdate,
+    //     unconditionally, even mid-jump and while locked on the gate. And when
+    //     two units sat at the SAME x, "pushDir = (dx >= 0f) ? 1f : -1f" gave
+    //     BOTH of them +1, so they slid right together forever instead of
+    //     separating - the exact stacking that was reported.
+    //
+    // Spacing is now owned by the scene-level CrowdSeparation2D component.
 
     // Drive your 2D Cartesian BlendTree (Horizontal/Vertical)
     public void SetAnimMoving(bool moving)
@@ -631,11 +594,8 @@ public class PlayerManager : MonoBehaviour
 {
     HandleStateMachine();
 
-     
-
-        ResolveHorizontalOverlap();
-
-        //// Gentle horizontal unstick: Only for extreme overlaps, X-only nudge
+    // Spacing used to be forced here every physics step via
+    // ResolveHorizontalOverlap(). That is gone - CrowdSeparation2D owns it now.
     }
 
     private void HandleStateMachine()
