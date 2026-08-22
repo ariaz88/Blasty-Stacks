@@ -66,6 +66,16 @@ public class PlayerManager : MonoBehaviour
     public bool isUnlocked = false;
     private float damageAppling;
 
+    /// <summary>
+    /// TRUE while FormationGapFiller is walking this hero into a gap during the
+    /// PRE-BATTLE phase. The hero is still in PlayerLockState at that point, and
+    /// PlayerLockState.Tick forces the animator back to idle every FixedUpdate -
+    /// which silently ate the walk cycle the gap filler had just started. While
+    /// this flag is set, PlayerLockState leaves locomotion and the animator alone
+    /// and lets the gap filler drive them.
+    /// </summary>
+    [HideInInspector] public bool isFormationStepping = false;
+
     [Header("Facing/Targeting")]
     public bool faceCenterOnStart = true;
 

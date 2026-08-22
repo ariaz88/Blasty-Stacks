@@ -22,7 +22,37 @@ public class LevelGameManager : MonoBehaviour
     [Tooltip("If true, only one successful revive is allowed per stage.")]
     [SerializeField] private bool allowSingleRevivePerStage = true;
 
-    public GameState CurrentState { get; private set; } = GameState.Playing;
+    /// <summary>
+    /// Fires whenever the level leaves or re-enters GameState.Playing.
+    ///
+    /// This is the authoritative "is the battle still running?" signal: the battle
+    /// ends the moment a GATE hits 0 HP (enemy gate = won, player gate = lost or
+    /// revive offer), and resumes only when a revive is accepted. Anything that
+    /// behaves differently during combat than it does under an end-of-battle panel
+    /// should listen here rather than inventing its own notion of "over".
+    ///
+    /// STATIC, so it survives the listener's own lifetime - every subscriber must
+    /// unsubscribe in OnDestroy or it will leak across scene loads.
+    /// </summary>
+    public static event Action<GameState> OnGameStateChanged;
+
+    /// <summary>True while the level is still being played. Safe before any
+    /// LevelGameManager exists (a stage opened directly in the editor).</summary>
+    public static bool IsBattleRunning =>
+        Instance == null || Instance.CurrentState == GameState.Playing;
+
+    private GameState _currentState = GameState.Playing;
+
+    public GameState CurrentState
+    {
+        get => _currentState;
+        private set
+        {
+            if (_currentState == value) return;
+            _currentState = value;
+            OnGameStateChanged?.Invoke(value);
+        }
+    }
 
     private bool hasRevivedThisStage = false;
 

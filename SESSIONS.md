@@ -55,6 +55,36 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **RELEASE BLOCKERS from the 2026-08-21 ads work** (all currently set for testing):
+  `BattleStartController.doNotPersistAllowance` must go OFF (otherwise the 24h battle cap resets
+  every app restart); `AdManager.useTestIds` must go OFF with real unit ids filled in;
+  `GoogleMobileAdsSettings.asset` still holds Google's TEST app ids; and the Android
+  `applicationIdentifier` is UNSET (only Standalone `com.DefaultCompany.2D-URP` exists) — a real
+  package name is required and must match the AdMob console entry.
+- `Level_1_Stage_1.unity` is NOT in Build Settings yet (user said they would add it).
+- **Nothing has been run on a device.** No Android build was produced this session, so the AdMob
+  banner has never actually been seen on a phone. `JAVA_HOME` was repointed to the 6000.3.21f1
+  OpenJDK (it dangled at an uninstalled 2021.3.42f1) — Unity must be restarted for that to apply.
+- **`PlayerAttackState.cs:69` and `PlayerDeathState.cs:9` write `linearVelocity` on a body they
+  just set to Static**, spamming "Cannot use 'linearVelocity' on a static body" every FixedUpdate.
+  Harmless but it floods the console and hides real errors. Two-line guard each.
+- **`EnemyManager` target selection never got the hysteresis treatment** that `PlayerManager` did
+  (see the 2026-08-21 Decisions row). Enemy FACING has a `facingDeadZoneX` guard, but if enemies
+  are seen flip-flopping between left and right, that is where to look.
+- **Unconfirmed report:** "back row plays its walk animation but stays in place" mid-battle
+  (user video 483, case 2). Simulating a perfectly-aligned rear hero did NOT reproduce it, so the
+  proposed cause (pursuit vs personal-space cancelling out) is probably wrong. A likely alternative
+  is `PlayerPursueTargetState` calling `SetAnimMoving(true)` while `HandleMoveToTarget` has already
+  hit its arrival threshold and zeroed velocity. Catch it live and read the state.
+- **Design gap:** the board can empty BEFORE the move budget is spent (observed: board cleared in
+  3 of 8 moves). Nothing signals it and nothing advances, so the only way forward is BATTLE. Worse,
+  `PlayerWaveManager.WaveLoop` exits PERMANENTLY once the board is empty, so no further hero waves
+  can ever spawn that stage. Decide: refill the board, auto-start the battle, or hide the counter.
+- **Per-script docs are behind** for the scripts touched on 2026-08-21: `PlayerManager`,
+  `CrowdSeparation2D`, `AttackSlotRegistry`, `HealthBar`, `EnemySpawner`, `BattleStartController`,
+  `SimpleJump2D`, `FormationGapFiller`, `PlayerPursueTargetState`. Two standalone guides WERE
+  written: `Formation_GapFilling_Guide.md` and `Unit_Avoidance_And_NonCollision_Guide.md`.
+
 - Build Profiles points `Level_1_Stage_8..20` at the stale path `Scenes/Level_1_Stage_N.unity`;
   the real files are under `Scenes/TestScenes/GamePlay Scenes/`. Stages 8-20 are not in the build.
 - `Assets/Scripts/_Legacy/` holds 16 quarantined scripts. Confirm each is truly unused, then delete.
@@ -67,6 +97,10 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   OnResetButtonClicked();`) — confirmed still present as of the doc pass. Almost certainly a
   debug leftover; needs the two lines removed or `resetBool` exposed as a real toggle before
   this project can retain any player progress across sessions.
+  **2026-08-21: the user explicitly asked to KEEP this while testing.** Note it is NOT in the
+  gameplay scenes (it reaches them via `DontDestroyOnLoad` from `StarterScene`), so pressing Play
+  directly on a stage skips the wipe entirely — which is why `BattleEnergyService.SessionOnly`
+  exists rather than relying on this reset.
 - Roguelite XP is fully implemented but never triggered in play: `RogueliteManager.AddXP` /
   `NotifyEnemyKilled` have zero live call sites (`EnemyManager`'s call is commented out).
   Confirm whether this is intentional WIP or a lost wire-up.
@@ -108,6 +142,11 @@ _Durable choices with their reasons, so no session reopens them blindly._
 | 2026-08-20 | The **read** half is automated by a `SessionStart` hook (`.claude/hooks/inject-sessions.js`, wired in `.claude/settings.json`) that injects this file's contents into every session. | Relying on each session to remember to open the file made awareness optional; the hook makes it unconditional. |
 | 2026-08-20 | The **write** half is triggered by the `/wrap` slash command (`.claude/commands/wrap.md`), not by a hook. | No hook event reliably means "the session is ending", and a `Stop` hook fires after every response — far too noisy. An explicit one-word command is the honest mechanism. |
 | 2026-08-20 | TMP font assets in this project are **Static** atlas population, not Dynamic, with `ClearDynamicDataOnBuild` off (including the project-wide default in `TMP Settings.asset`). | Dynamic treats the glyph atlas as a rebuildable cache, so it does not survive a `Library/` wipe, a fresh clone, or a build — it forced a manual "Generate Font Atlas" every time. Static bakes glyphs into the `.asset`. Accepted cost: Static cannot add glyphs at runtime, so any font that must render Persian/Arabic or player-typed text is an explicit exception and stays Dynamic **with its Source Font File assigned**. |
+| 2026-08-21 | **Units have ZERO physics interaction.** They never collide or push. A moving unit instead uses LOOK-AHEAD steering to route around an ALLY in its path, plus a small personal space that runs only while walking. | A continuous separation push was built and rejected TWICE. First it shoved heroes away from ENEMIES the moment they closed to attack range, so they orbited their target instead of fighting it. Second, even same-team-only, a constant shove is still an interaction — the requirement is that a unit which has stopped is left completely alone. Steering is predictive (it prevents the overlap) rather than corrective (fighting one that already exists), which is what makes "don't touch standing units" possible at all. Full history in `Assets/Documentation for scripts/Unit_Avoidance_And_NonCollision_Guide.md`. |
+| 2026-08-21 | **An attack spot must ALWAYS be within `maxAttackRange` of its target.** Attackers fan out on an ARC around the target (`radius = min(anchorDistance, maxAttackRange * 0.8)`), never on a flat sideways offset. | `PlayerPursueTargetState` decides pursue-vs-combat by distance to the TARGET while the mover walks to the SLOT. A flat `+0.90` offset put a hero 1.57 from an enemy with a range of 0.85, so the mover reported "arrived" (0.046 away) while the state reported "too far" — a hard deadlock, units frozen on the spot. Any future slot scheme must preserve this invariant. |
+| 2026-08-21 | **Every "which is nearest / which side" decision needs hysteresis or a deterministic tie-break.** | The identical bug shape appeared FIVE times: target selection, side-anchor selection, `FaceLeft` re-picking the anchor, swerve side with a blocker dead-ahead, and swerve side with units exactly overlapped. Symptoms were units spinning left-right on the spot, or two units picking the SAME side (`0 > 0` is false for both) and travelling as one merged blob. Margins are compared in SQUARED space, so a linear margin must be squared. |
+| 2026-08-21 | **Battle-gate flags all default to "ungated"**: `waitForBattleStart = false`, `BattleIsRunning = true`, `EnemiesHaveAppeared = true`. Only a scene that actually has the new components flips them. | Stages 1-20 were authored before the puzzle-first flow. Defaulting to gated would have silently frozen every one of them. Presence-based gating means the new scene opts IN and nothing else changes behaviour. |
+| 2026-08-21 | AdMob + EDM4U are installed from **git URLs**, not Google's scoped registry. | `https://unityregistry-pa.googleapis.com` was unreachable from this machine; the resolve failed with "Package [com.google.external-dependency-manager@1.2.187] cannot be found". If the registry is ever restored, drop the EDM4U git url at the same time — do not keep both. |
 | 2026-08-20 | The conversion is done by a repeatable editor tool (`Assets/Scripts/Editor/TMPFontAssetStaticBaker.cs`), not by hand-editing the Inspector or patching the `.asset` YAML directly. | Hand-editing does not scale and is not reproducible for the next font added; direct YAML patching was considered and rejected because it cannot repopulate an atlas — only TMP's `TryAddCharacters` can, and it needs a loaded font face. The tool also re-runs safely on assets that are already correct. |
 
 ---
@@ -115,6 +154,113 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-08-21 — Puzzle-first stage flow: battle gate, jump lanes/formation, unit avoidance, AdMob install
+- **Goal:** rebuild `Level_1_Stage_1` around a new loop — puzzle phase first, combat only after
+  the BATTLE button — then fix the movement/formation problems that surfaced from it.
+- **Status:** partial (core flow works; see Open Threads for what is unverified)
+- **Commits:** `c0b9210 jump formation`, `976a0ec سس`, `c74f706 physics`, `d599ca2 Fomations settings`
+
+- **Changed — battle gate / energy:**
+  - `Assets/Scripts/Combat/Spawning/EnemySpawner.cs` — added `waitForBattleStart` (default OFF so
+    stages 1-20 keep auto-starting) + idempotent `StartBattle()`; `HasSpawnedFirstEnemy` /
+    `OnFirstEnemySpawned` plus static `EnemiesHaveAppeared` / `OnAnyFirstEnemySpawned`; optional
+    gate-relative spawn box (`spawnRelativeToEnemyGate`, `gateRelativeMin/Max`) because the shared
+    `Spawner2` asset holds ABSOLUTE coords that broke when the enemy gate moved to y=14.43.
+  - `Assets/Scripts/Combat/Spawning/BattleStartController.cs` (new) — drives the BATTLE button,
+    charges the allowance, then releases the spawner. Static `BattleIsRunning` / `OnAnyBattleStarted`.
+  - `Assets/Scripts/Core/Progression/BattleEnergyService.cs` (new) — 25 battles per ROLLING 24h,
+    global, window opens on first battle. Energy is a PLACEHOLDER (nothing grants it yet).
+    `SessionOnly` test mode keeps it in memory only.
+  - `Assets/Scripts/Core/SaveLoad/SaveData.cs` + `SaveSystem.cs` — `BattleEnergyState` section,
+    `GetBattleEnergy` / `SetBattleEnergy`. Also FIXED a pre-existing migration recursion in
+    `LoadInternal()` (it called `Save()` before publishing `_cache`, so the v2 migration never
+    persisted and re-ran every launch).
+
+- **Changed — puzzle:**
+  - `Assets/Scripts/Puzzle/Board/PuzzleMoveBudget.cs` (new) + `Puzzle/Input/BoardInputController.cs`
+    — N moves per level. A move counts ONLY when a piece lands on a DIFFERENT cell; a tap, or a
+    drag the board refused, does not. Board stops accepting new pickups when spent.
+
+- **Changed — camera / phase transition:**
+  - `Assets/Scripts/Combat/Spawning/BattlePhaseTransition.cs` (new) — on BATTLE, moves
+    `Main Camera` + `BackGroundImage` UP by a relative **+6.75** (DOTween) and switches off
+    `Puzzle Board` + `Feature Panel`. Spawner is released only on completion, so waves never
+    start while the camera is still travelling. An earlier absolute "Battle View Anchor" approach
+    was replaced by the relative offset and that object deleted.
+
+- **Changed — jump / formation:**
+  - `Assets/Scripts/Combat/Player/SimpleJump2D.cs` — `TriggerJumpTo(worldY)` (lands on an exact
+    lane, X preserved); `landedScaleMultiplier` 0.9 eased across the jump so there is no pop on
+    landing; duration/arc now SCALE WITH DISTANCE (duration by sqrt of the ratio, arc linearly),
+    fixing the first jump looking fired from a cannon (9.4 vs 1.8 u/s → 7.9 vs 2.9).
+  - `Assets/Scripts/Combat/Spawning/PlayerWaveManager.cs` — `jumpLanes[]` (wave N → lane N,
+    lane 1 = furthest), `holdUntilFirstEnemySpawns`, and a per-wave formation compaction pass.
+  - `Assets/Scripts/Combat/Spawning/FormationGapFiller.cs` (new) — 4x4 grid DERIVED from the gate
+    stages (X) and jump lanes (Y). Fills holes forward-only, cascading. Reserves a mover's
+    destination slot (a `Dictionary`, not a `HashSet`) — without that, a second hero was sent to a
+    slot someone was already walking to and the two stacked permanently.
+
+- **Changed — unit avoidance (the largest thread; 5 attempts):**
+  - `Assets/Scripts/Combat/Player/PlayerManager.cs` — DELETED both old separation systems
+    (`ApplyFriendlySeparation`, `ResolveHorizontalOverlap`, 112 lines + 5 fields). Added
+    `HandleRoamForward()`, `ResolveAttackDestination()`, `PickAttackAnchor()`, and hysteresis
+    fields. Also fixed FACING being inverted on the gate: `PlayerCastle` has
+    `lossyScale.x = -1`, so `FaceLeft` writing LOCAL scale under that mirrored parent rendered
+    backwards; it now converts the wanted WORLD sign into the local one.
+  - `Assets/Scripts/Combat/Shared/CrowdSeparation2D.cs` (new) — ended up as look-ahead path
+    avoidance + a small walking-only personal space. No `LateUpdate`, no push on standing units.
+  - `Assets/Scripts/Combat/Shared/AttackSlotRegistry.cs` (new) — per-target attack spots claimed
+    once on arrival, fanned on an ARC inside attack range.
+  - `Assets/Scripts/Combat/Player/States/PlayerPursueTargetState.cs` — the no-target march used to
+    write `linearVelocity` inline, bypassing all avoidance; now calls `HandleRoamForward()`.
+
+- **Changed — health bars / ads:**
+  - `Assets/Scripts/Combat/Player/HealthBar.cs` — forces its Canvas to `sortingOrder 500` (all 23
+    character prefabs sat at order 1, tied with the sprites, so bars hid behind other units);
+    `hideUntilBattleStarts` reveals unit bars when the FIRST ENEMY APPEARS (not on the button press).
+  - `Assets/Scripts/Core/Ads/AdManager.cs` — anchored ADAPTIVE banner, load/fail events, retry;
+    `Assets/Scripts/Core/Ads/AdBannerSlot.cs` (new) reserves the on-screen strip (uses
+    `SetSizeWithCurrentAnchors`, since that panel is stretch-anchored).
+
+- **Scene/Prefab/SO edits (invisible in a git diff):**
+  - `Level_1_Stage_1.unity` — created `Jump pos 4` and repositioned all four lanes to
+    7.75 / 6.61 / 5.47 / 4.33; added `BattlePhaseTransition` + `CrowdSeparation2D` to
+    `LevelGameManager`, `FormationGapFiller` to the `PlayerWaveManager` object, `AdBannerSlot` to
+    `Ads Banner panel`; wired `jumpLanes`, `gapFiller`, `columnAnchors`, `rowLanes`,
+    `transition`; `moveSpeed` 2→1.6, `jumpWaitTimeout` 0.5→1.5 (a scaled first jump is 0.54s and
+    would otherwise have been cut short). Deleted the obsolete `Battle View Anchor`.
+    NOTE the user renamed this scene from `Level_1_Stage_0` mid-session.
+  - `StarterScene.unity` — added an `AdManager` GameObject (done ADDITIVELY so the user's open
+    scene was never touched).
+  - **23 character prefabs** — `HealthBar.hideUntilBattleStarts = true`. Gate bars
+    (`PlayerGateProgressBarUI`, `EnemyGateProgressBarUI`) deliberately left always-visible.
+  - `Assets/GoogleMobileAds/Resources/GoogleMobileAdsSettings.asset` — created, filled with
+    Google's TEST app ids (an empty app id crashes an Android build on startup).
+  - `Packages/manifest.json` + ProjectSettings — AdMob v11.2.0 and EDM4U v1.2.187, BOTH as git
+    URLs; `GOOGLE_MOBILE_ADS` define for Android, iOS AND Standalone.
+
+- **Verified:** almost everything was checked by SIMULATING the exact case and by inspecting the
+  RUNNING editor over MCP, not by watching Play mode. Live inspection is what found the real
+  causes: the pursue/mover deadlock (`dist to dest 0.046` vs `dist to enemy 1.57`), the mirrored
+  `PlayerCastle` scale, and the empty-board state. Frame extraction (ffmpeg) on the user's videos
+  identified the stacking and merged-blob bugs. The user visually CONFIRMED: facing on the gate,
+  the 90% landed scale, HP bars appearing with the enemies, and the final avoidance behaviour.
+  NOT VERIFIED: anything on a real device (no Android build was made, the banner has never been
+  seen on a phone), and the "walking in place" report from video 483 — my simulation did NOT
+  reproduce it, so that explanation is unconfirmed.
+
+- **Gotchas:**
+  - `Camera.main` ortho size is 12.18 and the layout is TALL — screen-half facing logic and
+    absolute spawn coords both break when things move vertically.
+  - `PlayerCastle` is MIRRORED (`lossyScale.x = -1`). Anything writing `localScale.x` on a child
+    of it renders backwards.
+  - Editing a scene while the editor is in PLAY MODE silently loses the work; and scene edits made
+    during play are reverted on stop. Verify serialized refs by reading them back.
+  - The MCP `RunCommand` sandbox rejects `System.Reflection`, and its logger only substitutes
+    simple `{0}` placeholders — `{0:F2}` prints literally.
+
+- **Next:** see Open Threads.
 
 ### 2026-08-20 — TMP fonts go blank after deleting `Library/`: root cause + bulk Static-bake editor tool
 - **Goal:** user reported that every time they delete `Library/`, the game's fonts render wrong and

@@ -32,6 +32,14 @@ public class HealthBar : MonoBehaviour
     // every child graphic without re-running anyone's Awake when it comes back.
     private Canvas ownerCanvas;
 
+    // The Canvas that carries the sorting order, and the order/layer it was
+    // AUTHORED with. onTopSortingOrder is only ever a combat-time override; the
+    // authored values are what we fall back to once the battle is over.
+    private Canvas sortingCanvas;
+    private int authoredSortingOrder;
+    private string authoredSortingLayer;
+    private bool capturedAuthoredSorting;
+
     float _baseLocalScaleX;
 
     void Awake()
@@ -39,8 +47,21 @@ public class HealthBar : MonoBehaviour
         if (!healthBar)
             healthBar = GetComponent<Image>();
 
+        CaptureAuthoredSorting();
         ApplyRenderOrder();
         ApplyBattleGate();
+
+        // The 500 override must not outlive the battle. Win, lose and revive
+        // panels all sit below it, so a bar left on top punches straight through
+        // them - and any future panel (the roguelite skill pick) would hit the
+        // same wall. Track the level state and drop back to the authored order
+        // the moment a gate dies.
+        LevelGameManager.OnGameStateChanged += HandleGameStateChanged;
+
+        // A bar spawned INTO an already-finished battle (a unit that outlives the
+        // win panel) never sees the event, so resolve the current state now.
+        if (!LevelGameManager.IsBattleRunning)
+            RestoreAuthoredSorting();
 
         // Make sure the image is a filled horizontal bar
         healthBar.type = Image.Type.Filled;
@@ -96,9 +117,52 @@ public class HealthBar : MonoBehaviour
 
     void OnDestroy()
     {
-        // Static event: without this, a hero destroyed before the first enemy
+        // Static events: without this, a hero destroyed before the first enemy
         // appears would keep the subscription alive and throw later.
         EnemySpawner.OnAnyFirstEnemySpawned -= ShowForBattle;
+        LevelGameManager.OnGameStateChanged -= HandleGameStateChanged;
+    }
+
+    /// <summary>
+    /// Combat over -> give the sorting order back so end-of-battle UI can cover
+    /// the bar. A revive puts the level back into Playing, so this raises the bar
+    /// again rather than being a one-way trip.
+    /// </summary>
+    void HandleGameStateChanged(LevelGameManager.GameState state)
+    {
+        if (state == LevelGameManager.GameState.Playing)
+            ApplyRenderOrder();
+        else
+            RestoreAuthoredSorting();
+    }
+
+    /// <summary>
+    /// Remembers what the prefab actually shipped with, BEFORE ApplyRenderOrder
+    /// overwrites it. Restoring these exact values is what guarantees the bar
+    /// lands back under the UI - rather than guessing at some "low" number that
+    /// might still outrank a panel.
+    /// </summary>
+    void CaptureAuthoredSorting()
+    {
+        if (capturedAuthoredSorting) return;
+
+        sortingCanvas = GetComponentInParent<Canvas>();
+        if (!sortingCanvas) return;
+
+        authoredSortingOrder = sortingCanvas.sortingOrder;
+        authoredSortingLayer = sortingCanvas.sortingLayerName;
+        capturedAuthoredSorting = true;
+    }
+
+    void RestoreAuthoredSorting()
+    {
+        if (!capturedAuthoredSorting || !sortingCanvas) return;
+
+        sortingCanvas.sortingOrder = authoredSortingOrder;
+
+        // Only undo the layer move if we were the ones who made it.
+        if (!string.IsNullOrEmpty(onTopSortingLayer))
+            sortingCanvas.sortingLayerName = authoredSortingLayer;
     }
 
     /// <summary>
@@ -109,7 +173,8 @@ public class HealthBar : MonoBehaviour
     {
         if (!forceOnTop) return;
 
-        var canvas = GetComponentInParent<Canvas>();
+        CaptureAuthoredSorting();
+        var canvas = sortingCanvas;
         if (!canvas) return;
 
         if (!string.IsNullOrEmpty(onTopSortingLayer))

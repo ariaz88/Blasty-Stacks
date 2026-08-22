@@ -15,10 +15,16 @@
 PURPOSE
 -------
 A purely TRANSFORM-DRIVEN jump: no physics, no Rigidbody impulse. It animates
-the character's Y position along a parabolic arc over a fixed duration, plays
-"squash and stretch"-style scale effects on both the player and its shadow, and
-detaches/reattaches the shadow so it can lag behind on the ground while the
-character is airborne. Used for stage-unlock hops and any other jump FX.
+the character's Y position along a parabolic arc over a fixed duration and plays
+"squash and stretch"-style scale effects on both the player and its shadow.
+Used for stage-unlock hops, the puzzle->battle wave jumps, and any other jump FX.
+
+Shadow handling has TWO modes (shadowMode, 2026-08-22):
+  StickToCharacter (DEFAULT, current design) - the shadow stays parented and just
+      rides along with the unit, arc included. The script never writes its
+      position.
+  GroundProjected - the shadow un-parents and slides along the arc-free GROUND
+      path while the unit arcs over it. Kept for when we want that look back.
 
 INSPECTOR FIELDS
 ----------------
@@ -61,10 +67,16 @@ INSPECTOR FIELDS
     shadowScaleResponse (min 0.1, default 1.0)
     resetShadowOnLand (bool, default true)
 
-  Shadow Ground-Follow
-    detachShadowDuringJump (bool, default true)
-    shadowProgressCurve (AnimationCurve, optional; if null, uses t^2 as an
-                         ease-in "lag then catch up" default)
+  Shadow Behaviour
+    shadowMode (ShadowJumpMode enum, default StickToCharacter)
+                 REPLACED the old detachShadowDuringJump bool on 2026-08-22.
+                 Because it is a new field, the 12 character prefabs that still
+                 serialize `detachShadowDuringJump: 1` fall back to the C# field
+                 initializer, i.e. StickToCharacter. Those orphan YAML keys are
+                 harmless and disappear the next time Unity re-saves a prefab.
+
+  Shadow Ground-Follow  (GroundProjected mode ONLY - ignored in StickToCharacter)
+    shadowProgressCurve (AnimationCurve, optional; must start at 0 and end at 1)
     shadowGroundAxisMask (Vector3, default (0,1,0))  which world axes the
                          shadow tracks; Y matches this game's forward direction
 
@@ -80,8 +92,11 @@ RUNTIME STATE
 
 LIFECYCLE
 ---------
-  Awake()   caches PlayerManager and CacheBaseScales()
-  Update()  HandleInput() -> TryBeginJump() -> if isJumping, TickJump()
+  Awake()     caches PlayerManager and CacheBaseScales()
+  OnDisable() ReattachShadowIfDetached() - a unit that dies or is pooled mid-jump
+              in GroundProjected mode would otherwise leave its shadow behind in
+              the scene as a permanent root object.
+  Update()    HandleInput() -> TryBeginJump() -> if isJumping, TickJump()
 
 INPUT / TRIGGERING
 -------------------
@@ -102,9 +117,10 @@ BeginJump()  (the live version)
   3. Resets timers and flags; computes tLoopSwapAt as the smaller of
      jumpStartToLoopDelay and half the jump duration (so a very short jump
      still swaps to the loop clip before landing).
-  4. If a shadow is assigned and detachShadowDuringJump is true: UN-PARENTS the
-     shadow (keeping its world transform), and caches which axes stay fixed
-     (shadowXZHold) versus which follow the jump (per shadowGroundAxisMask).
+  4. GroundProjected mode ONLY: UN-PARENTS the shadow (keeping its world
+     transform), and caches which axes stay fixed (shadowXZHold) versus which
+     follow the jump (per shadowGroundAxisMask). StickToCharacter skips this
+     entirely - the shadow stays a child and needs no bookkeeping.
   5. Plays jumpStartState.
 
 TickJump()  (per frame while airborne)
@@ -122,12 +138,16 @@ TickJump()  (per frame while airborne)
 
 UpdateShadowGroundFollow(t01, yLinear)
 ----------------------------------------
-  Computes its own progress value s: either sampling shadowProgressCurve, or
-  defaulting to t01*t01 (an ease-in), so the shadow starts moving slower than
-  the player and "catches up" by landing - the classic top-down jump-shadow
-  effect. Moves only the axes flagged in shadowGroundAxisMask toward the
-  player's endPos on that axis; locked axes stay at the cached shadowXZHold
-  value.
+  RETURNS IMMEDIATELY in StickToCharacter mode. In GroundProjected mode it gets
+  a progress value s from ShadowProgress01(), then advances the shadow by the
+  SAME DELTA the unit travels (endPos - startPos) * s, on the axes flagged in
+  shadowGroundAxisMask. Locked axes stay at the cached shadowXZHold value.
+
+ShadowProgress01(t01)
+----------------------------------------
+  Validates shadowProgressCurve before trusting it: needs >= 2 keys AND must
+  evaluate to <= 0.05 at t=0. Anything else falls back to t01*t01 (lag, then
+  catch up). See the 2026-08-22 bug in NOTES for why this validation exists.
 
 SCALE EFFECTS
 --------------
@@ -150,10 +170,10 @@ LANDING
   Land()  (the live version)
       Snaps Y to exactly endPos.y (removing any residual arc), restores the
       player's original scale if resetScaleOnLand, restores the shadow's scale
-      if resetShadowOnLand, and if the shadow was detached: computes its FINAL
-      ground-aligned position (forward axis = endPos, held axes = the cached
-      value), snaps it there, and RE-PARENTS it back under its original parent.
-      Clears isJumping and loopPlayed.
+      if resetShadowOnLand, and in GroundProjected mode: completes the full
+      travel delta (shadowStartPos + (endPos - startPos), held axes = the cached
+      value), snaps the shadow there, and RE-PARENTS it under its original
+      parent. Clears isJumping and loopPlayed.
 
 HELPERS
 -------
@@ -192,8 +212,30 @@ NOTES
     build unless removed before shipping.
   - The shadow detach/reattach logic assumes exactly one jump happens at a time
     per instance; TriggerJump() returning false while isJumping already guards
-    re-entrancy, but there is no safety net if the GameObject is destroyed
-    mid-air (the shadow would remain unparented).
+    re-entrancy. A unit destroyed/disabled mid-air is now covered by OnDisable
+    -> ReattachShadowIfDetached().
+
+  - FIXED 2026-08-22: "the shadow flashes to the landing spot, then snaps back
+    onto the character." All 12 character prefabs carried a hand-dragged
+    shadowProgressCurve whose FIRST key sat at time -0.104 with value 0.994 - so
+    at t01 = 0 it evaluated to ~1.0 and the shadow was placed on the landing spot
+    on frame one, then walked BACK as the curve dipped to 0.66 at t=0.35. Two
+    reasons the old code could not defend itself:
+      * `shadowProgressCurve != null` is ALWAYS true for a serialized
+        AnimationCurve (Unity deserializes an empty curve, never null), so the
+        documented "if null, use t^2" fallback was dead code.
+      * nothing validated the curve's shape.
+    ShadowProgress01() now checks length >= 2 AND Evaluate(0) <= 0.05 before
+    trusting the curve. The prefab curves fail that check and fall back to t^2.
+    The user-facing decision, though, was simpler: shadowMode now defaults to
+    StickToCharacter, so the ground-follow path does not run at all.
+
+  - ALSO FIXED 2026-08-22 (latent, only reachable in GroundProjected mode): the
+    ground-follow lerped the shadow's world position to endPos ABSOLUTELY rather
+    than by the travel delta, which discarded the shadow's authored local offset
+    (its "under the feet" placement). Because Land() re-parents with
+    worldPositionStays = true, that loss was baked in permanently after the first
+    jump. Both the per-frame path and Land() now advance by the delta instead.
   - [2026-08-20] TriggerJumpTo(worldY) added. It sets a one-shot
     hasTargetYOverride / targetWorldY pair that BeginJump CONSUMES, making the
     unit land on an exact world Y instead of travelling jumpDistanceY in its

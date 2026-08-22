@@ -250,8 +250,12 @@ public class FormationGapFiller : MonoBehaviour
             yield break;
         }
 
-        // Play the walk cycle for the step. The arrival block below puts the
-        // hero back to idle.
+        // Claim locomotion for the step BEFORE starting the walk cycle.
+        // Without this the hero is still in PlayerLockState (the battle has not
+        // started yet), whose Tick forces the animator back to idle every
+        // FixedUpdate - so the walk below was set once and immediately erased,
+        // and the hero slid into its slot with no animation.
+        pm.isFormationStepping = true;
         pm.SetAnimMoving(true);
 
         // Start the timeout AFTER the pause, so the delay never eats into the
@@ -259,6 +263,7 @@ public class FormationGapFiller : MonoBehaviour
         float t0 = Time.time;
 
         while (pm != null &&
+               pm.currentState == pm.PlayerLockState &&   // battle started: hand over
                Vector2.Distance(pm.transform.position, target) > arriveEpsilon &&
                Time.time - t0 < moveTimeout)
         {
@@ -295,10 +300,22 @@ public class FormationGapFiller : MonoBehaviour
 
         if (pm != null)
         {
-            var snapped = target;
-            snapped.z = pm.transform.position.z;
-            pm.transform.position = snapped;
-            pm.SetAnimMoving(false);
+            // Only settle onto the slot if we still own this hero. If the battle
+            // started mid-step it has already switched to PlayerPursueTargetState
+            // and is marching under its own power - snapping it backwards here
+            // would yank it off the advance.
+            bool stillOurs = pm.currentState == pm.PlayerLockState;
+
+            if (stillOurs)
+            {
+                var snapped = target;
+                snapped.z = pm.transform.position.z;
+                pm.transform.position = snapped;
+                pm.SetAnimMoving(false);
+            }
+
+            // Release locomotion back to the state machine either way.
+            pm.isFormationStepping = false;
         }
 
         // Release the reservation only now. Until this point the slot stayed

@@ -93,11 +93,32 @@ public class FrogJumpTransformOnly : MonoBehaviour
     // ====== lifecycle ======
 
 
-    // --- Shadow ground-follow settings (add near your existing shadow fields) ---
-    [Header("Shadow Ground-Follow")]
-    [SerializeField] private bool detachShadowDuringJump = true;
+    // --- Shadow behaviour during a jump ---
+    public enum ShadowJumpMode
+    {
+        /// <summary>Shadow stays parented and simply rides along with the unit,
+        /// arc included. Current design choice: the shadow is always glued to
+        /// the character.</summary>
+        StickToCharacter = 0,
+
+        /// <summary>Shadow detaches and travels along the GROUND (the arc-free
+        /// path), so it reads as a real cast shadow. Kept for when we want that
+        /// look back.</summary>
+        GroundProjected = 1,
+    }
+
+    [Header("Shadow Behaviour")]
+    [Tooltip("Stick To Character = the shadow never leaves the unit (current design).\n" +
+             "Ground Projected = the shadow detaches and slides along the ground while the " +
+             "unit arcs over it.")]
+    [SerializeField] private ShadowJumpMode shadowMode = ShadowJumpMode.StickToCharacter;
+
+    [Header("Shadow Ground-Follow (Ground Projected mode only)")]
+    [Tooltip("How far along the ground the shadow has travelled, as a function of jump " +
+             "progress. MUST start at 0 and end at 1 - a curve that starts high teleports " +
+             "the shadow to the landing spot on frame one. Leave empty for the default t^2 " +
+             "(lag, then catch up).")]
     [SerializeField] private AnimationCurve shadowProgressCurve = null;
-    // If null, we'll use an ease-in (t^2) at runtime to make it lag then catch up.
 
     [SerializeField] private Vector3 shadowGroundAxisMask = new Vector3(0, 1, 0);
     // Which axes the shadow should move along. For your setup (forward on Y), keep (0,1,0).
@@ -108,6 +129,8 @@ public class FrogJumpTransformOnly : MonoBehaviour
     private Vector3 shadowStartPos;     // where the shadow begins this jump
     private Vector3 shadowXZHold;       // fixed X/Z (or axes not used by ground axis mask)
 
+    private bool DetachShadow => shadowMode == ShadowJumpMode.GroundProjected;
+
 
 
     private void Awake()
@@ -115,6 +138,19 @@ public class FrogJumpTransformOnly : MonoBehaviour
         pm = GetComponent<PlayerManager>();
 
         CacheBaseScales();
+    }
+
+    // If the unit dies or is pooled mid-jump while its shadow is detached, the
+    // shadow is a ROOT object and would be left behind in the scene forever.
+    private void OnDisable() => ReattachShadowIfDetached();
+
+    private void ReattachShadowIfDetached()
+    {
+        if (!shadow || !shadowOriginalParent) return;
+
+        shadow.SetParent(shadowOriginalParent, true);
+        shadowOriginalParent = null;
+        isJumping = false;
     }
 
     private void Update()
@@ -175,22 +211,6 @@ public class FrogJumpTransformOnly : MonoBehaviour
         return TriggerJump();
     }
 
-    private void BeginJump1()
-    {
-        ConsumeJumpBuffer();
-
-        int facingY = GetFacingYSign();
-        startPos = transform.position;
-        endPos = startPos + new Vector3(0f, jumpDistanceY * facingY, 0f);
-
-        tElapsed = 0f;
-        isJumping = true;
-        loopPlayed = false;
-
-        tLoopSwapAt = Mathf.Min(jumpStartToLoopDelay, jumpDuration * 0.5f);
-
-        PlayAnim(jumpStartState);
-    }
     private void BeginJump()
     {
         ConsumeJumpBuffer();
@@ -222,7 +242,9 @@ public class FrogJumpTransformOnly : MonoBehaviour
         tLoopSwapAt = Mathf.Min(jumpStartToLoopDelay, activeDuration * 0.5f);
 
         // --- Shadow detach + cache ---
-        if (shadow && detachShadowDuringJump)
+        // Only in GroundProjected mode. In StickToCharacter the shadow stays a
+        // child and needs no bookkeeping at all - it just rides along.
+        if (shadow && DetachShadow)
         {
             shadowOriginalParent = shadow.parent;
             shadow.SetParent(null, true); // keep world position/rotation/scale
@@ -298,29 +320,54 @@ public class FrogJumpTransformOnly : MonoBehaviour
 
     private void UpdateShadowGroundFollow(float t01, float yLinear)
     {
-        if (!shadow) return;
+        // StickToCharacter never touches the shadow's position - it is still a
+        // child, so it follows the unit for free. Writing a world position here
+        // while the shadow is parented is what made it flash to the landing spot
+        // and then snap back onto the character.
+        if (!shadow || !DetachShadow) return;
 
-        // Choose the progress curve: ease-in to create lag, but still hit 1 at the end.
-        float s = shadowProgressCurve != null ? Mathf.Clamp01(shadowProgressCurve.Evaluate(t01))
-                                              : t01 * t01; // default: t^2 (lag then catch up)
+        float s = ShadowProgress01(t01);
 
-        // Compute target ground position along the chosen axis, using linear (no arc).
-        // Axes masked with 1 move from start->end; axes with 0 stay at cached value.
-        Vector3 start = shadowStartPos;
-        Vector3 end = start;
+        // Travel the SAME delta the unit travels, so the shadow keeps the local
+        // offset it was authored with (under the feet) instead of collapsing onto
+        // the unit's origin. Lerping straight to endPos threw that offset away and
+        // - because Land() re-parents with worldPositionStays - the loss was
+        // permanent after the first jump.
+        Vector3 delta = endPos - startPos;
+        Vector3 pos = shadowStartPos;
 
-        // We only move on the axis specified by shadowGroundAxisMask.
-        // Your forward is Y, so we lerp Y from start.y to end.y == yLinear’s end.
-        if (shadowGroundAxisMask.x != 0f) end.x = Mathf.Lerp(start.x, endPos.x, s);
-        if (shadowGroundAxisMask.y != 0f) end.y = Mathf.Lerp(start.y, endPos.y, s); // ground follows player's forward on Y
-        if (shadowGroundAxisMask.z != 0f) end.z = Mathf.Lerp(start.z, endPos.z, s);
+        if (shadowGroundAxisMask.x != 0f) pos.x = shadowStartPos.x + delta.x * s;
+        if (shadowGroundAxisMask.y != 0f) pos.y = shadowStartPos.y + delta.y * s;
+        if (shadowGroundAxisMask.z != 0f) pos.z = shadowStartPos.z + delta.z * s;
 
         // Lock non-moving axes to their cached values
-        if (shadowGroundAxisMask.x == 0f) end.x = shadowXZHold.x;
-        if (shadowGroundAxisMask.y == 0f) end.y = shadowXZHold.y;
-        if (shadowGroundAxisMask.z == 0f) end.z = shadowXZHold.z;
+        if (shadowGroundAxisMask.x == 0f) pos.x = shadowXZHold.x;
+        if (shadowGroundAxisMask.y == 0f) pos.y = shadowXZHold.y;
+        if (shadowGroundAxisMask.z == 0f) pos.z = shadowXZHold.z;
 
-        shadow.position = end;
+        shadow.position = pos;
+    }
+
+    /// <summary>
+    /// Ground progress for the shadow, 0..1.
+    ///
+    /// A serialized AnimationCurve field is NEVER null in Unity - it deserializes
+    /// as an empty curve - so the old `curve != null` test always took the curve
+    /// branch, however broken the authored curve was. We validate the shape
+    /// instead: it needs at least two keys and must actually start at 0, because
+    /// a curve whose first key sits at ~1 (which is what the character prefabs
+    /// were carrying) puts the shadow on the landing spot on the very first frame.
+    /// </summary>
+    private float ShadowProgress01(float t01)
+    {
+        if (shadowProgressCurve != null && shadowProgressCurve.length >= 2)
+        {
+            float first = shadowProgressCurve.Evaluate(0f);
+            if (first <= 0.05f)
+                return Mathf.Clamp01(shadowProgressCurve.Evaluate(t01));
+        }
+
+        return t01 * t01; // default: lag, then catch up
     }
 
     private void UpdateTimers(out float t01)
@@ -359,31 +406,14 @@ public class FrogJumpTransformOnly : MonoBehaviour
         );
     }
 
-    private void UpdateShadowScale1(float arcT)
-    {
-        if (!shadow) return;
-
-        // the player's scale factor this frame
-        float playerU = GetCurrentPlayerUniformScale();
-
-        float arcForShadow = Mathf.Pow(arcT, shadowScaleResponse);
-        float shadowWorldU = Mathf.Lerp(1f, shadowApexScale, arcForShadow); // target WORLD scale
-
-        // counter-scale locally to achieve target WORLD scale:
-        float childLocalU = shadowWorldU / Mathf.Max(playerU, 1e-6f);
-
-        Vector3 shAbs = shadowBaseLocalAbs * childLocalU;
-        shadow.localScale = new Vector3(
-            shAbs.x * shadowBaseLocalSign.x,
-            shAbs.y * shadowBaseLocalSign.y,
-            shAbs.z * shadowBaseLocalSign.z
-        );
-    }
     private void UpdateShadowScale(float arcT)
     {
         if (!shadow) return;
 
-        float playerU = detachShadowDuringJump ? 1f : GetCurrentPlayerUniformScale();
+        // Detached: the shadow is a root object, so its local scale IS its world
+        // scale. Parented: counter-scale so the unit's arc bump does not inflate
+        // the shadow with it.
+        float playerU = DetachShadow ? 1f : GetCurrentPlayerUniformScale();
 
         float arcForShadow = Mathf.Pow(arcT, shadowScaleResponse);
         float shadowWorldU = Mathf.Lerp(1f, shadowApexScale, arcForShadow); // 1 -> smaller at apex
@@ -399,19 +429,6 @@ public class FrogJumpTransformOnly : MonoBehaviour
 
 
     // ====== finish ======
-    private void Land1()
-    {
-        SnapToEndY();
-
-        if (resetScaleOnLand)
-            RestorePlayerScale();
-
-        if (shadow && resetShadowOnLand)
-            RestoreShadowScale();
-
-        isJumping = false;
-        loopPlayed = false;
-    }
     private void Land()
     {
         SnapToEndY();
@@ -422,14 +439,16 @@ public class FrogJumpTransformOnly : MonoBehaviour
             if (resetShadowOnLand) RestoreShadowScale();
 
             // Snap shadow exactly to player's landing forward position along ground axis
-            if (detachShadowDuringJump)
+            if (DetachShadow)
             {
-                // Build final ground-aligned pos: same end on forward axis, keep held axes.
+                // Finish the same delta the unit travelled, so the authored local
+                // offset survives the round trip (see UpdateShadowGroundFollow).
+                Vector3 delta = endPos - startPos;
                 Vector3 final = shadow.position;
 
-                if (shadowGroundAxisMask.x != 0f) final.x = endPos.x;
-                if (shadowGroundAxisMask.y != 0f) final.y = endPos.y; // forward on Y
-                if (shadowGroundAxisMask.z != 0f) final.z = endPos.z;
+                if (shadowGroundAxisMask.x != 0f) final.x = shadowStartPos.x + delta.x;
+                if (shadowGroundAxisMask.y != 0f) final.y = shadowStartPos.y + delta.y; // forward on Y
+                if (shadowGroundAxisMask.z != 0f) final.z = shadowStartPos.z + delta.z;
 
                 if (shadowGroundAxisMask.x == 0f) final.x = shadowXZHold.x;
                 if (shadowGroundAxisMask.y == 0f) final.y = shadowXZHold.y;
@@ -439,6 +458,7 @@ public class FrogJumpTransformOnly : MonoBehaviour
 
                 // Re-parent back
                 shadow.SetParent(shadowOriginalParent, true);
+                shadowOriginalParent = null;
             }
         }
 
