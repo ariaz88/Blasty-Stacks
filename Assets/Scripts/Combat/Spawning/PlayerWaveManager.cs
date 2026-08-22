@@ -581,6 +581,20 @@ public class PlayerWaveManager : MonoBehaviour
         // Pick one deployed unit
         var def = deployed[UnityEngine.Random.Range(0, deployed.Count)];
 
+        return SpawnUnitAt(def, pos, rot);
+    }
+
+    /// <summary>
+    /// Instantiates ONE specific unit and stamps its identity onto the stats
+    /// system. Split out of SpawnOneAt so the reinforcement flow below can spawn
+    /// a CHOSEN type through exactly the same path the wave system uses - the
+    /// unitId set here is also what PlayerManager files itself under in
+    /// <see cref="HeroRoster"/>.
+    /// </summary>
+    private PlayerManager SpawnUnitAt(UnitDefinitionSO def, Vector3 pos, Quaternion rot)
+    {
+        if (def == null) return null;
+
         if (def.runtimePrefab == null)
         {
             Debug.LogError($"Unit '{def.displayName}' has no runtimePrefab assigned.");
@@ -614,6 +628,86 @@ public class PlayerWaveManager : MonoBehaviour
         }
 
         return pm;
+    }
+
+    // ---------------- Mid-battle reinforcements ----------------
+
+    [Header("Reinforcements")]
+    [Tooltip("Beat between two reinforcements of the same purchase, so a squad " +
+             "walks out of the castle instead of appearing as one clump.")]
+    [SerializeField, Min(0f)] private float reinforcementStagger = 0.12f;
+
+    /// <summary>
+    /// True when a gem purchase for this unit type could actually put heroes on
+    /// the field. The HUD checks this BEFORE charging gems, so a missing prefab
+    /// can never take the player's money and deliver nothing.
+    /// </summary>
+    public bool CanSpawnReinforcements(int unitId)
+    {
+        if (_unitsDb == null) return false;
+        if (gatePoints == null || gatePoints.Length == 0) return false;
+
+        var def = _unitsDb.GetById(unitId);
+        return def != null && def.runtimePrefab != null;
+    }
+
+    /// <summary>
+    /// Buys a wiped-out hero type back into the fight: spawns <paramref name="count"/>
+    /// of it at the castle gates and sends each one jumping into the REAR rank,
+    /// from where it marches forward under its own state machine.
+    ///
+    /// Unlike a normal wave these are NOT locked - the battle is already running,
+    /// so they skip the puzzle gate entirely.
+    /// </summary>
+    public void SpawnReinforcements(int unitId, int count)
+    {
+        if (count <= 0) return;
+
+        if (!CanSpawnReinforcements(unitId))
+        {
+            Debug.LogError($"[PlayerWaveManager] Cannot spawn reinforcements for unitId={unitId}.", this);
+            return;
+        }
+
+        StartCoroutine(SpawnReinforcementsRoutine(_unitsDb.GetById(unitId), count));
+    }
+
+    private IEnumerator SpawnReinforcementsRoutine(UnitDefinitionSO def, int count)
+    {
+        // Rear rank: reinforcements arrive BEHIND the survivors and walk up, they
+        // never materialise in the middle of the fight.
+        float? laneY = GetRearLaneY();
+
+        for (int i = 0; i < count; i++)
+        {
+            var gate = gatePoints[i % gatePoints.Length];
+            if (gate == null) continue;
+
+            var pm = SpawnUnitAt(def, gate.position, gate.rotation);
+            if (pm == null) continue;
+
+            pm.isUnlocked = true;
+            ApplyLock(pm, false);
+            StartCoroutine(JumpThenSwitch(pm, laneY));
+
+            if (reinforcementStagger > 0f && i < count - 1)
+                yield return new WaitForSeconds(reinforcementStagger);
+        }
+    }
+
+    /// <summary>
+    /// The world Y of the BACK rank. jumpLanes is authored front-first (index 0 is
+    /// closest to the enemy), so the last entry is the one furthest back.
+    /// Null means "no lanes authored" - the jumper keeps its fixed distance.
+    /// </summary>
+    private float? GetRearLaneY()
+    {
+        if (jumpLanes == null || jumpLanes.Length == 0) return null;
+
+        for (int i = jumpLanes.Length - 1; i >= 0; i--)
+            if (jumpLanes[i]) return jumpLanes[i].position.y;
+
+        return null;
     }
 
 

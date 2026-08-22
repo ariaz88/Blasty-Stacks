@@ -62,6 +62,21 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   `applicationIdentifier` is UNSET (only Standalone `com.DefaultCompany.2D-URP` exists) — a real
   package name is required and must match the AdMob console entry.
 - `Level_1_Stage_1.unity` is NOT in Build Settings yet (user said they would add it).
+- **Heroes Stats panel: two of its three states have never executed.** Building the cells is
+  confirmed working in Play mode; the WIPED look (`Gray out Avatar` on, count hidden, `Parent `
+  buy button shown) and the gem buy-back (`PlayerWaveManager.SpawnReinforcements` → spawn at the
+  gates, jump to the REAR `jumpLanes` entry, march) have never run. Test both before trusting them.
+- **The Heroes Stats panel exists in `Level_1_Stage_1` ONLY.** Stages 2-20 have no such object,
+  so `HeroRoster` still tallies there (PlayerManager always registers) but nothing displays it.
+  Copying the panel means re-doing the `HeroStatCell` wiring and adding it to that stage's
+  `BattlePhaseTransition.fadeInAfterMove`.
+- **Heroes still LOCKED on the castle gates when BATTLE is pressed are stranded permanently** —
+  the board is hidden from that point, so no puzzle match can ever release them. They just stand
+  on the gates for the rest of the stage. `HeroRoster` deliberately does not count them (see
+  Decisions), but whether the stranding itself should be fixed — auto-release them on battle
+  start, or refuse the BATTLE press while a wave is unreleased — is an open design question.
+- `gemsPerHero` on `HeroStatsPanel` is a placeholder 50 (× squad size). The reference art shows
+  200. Either set that, or fill `respawnGemCost` per `UnitDefinitionSO` (which overrides it).
 - **Nothing has been run on a device.** No Android build was produced this session, so the AdMob
   banner has never actually been seen on a phone. `JAVA_HOME` was repointed to the 6000.3.21f1
   OpenJDK (it dangled at an uninstalled 2021.3.42f1) — Unity must be restarted for that to apply.
@@ -169,6 +184,9 @@ _Durable choices with their reasons, so no session reopens them blindly._
 | 2026-08-22 | **A render-order override that exists for combat must be scoped to combat, never applied as a constant.** `HealthBar` captures its canvas's AUTHORED sortingOrder and restores it whenever the level leaves `GameState.Playing`. | The `sortingOrder = 500` added on 2026-08-21 fixed bars hiding behind other units, but 500 outranks everything in the scene forever — so the bars punched through the win panel. The user chose lowering the order over hiding the bars, explicitly because the roguelite skill panel will hit the same wall later. Restoring the AUTHORED value (not some hand-picked low number) is what guarantees it lands under the UI: it is provably the configuration that worked before the override existed. |
 | 2026-08-22 | **`LevelGameManager.OnGameStateChanged` is the authoritative "is the battle over?" signal.** The battle ends when a GATE reaches 0 HP — enemy gate = won, player gate = lost/revive — and resumes only when a revive is accepted. | Confirmed by the user as the real rule. Win, lose and revive are three different paths and revive RESUMES combat, so any listener keying off a single panel or a one-way bool gets revive wrong. Routing `CurrentState` through a property setter means the existing five assignment sites need no changes and cannot forget to fire it. |
 | 2026-08-22 | **Jump shadows stay glued to the character (`ShadowJumpMode.StickToCharacter`).** The ground-projected shadow is kept as an opt-in mode, not deleted. | The user's call, flagged as provisional ("maybe we change this functionality later"), so the old look had to remain reachable rather than being ripped out. Making it an enum default also meant zero prefab edits — the 12 character prefabs simply fall through to the C# field initializer. |
+| 2026-08-22 | **A view component must DECLARE its visual states, never infer one by capturing whatever the scene was authored with.** `HeroStatCell.aliveTint` is an explicit serialized field defaulting to white; it used to be `avatar.color` read at `Awake()`. | The capture version shipped a bug within the hour. `Hero avatar` was authored blue for the `UISprite` placeholder it originally held, so once `Bind()` swapped in the real portrait, "alive" faithfully restored a tint that was only ever meant for a placeholder — every LIVING hero rendered as a dark blue silhouette and it read as "the grey-out is inverted". A captured default silently inherits authoring accidents; a declared one cannot. Corollary now in the code: when `deadOverlay` is assigned, the avatar's colour is never touched at all. |
+| 2026-08-22 | **`HeroRoster` counts a hero only once `PlayerManager.isUnlocked` is true** — i.e. once a puzzle match has actually thrown it into the field. | Heroes spawn onto the castle gates LOCKED. Press BATTLE with a wave still sitting there and it is stranded for the rest of the stage (the board is hidden, so nothing can release it) — it never fights and never dies. Counting those would pin `alive/total` permanently above zero, and the buy-back button, which only appears at 0, could never be reached. |
+| 2026-08-22 | **Battle-phase UI choreography lives in `BattlePhaseTransition`, not in each panel.** It owns `fadeOutOnPress` (fires before the camera moves) and `fadeInAfterMove` (fires after it settles); panels are passive and just get switched on. | The transition is the only thing that knows when the camera has arrived, so it is the only thing that can sequence against it. Keeping the ordering in one component means a new battle panel is wired by dropping it into an array rather than by teaching it about the camera. Consequence to remember: a panel in `fadeInAfterMove` must be left INACTIVE in the scene, and `BattleStartController.hideButtonAfterBattleStarts` had to go OFF so the BATTLE button fades with its panel instead of popping out first. |
 | 2026-08-20 | The conversion is done by a repeatable editor tool (`Assets/Scripts/Editor/TMPFontAssetStaticBaker.cs`), not by hand-editing the Inspector or patching the `.asset` YAML directly. | Hand-editing does not scale and is not reproducible for the next font added; direct YAML patching was considered and rejected because it cannot repopulate an atlas — only TMP's `TryAddCharacters` can, and it needs a loaded font face. The tool also re-runs safely on assets that are already correct. |
 
 ---
@@ -176,6 +194,97 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-08-22 — Heroes Stats panel: dynamic per-type "alive/total" HUD + gem buy-back
+- **Goal:** the new "Heros Stats panel" shown during battle must build its cells DYNAMICALLY
+  (one per hero type actually on the field, centred), show `alive/total` per type, and — when a
+  type is wiped out — grey the avatar and offer a gem price that respawns the whole squad.
+  Mid-session the user added two more requirements: the Feature Panel must fade out fast the
+  instant BATTLE is pressed, and the Heroes panel must fade in only after the camera has
+  finished its move.
+- **Status:** partial. Code done, scene wired and saved by me, and the panel was seen BUILDING
+  CORRECTLY in Play mode. The death grey-out and the gem buy-back are still unverified.
+- **Changed:**
+  - `Assets/Scripts/Combat/Shared/HeroRoster.cs` — NEW. Static per-`unitId` tally of living
+    heroes + a frozen `StartingCount` snapshot. `[RuntimeInitializeOnLoadMethod]` reset so it
+    survives domain-reload-off. Key rule: a hero only counts once `isUnlocked` is true.
+  - `Assets/Scripts/UI/HUD/HeroStatsPanel.cs` — NEW. Clones the authored "Hero 1" cell once per
+    type at battle start, sorts by `UnitsDatabaseSO.IndexOf`, forces `MiddleCenter` on the
+    layout group, and owns the gem purchase.
+  - `Assets/Scripts/UI/HUD/HeroStatCell.cs` — NEW. View only: alive look vs. wiped look.
+    Revised later in the session: `aliveTint` became an explicit serialized field defaulting to
+    white instead of being CAPTURED from the avatar's authored colour in `Awake()`, and when
+    `deadOverlay` is assigned the avatar's colour is never touched at all. See Gotchas.
+  - `Assets/Scripts/Combat/Player/PlayerManager.cs` — registers into `HeroRoster` at the end of
+    `Start()` (NOT Awake — `SetUnitId` runs after Awake), unregisters in a new `OnDestroy`.
+  - `Assets/Scripts/Combat/Spawning/PlayerWaveManager.cs` — extracted `SpawnUnitAt(def,…)` out
+    of `SpawnOneAt`; added `CanSpawnReinforcements` / `SpawnReinforcements` / `GetRearLaneY`
+    and a `reinforcementStagger` field. Bought squads spawn at the gates and jump into the
+    REAR lane, unlocked, then march.
+  - `Assets/Scripts/Data/Units/UnitDefinitionSO.cs` — added `respawnGemCost` (0 = use the
+    panel's `gemsPerHero × squad size` fallback).
+  - Docs: new `HeroRoster.txt`, `HeroStatsPanel.txt`, `HeroStatCell.txt`; updated
+    `PlayerManager.txt`, `PlayerWaveManager.txt`, `UnitDefinitionSO.txt`,
+    `BattlePhaseTransition.txt`. No doc debt was added this session.
+  - `Assets/Scripts/Combat/Spawning/BattlePhaseTransition.cs` — added `fadeOutOnPress` /
+    `pressFadeOutDuration` (Feature Panel fades out the instant BATTLE is pressed) and
+    `fadeInAfterMove` / `arriveFadeInDuration` (Heroes panel fades in only once the camera
+    has finished its move). `CanvasGroup` is added on demand; alpha is set to 0 *before*
+    `SetActive(true)` so there is no one-frame flash.
+- **Scene/Prefab/SO edits — `Level_1_Stage_1.unity`, done BY ME over Unity MCP and SAVED
+  (the diff will look large; this is what changed):**
+  - `Heros Stats panel`: added `HeroStatsPanel`, `HorizontalLayoutGroup` (MiddleCenter,
+    spacing 24, no child control/expand) and a `CanvasGroup`. Left INACTIVE — the transition
+    now owns activating it.
+  - `Hero 1`: added `HeroStatCell`, wired avatar → `Hero avatar`, countText → `Hero Count`,
+    buyRoot/buyButton → `Parent ` (note the trailing space in that object's name),
+    gemCostText → `gem Amount`, deadOverlay → `Gray out Avatar` (the user authored that
+    object mid-session; it is a spriteless Image, RGBA 0.109/0.082/0.091/0.58, kept inactive).
+  - `Hero avatar` Image colour: **0.325/0.443/0.627 (blue) → white**. That tint was authored
+    for the `UISprite` placeholder the object originally held; once `Bind()` swaps in the real
+    portrait it painted every LIVING hero into a dark blue silhouette, which read as
+    "the grey-out is inverted".
+  - `Feature Panel`: added a `CanvasGroup`; moved OUT of `hideWhenBattleStarts` and INTO
+    `fadeOutOnPress`. `hideWhenBattleStarts` now holds only `Puzzle Board`.
+  - `BattleStartController.hideButtonAfterBattleStarts` turned OFF — the whole panel fades
+    now, so popping the button out first read as a glitch.
+- **Verified:** project compiles clean; scene wiring read back from the editor and confirmed.
+  The USER ran Play mode once: the panel built three cells correctly (`Hero_Valkir3`,
+  `Hero_Dark_Oracle_1`, `Hero_Minotaur_2`, counts `1/1`, `2/2`, `1/1`, centred). **NOT verified:
+  the grey-out when a type is wiped out, and the gem buy-back / reinforcement spawn.** Neither
+  path has ever executed.
+- **Gotchas:**
+  - **The "grey-out is inverted" bug was NOT inverted logic.** `Hero avatar`'s Image was
+    authored blue for the `UISprite` placeholder it originally held. `Bind()` swaps in the real
+    portrait but the tint stayed, so every LIVING hero rendered as a dark blue silhouette, and
+    `aliveTint` — captured from that same authored colour at `Awake` — faithfully preserved it.
+    Diagnosis came from dumping the live values over MCP (`deadTint` was untouched and the
+    counts were visible, which only happens in the ALIVE branch), not from the screenshot.
+    Lesson recorded in Decisions.
+  - Heroes still sitting LOCKED on the castle gates when BATTLE is pressed are stranded there
+    forever (the board is hidden, so no match can release them). They are deliberately excluded
+    from the roster — counting them would pin the label above zero and the buy-back could never
+    appear. If that stranding is itself considered a bug, it is a separate fix.
+  - `BattleStartController.BattleIsRunning` DEFAULTS TO TRUE for stages with no
+    `BattleStartController`, so the panel defers its first build to `WaitForEndOfFrame`.
+  - `HeroStatCell` hides the count with `countText.enabled = false`, not `SetActive`, in case
+    the "Parent" buy button is authored as a child of the "Hero Count" label. (It turned out to
+    be a SIBLING, but the guard costs nothing.)
+  - The child object is literally named `"Parent "` — with a trailing space. Any lookup by exact
+    name will miss it.
+  - Scene edits cannot be made while the editor is in Play mode. I called
+    `EditorApplication.ExitPlaymode()`, which also RESTORED the pre-Play scene (StarterScene),
+    so the stage scene had to be reopened before the fix could be applied. I left the editor on
+    **StarterScene** at the end, since that is where Play must start.
+- **Next:**
+  1. Play `Level_1_Stage_1` from StarterScene and let a whole hero type die. Confirm
+     `Gray out Avatar` switches on, the count hides, `Parent ` appears with its price, and that
+     paying spawns the squad at the gates and marches it in.
+  2. Set the real gem price — `gemsPerHero` on the panel (currently 50) or `respawnGemCost`
+     per `UnitDefinitionSO`. The reference art shows 200.
+  3. Only `Level_1_Stage_1` is wired. Stages 2-20 have no Heroes Stats panel at all yet.
+  4. Always Play from **StarterScene**; booting a stage directly leaves `GameStartManager`
+     missing, so stats and the unit database never resolve.
 
 ### 2026-08-22 — Level1_Stage01 part 2: jump shadow, gap-fill animation, HP-bar sorting on battle end
 - **Goal:** three polish bugs the user found while playing the new puzzle-first flow — the jump

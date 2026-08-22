@@ -28,6 +28,13 @@ public class UnitDefinitionSO : ScriptableObject
     [SerializeField] public bool startsDeployed = false;              // initial roster seed
 
 
+    [Header("Battle HUD")]
+    [Tooltip("Gems charged to bring this hero type back at FULL strength once every " +
+             "one of them has died mid-battle (the Heroes Stats panel).\n" +
+             "0 = use the panel's own 'gems per hero x squad size' fallback.")]
+    [Min(0)] public int respawnGemCost = 0;
+
+
     [Header("Tags (optional)")]
     public FighterType classType;               // Mirrors or complements baseStats.type for UI filtering, etc.
 

@@ -1,0 +1,106 @@
+================================================================================
+  HeroStatCell.cs
+  Path : Assets/Scripts/UI/HUD/HeroStatCell.cs
+  Type : MonoBehaviour
+  Layer: UI / HUD   (one cell of the Heroes Stats panel - view only)
+  Scenes: Canvas/Heros Stats panel/Hero 1   (the authored TEMPLATE)
+================================================================================
+
+PURPOSE
+-------
+ONE hero type in the battle HUD. It has exactly two looks:
+
+  ALIVE : portrait in colour, "alive/total" under it, buy button HIDDEN.
+  WIPED : portrait greyed out, count HIDDEN, buy button SHOWN with its price.
+
+It owns NO game logic - no currency, no spawning, no roster. HeroStatsPanel
+clones it once per hero type, feeds it numbers, and handles the purchase.
+
+INSPECTOR FIELDS
+----------------
+  Avatar
+    avatar        (Image) the "Hero avatar" object. Its sprite is overwritten at
+                  Bind time from UnitDefinitionSO.portrait.
+    deadOverlay   (GameObject) grey layer drawn ON TOP of the avatar while the
+                  type is wiped out - "Gray out Avatar" in Level_1_Stage_1.
+                  WHEN THIS IS ASSIGNED THE AVATAR'S OWN COLOUR IS NEVER TOUCHED.
+                  Left empty = the two tints below are used instead.
+    aliveTint     (Color, default white) FALLBACK ONLY: the avatar's colour while
+                  at least one hero of the type is alive.
+    deadTint      (Color, default 0.45 grey) FALLBACK ONLY: the avatar's colour
+                  once every hero of the type is dead.
+
+    NOTE on the tints: aliveTint used to be CAPTURED from the avatar's authored
+    colour at Awake instead of being a field. That was a real bug on
+    2026-08-22 - "Hero avatar" was authored blue (0.325, 0.443, 0.627) for the
+    UISprite placeholder it originally held, so once Bind() swapped in the real
+    portrait, every LIVING hero rendered as a dark blue silhouette. An explicit
+    white default cannot inherit a stale authoring tint that way.
+
+  Count
+    countText     (TMP_Text) the "Hero Count" label. Rendered as "2/3".
+
+  Buy Back
+    buyRoot       (GameObject) the "Parent" object holding the gem icon + price.
+                  MUST start switched OFF in the scene. Left empty = taken from
+                  buyButton's GameObject.
+    buyButton     (Button) the Button component on "Parent". Left empty = taken
+                  from buyRoot.
+    gemCostText   (TMP_Text) the "gem Amount" label on that button.
+
+PUBLIC STATE
+------------
+  UnitId     int, -1 until bound. Matches UnitDefinitionSO.unitId.
+  SquadSize  int, the frozen "/total".
+  GemCost    int, gems charged to bring the whole squad back.
+
+METHODS
+-------
+  Awake()
+      Fills in whichever of buyRoot / buyButton was left empty from the other.
+      Nothing else - it deliberately does NOT read the avatar's colour.
+
+  Bind(unitId, def, squadSize, gemCost, onBuy)   [called once, after cloning]
+      unitId is passed SEPARATELY from def on purpose: a hero can be on the
+      field with no matching entry in UnitsDatabaseSO, and the cell must still
+      track the right HeroRoster bucket even when it has no portrait.
+      Stores the identity, writes the portrait and the price label, replaces the
+      button's listeners (RemoveAllListeners first, so a re-bind cannot stack
+      them), then calls SetAlive(squadSize) to paint the initial state.
+
+  SetAlive(int alive)
+      Clamps alive into [0, SquadSize] - a purchase can briefly put more heroes
+      on the field than the snapshot recorded, and the label must never read
+      "4/3". Then:
+        countText.enabled = alive > 0   and text = "alive/SquadSize"
+        deadOverlay.SetActive(wiped)    (or avatar.color = deadTint)
+        buyRoot.SetActive(wiped)
+
+  SetAffordable(bool)
+      buyButton.interactable. Purely cosmetic - HeroStatsPanel re-checks the
+      balance for real before spending.
+
+MAGIC / CONTRACTS
+-----------------
+  - countText is hidden with .enabled = false, NOT SetActive(false). That is
+    deliberate: if "Parent" (the buy button) is authored as a CHILD of the
+    "Hero Count" label, switching the label's GameObject off would hide the buy
+    button along with it - the exact opposite of what the wiped state needs.
+    Toggling only the text component works either way.
+  - buyRoot must be INACTIVE in the authored template. Bind -> SetAlive turns it
+    on only at 0 alive, but a template saved with it on will flash it for one
+    frame on the clone.
+
+HOW IT CONNECTS
+---------------
+  - HeroStatsPanel is the only caller. It clones this, binds it, and is the
+    delegate behind the button.
+  - UnitDefinitionSO supplies portrait and (optionally) respawnGemCost.
+  - It never touches HeroRoster, CurrencyManager or PlayerWaveManager directly.
+
+NOTES
+-----
+  - The authored instance in the scene is a TEMPLATE, not a live cell.
+    HeroStatsPanel.Awake deactivates it; every visible cell is a clone.
+  - There is no animation on the alive->wiped switch yet. If one is added, it
+    belongs here, not in the panel.

@@ -34,8 +34,26 @@ public class BattlePhaseTransition : MonoBehaviour
     [Tooltip("Switched OFF for the battle - the Puzzle Board and the Feature Panel.")]
     [SerializeField] private GameObject[] hideWhenBattleStarts;
 
-    [Tooltip("Switched ON for the battle - the combat HUD, if you have one.")]
+    [Tooltip("Switched ON for the battle - the combat HUD, if you have one. " +
+             "Instant. For anything that should FADE in, use fadeInAfterMove below.")]
     [SerializeField] private GameObject[] showWhenBattleStarts;
+
+    [Header("Fades")]
+    [Tooltip("UI that fades out QUICKLY the instant BATTLE is pressed - the Feature Panel. " +
+             "Put it HERE instead of in hideWhenBattleStarts, which only fires once the " +
+             "camera has already arrived. A CanvasGroup is added automatically if missing.")]
+    [SerializeField] private GameObject[] fadeOutOnPress;
+
+    [Tooltip("Seconds for that fade. It runs alongside the camera move, so keep it short.")]
+    [SerializeField, Min(0f)] private float pressFadeOutDuration = 0.2f;
+
+    [Tooltip("UI that fades IN only after the camera has finished its whole move - the " +
+             "Heroes Stats panel. These are activated by this script, so leave them " +
+             "switched OFF in the scene.")]
+    [SerializeField] private GameObject[] fadeInAfterMove;
+
+    [Tooltip("Seconds for that fade-in.")]
+    [SerializeField, Min(0f)] private float arriveFadeInDuration = 0.45f;
 
     [Header("Timing")]
     [Tooltip("ON  = hide the board only after the move finishes, by which point " +
@@ -63,6 +81,10 @@ public class BattlePhaseTransition : MonoBehaviour
         if (IsPlaying) return;
 
         SetActiveAll(showWhenBattleStarts, true);
+
+        // Straight away, before the camera has moved a pixel: the Feature Panel
+        // must be gone almost immediately, not linger for the whole pan.
+        FadeOutAndDisable(fadeOutOnPress, pressFadeOutDuration);
 
         if (!hideAfterCameraArrives)
             SetActiveAll(hideWhenBattleStarts, false);
@@ -122,6 +144,10 @@ public class BattlePhaseTransition : MonoBehaviour
         if (hideAfterCameraArrives)
             SetActiveAll(hideWhenBattleStarts, false);
 
+        // The battle HUD arrives only now, with the camera already settled on the
+        // battlefield - never mid-pan, and never before the board is gone.
+        FadeInAndEnable(fadeInAfterMove, arriveFadeInDuration);
+
         onComplete?.Invoke();
     }
 
@@ -132,6 +158,76 @@ public class BattlePhaseTransition : MonoBehaviour
         foreach (var go in objects)
         {
             if (go) go.SetActive(active);
+        }
+    }
+
+    /// <summary>
+    /// A CanvasGroup on the object, created on demand. Works on an INACTIVE
+    /// GameObject, which is what lets FadeInAndEnable set alpha to 0 before the
+    /// object is ever switched on.
+    /// </summary>
+    private static CanvasGroup EnsureCanvasGroup(GameObject go)
+    {
+        var group = go.GetComponent<CanvasGroup>();
+        if (!group) group = go.AddComponent<CanvasGroup>();
+        return group;
+    }
+
+    private static void FadeOutAndDisable(GameObject[] objects, float duration)
+    {
+        if (objects == null) return;
+
+        foreach (var go in objects)
+        {
+            if (!go || !go.activeSelf) continue;
+
+            var group = EnsureCanvasGroup(go);
+            group.DOKill();
+
+            // Stop taking clicks the moment the fade starts - a half-faded
+            // BATTLE button is still a live button otherwise.
+            group.interactable = false;
+            group.blocksRaycasts = false;
+
+            if (duration <= 0f)
+            {
+                group.alpha = 0f;
+                go.SetActive(false);
+                continue;
+            }
+
+            var target = go;
+            group.DOFade(0f, duration)
+                 .SetEase(Ease.Linear)
+                 .OnComplete(() => { if (target) target.SetActive(false); });
+        }
+    }
+
+    private static void FadeInAndEnable(GameObject[] objects, float duration)
+    {
+        if (objects == null) return;
+
+        foreach (var go in objects)
+        {
+            if (!go) continue;
+
+            var group = EnsureCanvasGroup(go);
+            group.DOKill();
+
+            // Alpha BEFORE SetActive, so the panel never flashes at full opacity
+            // for one frame before the tween's first update.
+            group.alpha = 0f;
+            go.SetActive(true);
+            group.interactable = true;
+            group.blocksRaycasts = true;
+
+            if (duration <= 0f)
+            {
+                group.alpha = 1f;
+                continue;
+            }
+
+            group.DOFade(1f, duration).SetEase(Ease.OutQuad);
         }
     }
 }

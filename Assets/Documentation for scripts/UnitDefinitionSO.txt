@@ -40,6 +40,13 @@ FIELDS
     startsDeployed (bool)  if true, this unit begins in the Deployed bucket on a
                            fresh save (used to seed the starting team).
 
+  Battle HUD
+    respawnGemCost (int, >=0, default 0)  gems charged to bring this hero type
+                           back at FULL strength once every one of them has died
+                           mid-battle, via the Heroes Stats panel.
+                           0 = use HeroStatsPanel's own fallback,
+                           gemsPerHero * squad size. Added 2026-08-22.
+
   Tags
     classType     (FighterType)  mirrors baseStats.type for quick UI filtering.
 
@@ -56,5 +63,8 @@ HOW IT CONNECTS
   - Listed in UnitsDatabaseSO, which defines the roster and card order.
   - PlayerProgressionService.ProcessStageUnlocks() compares the required stage
     against LevelManager to unlock units as the player advances.
-  - PlayerWaveManager reads runtimePrefab when spawning a wave.
+  - PlayerWaveManager reads runtimePrefab when spawning a wave AND when spawning
+    a mid-battle reinforcement squad (SpawnReinforcements).
+  - HeroStatsPanel reads portrait (cell avatar) and respawnGemCost (buy-back
+    price); HeroRoster keys everything by unitId.
   - UnitCardView / UnitDetailView read portrait, displayName and baseStats.

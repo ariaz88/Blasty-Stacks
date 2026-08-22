@@ -1,0 +1,107 @@
+================================================================================
+  HeroRoster.cs
+  Path : Assets/Scripts/Combat/Shared/HeroRoster.cs
+  Type : static class (NOT a MonoBehaviour, no GameObject, no Inspector)
+  Layer: Combat / Shared   (runtime tally read by the battle HUD)
+  Scenes: none - it is pure static state, created on first use
+================================================================================
+
+PURPOSE
+-------
+Answers one question for the battle HUD: "how many heroes of each unit type are
+alive right now, and how many did this battle start with?"
+
+It exists as a STATIC class on purpose. Heroes are instantiated at runtime by
+PlayerWaveManager, and HeroStatsPanel may itself be switched on only when the
+battle starts (BattlePhaseTransition.showWhenBattleStarts), so neither side can
+hold an Inspector reference to the other. A static registry is the only thing
+both can reach.
+
+Everything is keyed by UnitDefinitionSO.unitId - never by prefab, name or tag.
+
+STATE
+-----
+  ByUnitId : Dictionary<int, TypeEntry>
+      TypeEntry.Alive         HashSet<PlayerManager> - every registered hero of
+                              this type that has not been destroyed yet.
+      TypeEntry.StartingCount int - the frozen "/total" half of the label.
+
+EVENTS
+------
+  OnRosterChanged   fired on every Register, Unregister, SnapshotStartingCounts
+                    and ClearAll. HeroStatsPanel subscribes and re-reads the
+                    counts; nothing is pushed, the listener always pulls.
+
+PUBLIC API
+----------
+  Register(int unitId, PlayerManager hero)
+      Files a hero under a type. No-op for a null hero or a duplicate.
+
+  Unregister(int unitId, PlayerManager hero)
+      Removes it. Called from PlayerManager.OnDestroy, which fires 0.5s into the
+      dying animation (PlayerDeathState schedules Destroy(gameObject, 0.5f)) -
+      so the label drops as the body falls, which is what we want.
+
+  AliveCount(int unitId) -> int
+      Living heroes of this type THAT ARE IN THE FIELD. See IsInBattle below.
+      Prunes destroyed entries on the way through.
+
+  StartingCount(int unitId) -> int
+      The denominator. 0 until SnapshotStartingCounts has run.
+
+  SnapshotStartingCounts()
+      Freezes StartingCount = AliveCount for every tracked type. Called once,
+      from HeroStatsPanel when the battle phase begins. Safe to call again - it
+      simply recomputes, which is what a scene reload needs.
+
+  UnitIdsInBattle() -> List<int>
+      The types with StartingCount > 0, i.e. the ones that deserve a cell.
+      Unordered; HeroStatsPanel sorts by database order.
+
+  ClearAll()
+      Drops every type and its snapshot. For a hard stage restart.
+
+INTERNAL
+--------
+  IsInBattle(PlayerManager pm) -> pm != null && pm.isUnlocked
+
+      THIS IS THE IMPORTANT ONE. Heroes spawn onto the castle gates LOCKED, and
+      a puzzle match is what throws them into the field (PlayerWaveManager
+      .UnlockCurrentWaveViaAnimation sets isUnlocked = true). Press BATTLE while
+      a wave is still sitting on the gates and that wave is stranded there - the
+      board is hidden from that point on, so no further match can ever release
+      it. It never fights and it never dies.
+
+      Counting those heroes would pin the label permanently above zero, and the
+      buy-back button - which only appears at 0 - could never be reached. So a
+      registered hero is invisible to the roster until it is unlocked.
+
+  Prune(entry)  removes destroyed PlayerManagers from the set.
+
+  ResetStatics()  [RuntimeInitializeOnLoadMethod, SubsystemRegistration]
+      Clears the dictionary and the event when Play mode starts. REQUIRED: with
+      "Enter Play Mode Options" set to skip the domain reload, static state
+      survives between runs and the first battle would open showing the previous
+      session's counts.
+
+HOW IT CONNECTS
+---------------
+  - PlayerManager.Start        -> Register    (unitId read from PlayerStatsApplier)
+  - PlayerManager.OnDestroy    -> Unregister
+  - HeroStatsPanel             -> SnapshotStartingCounts, UnitIdsInBattle,
+                                  StartingCount, AliveCount, OnRosterChanged
+  - Nothing in the combat layer reads it. It is a pure observer.
+
+NOTES
+-----
+  - Registration deliberately happens in PlayerManager.Start, NOT Awake or
+    OnEnable. PlayerWaveManager calls playerStatsApplier.SetUnitId() straight
+    after Instantiate, which is AFTER Awake has run - register any earlier and
+    every hero is filed under the prefab's default unitId.
+  - PlayerManager caches the id it registered with (rosterUnitId) so it always
+    unregisters from the same bucket, even if the applier's unitId is rewritten
+    later.
+  - The player castle also carries a PlayerManager. It is excluded by the
+    CompareTag("PlayerGate") check in PlayerManager.RegisterInHeroRoster.
+  - There is no upper bound and no ordering guarantee inside a type - it is a
+    HashSet, only the COUNT is ever used.

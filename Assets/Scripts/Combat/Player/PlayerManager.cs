@@ -126,6 +126,38 @@ public class PlayerManager : MonoBehaviour
         AttackSlotRegistry.Release(this);
         attackSlotTarget = null;
     }
+
+    /// <summary>
+    /// The unit type this hero was counted as in <see cref="HeroRoster"/>, or -1
+    /// for anything that is not a countable hero (the player castle, mainly).
+    /// Cached at registration because PlayerStatsApplier.unitId can be rewritten
+    /// later and we must unregister from the SAME bucket we registered into.
+    /// </summary>
+    private int rosterUnitId = -1;
+
+    /// <summary>
+    /// Adds this hero to the per-type tally the battle HUD reads.
+    ///
+    /// Deliberately in Start, not Awake/OnEnable: PlayerWaveManager calls
+    /// SetUnitId() on the applier straight after Instantiate, which is AFTER
+    /// Awake has already run - registering any earlier would file every hero
+    /// under the prefab's default unitId.
+    /// </summary>
+    private void RegisterInHeroRoster()
+    {
+        // The player castle also carries a PlayerManager; it is not a hero.
+        if (CompareTag("PlayerGate")) return;
+        if (playerStatsApplier == null) return;
+
+        rosterUnitId = playerStatsApplier.unitId;
+        HeroRoster.Register(rosterUnitId, this);
+    }
+
+    private void OnDestroy()
+    {
+        if (rosterUnitId >= 0)
+            HeroRoster.Unregister(rosterUnitId, this);
+    }
     private void Awake()
     {
         playerStatsApplier = GetComponent<PlayerStatsApplier>();
@@ -186,7 +218,7 @@ public class PlayerManager : MonoBehaviour
                              "so GameStartManager exists.", this);
         }
 
-       
+        RegisterInHeroRoster();
     }
     private void HandleGateDestroyed1()
     {

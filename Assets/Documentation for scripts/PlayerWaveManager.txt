@@ -122,14 +122,22 @@ SPAWNING ONE UNIT
   SpawnOneAt(pos, rot)  (the live version - the one actually called)
       1. Gets the deployed-units pool; warns and returns null if empty.
       2. Picks ONE at RANDOM from the pool.
-      3. Requires def.runtimePrefab; errors and returns null if missing.
-      4. Instantiates that FULL prefab directly (no root+visual injection).
-      5. Requires a PlayerManager component on it; errors, destroys the
+      3. Hands it to SpawnUnitAt below.
+
+  SpawnUnitAt(def, pos, rot)   (added 2026-08-22)
+      The instantiate-and-stamp half, split out of SpawnOneAt so the
+      reinforcement flow can spawn a CHOSEN type through the identical path
+      instead of growing yet another numbered sibling.
+      1. Requires def.runtimePrefab; errors and returns null if missing.
+      2. Instantiates that FULL prefab directly (no root+visual injection).
+      3. Requires a PlayerManager component on it; errors, destroys the
          instance and returns null if missing.
-      6. If the spawned unit has a playerStatsApplier, calls
+      4. If the spawned unit has a playerStatsApplier, calls
          SetUnitId(def.unitId), then ApplyNow(), then copies the computed
          stats into pm.unitStats - this is the moment a spawned unit's live
          stats (including any active roguelite multipliers) become correct.
+         The unitId set here is ALSO what PlayerManager files itself under in
+         HeroRoster, one frame later in its Start.
 
   ApplyLock(pm, locked)
       If locking: immediately calls pm.SwitchToNextState(pm.PlayerLockState) -
@@ -201,9 +209,47 @@ HELPERS
       gate itself if not found - a MAGIC CHILD NAME that every gate prefab must
       contain exactly.
 
+MID-BATTLE REINFORCEMENTS   (added 2026-08-22)
+---------------------------
+Bought from the Heroes Stats panel when every hero of one type has died.
+
+  reinforcementStagger  (Inspector, float >=0, default 0.12) beat between two
+      heroes of the same purchase, so a squad walks out of the castle instead of
+      appearing as one clump.
+
+  CanSpawnReinforcements(unitId) -> bool   [public]
+      True when the database, the gate points and the unit's runtimePrefab all
+      exist. HeroStatsPanel calls this BEFORE charging gems, so a broken
+      UnitDefinitionSO can never take the player's money and deliver nothing.
+
+  SpawnReinforcements(unitId, count)   [public]
+      Errors out if CanSpawnReinforcements is false, otherwise starts
+      SpawnReinforcementsRoutine.
+
+  SpawnReinforcementsRoutine(def, count)   [private coroutine]
+      Resolves the REAR lane once (GetRearLaneY), then for each hero:
+      picks gatePoints[i % length] - NOTE it does not check occupancy, unlike a
+      normal wave, because a bought squad must arrive in full - spawns via
+      SpawnUnitAt, sets isUnlocked = true, ApplyLock(pm, false), and starts the
+      normal JumpThenSwitch coroutine so it jumps into the rear rank and then
+      marches under its own FSM. Waits reinforcementStagger between each.
+      These are NEVER locked: the battle is already running, so they skip the
+      puzzle gate entirely.
+
+  GetRearLaneY() -> float?
+      The last non-null entry in jumpLanes. jumpLanes is authored FRONT FIRST
+      (index 0 closest to the enemy), so the last one is the back rank -
+      reinforcements arrive BEHIND the survivors and walk up, they never
+      materialise in the middle of the fight. Null (no lanes authored) leaves
+      the jumper on its fixed distance.
+      Distinct from GetLaneYForNextWave(), which walks forward by waveUnlockIndex.
+
 HOW IT CONNECTS
 ---------------
   - Subscribes to MatchResolver.OnBlast - this IS the puzzle-to-combat bridge.
+  - HeroStatsPanel calls CanSpawnReinforcements / SpawnReinforcements; the
+    heroes it spawns then register themselves in HeroRoster from
+    PlayerManager.Start.
   - Reads GameStartManager.PlayerUnits and unitsDatabase to know which units are
     deployed.
   - Spawns UnitDefinitionSO.runtimePrefab, configures via PlayerStatsApplier.

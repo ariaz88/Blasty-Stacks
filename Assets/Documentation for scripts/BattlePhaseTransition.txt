@@ -34,7 +34,20 @@ INSPECTOR FIELDS
     hideWhenBattleStarts (GameObject[]) switched OFF for the battle. Currently
                      "Puzzle Board" and "Feature Panel".
     showWhenBattleStarts (GameObject[]) switched ON for the battle - the combat
-                     HUD, when one exists. Currently empty.
+                     HUD, when one exists. INSTANT, no fade.
+
+  Fades   (added 2026-08-22)
+    fadeOutOnPress   (GameObject[]) UI that fades out QUICKLY the instant BATTLE
+                     is pressed - the Feature Panel belongs HERE, not in
+                     hideWhenBattleStarts, which only fires once the camera has
+                     already arrived.
+    pressFadeOutDuration (float, >=0, default 0.2) seconds for that fade. It runs
+                     alongside the camera move, so keep it short.
+    fadeInAfterMove  (GameObject[]) UI faded IN only after the camera has
+                     finished its WHOLE move - the Heroes Stats panel. These are
+                     activated by this script, so leave them switched OFF in the
+                     scene.
+    arriveFadeInDuration (float, >=0, default 0.45) seconds for that fade-in.
 
   Timing
     hideAfterCameraArrives (bool, default ON)
@@ -53,6 +66,9 @@ FLOW
   Play(onComplete)
       1. Returns immediately if already playing (double-press guard).
       2. Enables showWhenBattleStarts.
+      2b. FadeOutAndDisable(fadeOutOnPress) - runs BEFORE the camera has moved a
+         pixel, because the Feature Panel must be gone almost immediately rather
+         than linger through the whole pan.
       3. If hideAfterCameraArrives is OFF, hides hideWhenBattleStarts now.
       4. WARNS if moveUpTargets is empty - a silent no-move was the exact
          failure mode that made this feature look broken once already.
@@ -64,8 +80,26 @@ FLOW
       7. On complete -> Finish().
 
   Finish(onComplete)
-      Clears IsPlaying, hides hideWhenBattleStarts if it was deferred, then
-      invokes the callback.
+      Clears IsPlaying, hides hideWhenBattleStarts if it was deferred, runs
+      FadeInAndEnable(fadeInAfterMove) - so the battle HUD arrives with the
+      camera already settled, never mid-pan and never before the board is gone -
+      then invokes the callback.
+
+  EnsureCanvasGroup(go)   [static]
+      GetComponent<CanvasGroup>, added on demand. Works on an INACTIVE
+      GameObject, which is what lets FadeInAndEnable set alpha to 0 BEFORE the
+      object is switched on.
+
+  FadeOutAndDisable(objects, duration)   [static]
+      Skips already-inactive objects. Kills any running tween, drops
+      interactable + blocksRaycasts IMMEDIATELY (a half-faded BATTLE button is
+      still a live button otherwise), fades to 0 and SetActive(false) on
+      complete. duration <= 0 = instant.
+
+  FadeInAndEnable(objects, duration)   [static]
+      Kills any running tween, sets alpha 0, THEN SetActive(true) - that order
+      is what stops a one-frame flash at full opacity - restores interactable +
+      blocksRaycasts, then fades to 1. duration <= 0 = instant.
 
   ApplyEndStateInstantly()
       The no-tween path: adds Vector3.up * moveUpDistance to every target.

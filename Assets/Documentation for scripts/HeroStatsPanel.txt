@@ -1,0 +1,136 @@
+================================================================================
+  HeroStatsPanel.cs
+  Path : Assets/Scripts/UI/HUD/HeroStatsPanel.cs
+  Type : MonoBehaviour
+  Layer: UI / HUD   (battle-only HUD, reads HeroRoster, spends gems)
+  Scenes: Canvas/Heros Stats panel  (gameplay stages)
+================================================================================
+
+PURPOSE
+-------
+The row of hero cells shown during a battle. One cell per hero TYPE that is on
+the field when BATTLE is pressed, each showing "alive/total" - and, once every
+hero of that type is dead, a gem price to buy the whole squad back into the
+fight.
+
+THE CELLS ARE BUILT AT RUNTIME. The scene holds ONE authored cell ("Hero 1")
+which is used as a TEMPLATE and switched off at Awake. A stage that fields two
+hero types gets two cells; one that fields four gets four. Nothing about the
+panel is hard-coded to a particular hero.
+
+INSPECTOR FIELDS
+----------------
+  Cells
+    cellContainer        (RectTransform) what the cells are parented to. PUT THE
+                         HorizontalLayoutGroup HERE. Left empty = this GameObject.
+    cellTemplate         (HeroStatCell) the authored "Hero 1" object. Left empty,
+                         Awake takes the first HeroStatCell found in the
+                         container's children, including inactive ones.
+    forceCenterAlignment (bool, default ON) sets the container's layout group to
+                         MiddleCenter at Awake, so a two-hero row sits centred
+                         instead of hugging the left edge. Turn OFF to control
+                         the alignment by hand.
+
+  Buy Back Cost
+    gemsPerHero          (int, >=0, default 50) FALLBACK price - this many gems
+                         for EACH hero in the squad. Used only when the unit's
+                         own UnitDefinitionSO.respawnGemCost is left at 0.
+
+  Refs (left empty = found in the scene at Awake)
+    waveManager          (PlayerWaveManager) does the actual respawning.
+    gameStartManager     (GameStartManager) only used to reach unitsDatabase.
+
+RUNTIME STATE
+-------------
+  cells          List<HeroStatCell> - the clones, in display order.
+  unitsDatabase  UnitsDatabaseSO, cached from GameStartManager at Awake.
+  built          latches true the first time the battle starts, so the cells are
+                 never rebuilt mid-battle.
+
+FLOW
+----
+  Awake()
+      Resolves cellContainer / cellTemplate, DEACTIVATES the template, forces
+      MiddleCenter on the layout group, resolves waveManager and
+      gameStartManager, caches unitsDatabase. With no template it logs an error
+      and disables itself (which also skips OnEnable).
+
+  OnEnable()
+      Subscribes to BattleStartController.OnAnyBattleStarted,
+      HeroRoster.OnRosterChanged and CurrencyManager.OnCurrencyChanged. The
+      currency one is here, not in HandleBattleStarted, so a panel switched off
+      and on again mid-battle (built already true) keeps greying the price out.
+      Then: if the battle is ALREADY running (BattleStartController
+      .BattleIsRunning), builds via BuildAtEndOfFrame. That covers the normal
+      case where this panel is listed in
+      BattlePhaseTransition.showWhenBattleStarts and is therefore switched on
+      AFTER the event has fired. Otherwise it just refreshes.
+
+  BuildAtEndOfFrame()   [coroutine]
+      WaitForEndOfFrame, then HandleBattleStarted. The wait matters because
+      BattleIsRunning DEFAULTS TO TRUE for any stage with no
+      BattleStartController - without it, such a stage would build on frame 0,
+      before a single hero had run its Start() and registered, and the panel
+      would come up empty.
+
+  OnDisable()
+      Drops all three subscriptions (including CurrencyManager's).
+
+  HandleBattleStarted()
+      Runs once (latched by `built`). HeroRoster.SnapshotStartingCounts()
+      freezes the "/total" for every type standing on the field, then
+      BuildCells(), then Refresh().
+
+  BuildCells()
+      Destroys any previous clones, asks HeroRoster.UnitIdsInBattle(), sorts
+      them by UnitsDatabaseSO.IndexOf so the row reads the same way every run
+      (not spawn order), then clones the template once per id and calls
+      cell.Bind(unitId, def, squadSize, cost, HandleBuyBack).
+      Empty roster = one warning, no cells. A unitId with no database entry also
+      warns but still gets a cell (no portrait, cannot be bought back).
+
+  ResolveGemCost(def, squadSize)
+      def.respawnGemCost when it is > 0, otherwise gemsPerHero * squadSize.
+
+  Refresh()
+      For every cell: SetAlive(HeroRoster.AliveCount(id)) and
+      SetAffordable(gems >= cell.GemCost). Called on every roster change and on
+      every gem change.
+
+  HandleBuyBack(cell)
+      1. Bails if the type is not actually wiped out (AliveCount > 0).
+      2. Bails if there is no waveManager.
+      3. waveManager.CanSpawnReinforcements(unitId) is checked BEFORE the
+         charge - a missing runtimePrefab must never eat the player's gems.
+      4. CurrencyManager.TrySpendGems(cell.GemCost). Not enough -> log, refresh,
+         return. No CurrencyManager in the scene -> warn and give it free.
+      5. waveManager.SpawnReinforcements(unitId, cell.SquadSize).
+
+HOW IT CONNECTS
+---------------
+  - HeroRoster            : the whole data source. Subscribes to OnRosterChanged.
+  - BattleStartController : static OnAnyBattleStarted / BattleIsRunning.
+  - PlayerWaveManager     : CanSpawnReinforcements + SpawnReinforcements.
+  - CurrencyManager       : TrySpendGems + OnCurrencyChanged.
+  - GameStartManager      : unitsDatabase (portraits, order, per-unit price).
+  - HeroStatCell          : the cloned cell; this panel owns all its logic.
+
+SCENE SETUP CHECKLIST
+---------------------
+  1. HorizontalLayoutGroup on the container (Child Alignment is forced to
+     Middle Center by this script unless you turn forceCenterAlignment off).
+  2. The authored "Hero 1" object needs a HeroStatCell with its own refs wired -
+     see HeroStatCell.txt. Leave it ACTIVE in the scene; Awake switches it off.
+  3. Add the panel to BattlePhaseTransition.showWhenBattleStarts if it should
+     only appear during combat.
+
+NOTES
+-----
+  - Heroes register with HeroRoster in their Start, i.e. the frame AFTER
+    SpawnReinforcements instantiates them. The label therefore fills in one
+    frame late; that is why HandleBuyBack does not try to set it itself.
+  - The snapshot is taken once. A mid-battle revive (RevivePanel) spawns fresh
+    waves against the OLD totals; HeroStatCell.SetAlive clamps to SquadSize so
+    the label can never read "4/3".
+  - Costs are per-battle only. Nothing here is written to SaveSystem - only the
+    gem balance is, and CurrencyManager does that itself.

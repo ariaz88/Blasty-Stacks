@@ -86,6 +86,23 @@ LIFECYCLE
       .CurrentStats. Unlike EnemyManager, PlayerManager does not build its own
       stats from statsBase; it simply borrows the reference already computed by
       PlayerStatsApplier (which itself handles roguelite multipliers).
+      ALSO calls RegisterInHeroRoster() as its last act - see below.
+
+  RegisterInHeroRoster()   [private, from Start]   (added 2026-08-22)
+      Files this hero into HeroRoster under playerStatsApplier.unitId, and caches
+      that id in rosterUnitId so OnDestroy can unregister from the SAME bucket
+      even if the applier's unitId is rewritten later.
+      Skipped entirely when CompareTag("PlayerGate") - the player castle also
+      carries a PlayerManager and is not a hero - or when there is no applier.
+      MUST stay in Start, not Awake: PlayerWaveManager calls SetUnitId() right
+      after Instantiate, i.e. after Awake has already run, so registering earlier
+      would file every hero under the prefab's default unitId.
+
+  OnDestroy()   (added 2026-08-22)
+      HeroRoster.Unregister(rosterUnitId, this) when rosterUnitId >= 0. Death
+      reaches this 0.5s after PlayerDeathState schedules Destroy(gameObject,
+      0.5f), so the "alive/total" label in the battle HUD drops as the body
+      falls rather than the instant HP hits zero.
 
   HandleGateDestroyed()
       Clears attackPlayerGate/currentGateTarget, makes the Rigidbody2D kinematic
