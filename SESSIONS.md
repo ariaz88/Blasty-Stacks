@@ -68,6 +68,9 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
 - **`PlayerAttackState.cs:69` and `PlayerDeathState.cs:9` write `linearVelocity` on a body they
   just set to Static**, spamming "Cannot use 'linearVelocity' on a static body" every FixedUpdate.
   Harmless but it floods the console and hides real errors. Two-line guard each.
+  **2026-08-22: the third site, `PlayerLockState`, is FIXED** (guarded while fixing the gap-fill
+  animation). These two remain — the user was offered the fix and has not taken it yet; the error
+  is still visible in their latest screenshot. Copy the guard from `PlayerLockState.cs:22`.
 - **`EnemyManager` target selection never got the hysteresis treatment** that `PlayerManager` did
   (see the 2026-08-21 Decisions row). Enemy FACING has a `facingDeadZoneX` guard, but if enemies
   are seen flip-flopping between left and right, that is where to look.
@@ -82,8 +85,24 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   can ever spawn that stage. Decide: refill the board, auto-start the battle, or hide the counter.
 - **Per-script docs are behind** for the scripts touched on 2026-08-21: `PlayerManager`,
   `CrowdSeparation2D`, `AttackSlotRegistry`, `HealthBar`, `EnemySpawner`, `BattleStartController`,
-  `SimpleJump2D`, `FormationGapFiller`, `PlayerPursueTargetState`. Two standalone guides WERE
-  written: `Formation_GapFilling_Guide.md` and `Unit_Avoidance_And_NonCollision_Guide.md`.
+  `FormationGapFiller`, `PlayerPursueTargetState`. Two standalone guides WERE written:
+  `Formation_GapFilling_Guide.md` and `Unit_Avoidance_And_NonCollision_Guide.md`.
+  `SimpleJump2D.txt` was brought fully up to date on 2026-08-22.
+  **Additionally behind as of 2026-08-22** (the user explicitly asked for NO docs on those two
+  fixes, so this is a deliberate debt, not an oversight): `PlayerManager` (new
+  `isFormationStepping`), `PlayerLockState` (formation-step bypass + static-body guard),
+  `FormationGapFiller` (flag handover + mid-step battle-start abort), `HealthBar` (authored-order
+  capture/restore), `LevelGameManager` (new static `OnGameStateChanged` / `IsBattleRunning`).
+
+- **`GroundProjected` shadow mode has never been run.** The 2026-08-22 shadow work defaults every
+  unit to `StickToCharacter`, so the detach/slide path — including its two fixes (delta-based
+  travel, `OnDisable` reattach) — is entirely untested. If that look is ever wanted back, test it
+  before trusting it.
+
+- **The broken `shadowProgressCurve` is still serialized in all 12 character prefabs** (first key
+  at time `-0.104`, value `0.994`). `ShadowProgress01()` now rejects it and falls back to t^2, so
+  it is harmless, but anyone who re-enables `GroundProjected` and wonders why their authored curve
+  is ignored should clear the curve in the Inspector first.
 
 - Build Profiles points `Level_1_Stage_8..20` at the stale path `Scenes/Level_1_Stage_N.unity`;
   the real files are under `Scenes/TestScenes/GamePlay Scenes/`. Stages 8-20 are not in the build.
@@ -147,6 +166,9 @@ _Durable choices with their reasons, so no session reopens them blindly._
 | 2026-08-21 | **Every "which is nearest / which side" decision needs hysteresis or a deterministic tie-break.** | The identical bug shape appeared FIVE times: target selection, side-anchor selection, `FaceLeft` re-picking the anchor, swerve side with a blocker dead-ahead, and swerve side with units exactly overlapped. Symptoms were units spinning left-right on the spot, or two units picking the SAME side (`0 > 0` is false for both) and travelling as one merged blob. Margins are compared in SQUARED space, so a linear margin must be squared. |
 | 2026-08-21 | **Battle-gate flags all default to "ungated"**: `waitForBattleStart = false`, `BattleIsRunning = true`, `EnemiesHaveAppeared = true`. Only a scene that actually has the new components flips them. | Stages 1-20 were authored before the puzzle-first flow. Defaulting to gated would have silently frozen every one of them. Presence-based gating means the new scene opts IN and nothing else changes behaviour. |
 | 2026-08-21 | AdMob + EDM4U are installed from **git URLs**, not Google's scoped registry. | `https://unityregistry-pa.googleapis.com` was unreachable from this machine; the resolve failed with "Package [com.google.external-dependency-manager@1.2.187] cannot be found". If the registry is ever restored, drop the EDM4U git url at the same time — do not keep both. |
+| 2026-08-22 | **A render-order override that exists for combat must be scoped to combat, never applied as a constant.** `HealthBar` captures its canvas's AUTHORED sortingOrder and restores it whenever the level leaves `GameState.Playing`. | The `sortingOrder = 500` added on 2026-08-21 fixed bars hiding behind other units, but 500 outranks everything in the scene forever — so the bars punched through the win panel. The user chose lowering the order over hiding the bars, explicitly because the roguelite skill panel will hit the same wall later. Restoring the AUTHORED value (not some hand-picked low number) is what guarantees it lands under the UI: it is provably the configuration that worked before the override existed. |
+| 2026-08-22 | **`LevelGameManager.OnGameStateChanged` is the authoritative "is the battle over?" signal.** The battle ends when a GATE reaches 0 HP — enemy gate = won, player gate = lost/revive — and resumes only when a revive is accepted. | Confirmed by the user as the real rule. Win, lose and revive are three different paths and revive RESUMES combat, so any listener keying off a single panel or a one-way bool gets revive wrong. Routing `CurrentState` through a property setter means the existing five assignment sites need no changes and cannot forget to fire it. |
+| 2026-08-22 | **Jump shadows stay glued to the character (`ShadowJumpMode.StickToCharacter`).** The ground-projected shadow is kept as an opt-in mode, not deleted. | The user's call, flagged as provisional ("maybe we change this functionality later"), so the old look had to remain reachable rather than being ripped out. Making it an enum default also meant zero prefab edits — the 12 character prefabs simply fall through to the C# field initializer. |
 | 2026-08-20 | The conversion is done by a repeatable editor tool (`Assets/Scripts/Editor/TMPFontAssetStaticBaker.cs`), not by hand-editing the Inspector or patching the `.asset` YAML directly. | Hand-editing does not scale and is not reproducible for the next font added; direct YAML patching was considered and rejected because it cannot repopulate an atlas — only TMP's `TryAddCharacters` can, and it needs a loaded font face. The tool also re-runs safely on assets that are already correct. |
 
 ---
@@ -154,6 +176,102 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-08-22 — Level1_Stage01 part 2: jump shadow, gap-fill animation, HP-bar sorting on battle end
+- **Goal:** three polish bugs the user found while playing the new puzzle-first flow — the jump
+  shadow flashing to the landing spot, gap-filling heroes sliding with no walk animation, and unit
+  HP bars drawing on top of the win panel.
+- **Status:** done (all three fixed in code; none run in Play mode)
+- **Commits:** none — working tree only.
+
+- **Changed — jump shadow flash** (`Assets/Scripts/Combat/Player/SimpleJump2D.cs`):
+  - ROOT CAUSE: all 12 character prefabs carry a hand-dragged `shadowProgressCurve` whose FIRST
+    key sits at time `-0.104`, value `0.994` (see `Player_Pref.prefab:1503`). At `t01 = 0` it
+    evaluated to ~1.0, so the detached shadow was placed on the LANDING SPOT on frame one, then
+    walked backwards as the curve dipped to 0.66 at t=0.35. The documented "if the curve is null,
+    fall back to t^2" guard was DEAD CODE: **a serialized `AnimationCurve` field is never null in
+    Unity** — it deserializes as an empty curve — so `curve != null` was always true.
+  - Replaced the `detachShadowDuringJump` bool with a `ShadowJumpMode` enum defaulting to
+    `StickToCharacter` (shadow stays parented, script never writes its position). `GroundProjected`
+    preserves the old detach-and-slide look. **No prefab edits needed** — the new field is absent
+    from all 12 prefab YAMLs, so the C# field initializer applies; the orphan
+    `detachShadowDuringJump: 1` keys are inert and vanish on the next prefab re-save.
+  - New `ShadowProgress01()` validates the curve (>= 2 keys AND `Evaluate(0) <= 0.05`) before
+    trusting it, else falls back to t^2.
+  - Fixed a LATENT bug only reachable in `GroundProjected`: the follow lerped to `endPos`
+    ABSOLUTELY, discarding the shadow's authored local offset (its under-the-feet placement).
+    Because `Land()` re-parents with `worldPositionStays = true`, the loss was permanent after the
+    first jump. Both the per-frame path and `Land()` now advance by the travel DELTA.
+  - Added `OnDisable -> ReattachShadowIfDetached()`: a unit dying mid-jump used to orphan its
+    detached shadow as a root object forever.
+  - Deleted three confirmed-dead numbered siblings: `BeginJump1`, `Land1`, `UpdateShadowScale1`.
+
+- **Changed — no walk animation while filling formation gaps:**
+  - ROOT CAUSE: `PlayerWaveManager.ApplyLock(pm, false)` only flips `canMove`/`isUnlocked` — it
+    NEVER changes the state. The switch to `PlayerPursueTargetState` happens in `JumpThenSwitch`,
+    which blocks on `WaitForCombatLive()`. So through the whole puzzle phase heroes are still
+    ticking `PlayerLockState`, whose `Tick` runs in **FixedUpdate** and calls `SetAnimMoving(false)`
+    every physics step. `FormationGapFiller.WalkTo` set `SetAnimMoving(true)` once before its loop
+    and lock state erased it ~2ms later.
+  - RULED OUT the animator: `Jump Loop` lives on an Override Layer and exits at `exitTime 0` into
+    an empty state carrying `ResetAnimationsBool` (which clears `isInteracting`), so the base-layer
+    locomotion blend tree is already visible well before `preMoveDelay` (0.4s) elapses. The
+    Horizontal/Vertical blend floats were the right lever all along.
+  - `Assets/Scripts/Combat/Player/PlayerManager.cs` — new `[HideInInspector] public bool
+    isFormationStepping`.
+  - `Assets/Scripts/Combat/Player/States/PlayerLockState.cs` — skips the locomotion/animator
+    clobber while that flag is set. Everything else (root motion off, Z clamp, staying in state)
+    still runs. Also guarded the `linearVelocity`-on-a-Static-body write here (one of the console
+    spam sources in Open Threads) — it now only touches velocity on a non-Static body.
+  - `Assets/Scripts/Combat/Spawning/FormationGapFiller.cs` — raises the flag before the walk,
+    clears it on arrival. Also closed the race the flag made reachable: the walk loop now aborts
+    if the hero leaves lock state mid-step (battle starting mid-walk had the gap filler AND
+    `PlayerPursueTargetState` both driving position), and the arrival snap is skipped in that case
+    so a marching hero is not yanked back onto its slot.
+
+- **Changed — HP bars drawing over the win/lose/revive panels:**
+  - ROOT CAUSE: the `sortingOrder = 500` added on 2026-08-21 to stop bars hiding behind other
+    units. It is applied once in `Awake` and nothing ever lowers it, so it outranks every
+    end-of-battle panel. A combat-time need expressed as a permanent constant.
+  - `Assets/Scripts/UI/WinLose/LevelGameManager.cs` — `CurrentState` converted from an
+    auto-property to a backing field whose setter fires a new static
+    `event Action<GameState> OnGameStateChanged`, plus a static `IsBattleRunning` helper. All five
+    existing `CurrentState = X` assignments are untouched. The gate-death handlers already sit on
+    `EnemyGateStats.OnGateDestroyed` / `PlayerGateStats.OnGateDestroyed`, which is exactly the
+    signal the user named as authoritative (a gate at 0 HP ends the battle).
+  - `Assets/Scripts/Combat/Player/HealthBar.cs` — captures the canvas's AUTHORED
+    sortingOrder/layer before overriding, and swaps between authored and 500 as the state changes.
+    Restoring the authored value (rather than picking some low number) is deliberate: it is
+    provably the configuration that worked before 2026-08-21, so it cannot accidentally still
+    outrank a panel. Revive is handled — `NotifyReviveAccepted()` returns the state to `Playing`
+    and re-raises the bars, so this is not a one-way trip. A bar whose `Awake` runs AFTER the
+    battle already ended resolves `IsBattleRunning` directly instead of waiting for an event.
+  - GATE bars are covered for free: `PlayerGateStats` and `EnemyGateStats` both hold a `HealthBar`
+    reference, so it is the same class and the same fix.
+
+- **Scene/Prefab/SO edits:** **none.** All three fixes are pure code; no `.unity`, `.prefab` or
+  `.asset` was touched. Deliberate — the shadow fix in particular was designed to avoid editing
+  12 character prefabs.
+
+- **Verified:** **NOT VERIFIED — nothing was run in Play mode this session.** Diagnosis was done by
+  reading source and by inspecting the serialized prefab/controller YAML directly (the broken
+  shadow curve keys, the `Jump Loop` transition's `exitTime 0`, `detachShadowDuringJump: 1` on all
+  12 prefabs). The `linearVelocity` console error is still visible in the user's screenshot from
+  the two sites listed in Open Threads.
+
+- **Gotchas:**
+  - **A serialized `AnimationCurve` is NEVER null in Unity.** Any `curve != null` fallback in this
+    codebase is dead code — validate the curve's SHAPE instead.
+  - `PlayerLockState.Tick` runs in **FixedUpdate**, so anything it writes beats a value another
+    system set once outside the physics loop. Check for a lock-state clobber first when an
+    animation "does not play" pre-battle.
+  - `ApplyLock(pm, false)` does NOT leave `PlayerLockState`. Heroes stay locked for the entire
+    puzzle phase; only `JumpThenSwitch` moves them on, and only after `WaitForCombatLive()`.
+  - Re-parenting with `worldPositionStays: true` BAKES whatever world position you last wrote into
+    the new local offset — a wrong position written once becomes permanent.
+
+- **Next:** see Open Threads. The user has a running list of `Level_1_Stage_1` revisions and is
+  working through them one at a time.
 
 ### 2026-08-21 — Puzzle-first stage flow: battle gate, jump lanes/formation, unit avoidance, AdMob install
 - **Goal:** rebuild `Level_1_Stage_1` around a new loop — puzzle phase first, combat only after
