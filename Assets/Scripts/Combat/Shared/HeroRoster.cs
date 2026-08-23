@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// "How many heroes of each unit type are alive right now, and how many did the
@@ -43,6 +44,27 @@ public static class HeroRoster
     {
         ByUnitId.Clear();
         OnRosterChanged = null;
+
+        // This method runs ONCE per Play session, NOT per scene load. Without the
+        // hook below, replaying a stage carried the PREVIOUS battle's
+        // StartingCount into the new scene - where AliveCount is briefly 0 while
+        // nothing has spawned yet, so any "how much of my army is left" ratio
+        // read as "wiped out" for the whole puzzle phase.
+        SceneManager.sceneLoaded -= HandleSceneLoaded;
+        SceneManager.sceneLoaded += HandleSceneLoaded;
+    }
+
+    /// <summary>
+    /// A new stage means a new roster. Safe to run here because heroes register
+    /// from PlayerManager.Start, which Unity runs AFTER the sceneLoaded callback -
+    /// so this can never wipe units that already filed themselves in.
+    /// </summary>
+    private static void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        // An additive load layers onto the live stage; it must not reset it.
+        if (mode == LoadSceneMode.Additive) return;
+
+        ClearAll();
     }
 
     public static void Register(int unitId, PlayerManager hero)
@@ -113,6 +135,33 @@ public static class HeroRoster
             kv.Value.StartingCount = AliveCount(kv.Key);
 
         Changed();
+    }
+
+    /// <summary>
+    /// Living heroes IN THE FIELD across every type. The numerator of the
+    /// "how much of my army is left" question.
+    /// </summary>
+    public static int TotalAlive()
+    {
+        int n = 0;
+        foreach (var kv in ByUnitId)
+            n += AliveCount(kv.Key);
+
+        return n;
+    }
+
+    /// <summary>
+    /// How many heroes of ALL types stood on the field when BATTLE was pressed.
+    /// Zero until SnapshotStartingCounts has run, which conveniently makes any
+    /// ratio built on it inert during the puzzle phase.
+    /// </summary>
+    public static int TotalStarting()
+    {
+        int n = 0;
+        foreach (var kv in ByUnitId)
+            n += kv.Value.StartingCount;
+
+        return n;
     }
 
     /// <summary>

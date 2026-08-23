@@ -110,6 +110,26 @@ public class HeroStatCell : MonoBehaviour
         if (buyRoot) buyRoot.SetActive(wiped);
     }
 
+    /// <summary>
+    /// The THIRD look, used by the last-stand offer: portrait in COLOUR, no
+    /// count, buy button showing.
+    ///
+    /// Deliberately not SetAlive(0). That is the "this type is wiped out" state
+    /// and it greys the portrait, which is the wrong sell for a prompt asking
+    /// the player to buy a fresh hero - the offer is an invitation, not an
+    /// obituary. Everything else (the button, its listener, the price label) is
+    /// exactly what Bind already wired.
+    /// </summary>
+    public void ShowAsOffer()
+    {
+        if (countText) countText.enabled = false;
+
+        if (deadOverlay) deadOverlay.SetActive(false);
+        else if (avatar) avatar.color = aliveTint;
+
+        if (buyRoot) buyRoot.SetActive(true);
+    }
+
     /// <summary>Greys out the price while the player cannot afford it. Purely cosmetic.</summary>
     public void SetAffordable(bool affordable)
     {

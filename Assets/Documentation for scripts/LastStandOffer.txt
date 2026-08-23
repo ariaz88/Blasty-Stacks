@@ -1,0 +1,187 @@
+================================================================================
+  LastStandOffer.cs
+  Path : Assets/Scripts/UI/HUD/LastStandOffer.cs
+  Type : MonoBehaviour
+  Layer: UI / HUD
+  Added: 2026-08-23
+================================================================================
+
+PURPOSE
+-------
+The "your army is collapsing - want one more hero?" prompt.
+
+Where HeroStatsPanel offers a PER-TYPE buy-back and only once that one type is
+wiped out, this watches the WHOLE roster: when deadFraction (default 0.8) of
+everyone who started the battle has fallen, it shows a single buy button for a
+hero the DESIGNER PICKED FOR THE STAGE - wiped or not.
+
+It owns no arrival logic. Paying calls PlayerWaveManager.SpawnReinforcements,
+the same entry point the per-type buy-back uses, so the hero lands on a castle
+gate, poses there for reinforcementGateHold with its HP bar hidden, then jumps
+into the rear rank. Nothing about that sequence is duplicated here.
+
+Shows ONCE PER BATTLE - see NOTES for why "spent" is set on SHOW, not on buy.
+
+INSPECTOR FIELDS
+----------------
+  The Offer
+    offeredUnit       (UnitDefinitionSO)  WHICH hero this stage offers. THE ONE
+                      FIELD THAT MUST BE FILLED IN PER LEVEL - with it empty the
+                      component logs an error in Awake and never shows anything.
+                      Its runtimePrefab is what actually spawns.
+    gemCost           (int, >=0, default 200)  price. 0 = fall back to the unit's
+                      own UnitDefinitionSO.respawnGemCost.
+    heroesPerPurchase (int, >=1, default 1)  how many arrive for that price.
+
+  Trigger
+    deadFraction      (float 0.1-1, default 0.8)  fraction of the STARTING army
+                      that must be dead before the offer appears. 0.8 = 5 of 6.
+
+  Presentation
+    offerContainer    (RectTransform)  where the offer cell is parented.
+                      Left empty = this GameObject.
+    cellTemplate      (HeroStatCell)  the cell CLONED for the offer's look.
+                      Point it at the same authored "Hero 1" template the Heroes
+                      Stats panel uses; the clone is shown in OFFER mode.
+                      MUST BE INACTIVE in the scene - it is a template, and an
+                      active one is simply visible from frame 1. Show() calls
+                      SetActive(true) on the CLONE.
+
+  Attention Pulse
+    pulseScale        (float 0.5-1, default 0.8)  the offer breathes between full
+                      size and this fraction of it, forever. 1 = no pulse.
+    pulseDuration     (float >=0.05, default 0.75)  seconds for ONE direction, so
+                      a full cycle is twice this.
+
+  Refs (left empty = found in the scene)
+    waveManager       (PlayerWaveManager)
+
+RUNTIME STATE
+-------------
+  offerCell  (HeroStatCell)  the live clone, null while nothing is on screen
+  spent      (bool)          one-shot latch, set when the offer is SHOWN
+  armed      (bool)          false until THIS scene's battle-start event fires;
+                             nothing is evaluated before it - see NOTES
+  pulse      (Tween)         the looping DOTween breath on the live clone
+
+FLOW
+----
+  Awake()
+      Defaults offerContainer to self, finds the PlayerWaveManager, and logs an
+      error for a missing cellTemplate or offeredUnit.
+
+  OnEnable / OnDisable
+      Subscribes/unsubscribes HeroRoster.OnRosterChanged -> Evaluate,
+      LevelGameManager.OnGameStateChanged -> HandleGameStateChanged, and
+      CurrencyManager.OnCurrencyChanged -> HandleCurrencyChanged. Evaluates once
+      on enable.
+
+  HandleBattleStarted()   [BattleStartController.OnAnyBattleStarted subscriber]
+      Sets armed = true and evaluates. This is the ONLY thing that arms the
+      component - see NOTES for why BattleIsRunning is not read instead.
+
+  Evaluate()   [the trigger]
+      Bails if not armed, if spent, if a cell is already up, or if the refs are
+      missing. Reads HeroRoster.TotalStarting(), then shows when
+          TotalAlive() <= starting * (1 - deadFraction)
+      Called on every roster change, which covers BOTH halves of the ratio:
+      deaths drive it down, a landing purchase drives it back up.
+
+  Show()
+      Calls waveManager.CanSpawnReinforcements FIRST - a stage with a broken
+      UnitDefinitionSO stays quiet rather than taking gems and delivering
+      nothing (it also latches spent, so it does not re-log every death).
+      Otherwise latches spent, clones cellTemplate into offerContainer, Binds it
+      (heroesPerPurchase is passed as squadSize, ResolveGemCost as the price,
+      HandleBuy as the callback), calls ShowAsOffer(), and refreshes the price
+      greying.
+
+  ResolveGemCost()
+      gemCost when > 0, else offeredUnit.respawnGemCost, else 0.
+
+  HandleBuy(cell)
+      Re-checks CanSpawnReinforcements (the stage may have ended while the offer
+      sat on screen), charges via CurrencyManager.TrySpendGems - refreshing and
+      bailing if the player is short - then calls
+      SpawnReinforcements(cell.UnitId, cell.SquadSize) and hides.
+
+  StartPulse() / StopPulse()
+      A DOTween yoyo from the clone's AUTHORED scale (not Vector3.one, so a
+      template sized to anything else still breathes around its own size) down to
+      pulseScale and back, forever, on Ease.InOutSine - eased at BOTH ends,
+      because a linear yoyo visibly ticks at the turn. SetUpdate(true) runs it on
+      unscaled time: a pause sets timeScale to 0, and an offer frozen mid-breath
+      reads as a hung UI rather than a paused one.
+
+  Hide()  kills the pulse FIRST (a live tween holding a destroyed Transform
+      throws on its next step), then destroys the clone and nulls offerCell.
+
+  OnDestroy()  kills the pulse - covers scene unload and this object being
+      switched off while the offer is still up.
+
+  RefreshAffordable() / HandleCurrencyChanged(currency, ...)
+      Greys the price out while the balance is short. Only reacts to "Gems".
+
+  HandleGameStateChanged(state)
+      Anything other than Playing hides the offer, so it cannot sit on top of the
+      win / lose / revive panels.
+
+HOW IT CONNECTS
+---------------
+  - HeroRoster.TotalAlive / TotalStarting supply the ratio; OnRosterChanged is
+    the tick.
+  - BattleStartController.OnAnyBattleStarted arms it. Nothing else does.
+  - DOTween drives the attention pulse.
+  - HeroStatCell is CLONED for the look; ShowAsOffer() is the third look added
+    for this feature (portrait in colour, no count, buy button showing).
+  - PlayerWaveManager.CanSpawnReinforcements / SpawnReinforcements do the whole
+    arrival - gate pose, hidden HP bar, hold, jump.
+  - CurrencyManager.TrySpendGems / OnCurrencyChanged handle the money.
+  - LevelGameManager.OnGameStateChanged retires it at end of battle.
+
+SETUP CHECKLIST (per stage)
+---------------------------
+  1. Add the component to a UI object under the battle HUD canvas, positioned
+     where the offer should appear (above a castle gate in the mockup).
+  2. Assign offeredUnit - the hero THIS stage offers.
+  3. Assign cellTemplate to the same "Hero 1" object the Heroes Stats panel uses.
+  4. Leave offerContainer empty to parent the cell to the component itself, or
+     point it at a dedicated anchor.
+  5. waveManager can stay empty; it is found in the scene.
+
+NOTES / RISKS
+-------------
+  - [2026-08-23] BUG, FIXED: THE OFFER APPEARED THE MOMENT A REPLAYED STAGE
+    OPENED. The first version had no "armed" flag and leaned on an IMPLICIT
+    guard: "TotalStarting() is 0 until the battle-start snapshot, so the ratio is
+    inert during the puzzle phase". True on a fresh Play session, FALSE after a
+    scene reload - HeroRoster is static, nothing called ClearAll, and the
+    previous battle's StartingCount survived while TotalAlive was still 0. The
+    ratio read as "army wiped out" and Show() fired immediately.
+    Fixed in two places, deliberately both:
+      1. HeroRoster now clears itself on every non-additive scene load (the root
+         cause - it would have bitten any future ratio reader too).
+      2. This component now arms ONLY on BattleStartController.OnAnyBattleStarted.
+    Note (2) does NOT read BattleStartController.BattleIsRunning instead, which
+    would look equivalent: that flag is also a static, it DEFAULTS TO TRUE, and
+    the new stage only sets it false in Awake - so a component enabling before
+    that Awake would read the PREVIOUS stage's "yes, running" and arm during the
+    puzzle phase. Same class of bug, one layer down. An event cannot lie about
+    which scene it came from.
+  - [2026-08-23] "spent" IS SET ON SHOW, NOT ON BUY. This is the whole meaning
+    of "once per battle". Latching on purchase instead would make an IGNORED
+    offer re-trigger on every subsequent death, because the ratio only gets
+    worse from there - the player would be nagged on every corpse.
+  - The trigger is written as "few enough alive" rather than "enough dead" on
+    purpose. A landed reinforcement can push TotalAlive ABOVE the frozen
+    snapshot, at which point a dead-count subtraction would go negative; the
+    ratio form stays correct.
+  - deadFraction = 1.0 means "every hero dead". That is reachable, but by then
+    the lose condition has usually already fired - LevelGameManager will hide
+    the offer via HandleGameStateChanged. Keep it below 1 for it to be useful.
+  - The offer does NOT require offeredUnit to be unlocked or deployed. It is a
+    designer-placed prompt, not a roster read - CanSpawnReinforcements only
+    needs the unit to exist in UnitsDatabaseSO with a runtimePrefab.
+  - heroesPerPurchase rides in HeroStatCell.SquadSize, which is also the "/total"
+    denominator in the panel's normal use. Harmless here because ShowAsOffer
+    hides the count label, but it is why the two numbers share a field.

@@ -54,12 +54,30 @@ PUBLIC API
       from HeroStatsPanel when the battle phase begins. Safe to call again - it
       simply recomputes, which is what a scene reload needs.
 
+  TotalAlive() -> int   [added 2026-08-23]
+      Sum of AliveCount over every tracked type - living heroes IN THE FIELD
+      across the whole army. Prunes as it goes, since it goes through AliveCount.
+
+  TotalStarting() -> int   [added 2026-08-23]
+      Sum of StartingCount over every tracked type. ZERO until
+      SnapshotStartingCounts has run, which conveniently makes any ratio built
+      on it inert during the puzzle phase - callers get a free "battle has not
+      begun" guard without asking for one.
+
   UnitIdsInBattle() -> List<int>
       The types with StartingCount > 0, i.e. the ones that deserve a cell.
       Unordered; HeroStatsPanel sorts by database order.
 
   ClearAll()
-      Drops every type and its snapshot. For a hard stage restart.
+      Drops every type and its snapshot. For a hard stage restart. Called
+      automatically on every non-additive scene load - see HandleSceneLoaded.
+
+  HandleSceneLoaded(scene, mode)   [private, added 2026-08-23]
+      Subscribed to SceneManager.sceneLoaded from ResetStatics. A new stage means
+      a new roster, so it calls ClearAll - EXCEPT for LoadSceneMode.Additive,
+      which layers onto the live stage and must not reset it. Safe to clear here
+      because heroes register from PlayerManager.Start, which Unity runs AFTER
+      the sceneLoaded callback.
 
 INTERNAL
 --------
@@ -83,6 +101,9 @@ INTERNAL
       "Enter Play Mode Options" set to skip the domain reload, static state
       survives between runs and the first battle would open showing the previous
       session's counts.
+      ALSO subscribes HandleSceneLoaded to SceneManager.sceneLoaded (unsubscribe
+      first, so re-entering Play mode without a domain reload cannot stack a
+      second handler).
 
 HOW IT CONNECTS
 ---------------
@@ -90,6 +111,7 @@ HOW IT CONNECTS
   - PlayerManager.OnDestroy    -> Unregister
   - HeroStatsPanel             -> SnapshotStartingCounts, UnitIdsInBattle,
                                   StartingCount, AliveCount, OnRosterChanged
+  - LastStandOffer             -> TotalAlive, TotalStarting, OnRosterChanged
   - Nothing in the combat layer reads it. It is a pure observer.
 
 NOTES
@@ -105,3 +127,12 @@ NOTES
     CompareTag("PlayerGate") check in PlayerManager.RegisterInHeroRoster.
   - There is no upper bound and no ordering guarantee inside a type - it is a
     HashSet, only the COUNT is ever used.
+  - [2026-08-23] SCENE RELOADS USED TO LEAK THE SNAPSHOT. ResetStatics runs once
+    per PLAY SESSION, not per scene load, and nothing called ClearAll - so
+    replaying a stage carried the previous battle's StartingCount into the new
+    scene. TotalAlive is 0 there (nothing has spawned yet) while TotalStarting
+    still reported the old army, which made any "how much is left" ratio read as
+    WIPED OUT for the whole puzzle phase. It surfaced as LastStandOffer showing
+    its buy prompt the instant a replayed stage opened. Fixed by the
+    sceneLoaded -> ClearAll hook. HeroStatsPanel never noticed because it
+    re-snapshots at battle start, which overwrites the stale numbers anyway.

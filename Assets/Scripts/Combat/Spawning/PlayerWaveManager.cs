@@ -637,6 +637,12 @@ public class PlayerWaveManager : MonoBehaviour
              "walks out of the castle instead of appearing as one clump.")]
     [SerializeField, Min(0f)] private float reinforcementStagger = 0.12f;
 
+    [Tooltip("How long a bought hero STANDS ON THE GATE before it leaps into the " +
+             "field, so the arrival reads as 'lands on the castle, then jumps in' " +
+             "instead of appearing and vanishing on the same frame. " +
+             "0 = the old instant behaviour.")]
+    [SerializeField, Min(0f)] private float reinforcementGateHold = 0.75f;
+
     /// <summary>
     /// True when a gem purchase for this unit type could actually put heroes on
     /// the field. The HUD checks this BEFORE charging gems, so a missing prefab
@@ -686,13 +692,67 @@ public class PlayerWaveManager : MonoBehaviour
             var pm = SpawnUnitAt(def, gate.position, gate.rotation);
             if (pm == null) continue;
 
+            // Marked unlocked HERE, not after the gate hold: HeroRoster.AliveCount
+            // only counts unlocked heroes, so deferring this would leave the cell
+            // reading 0 alive for the whole hold and let the player buy the same
+            // squad a second time while it is already on its way.
             pm.isUnlocked = true;
-            ApplyLock(pm, false);
-            StartCoroutine(JumpThenSwitch(pm, laneY));
+
+            // Stand on the gate first, leap a beat later. The lock is the same one
+            // a normal wave sits in (Lock state + Static body), so the hero cannot
+            // drift or be shoved while it waits.
+            if (reinforcementGateHold > 0f) ApplyLock(pm, true);
+
+            // Per-hero coroutine rather than an inline wait: the hold has to run
+            // ALONGSIDE the stagger, otherwise a squad of four takes
+            // 4 * (hold + stagger) to walk out instead of overlapping.
+            StartCoroutine(HoldOnGateThenJump(pm, laneY));
 
             if (reinforcementStagger > 0f && i < count - 1)
                 yield return new WaitForSeconds(reinforcementStagger);
         }
+    }
+
+    /// <summary>
+    /// Keeps one bought hero standing on the gate for <see cref="reinforcementGateHold"/>
+    /// seconds, then releases it into the normal jump-and-pursue flow.
+    /// </summary>
+    private IEnumerator HoldOnGateThenJump(PlayerManager pm, float? laneY)
+    {
+        // On the gate the hero is scenery, not a combatant - no HP bar. The
+        // prefab's own hideUntilBattleStarts cannot do this for reinforcements:
+        // it keys off the FIRST ENEMY, which appeared long before the purchase.
+        SetHealthBarsHiddenOnGate(pm, true);
+
+        if (reinforcementGateHold > 0f)
+        {
+            yield return new WaitForSeconds(reinforcementGateHold);
+
+            // Destroyed while it waited (stage cleared, revive reset, ...).
+            if (pm == null) yield break;
+        }
+
+        ApplyLock(pm, false);
+
+        yield return JumpThenSwitch(pm, laneY);
+
+        // Landed and marching - the bar is its own again. Null-guarded inside:
+        // the hero can die to a stray hit before the jump resolves.
+        SetHealthBarsHiddenOnGate(pm, false);
+    }
+
+    /// <summary>
+    /// Shows/hides every HP bar under one hero for the castle-gate pose.
+    /// GetComponentsInChildren rather than PlayerStats.healthBar: a prefab may
+    /// carry more than one bar (unit + shield), and the inactive flag matters
+    /// because the canvas is already disabled by the time we come back.
+    /// </summary>
+    private static void SetHealthBarsHiddenOnGate(PlayerManager pm, bool hidden)
+    {
+        if (pm == null) return;
+
+        foreach (var bar in pm.GetComponentsInChildren<HealthBar>(true))
+            if (bar) bar.SetHiddenOnGate(hidden);
     }
 
     /// <summary>

@@ -32,6 +32,11 @@ public class HealthBar : MonoBehaviour
     // every child graphic without re-running anyone's Awake when it comes back.
     private Canvas ownerCanvas;
 
+    // True while the spawn code is holding this hero on a castle gate. Kept as
+    // state rather than a bare canvas toggle so ShowForBattle cannot reveal the
+    // bar out from under the pose.
+    private bool hiddenOnGate;
+
     // The Canvas that carries the sorting order, and the order/layer it was
     // AUTHORED with. onTopSortingOrder is only ever a combat-time override; the
     // authored values are what we fall back to once the battle is over.
@@ -112,7 +117,44 @@ public class HealthBar : MonoBehaviour
     void ShowForBattle()
     {
         EnemySpawner.OnAnyFirstEnemySpawned -= ShowForBattle;
+
+        // Still posing on the castle gate: the spawn code owns the bar until it
+        // lands. SetHiddenOnGate(false) is what reveals it.
+        if (hiddenOnGate) return;
+
         if (ownerCanvas) ownerCanvas.enabled = true;
+    }
+
+    /// <summary>
+    /// Hides the bar while its hero is still STANDING ON THE CASTLE GATE, and
+    /// gives it back once the hero has jumped into the field.
+    ///
+    /// Separate from <see cref="hideUntilBattleStarts"/> on purpose: that one is
+    /// keyed to the FIRST ENEMY appearing, which covers heroes gathering during
+    /// the puzzle phase but does nothing for mid-battle reinforcements - those
+    /// are bought long AFTER the enemies are out, so ApplyBattleGate has already
+    /// bowed out and the bar would pop up on the gate.
+    /// </summary>
+    public void SetHiddenOnGate(bool hidden)
+    {
+        hiddenOnGate = hidden;
+
+        // Resolved here as well as in ApplyBattleGate: that method returns early
+        // when hideUntilBattleStarts is off, leaving ownerCanvas null.
+        if (!ownerCanvas) ownerCanvas = GetComponentInParent<Canvas>();
+        if (!ownerCanvas) return;
+
+        if (hidden)
+        {
+            ownerCanvas.enabled = false;
+            return;
+        }
+
+        // Do not punch through the battle gate's own hide - it is still waiting
+        // for the first enemy and owns the bar until then.
+        if (hideUntilBattleStarts && !EnemySpawner.EnemiesHaveAppeared) return;
+
+        ownerCanvas.enabled = true;
     }
 
     void OnDestroy()

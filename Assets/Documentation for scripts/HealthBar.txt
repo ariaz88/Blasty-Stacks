@@ -9,23 +9,57 @@
 PURPOSE
 -------
 The floating health bar above a unit or gate. It fills a UI Image proportionally
-to current health, and - importantly - keeps itself readable when the parent
-character flips to face the other direction.
+to current health, keeps itself readable when the parent character flips to face
+the other direction, forces itself above the character sprites while the battle
+runs (and gives that priority back when the battle ends so win/lose panels can
+cover it), and can stay hidden until the unit is actually IN the fight.
 
 FIELDS
 ------
-  healthBar         (Image) the filled bar; falls back to GetComponent<Image>
-  _baseLocalScaleX  (float) the original absolute X scale, captured in Awake
+  healthBar           (Image) the filled bar; falls back to GetComponent<Image>
+
+  Render Order
+    forceOnTop        (bool, default true) push the owning world-space Canvas
+                      above every character sprite. Without it the bar sits at
+                      sortingOrder 1, tied with the units, so whichever unit
+                      draws later covers the bars behind it.
+    onTopSortingOrder (int, default 500) the order applied when forceOnTop is on.
+    onTopSortingLayer (string, default "") optional sorting layer to move onto.
+                      EMPTY = stay on the Canvas's layer and use the order alone.
+
+  Battle Gate
+    hideUntilBattleStarts (bool, default false)
+                      ON  = stay hidden through the puzzle phase AND the camera
+                            move, appearing only when the FIRST ENEMY is on
+                            screen. Use on UNIT prefabs.
+                      OFF = always visible. Keep off for GATE bars, which are
+                            meant to be readable during the puzzle phase.
+
+  Runtime state
+    ownerCanvas             (Canvas) the canvas shown/hidden. The COMPONENT is
+                            disabled, not the GameObject, so nothing re-runs its
+                            Awake when the bar comes back.
+    hiddenOnGate            (bool) true while spawn code is holding this hero on
+                            a castle gate - see SetHiddenOnGate.
+    sortingCanvas           (Canvas) the canvas carrying the sorting order.
+    authoredSortingOrder / authoredSortingLayer / capturedAuthoredSorting
+                            what the prefab SHIPPED with, captured before
+                            ApplyRenderOrder overwrites it.
+    _baseLocalScaleX        (float) original absolute X scale, captured in Awake.
 
 LIFECYCLE
 ---------
   Awake()
-      Resolves the Image if unassigned and FORCES its configuration:
+      Resolves the Image if unassigned, captures the authored sorting, applies
+      the render order and the battle gate, subscribes to
+      LevelGameManager.OnGameStateChanged, and - if the battle is NOT running -
+      immediately restores the authored sorting (a bar spawned into an already
+      finished battle never sees the event). Then FORCES the Image config:
           type        = Image.Type.Filled
           fillMethod  = FillMethod.Horizontal
           fillOrigin  = OriginHorizontal.Left
-      Doing this in code means a designer cannot accidentally mis-configure the
-      prefab. Then it stores the absolute base X scale.
+      Doing this in code means a designer cannot mis-configure the prefab.
+      Finally stores the absolute base X scale.
 
   LateUpdate()
       Reads the sign of the parent's lossyScale.x. If the character has been
@@ -35,16 +69,57 @@ LIFECYCLE
       Running in LateUpdate ensures it happens AFTER any facing logic has
       flipped the parent this frame.
 
+  OnDestroy()
+      Unsubscribes from BOTH static events. Without this a hero destroyed before
+      the first enemy appears keeps its subscription alive and throws later.
+
 METHODS
 -------
   SetCurrentHealth(currentHealth, maxHealth)
       Clamps currentHealth to >= 0 and maxHealth to >= 0.0001 to avoid a
       divide-by-zero, then sets fillAmount = current / max.
 
+  SetHiddenOnGate(hidden)   [public, added 2026-08-23]
+      Hides the bar while its hero is STANDING ON THE CASTLE GATE, and gives it
+      back once the hero has jumped into the field. Resolves ownerCanvas itself
+      (ApplyBattleGate leaves it null when hideUntilBattleStarts is off).
+      Un-hiding deliberately REFUSES to punch through the battle gate: if
+      hideUntilBattleStarts is on and the enemies have not appeared, that gate
+      still owns the bar and SetHiddenOnGate(false) leaves it hidden.
+      Distinct from hideUntilBattleStarts on purpose - see NOTES.
+
+  ApplyBattleGate()   [private]
+      No-op unless hideUntilBattleStarts. Otherwise, if the enemies have NOT yet
+      appeared, disables ownerCanvas and subscribes ShowForBattle to
+      EnemySpawner.OnAnyFirstEnemySpawned. The cue is the FIRST ENEMY APPEARING,
+      not the BATTLE press: pressing BATTLE only starts the camera move, so
+      revealing there made the bars pop in mid-travel.
+
+  ShowForBattle()   [private, event handler]
+      Unsubscribes, then enables ownerCanvas - UNLESS hiddenOnGate is set, in
+      which case the spawn pose still owns the bar.
+
+  CaptureAuthoredSorting() / RestoreAuthoredSorting() / ApplyRenderOrder()
+      Capture remembers the shipped order+layer once. ApplyRenderOrder writes
+      onTopSortingOrder (and the layer if one is named), setting overrideSorting
+      when the canvas is NESTED - a nested canvas ignores its own sorting
+      otherwise. Restore puts the exact authored values back, and only undoes the
+      layer move if we were the ones who made it.
+
+  HandleGameStateChanged(state)   [private, event handler]
+      Playing -> ApplyRenderOrder; anything else -> RestoreAuthoredSorting. A
+      revive puts the level back into Playing, so this is a two-way trip.
+
 HOW IT CONNECTS
 ---------------
   - PlayerStats, EnemyStats, PlayerGateStats and EnemyGateStats all call
     SetCurrentHealth after taking damage.
+  - EnemySpawner.OnAnyFirstEnemySpawned / EnemiesHaveAppeared drive the battle
+    gate.
+  - LevelGameManager.OnGameStateChanged / IsBattleRunning drive the sorting
+    hand-back.
+  - PlayerWaveManager.SetHealthBarsHiddenOnGate calls SetHiddenOnGate for the
+    mid-battle reinforcement spawn pose.
 
 NOTES
 -----
@@ -53,3 +128,15 @@ NOTES
     this is per-unit per-frame work.
   - A code comment says "fill from right -> left" while the code sets
     fillOrigin = Left; the code is what matters - it fills left to right.
+  - [2026-08-23] WHY SetHiddenOnGate EXISTS ALONGSIDE hideUntilBattleStarts.
+    They hide the bar for the same visual reason ("not in the fight yet") but
+    key off different things, and neither can replace the other:
+      hideUntilBattleStarts is a ONE-SHOT gate resolved in Awake against
+      "have the enemies appeared". It covers heroes gathering on the gates
+      during the PUZZLE phase, because at that point no enemy exists.
+      MID-BATTLE REINFORCEMENTS are bought long after the enemies are out, so
+      ApplyBattleGate hits its early return and never hides anything - the bar
+      would pop up on the castle gate during the spawn pose. SetHiddenOnGate is
+      the explicit, battle-state-independent override for that window.
+    The 500 sorting override must not outlive the battle: win, lose and revive
+    panels all sit below it, so a bar left on top punches straight through them.

@@ -62,6 +62,17 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   `applicationIdentifier` is UNSET (only Standalone `com.DefaultCompany.2D-URP` exists) — a real
   package name is required and must match the AdMob console entry.
 - `Level_1_Stage_1.unity` is NOT in Build Settings yet (user said they would add it).
+- **[2026-08-23] `LastStandOffer` is wired but INERT and the scene is UNSAVED.** `offeredUnit` on
+  `Canvas /LastStandOffer ` has no `UnitDefinitionSO` assigned, so the 80%-dead offer can never
+  appear. Everything else (component added, `cellTemplate` → `OfferCell `, template set inactive)
+  was done over MCP with Undo but **the scene was never saved** — verify all of it still exists
+  before assuming it does. Also check the stray `Image` on `LastStandOffer `: the script does not
+  control it, so a leftover white sprite would sit on the HUD for the whole match.
+- **[2026-08-23] Nothing from the reinforcement-arrival work has run in Play mode.** The gate pose
+  (`reinforcementGateHold`, 0.75s), the HP bar hidden during it (`HealthBar.SetHiddenOnGate`), the
+  80% trigger, the purchase, and the DOTween pulse are ALL unverified. The only Play-mode
+  observation was the replay bug — i.e. the trigger firing at the wrong time. Re-play a WON stage
+  too, to confirm the `HeroRoster` scene-load reset actually fixed it.
 - **Heroes Stats panel: two of its three states have never executed.** Building the cells is
   confirmed working in Play mode; the WIPED look (`Gray out Avatar` on, count hidden, `Parent `
   buy button shown) and the gem buy-back (`PlayerWaveManager.SpawnReinforcements` → spawn at the
@@ -99,15 +110,17 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   `PlayerWaveManager.WaveLoop` exits PERMANENTLY once the board is empty, so no further hero waves
   can ever spawn that stage. Decide: refill the board, auto-start the battle, or hide the counter.
 - **Per-script docs are behind** for the scripts touched on 2026-08-21: `PlayerManager`,
-  `CrowdSeparation2D`, `AttackSlotRegistry`, `HealthBar`, `EnemySpawner`, `BattleStartController`,
-  `FormationGapFiller`, `PlayerPursueTargetState`. Two standalone guides WERE written:
+  `CrowdSeparation2D`, `AttackSlotRegistry`, `EnemySpawner`, `BattleStartController`,
+  `FormationGapFiller`, `PlayerPursueTargetState`. (`HealthBar` was fully rewritten 2026-08-23 and
+  is no longer behind.) Two standalone guides WERE written:
   `Formation_GapFilling_Guide.md` and `Unit_Avoidance_And_NonCollision_Guide.md`.
   `SimpleJump2D.txt` was brought fully up to date on 2026-08-22.
   **Additionally behind as of 2026-08-22** (the user explicitly asked for NO docs on those two
   fixes, so this is a deliberate debt, not an oversight): `PlayerManager` (new
   `isFormationStepping`), `PlayerLockState` (formation-step bypass + static-body guard),
-  `FormationGapFiller` (flag handover + mid-step battle-start abort), `HealthBar` (authored-order
-  capture/restore), `LevelGameManager` (new static `OnGameStateChanged` / `IsBattleRunning`).
+  `FormationGapFiller` (flag handover + mid-step battle-start abort),
+  `LevelGameManager` (new static `OnGameStateChanged` / `IsBattleRunning`).
+  (`HealthBar`'s authored-order capture/restore IS now documented — rewritten 2026-08-23.)
 
 - **`GroundProjected` shadow mode has never been run.** The 2026-08-22 shadow work defaults every
   unit to `StickToCharacter`, so the detach/slide path — including its two fixes (delta-based
@@ -187,6 +200,8 @@ _Durable choices with their reasons, so no session reopens them blindly._
 | 2026-08-22 | **A view component must DECLARE its visual states, never infer one by capturing whatever the scene was authored with.** `HeroStatCell.aliveTint` is an explicit serialized field defaulting to white; it used to be `avatar.color` read at `Awake()`. | The capture version shipped a bug within the hour. `Hero avatar` was authored blue for the `UISprite` placeholder it originally held, so once `Bind()` swapped in the real portrait, "alive" faithfully restored a tint that was only ever meant for a placeholder — every LIVING hero rendered as a dark blue silhouette and it read as "the grey-out is inverted". A captured default silently inherits authoring accidents; a declared one cannot. Corollary now in the code: when `deadOverlay` is assigned, the avatar's colour is never touched at all. |
 | 2026-08-22 | **`HeroRoster` counts a hero only once `PlayerManager.isUnlocked` is true** — i.e. once a puzzle match has actually thrown it into the field. | Heroes spawn onto the castle gates LOCKED. Press BATTLE with a wave still sitting there and it is stranded for the rest of the stage (the board is hidden, so nothing can release it) — it never fights and never dies. Counting those would pin `alive/total` permanently above zero, and the buy-back button, which only appears at 0, could never be reached. |
 | 2026-08-22 | **Battle-phase UI choreography lives in `BattlePhaseTransition`, not in each panel.** It owns `fadeOutOnPress` (fires before the camera moves) and `fadeInAfterMove` (fires after it settles); panels are passive and just get switched on. | The transition is the only thing that knows when the camera has arrived, so it is the only thing that can sequence against it. Keeping the ordering in one component means a new battle panel is wired by dropping it into an array rather than by teaching it about the camera. Consequence to remember: a panel in `fadeInAfterMove` must be left INACTIVE in the scene, and `BattleStartController.hideButtonAfterBattleStarts` had to go OFF so the BATTLE button fades with its panel instead of popping out first. |
+| 2026-08-23 | **A per-scene trigger arms on an EVENT that fired in this scene — never on a static flag, and never on the ABSENCE of static state.** `LastStandOffer` arms only on `BattleStartController.OnAnyBattleStarted`; `HeroRoster` clears itself on `sceneLoaded`. | Both cheaper-looking options are the same bug. (1) The first version relied on "`TotalStarting()` is 0 until the battle-start snapshot" as an implicit guard — true on a fresh Play session, FALSE after a scene reload, because `HeroRoster` is static, `ResetStatics()` runs once per PLAY SESSION, and `ClearAll()` had zero call sites. A replayed stage inherited the last battle's `StartingCount` while `TotalAlive()` was 0, so the ratio read "army wiped out" and the offer appeared during the puzzle phase. (2) Reading `BattleStartController.BattleIsRunning` instead would have failed identically one layer down: it is also static, it DEFAULTS TO TRUE, and the new stage only sets it false in `Awake` — a component enabling first reads the previous stage's value. An event cannot lie about which scene it came from. Corollary: any NEW reader of a static tally must assume the tally is stale until something in this scene says otherwise. |
+| 2026-08-23 | **Reinforcements reuse `PlayerWaveManager.SpawnReinforcements` verbatim; new callers add a trigger and a look, never a second arrival path.** | The gate pose, the hidden HP bar, the lane choice, the 90% landing and the FSM handover are five coupled behaviours. `LastStandOffer` is ~190 lines of trigger + UI that bottom out in one call, so a fix to the arrival is a fix everywhere. The same rule is why `HeroStatCell` gained a third look (`ShowAsOffer()`) instead of the offer growing its own cell class — and why `SetAlive(0)` was NOT reused for it: that state greys the portrait, which is correct for "wiped out" and wrong for a purchase prompt. Reuse the mechanism, not the state that happens to look similar. |
 | 2026-08-20 | The conversion is done by a repeatable editor tool (`Assets/Scripts/Editor/TMPFontAssetStaticBaker.cs`), not by hand-editing the Inspector or patching the `.asset` YAML directly. | Hand-editing does not scale and is not reproducible for the next font added; direct YAML patching was considered and rejected because it cannot repopulate an atlas — only TMP's `TryAddCharacters` can, and it needs a loaded font face. The tool also re-runs safely on assets that are already correct. |
 
 ---
@@ -194,6 +209,126 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-08-23 — Reinforcement gate pose + hidden HP bars, and the new 80% "last stand" gem offer
+- **Goal:** four things, in order. (1) Explain why the Heroes-panel buy-back button sat with
+  `interactable` off and re-disabled itself when ticked by hand. (2) Make a bought hero LAND ON
+  THE GATE and pause before it jumps in, instead of spawning and leaping the same frame.
+  (3) Keep its HP bar hidden during that pose. (4) NEW MECHANIC: when 80% of the whole army is
+  dead, offer one designer-chosen hero for gems, reusing the exact same arrival.
+- **Status:** partial. All code done and compiling; the scene is wired except one field and was
+  **NOT saved by me**. Only the replay BUG was ever seen in Play mode — no intended path is verified.
+- **Commits:** none — working tree only.
+
+- **Answered, no code (task 1):** the button is not broken. `HeroStatsPanel.Refresh()` writes
+  `cell.SetAffordable(gems >= cell.GemCost)` → `buyButton.interactable` on every roster/currency
+  change, so a hand-ticked checkbox is overwritten within a frame. The click itself most likely DID
+  fire, failed `TrySpendGems`, and that failure path calls `Refresh()` — which is what switched it
+  back off. Also: the `200` on screen is not hardcoded anywhere; it is
+  `gemsPerHero (50) × squadSize (4)` at `Assets/Scripts/Combat/Spawning/PlayerWaveManager.cs:185`,
+  because no `UnitDefinitionSO` has `respawnGemCost` set.
+
+- **Changed — gate pose before the jump (task 2):**
+  - `Assets/Scripts/Combat/Spawning/PlayerWaveManager.cs` — new `reinforcementGateHold` (0.75s,
+    0 = old instant behaviour) and `HoldOnGateThenJump(pm, laneY)`. `SpawnReinforcementsRoutine`
+    now `ApplyLock(pm, true)` on spawn and hands off to that coroutine, which waits then calls the
+    UNCHANGED `JumpThenSwitch`. Started PER HERO, not awaited inline, so the hold overlaps the
+    stagger — a squad of 4 deploys in ~1.1s, not ~3.5s.
+  - `pm.isUnlocked = true` is deliberately still set AT SPAWN, not after the hold: `HeroRoster`
+    gates `AliveCount` on it, so deferring it would keep the cell at `0/N`, keep the buy button up,
+    and let the player pay twice for a squad already walking out.
+
+- **Changed — HP bar hidden on the gate (task 3):**
+  - `Assets/Scripts/Combat/Player/HealthBar.cs` — new public `SetHiddenOnGate(bool)` + a
+    `hiddenOnGate` latch that `ShowForBattle()` now respects. Un-hiding refuses to punch through the
+    older battle gate (if `hideUntilBattleStarts` is on and no enemy has appeared, that gate still
+    owns the bar).
+  - `Assets/Scripts/Combat/Spawning/PlayerWaveManager.cs` — new `SetHealthBarsHiddenOnGate(pm,bool)`
+    fanning over `GetComponentsInChildren<HealthBar>(true)`, called at both ends of the hold.
+  - WHY a new API was needed: `hideUntilBattleStarts` keys off the FIRST ENEMY APPEARING and is
+    resolved once in `Awake`. Reinforcements are bought long after that, so `ApplyBattleGate()`
+    hits its early return and can never hide them.
+  - Also ANSWERED, no code: yes, heroes already land at 90% (`SimpleJump2D.landedScaleMultiplier`),
+    and reinforcements always did — same `JumpThenSwitch` path.
+
+- **Changed — the 80% last-stand offer (task 4):**
+  - `Assets/Scripts/UI/HUD/LastStandOffer.cs` — **NEW.** Watches the WHOLE roster; once
+    `deadFraction` (0.8) of the starting army is dead it shows a one-time buy prompt for a
+    designer-chosen `offeredUnit`. Paying calls `PlayerWaveManager.SpawnReinforcements`, so the
+    arrival is tasks 2+3 reused verbatim — no arrival logic is duplicated. Also owns a DOTween
+    attention pulse (yoyo 1 → `pulseScale` 0.8, `Ease.InOutSine`, 0.75s per direction,
+    `SetUpdate(true)` so a `timeScale = 0` pause does not freeze it mid-breath).
+  - `Assets/Scripts/Combat/Shared/HeroRoster.cs` — added `TotalAlive()` / `TotalStarting()`
+    (it only tracked per-type counts before).
+  - `Assets/Scripts/UI/HUD/HeroStatCell.cs` — added `ShowAsOffer()`, a THIRD look: portrait in
+    COLOUR, no count, buy button on. Not `SetAlive(0)` — that is the "wiped out" state and it greys
+    the portrait, which is the wrong sell for a prompt inviting a purchase.
+  - `spent` is latched on SHOW, not on buy. Latching on purchase would make an ignored offer
+    re-fire on every subsequent death, since the ratio only gets worse from there.
+
+- **Changed — BUG I introduced and then fixed:** the offer appeared the instant a REPLAYED stage
+  opened (user hit it after winning stage 1 and restarting).
+  - ROOT CAUSE: `HeroRoster` is static, `ResetStatics()` runs once per PLAY SESSION not per scene
+    load, and **`ClearAll()` had zero call sites** — so the previous battle's `StartingCount`
+    survived into the new scene while `TotalAlive()` was still 0. The ratio read "army wiped out".
+  - Fixed in BOTH layers on purpose: `HeroRoster` now subscribes `SceneManager.sceneLoaded →
+    ClearAll()` (skipping `LoadSceneMode.Additive`), and `LastStandOffer` gained an `armed` flag set
+    only by `BattleStartController.OnAnyBattleStarted`.
+  - My original guard was IMPLICIT ("TotalStarting is 0 before the battle"), true only on a fresh
+    Play session. `HeroStatsPanel` never noticed because it re-snapshots at battle start.
+
+- **Docs:** new `Assets/Documentation for scripts/LastStandOffer.txt`; updated
+  `PlayerWaveManager.txt`, `HeroRoster.txt`, `HeroStatCell.txt`, and `HealthBar.txt` — the last was
+  fully REWRITTEN (it still described only the fill + counter-flip and none of the render-order,
+  battle-gate or `LevelGameManager` behaviour), which clears the HealthBar doc debt listed in Open
+  Threads since 2026-08-21/22. No new doc debt added.
+
+- **Scene/Prefab/SO edits — `Level_1_Stage_1.unity`, and READ THIS BEFORE TOUCHING THAT SCENE:**
+  - The USER hand-built, under the root `Canvas ` object: `LastStandOffer ` (an empty UI object
+    carrying an `Image`) → `OfferCell ` → `Hero avatar` + `Hero  info` (the price pill, has the
+    `Button`) → `gem Amount` + `Gem`. They also wired `HeroStatCell` on `OfferCell ` themselves.
+  - I then changed four things over MCP, each registered with **Undo**: added the `LastStandOffer`
+    component to `LastStandOffer `; wired its `cellTemplate` → `OfferCell `; set `OfferCell `
+    **inactive** (it is a template — active means visible from frame 1); and cleared two BROKEN
+    (`Missing`, not `None`) `deadOverlay` / `countText` refs left over from the duplicate.
+  - **`offeredUnit` is still UNSET** — the feature cannot fire until it is assigned.
+  - **I did NOT save the scene.** It was dirty at wrap time. Unsaved, all of the above is lost.
+  - `Assets/Scriptable Objects/Spawner/Spawner2.asset` is also modified in the working tree — that
+    is the user's, not this session's.
+
+- **Verified:** compiles clean, 0 errors, checked over MCP after every edit. Scene state was read
+  back from the live editor (that is how the missing component and the `activeSelf=True` template
+  were found). **NOT VERIFIED — nothing on this list has run correctly in Play mode:** the gate
+  pose, the hidden HP bar, the 80% trigger firing at the right moment, the purchase, or the pulse.
+  The ONLY Play-mode observation this session was the replay bug, i.e. the trigger firing WRONGLY.
+
+- **Gotchas:**
+  - **`HeroRoster.ClearAll()` had never been called by anything.** Any future reader of its counts
+    would have inherited the same stale-snapshot bug. Now hooked to `sceneLoaded`.
+  - **`BattleStartController.BattleIsRunning` cannot be used as a "has this scene's battle started"
+    check.** It is static, it DEFAULTS TO TRUE, and the new stage only sets it false in `Awake` —
+    so a component enabling before that `Awake` reads the PREVIOUS stage's value. Use the event.
+  - `SimpleJump2D` calls `CacheBaseScales()` at EVERY jump start, so `landedScaleMultiplier` 0.9
+    **compounds**: two jumps = 0.81, three = 0.729. Harmless now (reinforcements jump once) but it
+    will bite anything that re-triggers a jump.
+  - `PlayerManager.Start()` sets `bodyType = Dynamic` unconditionally, AFTER `ApplyLock` runs on the
+    spawn frame. The gate pose survives only because `PlayerLockState.Tick` re-asserts Static every
+    FixedUpdate and the prefabs have `m_GravityScale: 0`. Both must stay true.
+  - **Trailing spaces in object names are endemic in this scene**: `Canvas `, `LastStandOffer `,
+    `OfferCell `, and the older `Parent `. Every `GameObject.Find` by exact name will miss them.
+  - `Heros Stats panel` is INACTIVE in the scene at edit time, so nothing that needs `OnEnable` at
+    scene start can live under it.
+  - A DOTween loop must be killed BEFORE the `Destroy` of the Transform it drives, or it throws on
+    its next step. `Hide()` and `OnDestroy()` both do it.
+
+- **Next:**
+  1. **Assign `offeredUnit`** on `LastStandOffer ` and **SAVE the scene.**
+  2. Check the `Image` on `LastStandOffer ` — the script never touches it, so if it is a leftover
+     white sprite rather than a deliberate backdrop it will sit on the HUD all match.
+  3. Play a stage, lose down to ≤20% of the army, and verify the whole chain: offer appears (not
+     before), pulse looks right, purchase charges gems, hero poses on the gate with NO HP bar for
+     0.75s, jumps to the rear lane at 90%, bar returns.
+  4. Re-play a won stage to confirm the replay bug is actually gone.
 
 ### 2026-08-22 — Heroes Stats panel: dynamic per-type "alive/total" HUD + gem buy-back
 - **Goal:** the new "Heros Stats panel" shown during battle must build its cells DYNAMICALLY

@@ -80,6 +80,17 @@ METHODS
       buyButton.interactable. Purely cosmetic - HeroStatsPanel re-checks the
       balance for real before spending.
 
+  ShowAsOffer()   [added 2026-08-23]
+      The THIRD look, used only by LastStandOffer:
+        countText.enabled = false
+        deadOverlay.SetActive(false)   (or avatar.color = aliveTint)
+        buyRoot.SetActive(true)
+      i.e. portrait IN COLOUR, no count, buy button showing. Deliberately not
+      SetAlive(0): that is the "this type is wiped out" state and it GREYS the
+      portrait, which is the wrong sell for a prompt inviting the player to buy
+      a fresh hero. Everything else the offer needs - the button, its listener,
+      the price label - is already wired by Bind.
+
 MAGIC / CONTRACTS
 -----------------
   - countText is hidden with .enabled = false, NOT SetActive(false). That is
@@ -96,6 +107,8 @@ HOW IT CONNECTS
   - HeroStatsPanel is the only caller. It clones this, binds it, and is the
     delegate behind the button.
   - UnitDefinitionSO supplies portrait and (optionally) respawnGemCost.
+  - LastStandOffer CLONES this cell too, and shows it via ShowAsOffer() instead
+    of SetAlive() - see below.
   - It never touches HeroRoster, CurrencyManager or PlayerWaveManager directly.
 
 NOTES

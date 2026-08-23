@@ -217,6 +217,10 @@ Bought from the Heroes Stats panel when every hero of one type has died.
       heroes of the same purchase, so a squad walks out of the castle instead of
       appearing as one clump.
 
+  reinforcementGateHold (Inspector, float >=0, default 0.75) how long a bought
+      hero STANDS ON THE GATE before it jumps into the field. Added 2026-08-23.
+      0 restores the old behaviour (spawn and jump on the same frame).
+
   CanSpawnReinforcements(unitId) -> bool   [public]
       True when the database, the gate points and the unit's runtimePrefab all
       exist. HeroStatsPanel calls this BEFORE charging gems, so a broken
@@ -230,11 +234,27 @@ Bought from the Heroes Stats panel when every hero of one type has died.
       Resolves the REAR lane once (GetRearLaneY), then for each hero:
       picks gatePoints[i % length] - NOTE it does not check occupancy, unlike a
       normal wave, because a bought squad must arrive in full - spawns via
-      SpawnUnitAt, sets isUnlocked = true, ApplyLock(pm, false), and starts the
-      normal JumpThenSwitch coroutine so it jumps into the rear rank and then
-      marches under its own FSM. Waits reinforcementStagger between each.
-      These are NEVER locked: the battle is already running, so they skip the
-      puzzle gate entirely.
+      SpawnUnitAt, sets isUnlocked = true, ApplyLock(pm, TRUE) so it stands on
+      the gate, and starts HoldOnGateThenJump. Waits reinforcementStagger
+      between each.
+      These never wait on a puzzle match: the battle is already running, so they
+      skip the puzzle gate entirely - the lock is purely a timed pose.
+
+  HoldOnGateThenJump(pm, laneY)   [private coroutine, added 2026-08-23]
+      Hides the hero's HP bars (SetHealthBarsHiddenOnGate), waits
+      reinforcementGateHold seconds (re-checking pm for destruction after the
+      wait), then ApplyLock(pm, false), yields on the normal JumpThenSwitch so
+      the hero leaps into the rear rank and marches under its own FSM, and
+      finally shows the bars again. Started PER HERO rather than awaited inline,
+      so the hold overlaps the stagger instead of adding to it - a squad of four
+      takes hold + 3*stagger, not 4*(hold + stagger).
+
+  SetHealthBarsHiddenOnGate(pm, hidden)   [private static, added 2026-08-23]
+      Fans HealthBar.SetHiddenOnGate out over every HealthBar under one hero,
+      including inactive ones (the canvas is disabled by the time we un-hide).
+      Needed because HealthBar.hideUntilBattleStarts keys off the FIRST ENEMY
+      APPEARING, which is already long past when a reinforcement is bought - so
+      the prefab's own gate cannot hide the bar during the castle pose.
 
   GetRearLaneY() -> float?
       The last non-null entry in jumpLanes. jumpLanes is authored FRONT FIRST
@@ -303,6 +323,30 @@ NOTES / RISKS
     are unaffected. NOTE the jump itself is transform-driven and runs regardless
     of the unit's FSM state, which is why the units can visibly leap while still
     logically locked.
+  - [2026-08-23] REINFORCEMENT GATE HOLD. Four things make the 0.75s pose safe,
+    and all four have to stay true:
+      1. PlayerManager.Start() sets bodyType = Dynamic unconditionally, which
+         would undo ApplyLock's Static freeze on the spawn frame. It does not
+         matter because PlayerLockState.Tick re-asserts Static every
+         FixedUpdate - the lock is self-healing, not a one-shot write.
+      2. The runtime prefabs have m_GravityScale: 0, so even the one frame
+         before Start/Tick run cannot drop the hero off the gate.
+      3. isUnlocked is set at SPAWN, not after the hold. HeroRoster.IsInBattle
+         gates AliveCount on isUnlocked, so deferring it would keep the cell at
+         "0/N", keep the buy-back button visible, and let the player pay a
+         second time for a squad already walking out.
+      4. Because of (3) FormationGapFiller can see a still-holding reinforcement
+         as a valid formation candidate for the length of the hold. Harmless
+         today - the jump overwrites the position anyway - but it is the reason
+         to think twice before making the hold long.
+    Two side effects of the hold worth knowing: a reinforcement now OCCUPIES its
+    gate for 0.75s, so (a) GetFreeGateIndices sees one fewer free gate if a
+    normal wave spawns in that window, and (b) a puzzle blast landing in that
+    window makes PlayStageUnlockAnimations fire that gate's "Throw" clip because
+    the OverlapCircle finds an occupant. Both are cosmetic and self-resolving
+    (the Throw's animation event still fires, so pendingStageEvents drains).
+    Also note StopWaves()'s StopAllCoroutines() would strand a hero mid-hold,
+    locked on the gate forever - the same pre-existing risk JumpThenSwitch has.
   - [2026-08-20] The enemySpawner lookup in Awake is deliberately placed BEFORE
     the "GameStartManager not found" early return. Behind that return it would
     stay null, CombatLive could never become true, and every hero would freeze
