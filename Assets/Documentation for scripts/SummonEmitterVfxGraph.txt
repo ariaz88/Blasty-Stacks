@@ -1,0 +1,81 @@
+================================================================================
+  SummonEmitterVfxGraph.cs
+  Path : Assets/Scripts/Combat/VFX/SummonEmitterVfxGraph.cs
+  Type : MonoBehaviour  -  implements ISummonEmitter
+  Layer: Combat / VFX
+  Added: 2026-08-23  (summon arrival VFX)
+  GATED: the WHOLE FILE is inside #if SUMMON_VFX_GRAPH
+================================================================================
+
+PURPOSE
+-------
+GPU backend for the summon arrival, driving a hand-built SummonPillar.vfx graph.
+Requires compute-shader support - on Android that means GLES 3.1+ or Vulkan.
+SummonVfxDirector checks for that and falls back to SummonEmitterParticles when
+it is missing, so this class never has to handle the unsupported case.
+
+THE #if GUARD
+-------------
+The entire file is wrapped in `#if SUMMON_VFX_GRAPH`. Without the guard the
+`using UnityEngine.VFX` is a hard compile error on any machine where
+com.unity.visualeffectgraph is not installed - i.e. the project would not open.
+
+Current state (2026-08-23):
+  com.unity.visualeffectgraph 17.3.0  INSTALLED (matches URP 17.3.0)
+  SUMMON_VFX_GRAPH            DEFINED for Android, Standalone and iOS
+  SummonPillar.vfx            NOT YET BUILT - see the recipe file
+
+CONTRACT WITH THE GRAPH
+------------------------
+These names must match the .vfx asset EXACTLY. Full build instructions live in
+Assets/Documentation for scripts/SummonPillarVFX-Recipe.txt.
+
+  exposed properties : PillarColor  (Color)
+                       PillarHeight (float)
+                       PillarRadius (float)
+                       Intensity    (float)
+                       TrailColor   (Color)
+  events             : OnSummon, OnTrailStart, OnTrailStop
+
+FLOW
+----
+  Awake()       caches the VisualEffect; warns ONCE if visualEffectAsset is null
+  LateUpdate()  if _follow != null, transform.position = _follow.position
+  BeginTrail()  sets TrailColor, SendEvent("OnTrailStart")
+  EndTrail()    _follow = null, SendEvent("OnTrailStop")
+  PlayBurst()   moves to p.position, sets the four pillar properties,
+                SendEvent("OnSummon")
+  ResetForReuse() _vfx.Reinit()
+  IsBusy        _follow != null || _vfx.aliveParticleCount > 0
+
+  Ready() gates every method on both the component and the asset being present,
+  so a director pointed at a half-finished prefab no-ops instead of throwing.
+
+  SetIfExists uses HasFloat/HasVector4 before writing, which keeps a
+  half-authored graph from spamming "property not found" on every single summon
+  while the effect is still being built.
+
+HOW IT CONNECTS
+---------------
+  - Instantiated by SummonVfxDirector.CreateEmitter() from vfxGraphEmitterPrefab.
+  - Driven by SummonArrivalBinder through ISummonEmitter, exactly like the
+    particle backend.
+
+NOTES
+-----
+  - SORTING: VFX Graph output does NOT participate in the URP 2D renderer's
+    sorting layers. There is no sortingLayerName on VisualEffect at all. Depth
+    comes from the Z offset SummonVfxDirector applies (zOffset, default -0.1)
+    plus each output's Sorting Priority INSIDE the graph. This is the single
+    biggest behavioural difference from SummonEmitterParticles, which does
+    respect sorting layers.
+  - VFX Graph particles are also not lit by URP 2D lights, so the pillar must be
+    self-lit (additive + emissive colour). That is what the reference looks like
+    anyway, so it costs nothing here.
+  - SummonVfxDirector's Auto backend only selects this class when
+    vfxGraphEmitterPrefab is actually assigned. Installing the package alone can
+    never silently turn the summon invisible.
+  - aliveParticleCount is the only pooling signal available; unlike
+    ParticleSystem there is no per-system IsAlive. A graph with a permanently
+    looping sub-system would therefore never return to the pool - keep every
+    system in SummonPillar.vfx one-shot.

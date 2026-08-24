@@ -138,6 +138,14 @@ SPAWNING ONE UNIT
          stats (including any active roguelite multipliers) become correct.
          The unitId set here is ALSO what PlayerManager files itself under in
          HeroRoster, one frame later in its Start.
+      5. [2026-08-23] AddComponent<SummonArrivalBinder>() if not already present
+         - the summon arrival VFX (trail while airborne, flash + ground ring +
+         light pillar on landing). Attached HERE rather than on each runtime
+         prefab precisely BECAUSE this method is the one funnel both arrival
+         paths already share, so waves and reinforcements both get it with zero
+         prefab edits. The binder resolves its own FrogJumpTransformOnly and
+         silently disables itself on units that have none, so scenery and gate
+         props spawned through the same path cost nothing.
 
   ApplyLock(pm, locked)
       If locking: immediately calls pm.SwitchToNextState(pm.PlayerLockState) -

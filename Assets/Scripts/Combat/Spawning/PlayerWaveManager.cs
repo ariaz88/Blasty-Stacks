@@ -612,6 +612,13 @@ public class PlayerWaveManager : MonoBehaviour
             return null;
         }
 
+        // Summon arrival VFX. Added here rather than on each runtime prefab so
+        // every unit gets it through the one funnel both arrival paths already
+        // share - the wave unlock and SpawnReinforcements. It attaches itself to
+        // the unit's FrogJumpTransformOnly and no-ops on units that have none.
+        if (!go.GetComponent<SummonArrivalBinder>())
+            go.AddComponent<SummonArrivalBinder>();
+
         // Apply unit identity to stats system
         if (pm.playerStatsApplier != null)
         {

@@ -68,6 +68,17 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   was done over MCP with Undo but **the scene was never saved** — verify all of it still exists
   before assuming it does. Also check the stray `Image` on `LastStandOffer `: the script does not
   control it, so a leftover white sprite would sit on the HUD for the whole match.
+- **[2026-08-23] The summon arrival VFX has never run in Play mode.** Everything was verified by
+  edit-mode capture only. Unverified: the trail following a real jump, the flash landing on the
+  exact frame, emitter pooling/recycling, sorting against the board and the unit sprite, and the
+  binder's behaviour when a unit dies mid-jump. `StarterScene` has no `PlayerWaveManager`, so test
+  in a stage scene. Also still open: `SummonPillar.vfx` does not exist — the VFX Graph backend
+  compiles and is package-installed + define-enabled, but until that asset is built the director's
+  `Auto` backend always resolves to Particles (by design).
+  **[2026-08-24]** the ground telegraph (`SummonGroundCircle`) is in the same state — its
+  disc→ring lifecycle is confirmed by capture, but `circleLeadTime` (0.05s, "one frame before
+  touchdown") has never been judged at a real frame rate, and the burst's own `GroundRing` was
+  left switched ON as instructed, so watch for a double ring.
 - **[2026-08-23] Nothing from the reinforcement-arrival work has run in Play mode.** The gate pose
   (`reinforcementGateHold`, 0.75s), the HP bar hidden during it (`HealthBar.SetHiddenOnGate`), the
   80% trigger, the purchase, and the DOTween pulse are ALL unverified. The only Play-mode
@@ -209,6 +220,146 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-08-24 — Summon arrival: the pre-landing ground telegraph (disc → ring)
+- **Goal:** the user watched the previous session's result against the reference clip and said
+  it was still off. Their correction: **before** the unit lands there is a full filled circle;
+  it then empties from the centre outward into a ring, and the ring fades. They asked for the
+  circle ONLY — explicitly no changes to the other VFX layers.
+- **Status:** done and verified by capture. Still never run in Play mode.
+- **Commits:** none — working tree only.
+
+- **The user was right and the previous session's reading was wrong.** The 2026-08-23 entry
+  states "there is no pre-glow telegraph". That is incorrect — it was concluded from the landing
+  frames without checking the run-up. Re-examined `ScreenRecorderProject486.mkv` frame by frame
+  on the bee summon (lands on **f17**):
+  `f14-15` nothing → **`f16` filled white ellipse pops in while the bee is STILL AIRBORNE** →
+  `f17-19` holds filled (~0.13s) → `f20-21` centre opens into a ring (~0.07s) →
+  `f21-25` ring expands and fades (~0.15s) → `f26` gone. **Total ~0.30-0.35s.**
+  It is WHITE (not the pillar's gold), an ELLIPSE, and its outer edge grows only ~1.3x —
+  far less than the landing burst's ring.
+
+- **Key design point:** filled disc and ring are NOT two states. They are one animated value —
+  the shader's `_InnerRadius`, 0 = filled disc (the inner smoothstep evaluates to 1 everywhere),
+  ~0.78 = thin ring. There is no "disc mode" branch. This is also why it is a procedural shader
+  and not a texture: a texture bakes ONE fixed inner radius, so the morph would need a flipbook.
+
+- **New:** `Assets/Arts/Shaders/SummonGroundCircle.shader` — textureless additive annulus with
+  `_InnerRadius` / `_OuterRadius` / `_Edge` / `_Alpha`.
+- **New:** `Assets/Scripts/Combat/VFX/SummonGroundCircle.cs` — MeshRenderer + generated quad,
+  three explicit phases (fill hold / open / expand+fade), all tunable. Public `Seek(t)` so the
+  effect can be scrubbed frame by frame against the reference instead of caught live at 30fps.
+- **Changed:** `SummonVfxAssets.cs` — added `GroundCircleMaterial` and `UnitQuad`.
+- **Changed:** `SummonVfxDirector.cs` — `groundCircleEnabled` / `circleLeadTime` (0.05) /
+  `circleDiameter` (0.9) / `circleTint` (**white**), a small circle pool, `PlayGroundCircle()`.
+- **Changed:** `SummonArrivalBinder.cs` — an `Update()` poll that fires the telegraph at
+  `TimeUntilLanding <= circleLeadTime`, latched once per jump.
+- **Changed:** `Assets/Scripts/Combat/Player/SimpleJump2D.cs` — added read-only
+  `LandingPosition` and `TimeUntilLanding`.
+- **Docs:** new `SummonGroundCircle.txt`; updated `SummonVfxAssets.txt`,
+  `SummonVfxDirector.txt`, `SummonArrivalBinder.txt`, `SimpleJump2D.txt`.
+- **Project settings:** `Blasty/SummonGroundCircle` added to Graphics > Always Included Shaders.
+- **Scene/Prefab/SO edits:** none; scene left unsaved and not dirty.
+
+- **Verified:** 0 compile errors, shader compiles clean. Captured a 6-step scrub of the circle
+  over a green board stand-in: filled ellipse → centre opens → ring → expands → fades, matching
+  the reference lifecycle. Also captured the circle COMBINED with the landing burst at correct
+  relative timing (circle starts 0.05s before the burst) — the four composite frames line up
+  with reference f16 / f17-18 / f20 / f21-22.
+- **NOT verified:** anything in Play mode. In particular the LEAD TIME is unproven — the disc is
+  placed at `LandingPosition` from a polled threshold, and whether 0.05s reads correctly at real
+  frame rates has never been seen.
+
+- **Gotchas:**
+  - `Update()` here is a deliberate poll, and it is the only one in the feature. "A moment BEFORE
+    landing" is not an event the jumper can raise — it is a threshold on remaining flight time.
+    Everything else still hangs off `Jumped`/`Landed`.
+  - The **landing burst still has its own `GroundRing`**, untouched as instructed. In the composite
+    captures it hides under the flame base rather than reading as a second ring, but if a double
+    ring ever shows up that is where it comes from — the burst's ring, not this telegraph.
+  - `Unity_RunCommand` **blocks `System.Reflection`**, which is why `SummonGroundCircle.Seek()`
+    is public API rather than the preview harness poking at privates.
+  - `sed` with `\n` inside a replacement expands to REAL newlines and will split a C# string
+    literal across lines — it broke a `[Tooltip]` mid-edit. Keep inserted tooltips single-line.
+
+- **Next:** play-test a real arrival and tune `circleLeadTime` / `circleDiameter` against the
+  clip. Then decide whether the burst's own `GroundRing` should be turned off now that the
+  telegraph owns the ground read.
+
+
+### 2026-08-23 — Summon arrival VFX (Ludus-style light pillar), two backends
+- **Goal:** copy the summon effect from a reference clip of the game *Ludus*
+  (`Assets/Arts/Reference videos/ScreenRecorderProject486.mkv`). User asked for VFX Graph, with a
+  fallback for low-end devices.
+- **Status:** done for the ParticleSystem backend (built, rendered and visually verified in the
+  Editor). The VFX Graph backend compiles but its `.vfx` asset does NOT exist yet — a build recipe
+  was written instead. Nothing has run in Play mode.
+- **Commits:** none — working tree only.
+
+- **Read the reference properly first, and it overturned the read from the stills.** The clip is
+  118 frames @30fps. One summon is ~14 frames ≈ **0.45s**: the unit FALLS IN along an arc (tilted,
+  or Y-stretched ~1.8x) with a warm trail → lands, squashes, white flash + expanding ground ring →
+  a yellow→white flame column **erupts UPWARD from the ground**, ~1 cell wide and 2.5–3 tall, with
+  a torn flickering top → narrows and fades upward. There is **no sky-beam**, and the unit is
+  **not** dissolved into existence — it lands and the pillar is the consequence.
+  **CORRECTED 2026-08-24: the claim that there is "no pre-glow telegraph" was WRONG.** There
+  IS one — a filled white disc one frame before touchdown that opens into a ring. It was missed
+  by reading only the landing frames and never the run-up. See the 2026-08-24 entry.
+
+- **Key finding: most of this already existed.** Do not build a second fall animation. The gate
+  Animator's `"Throw"` → `UnlockCurrentWaveViaAnimation` → `JumpThenSwitch` →
+  `FrogJumpTransformOnly.TriggerJumpTo(laneY)` chain already IS the arced toss-in, shadow and apex
+  scale included. Only the three VISUALS were missing. The user's "locked until it lands"
+  requirement also needed **zero code**: `PlayerWaveManager.cs:1024` already withholds
+  `PlayerPursueTargetState` until the jump finishes and `WaitForCombatLive()` passes.
+
+- **Changed:** `Assets/Scripts/Combat/Player/SimpleJump2D.cs` — added `public event Action Jumped`
+  (end of `BeginJump`) and `Landed` (end of `Land`). Only edit to an existing combat script.
+- **Changed:** `Assets/Scripts/Combat/Spawning/PlayerWaveManager.cs` — one `AddComponent` in
+  `SpawnUnitAt`, the single funnel both waves and reinforcements already share.
+- **New:** `Assets/Scripts/Combat/VFX/` — `ISummonEmitter`, `SummonVfxAssets`,
+  `SummonEmitterParticles`, `SummonEmitterVfxGraph` (whole file behind `#if SUMMON_VFX_GRAPH`),
+  `SummonVfxDirector`, `SummonArrivalBinder`.
+- **New:** `Assets/Arts/Shaders/SummonAdditive.shader`.
+- **Docs:** one `.txt` per new script, plus `SummonPillarVFX-Recipe.txt` (the node-by-node graph
+  build), and `SimpleJump2D.txt` / `PlayerWaveManager.txt` updated.
+
+- **Project settings edited (the diff shows these, but they were made over MCP):**
+  installed `com.unity.visualeffectgraph@17.3.0`; added `SUMMON_VFX_GRAPH` to Scripting Define
+  Symbols for Android, Standalone and iOS; added `Blasty/SummonAdditive` to
+  **Graphics > Always Included Shaders**.
+- **Scene/Prefab/SO edits:** none. No director was placed in any scene and no scene was saved —
+  `SummonVfxDirector.Instance` self-creates, so the effect works without one.
+
+- **Verified:** Editor only, via `Unity_RunCommand` + `Unity_Camera_Capture` — emitters built in
+  edit mode, `ParticleSystem.Simulate` frozen at set times, rendered through the Main Camera and
+  looked at. Confirmed: 0 compile errors; `Jumped`/`Landed` exist; `SummonEmitterVfxGraph` compiled
+  into `Assembly-CSharp` and implements `ISummonEmitter`; the pillar renders as an additive flame
+  with a white-hot core, stays anchored to the ground through the jet, reaches the requested height
+  and fades upward. **NOT verified: anything in Play mode.** No real arrival, no trail, no binder,
+  no pooling, no device build.
+
+- **Gotchas — three real traps, all found by capture, not by reading:**
+  1. **Never configure `Universal Render Pipeline/Particles/Unlit` from script.** Its blend state
+     is applied by URP's material EDITOR, not by `_SrcBlend`/`_DstBlend`, so a runtime-built
+     material draws every particle as an **opaque white square** whatever the texture alpha says.
+     That is the entire reason `SummonAdditive.shader` exists. It is reached only via
+     `Shader.Find`, so it MUST stay in Always Included Shaders or it strips out of an Android
+     build and the effect silently goes flat.
+  2. **All three `velocityOverLifetime` axes must share one curve mode.** A constant X with a
+     curve Y makes Unity reject the module and log *"Particle Velocity curves must all be in the
+     same mode"* on every emit.
+  3. **A pillar must be a JET, not a burst.** `Emit(count)` launches everything on one frame, the
+     cloud rises together, and the column visibly **peels off the ground**, leaving a gap at the
+     unit's feet. Feeding continuously (`main.duration` = jet duration + `rateOverTime`) keeps the
+     foot lit while the head climbs. The recipe warns about this for the graph too.
+  - Also: `ParticleSystemRenderer.pivot.y` is **+0.5** to shift a quad UP — the opposite of what
+    the name suggests. And `StarterScene` contains **no `PlayerWaveManager`**, so a real arrival
+    cannot be tested there.
+
+- **Next:** play-test a real wave arrival (trail timing, flash landing on the exact frame, sorting
+  against the board and the unit sprite); then build `SummonPillar.vfx` from the recipe and compare
+  the two backends via the director's `Backend` enum.
 
 ### 2026-08-23 — Reinforcement gate pose + hidden HP bars, and the new 80% "last stand" gem offer
 - **Goal:** four things, in order. (1) Explain why the Heroes-panel buy-back button sat with

@@ -1,0 +1,136 @@
+================================================================================
+  SummonEmitterParticles.cs
+  Path : Assets/Scripts/Combat/VFX/SummonEmitterParticles.cs
+  Type : MonoBehaviour  -  implements ISummonEmitter
+  Layer: Combat / VFX
+  Added: 2026-08-23  (summon arrival VFX)
+================================================================================
+
+PURPOSE
+-------
+The built-in ParticleSystem backend for the summon arrival - the one that runs
+EVERYWHERE, including Android devices with no compute-shader support where a VFX
+Graph effect renders nothing at all.
+
+It builds its four sub-systems in code on Awake (or lazily on first PlayBurst,
+which is what makes it work in edit-mode previews too), so it needs no authored
+prefab and no imported art.
+
+THE FOUR SUB-SYSTEMS
+--------------------
+  Trail       runs the whole jump; warm ribbon following the unit
+  Flash       0.12s soft ellipse punched on the landing frame
+  GroundRing  0.25s bright annulus expanding outward along the ground
+  Pillar      ~0.34s column of upward streaks, ~1 cell wide, 2.5-3 cells tall
+
+  Each is a child GameObject created by NewSystem(), all non-looping,
+  playOnAwake off, World simulation space.
+
+INSPECTOR FIELDS
+----------------
+  Trail (while airborne)
+    trailRate      (default 55)    particles/sec
+    trailLifetime  (default 0.15)
+    trailSize      (default 0.26)
+
+  Landing flash
+    flashLifetime  (default 0.12)
+    flashSizeMul   (default 2.8)   flash diameter as a MULTIPLE of pillar radius
+
+  Ground ring
+    ringLifetime   (default 0.25)
+    ringStartMul   (default 0.6)   start diameter, x pillar radius
+    ringEndMul     (default 2.2)   end diameter, x pillar radius
+    ringFlatten    (0.1-1, default 0.45)  vertical squash - see NOTES
+
+  Pillar
+    pillarCount        (default 42)
+    pillarJetDuration  (default 0.22)  how long the column keeps FEEDING
+    pillarLifeMin/Max  (0.20 / 0.30)
+    pillarNoise        (default 0.25)  sideways turbulence; tears the top edge
+    pillarStretch      (default 2.6)   vertical streak length (Stretch mode)
+
+  Sorting (URP 2D renderer)
+    sortingLayer (default "Default"), sortingOrder (default 50)
+    NOTE: this backend DOES respect sorting layers, unlike the VFX Graph one.
+
+RUNTIME STATE
+-------------
+  _trail, _flash, _ring, _pillar  (ParticleSystem)
+  _follow  (Transform)  non-null only while trailing
+  _built   (bool)       guards Build() so it runs exactly once
+
+FLOW
+----
+  Awake()       Build()
+  LateUpdate()  if _follow != null, transform.position = _follow.position
+                World simulation space means already-emitted particles stay put,
+                so moving the emitter draws the arc as a ribbon behind the unit.
+
+  BeginTrail(follow, tint)  snaps to the target, sets trail startColor, Play()
+  EndTrail()                _follow = null; Stop(StopEmitting) - NOT clear
+  PlayBurst(p)              positions at p.position, then:
+                              flash  : startColor + startSize = radius*flashSizeMul
+                              ring   : startSizeX/Y (ellipse), size-over-life
+                                       curve rebuilt from ringEnd/ringStart
+                              pillar : lifetime range, startSize range,
+                                       velocityOverLifetime.y derived from
+                                       p.height, shape.radius, noise strength,
+                                       emission rate, then Play()
+  ResetForReuse()           StopEmittingAndClear on all four
+  IsBusy                    _follow != null || any system IsAlive(true)
+
+WHY THE PILLAR IS A JET, NOT A BURST
+-------------------------------------
+  main.duration IS pillarJetDuration, and emission.rateOverTime is
+  pillarCount / pillarJetDuration. A non-looping system emits for exactly its
+  duration and then stops on its own.
+
+  The FIRST implementation used _pillar.Emit(pillarCount) instead - one burst on
+  frame zero. Every particle then rose together and the whole column PEELED OFF
+  THE GROUND and drifted upward as a puff, leaving a visible gap between the
+  unit's feet and the flame (confirmed by capture at t=0.20 and t=0.30). Feeding
+  continuously keeps the foot of the column lit while the head climbs.
+
+RISE SPEED
+----------
+  velocityOverLifetime.y = height/avgLife * (0.75 .. 1.25), where avgLife is the
+  midpoint of the lifetime range. Deriving speed from the requested HEIGHT means
+  the column tops out where the caller asked rather than wherever a hardcoded
+  speed happens to reach; the 0.75-1.25 spread then makes some streaks overshoot
+  and some fall short, which IS the torn top edge.
+
+  main.startSpeed is 0 on purpose - see NOTES.
+
+HOW IT CONNECTS
+---------------
+  - Created by SummonVfxDirector.CreateEmitter() when no prefab is assigned, or
+    found on an assigned particleEmitterPrefab.
+  - Draws with SummonVfxAssets.GlowMaterial / RingMaterial.
+  - Driven by SummonArrivalBinder through ISummonEmitter.
+
+NOTES
+-----
+  - ALL THREE velocityOverLifetime AXES MUST SHARE ONE CURVE MODE. Mixing a
+    constant X with a curve Y makes Unity reject the whole module and log
+    "Particle Velocity curves must all be in the same mode" on EVERY emit
+    (hit during development 2026-08-23). Hence two-constant ranges on x, y and z
+    even where a plain constant would read better.
+  - main.startSpeed is 0 because the Circle shape emits RADIALLY. Any non-zero
+    start speed fires particles outward and flattens the column into a splash.
+    All motion comes from velocityOverLifetime.
+  - ParticleSystemRenderer.pivot.y is +0.5, which shifts the quad UP so each
+    streak draws from its position upward instead of centred on it. The sign is
+    the OPPOSITE of what the name suggests - verified by capture, -0.5 pushed the
+    flame further below the ground.
+  - ringFlatten exists because the board is viewed at a tilt. A perfect circle
+    reads as a hoop standing up in the air; squashing Y to ~0.45 makes it read as
+    a ring lying on the ground. Implemented with main.startSize3D = true, because
+    non-uniform start size is the only way to get an ellipse out of a billboard.
+    sizeOverLifetime then scales both axes together and preserves the squash.
+  - limitVelocityOverLifetime.dampen is deliberately LOW (0.12). At 0.35 it
+    tapered the top nicely but also stole roughly a third of the height the
+    caller asked for.
+  - Build() is called at the top of BeginTrail and PlayBurst as well as in Awake,
+    so the emitter also works when constructed in EDIT mode (where Awake does not
+    run) - that is what the editor preview harness relies on.

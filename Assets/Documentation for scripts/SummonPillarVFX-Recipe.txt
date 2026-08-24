@@ -1,0 +1,187 @@
+================================================================================
+  SummonPillar.vfx  -  BUILD RECIPE
+  For  : SummonEmitterVfxGraph.cs  (Assets/Scripts/Combat/VFX/)
+  Type : step-by-step instructions, not a script doc
+  Added: 2026-08-23
+================================================================================
+
+WHY THIS FILE EXISTS
+--------------------
+A .vfx asset is a serialised node graph with generated compute shaders. It can
+only be authored in Unity's Visual Effect Graph window - it cannot be written as
+text. The C# side is already finished and waiting; this is the half that has to
+be built by hand, once.
+
+Until it exists, everything still works: SummonVfxDirector falls back to the
+built-in ParticleSystem backend, which needs no assets at all. Nothing is broken
+while this sits unbuilt.
+
+ALREADY DONE (2026-08-23, no action needed)
+--------------------------------------------
+  [x] com.unity.visualeffectgraph 17.3.0 installed (matches URP 17.3.0)
+  [x] SUMMON_VFX_GRAPH added to Scripting Define Symbols for Android,
+      Standalone and iOS
+  [x] SummonEmitterVfxGraph.cs compiles into Assembly-CSharp
+
+STEP 1 - CREATE THE GRAPH
+--------------------------
+  Project window > Create > Visual Effects > Visual Effect Graph
+  Save as:  Assets/Arts/VFX/SummonPillar.vfx
+  Double-click to open the VFX Graph window.
+  Delete the default system that ships in a new graph.
+
+STEP 2 - EXPOSED PROPERTIES  (Blackboard, the "+" button)
+----------------------------------------------------------
+  Tick "Exposed" on every one. THE NAMES MUST MATCH EXACTLY - the C# looks them
+  up by these strings and silently skips any it cannot find.
+
+    Name          Type     Suggested default
+    ------------- -------- ------------------
+    PillarColor   Color    (1, 0.88, 0.29, 1)
+    PillarHeight  float    2.6
+    PillarRadius  float    0.45
+    Intensity     float    1
+    TrailColor    Color    (1, 0.88, 0.29, 1)
+
+STEP 3 - EVENTS
+---------------
+  Add three Event contexts. Again, exact names:
+
+    OnSummon      fires the flash + ring + pillar
+    OnTrailStart  starts the trail
+    OnTrailStop   stops the trail
+
+  C# sends these via VisualEffect.SendEvent(...) - see SummonEmitterVfxGraph.
+
+STEP 4 - SYSTEM "Pillar"   (the important one)
+-----------------------------------------------
+  Spawn context
+    - Source: OnSummon
+    - Constant Spawn Rate, Rate = 190
+    - Set Spawn Time / Loop Duration = 0.22          <- the JET duration
+
+    THIS IS THE CRITICAL DETAIL. Do NOT use a Single Burst. A burst launches
+    every particle on the same frame, they all rise together, and the whole
+    column peels off the ground and drifts upward as a puff - leaving a visible
+    gap between the unit's feet and the flame. This exact mistake was made and
+    fixed in the ParticleSystem backend; do not repeat it here. The column has to
+    be FED continuously for ~0.22s so its foot stays lit while its head climbs.
+
+  Initialize Particle
+    - Capacity 256
+    - Set Lifetime Random (Uniform): min 0.20, max 0.30
+    - Set Position (Shape: Circle)
+        Radius = PillarRadius            (drag the property in)
+        Arc = 360, Thickness = 1  (fill the disc, not just the rim)
+    - Set Velocity Random (Uniform):
+        min (-0.11, PillarHeight / 0.25 * 0.75, 0)
+        max ( 0.11, PillarHeight / 0.25 * 1.25, 0)
+      i.e. almost purely +Y, with a small sideways spread. Deriving Y speed from
+      PillarHeight is what makes the column top out where the caller asked.
+    - Set Size Random (Uniform): min PillarRadius*0.35, max PillarRadius*0.7
+
+  Update Particle
+    - Turbulence  Intensity ~0.25, Frequency ~2.2   <- tears the top edge into
+      flame tongues instead of a clean gradient. This is the single node that
+      most makes it read as "flame" rather than "beam".
+    - Linear Drag ~0.12   (light: heavy drag steals the height)
+    - Multiply Size over Life: curve 1.0 -> 0.15
+    - Set Color over Life: gradient
+        t=0.00  PillarColor, alpha 0
+        t=0.12  PillarColor, alpha 1
+        t=0.50  PillarColor, alpha 0.85
+        t=1.00  PillarColor, alpha 0
+
+  Output Particle Quad
+    - Blend Mode: ADDITIVE           <- non-negotiable; alpha blending over the
+                                        bright green board reads as dirty yellow
+                                        paint rather than light
+    - Orient: Face Camera Plane
+    - Main Texture: a soft round glow (see STEP 7)
+    - Multiply the colour by Intensity
+    - Sorting Priority: 1
+
+STEP 5 - SYSTEM "GroundRing"
+-----------------------------
+  Spawn : OnSummon, Single Burst, Count = 1
+  Initialize:
+    - Lifetime 0.25
+    - Velocity 0
+    - Set Scale (NOT uniform size):  X = PillarRadius*0.6
+                                     Y = PillarRadius*0.6*0.45
+                                     Z = 1
+      The Y squash matters. The board is viewed at a tilt, so a perfect circle
+      reads as a hoop standing up in the air rather than a ring lying on the
+      ground.
+  Update:
+    - Multiply Scale over Life: 1.0 -> 3.7  (uniform, so the squash survives)
+    - Alpha over life 1 -> 0
+  Output Particle Quad: Additive, ring texture, Orient Face Camera Plane,
+    Sorting Priority 0
+
+STEP 6 - SYSTEM "Flash"
+------------------------
+  Spawn : OnSummon, Single Burst, Count = 1
+  Initialize: Lifetime 0.12, Velocity 0, Size = PillarRadius * 2.8
+  Update: Size over life 0.6 -> 1.4, alpha 1 -> 0
+  Output Particle Quad: Additive, glow texture, Sorting Priority 2
+
+STEP 7 - SYSTEM "Trail"
+------------------------
+  Spawn : Constant Spawn Rate 55
+          Start on OnTrailStart, Stop on OnTrailStop
+          (Use the Spawn context's Start/Stop inputs, NOT a looping system -
+           see the pooling note at the bottom.)
+  Initialize: Lifetime 0.15, Velocity 0, Size 0.26, Color = TrailColor
+  Update: size 1 -> 0, alpha 1 -> 0
+  Output Particle Quad: Additive, glow texture, Sorting Priority 1
+
+  World space: leave the systems in WORLD simulation space. The C# moves the
+  whole GameObject to follow the unit, and world space is what makes the already
+  emitted particles stay behind as a ribbon instead of dragging along rigidly.
+
+TEXTURES
+--------
+  The ParticleSystem backend generates its own procedurally (SummonVfxAssets:
+  a 128x128 soft radial glow and a thin annulus). VFX Graph needs real texture
+  assets. Either export those two from a quick script, or use any soft round
+  particle glow and a ring - the shapes are forgiving.
+
+STEP 8 - WIRE IT UP
+--------------------
+  1. Create an empty GameObject, name it "SummonEmitter_VFX".
+  2. Add a Visual Effect component; assign SummonPillar.vfx.
+  3. Add the SummonEmitterVfxGraph component.
+  4. Untick "Play On Awake" on the Visual Effect.
+  5. Save it as a prefab, e.g. Assets/Arts/VFX/SummonEmitter_VFX.prefab
+  6. Put a SummonVfxDirector in StarterScene and assign that prefab to
+     "Vfx Graph Emitter Prefab".
+  7. Leave Backend on Auto. It will now pick VFX Graph on devices with compute
+     shaders and the ParticleSystem backend everywhere else.
+
+STEP 9 - VERIFY
+---------------
+  - Play mode, then right-click the director > "Preview Summon".
+  - Flip Backend between Particles and VfxGraph and compare side by side.
+  - Clear a puzzle group so a real wave arrives, and check the flash lands on
+    the SAME FRAME as the unit.
+
+URP 2D GOTCHAS  (read before debugging "it does not show up")
+---------------------------------------------------------------
+  - VFX Graph output does NOT participate in sorting layers. There is no
+    sortingLayerName on VisualEffect. Depth is the director's zOffset (-0.1)
+    plus each output's Sorting Priority. If the pillar hides behind the board,
+    make zOffset more negative - do not go looking for a sorting layer field.
+  - VFX Graph particles are NOT lit by URP 2D lights. Everything must be
+    self-lit: additive blending plus an emissive colour.
+  - On a device without compute-shader support the whole graph renders NOTHING,
+    silently - no error, no warning. That is exactly why the ParticleSystem
+    backend exists and why Backend should stay on Auto.
+
+POOLING CONSTRAINT
+------------------
+  SummonEmitterVfxGraph reports IsBusy from VisualEffect.aliveParticleCount,
+  because unlike ParticleSystem there is no per-system IsAlive. A graph
+  containing a permanently looping sub-system would therefore NEVER report idle
+  and its emitter would never return to the pool. Keep every system one-shot,
+  and make sure the Trail system genuinely stops on OnTrailStop.

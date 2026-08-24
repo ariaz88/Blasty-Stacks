@@ -1,0 +1,77 @@
+================================================================================
+  ISummonEmitter.cs
+  Path : Assets/Scripts/Combat/VFX/ISummonEmitter.cs
+  Type : interface + struct (no MonoBehaviour)
+  Layer: Combat / VFX
+  Added: 2026-08-23  (summon arrival VFX)
+================================================================================
+
+PURPOSE
+-------
+The seam between "what an arrival looks like" and "which particle technology
+draws it". Declares SummonBurstParams (the description of one summon) and
+ISummonEmitter (the thing that draws it).
+
+Two backends implement it:
+  SummonEmitterParticles  built-in ParticleSystem, runs on every device
+  SummonEmitterVfxGraph   GPU VFX Graph, needs compute-shader support
+
+SummonVfxDirector picks one at runtime. Nothing above this interface - not
+SummonArrivalBinder, not PlayerWaveManager - knows which one is live.
+
+SummonBurstParams (struct)
+--------------------------
+  position   Vector3   world point the unit landed on; the FOOT of the pillar
+  tint       Color     warm colour of the whole effect, per-unit overridable
+  height     float     pillar height in WORLD UNITS (reference ~2.5-3 cells)
+  radius     float     pillar radius in WORLD UNITS (reference ~half a cell)
+  intensity  float     brightness multiplier, 1 = authored value
+
+  Passed by `in` so adding a knob later does not churn every call site.
+
+ISummonEmitter members
+----------------------
+  BeginTrail(Transform follow, Color tint)
+      Start trailing a moving transform. The emitter repositions ITSELF each
+      frame; it does not parent to the target, because the already-emitted
+      particles must stay where they were (world simulation space) for the
+      ribbon to read as a trail rather than a rigid attachment.
+
+  EndTrail()
+      Stop emitting new trail particles. Does NOT clear the ones already in the
+      air - see NOTES.
+
+  PlayBurst(in SummonBurstParams p)
+      Landing flash + ground ring + light pillar, all on the same frame.
+
+  IsBusy  (get)
+      True while still trailing OR while any particle is alive. The pool waits
+      for false before recycling.
+
+  ResetForReuse()
+      Return to a clean state before the pool hands the emitter out again.
+
+  Owner  (get)
+      The emitter's GameObject, so the director can activate/park/reposition it.
+
+EXPECTED CALL ORDER (one arrival)
+----------------------------------
+  BeginTrail(visual)   on FrogJumpTransformOnly.Jumped
+  EndTrail()           on FrogJumpTransformOnly.Landed
+  PlayBurst(...)       same frame as EndTrail
+  IsBusy -> false      director reclaims
+
+HOW IT CONNECTS
+---------------
+  - SummonArrivalBinder drives the sequence above.
+  - SummonVfxDirector rents/releases implementations and fills in
+    SummonBurstParams from its shared look settings (BuildParams).
+
+NOTES
+-----
+  - EndTrail deliberately stops EMISSION only. Clearing the trail on the landing
+    frame makes the ribbon vanish instantly, which reads as a bug rather than an
+    effect. ResetForReuse is the call that actually clears.
+  - Owner is exposed rather than making the interface a MonoBehaviour, so a
+    future backend is free to be a plain class owning a GameObject it did not
+    itself component onto.

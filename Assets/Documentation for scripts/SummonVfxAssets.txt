@@ -1,0 +1,86 @@
+================================================================================
+  SummonVfxAssets.cs
+  Path : Assets/Scripts/Combat/VFX/SummonVfxAssets.cs
+  Type : static class (no MonoBehaviour)
+  Layer: Combat / VFX
+  Added: 2026-08-23  (summon arrival VFX)
+================================================================================
+
+PURPOSE
+-------
+Generates and caches the two textures and two materials the ParticleSystem
+backend draws with, so the summon needs NO imported art and NO authored prefab.
+Everything is built in code on first access and cached for the session.
+
+WHY PROCEDURAL: the entire value of the ParticleSystem backend is that the
+effect works the moment the scripts compile. Requiring three hand-painted PNGs
+would put it right back behind a pile of editor work. Assign real art on
+SummonEmitterParticles later and these are simply unused.
+
+PUBLIC MEMBERS
+--------------
+  Glow          Texture2D  128x128 soft round falloff, alpha only.
+                           Used by the pillar, the trail and the flash.
+  Ring          Texture2D  128x128 thin bright annulus (inner radius 0.78,
+                           thickness 0.14). The expanding ground shockwave.
+  GlowMaterial  Material   additive material using Glow
+  RingMaterial  Material   additive material using Ring
+  GroundCircleMaterial  Material  [2026-08-24] material on
+                        Blasty/SummonGroundCircle. TEXTURELESS, unlike the two
+                        above - the shader computes the annulus from UV because
+                        the whole telegraph effect IS its inner radius animating
+                        open, and a texture can only bake one fixed inner radius.
+                        Returns null (with a warning) if the shader is missing.
+  UnitQuad              Mesh      [2026-08-24] a 1x1 quad centred on the origin
+                        with UV 0..1, shared by every SummonGroundCircle. Built
+                        by hand rather than CreatePrimitive(Quad) so it carries
+                        no collider and no hidden asset dependency.
+
+  All six are lazily built, cached in statics, and marked
+  HideFlags.HideAndDontSave so they never leak into a scene or an asset file.
+
+BuildRadial(size, innerRadius, falloff)
+----------------------------------------
+  One function generates both textures:
+    innerRadius == 0  -> filled glow. alpha = (1 - d/falloff), then SQUARED so
+                         the core stays hot instead of washing out into a flat
+                         disc.
+    innerRadius >  0  -> ring. alpha peaks at innerRadius and falls off either
+                         side over `falloff`.
+  d is the normalised distance from centre (1 at the texture edge). Anything
+  past d > 1 is forced to alpha 0 so the quad's CORNERS never show.
+  Colour is always white; the tint arrives as the particle's vertex colour.
+
+BuildAdditive(tex, matName)
+----------------------------
+  Creates a material on the "Blasty/SummonAdditive" shader
+  (Assets/Arts/Shaders/SummonAdditive.shader), sets _MainTex, and forces the
+  transparent render queue.
+
+  Falls back to "Sprites/Default" with a warning if the shader is missing -
+  the effect still reads, just alpha-blended rather than additive, which looks
+  flat.
+
+HOW IT CONNECTS
+---------------
+  - Consumed only by SummonEmitterParticles, in its BuildTrail/BuildFlash/
+    BuildRing/BuildPillar methods.
+  - Depends on Assets/Arts/Shaders/SummonAdditive.shader, which MUST stay listed
+    in Project Settings > Graphics > Always Included Shaders (added 2026-08-23).
+
+NOTES
+-----
+  - DO NOT swap BuildAdditive back to "Universal Render Pipeline/Particles/Unlit".
+    That was the first implementation and it does NOT work: URP applies that
+    shader's blend state from its material EDITOR, not from _SrcBlend/_DstBlend,
+    so a material built at runtime renders every particle as an OPAQUE WHITE
+    SQUARE regardless of the texture's alpha. Verified by camera capture in this
+    project on 2026-08-23, not theory. The custom shader exists specifically to
+    remove that failure mode.
+  - The shader is reached only through Shader.Find on a runtime-created
+    material, so Unity's dependency scan cannot see it. Without the Always
+    Included Shaders entry it is stripped from an Android build and the summon
+    silently loses its additive blend. If the effect ever looks flat and washed
+    out ON DEVICE but correct in the Editor, check that list first.
+  - Textures are RGBA32 and unreadable-after-upload is NOT set, so GetPixel
+    still works if you ever need to debug the falloff.

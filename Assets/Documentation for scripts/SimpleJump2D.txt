@@ -80,6 +80,33 @@ INSPECTOR FIELDS
     shadowGroundAxisMask (Vector3, default (0,1,0))  which world axes the
                          shadow tracks; Y matches this game's forward direction
 
+PUBLIC EVENTS  (added 2026-08-23 for the summon arrival VFX)
+------------------------------------------------------------
+  Jumped   System.Action, fired at the END of BeginJump()
+  Landed   System.Action, fired at the END of Land(), after isJumping has been
+           cleared and the landing pose is fully applied - so a subscriber that
+           reads transform.position or IsJumping sees the settled state.
+
+  Added because BeginJump/Land are private and the jump is started from several
+  places (wave unlock, reinforcements, the debug key). Polling IsJumping from
+  outside would miss the exact landing frame roughly half the time, and the
+  summon flash has to fire ON it.
+
+  Only subscriber today: SummonArrivalBinder.
+
+PUBLIC LANDING INFO  (added 2026-08-24 for the ground telegraph)
+----------------------------------------------------------------
+  LandingPosition  Vector3  where this jump will END. Resolved in BeginJump and
+           valid for the whole flight, which is what lets the arrival VFX put its
+           ground circle on the landing CELL before the unit gets there.
+  TimeUntilLanding float    seconds left until touchdown, 0 when not jumping.
+           Uses activeDuration - the distance-scaled value this jump actually
+           plays at - not the serialized jumpDuration baseline.
+
+  These are read-only and exist because "a moment BEFORE landing" is a threshold
+  on remaining flight time, not an event this class can raise.
+  Only consumer: SummonArrivalBinder.Update().
+
 RUNTIME STATE
 -------------
   isJumping (bool, public get via IsJumping), loopPlayed, lastJumpPressedTime,

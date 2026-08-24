@@ -1,0 +1,131 @@
+================================================================================
+  SummonVfxDirector.cs
+  Path : Assets/Scripts/Combat/VFX/SummonVfxDirector.cs
+  Type : MonoBehaviour  -  singleton (SELF-CREATING, see NOTES)
+  Layer: Combat / VFX
+  Added: 2026-08-23  (summon arrival VFX)
+================================================================================
+
+PURPOSE
+-------
+Owns the summon-arrival VFX: which backend is live, the emitter pool, and the
+shared look settings every arrival starts from.
+
+SINGLETON
+---------
+Follows the project's hand-rolled pattern (public static Instance, guard-and-
+destroy duplicate in Awake) with ONE difference: if nothing in the scene provides
+a director, the Instance getter CREATES one. This system has no serialized
+dependencies and no scene references, so requiring a manual drop-in would only
+mean the summon silently does nothing in any scene someone forgot to wire.
+
+Drop a SummonVfxDirector into StarterScene when you want to TUNE the values -
+the auto-created one uses the C# field defaults.
+
+Note it does NOT use DontDestroyOnLoad, unlike LevelManager/CurrencyManager. The
+pool is per-scene on purpose: emitters parented under it would be destroyed on a
+scene change anyway, and a stale cross-scene pool would hand out dead objects.
+
+INSPECTOR FIELDS
+----------------
+  Backend
+    backend                  (enum Auto/Particles/VfxGraph, default Auto)
+    vfxGraphEmitterPrefab    prefab with VisualEffect + SummonEmitterVfxGraph;
+                             leave empty until SummonPillar.vfx exists
+    particleEmitterPrefab    optional; empty = built in code, no art needed
+
+  Pillar shape (world units)
+    pillarHeight (2.6)   reference reads ~2.5-3 board cells
+    pillarRadius (0.45)  reference reads ~half a board cell
+    intensity    (1.0)
+    tint         (1, 0.88, 0.29, 1)  default warm gold
+    zOffset      (-0.1) pushed toward the camera so the effect draws over the
+                        board. This is the ONLY depth control the VFX Graph
+                        backend has - it ignores sorting layers entirely.
+
+  Landing telegraph (the ground circle)   [2026-08-24]
+    groundCircleEnabled (true)   master switch for the pre-landing telegraph
+    circleLeadTime      (0.05)   how far AHEAD of touchdown the disc appears.
+                                 The reference shows it ~1 frame early at 30fps.
+    circleDiameter      (0.9)    filled disc width in world units, before growth
+    circleTint          (white)  the reference telegraph is WHITE, not the gold
+                                 of the pillar - hence its own colour rather than
+                                 reusing `tint`
+
+  Pool
+    prewarm (4)  emitters built in Awake
+
+RUNTIME STATE
+-------------
+  _free      List<ISummonEmitter>  ready to hand out
+  _draining  List<ISummonEmitter>  released but still finishing
+  _circles   List<SummonGroundCircle>  the telegraph pool [2026-08-24]
+  _resolved / _resolvedOnce        the backend actually chosen
+
+PUBLIC API
+----------
+  Rent() -> ISummonEmitter
+      Takes one out of the pool (creating if empty), activates it, resets it.
+      Skips destroyed entries left behind by a scene reload.
+
+  Release(ISummonEmitter)
+      Hands it back. It moves to _draining, NOT straight to _free.
+
+  PlayBurstAt(worldPos, tintOverride = null)
+      One-shot pillar with no trail, for callers that have no jump to hang off.
+
+  BuildParams(worldPos, tintOverride = null) -> SummonBurstParams
+      Fills in the shared look settings and applies zOffset.
+
+  DefaultTint / PillarHeight / PillarRadius / Intensity / ZOffset  (getters)
+
+  PlayGroundCircle(worldPos)                                     [2026-08-24]
+      Plays the pre-landing telegraph: filled white ellipse -> ring -> fade.
+      No-ops when groundCircleEnabled is false. Applies zOffset like the burst.
+      Called by SummonArrivalBinder while the unit is still AIRBORNE, timed off
+      FrogJumpTransformOnly.TimeUntilLanding rather than the Landed event -
+      the whole point is that it arrives first.
+
+  CircleLeadTime / GroundCircleEnabled  (getters)                [2026-08-24]
+      Read by the binder to decide when, and whether, to fire.
+
+  GetFreeCircle()  [private]
+      Circles are recycled by asking each one whether it IsPlaying, rather than
+      through a drain list like the emitters. There is at most a handful alive
+      at once and SummonGroundCircle deactivates itself when it finishes, so the
+      extra bookkeeping would buy nothing.
+
+  [ContextMenu("Preview Summon")]  plays a burst at the director's own position.
+      Play mode only; logs a warning otherwise.
+
+Update()
+--------
+  Walks _draining backwards and moves anything with IsBusy == false back into
+  _free (after ResetForReuse + SetActive(false)). Recycling earlier would cut a
+  pillar off mid-fade.
+
+ResolveBackend()
+----------------
+  Auto -> VfxGraph when SUMMON_VFX_GRAPH is defined AND
+          SystemInfo.supportsComputeShaders AND vfxGraphEmitterPrefab is set;
+          otherwise Particles.
+  Forced VfxGraph falls back to Particles (with a warning) when the define is
+  missing or the device has no compute shaders.
+
+HOW IT CONNECTS
+---------------
+  - SummonArrivalBinder is the only caller of Rent/Release in normal play.
+  - Creates SummonEmitterParticles instances directly when no prefab is set.
+  - PlayerWaveManager never touches this class; it only adds the binder.
+
+NOTES
+-----
+  - The backend is resolved ONCE, on first use, and cached. Changing `backend` in
+    the Inspector mid-play will not switch it - re-enter Play mode. This is
+    deliberate: swapping backends while emitters from the old one are still
+    draining would mix two pools.
+  - Auto only picks VfxGraph when vfxGraphEmitterPrefab is actually assigned, so
+    installing the package alone never silently turns the summon invisible.
+  - zOffset is applied in BuildParams, i.e. to the BURST position. The trail
+    follows the unit's own transform and does not get the offset; if the trail
+    ever sorts behind the board, offset the emitter prefab instead.

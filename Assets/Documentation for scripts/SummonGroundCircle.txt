@@ -1,0 +1,129 @@
+================================================================================
+  SummonGroundCircle.cs
+  Path : Assets/Scripts/Combat/VFX/SummonGroundCircle.cs
+  Type : MonoBehaviour  (NOT an ISummonEmitter - see HOW IT CONNECTS)
+  Layer: Combat / VFX
+  Added: 2026-08-24  (summon arrival - the pre-landing ground telegraph)
+================================================================================
+
+PURPOSE
+-------
+The ground telegraph of a summon arrival: a filled white ellipse that pops in
+just BEFORE the unit touches down, holds, then hollows out from the centre into
+a ring, expands slightly and fades.
+
+MEASURED FROM THE REFERENCE CLIP
+---------------------------------
+ScreenRecorderProject486.mkv at 30fps, the bee summon, which LANDS ON f17:
+
+  f14-f15   nothing
+  f16       filled white ellipse pops in - THE UNIT IS STILL IN THE AIR
+  f17-f19   holds as a solid filled disc                     ~0.13s
+  f20-f21   the centre opens outward into a ring             ~0.07s
+  f21-f25   ring expands and fades                           ~0.15s
+  f26       gone                                    total    ~0.30-0.35s
+
+Other measurements: it is WHITE, not the gold of the pillar. It is an ELLIPSE
+(the board is viewed at a tilt). The outer edge only grows about 1.3x across the
+whole life - far less than the landing burst's ring.
+
+THE CORE IDEA
+-------------
+Filled disc and ring are NOT two states. They are one value: the shader's
+_InnerRadius, animated from 0 (a filled disc, because the inner smoothstep then
+evaluates to 1 everywhere) out to innerRadiusMax (a thin ring). There is no
+"disc mode" branch anywhere in the code.
+
+This is also why it is a procedural shader and not a texture: a texture bakes
+ONE fixed inner radius, so the morph would need a flipbook.
+
+INSPECTOR FIELDS
+----------------
+  Timing (seconds)
+    fillHold      (0.13)  how long it stays a SOLID filled disc
+    openDuration  (0.07)  filled disc -> ring
+    fadeDuration  (0.15)  finished ring expands and fades
+
+  Shape
+    innerRadiusMax (0-0.95, default 0.78)  how far the hole opens
+    endScale       (min 1, default 1.3)    outer growth across the whole life
+    flatten        (0.1-1, default 0.45)   vertical squash
+    edgeSoftness   (0.001-0.5, default 0.14)
+
+  Sorting (URP 2D renderer)
+    sortingLayer (default "Default"), sortingOrder (default 45)
+    A MeshRenderer sorts by layer/order exactly like a SpriteRenderer. 45 keeps
+    the telegraph just UNDER the landing burst's 50.
+
+  Fade shape
+    fadeCurve (AnimationCurve, default EaseInOut 1 -> 0)
+    Applies to the FADE PHASE ONLY - see NOTES.
+
+RUNTIME STATE
+-------------
+  _renderer  MeshRenderer   drawing SummonVfxAssets.UnitQuad
+  _mpb       MaterialPropertyBlock  per-instance colour/inner/alpha
+  _t         float          elapsed; < 0 means IDLE
+  _total     fillHold + openDuration + fadeDuration
+  _baseDiameter, _tint
+
+PUBLIC API
+----------
+  Play(worldPos, diameter, tint)
+      Positions, resets the clock, activates and applies frame 0.
+      `diameter` is the FILLED disc's width in world units.
+
+  Seek(float t)
+      Jumps to an absolute time and applies that frame, like Animation.time.
+      Exists so the effect can be SCRUBBED in the editor against the reference
+      clip instead of having to be caught live at 30fps. No-ops when idle.
+
+  StopAndHide()
+      Immediate stop + SetActive(false). Used when the pool reclaims it.
+
+  IsPlaying (get)  true while mid-animation. The director's pool reads this.
+
+Apply(t)  [private]
+----------
+  Three explicit phases, mapping t to (inner, alpha, growth01):
+    t < fillHold                     inner 0,            alpha 1, growth 0
+    t < fillHold+openDuration        inner SmoothStep to innerRadiusMax,
+                                     alpha 1, growth 0 -> 0.35
+    otherwise                        inner innerRadiusMax,
+                                     alpha fadeCurve(k), growth 0.35 -> 1
+  Then writes localScale = diameter * lerp(1, endScale, growth01), squashed on Y
+  by `flatten`, and pushes _Color/_InnerRadius/_OuterRadius/_Edge/_Alpha through
+  the MaterialPropertyBlock.
+
+HOW IT CONNECTS
+---------------
+  - NOT part of ISummonEmitter, on purpose. That interface covers the LANDING
+    burst, which fires on FrogJumpTransformOnly.Landed. This fires EARLIER, on
+    its own clock, and has to look identical whichever emitter backend is live -
+    so SummonVfxDirector owns it separately.
+  - Created and pooled by SummonVfxDirector.GetFreeCircle();
+    played by SummonVfxDirector.PlayGroundCircle(worldPos).
+  - Triggered by SummonArrivalBinder.Update(), which polls
+    FrogJumpTransformOnly.TimeUntilLanding against the director's
+    circleLeadTime and places the disc on FrogJumpTransformOnly.LandingPosition.
+  - Draws with SummonVfxAssets.GroundCircleMaterial and SummonVfxAssets.UnitQuad.
+
+NOTES
+-----
+  - Apply() is written as three EXPLICIT phases rather than one blended curve
+    because the reference's disc holds at full alpha and zero hole for a clearly
+    readable beat before anything moves. A single eased curve smears that beat
+    away and the telegraph stops reading as a deliberate "it lands HERE".
+  - fadeCurve deliberately covers the fade phase ONLY. In the reference the disc
+    never dims while it is filled, so alpha is pinned at 1 for the first two
+    phases.
+  - This is the ONE part of the arrival that must be a POLL rather than an event.
+    "A moment before landing" is not something the jumper raises - it is a
+    threshold on remaining flight time. That is why FrogJumpTransformOnly gained
+    LandingPosition and TimeUntilLanding on 2026-08-24.
+  - It uses a MeshRenderer + generated quad rather than a SpriteRenderer so the
+    shape stays fully procedural - no sprite asset, no import settings, and the
+    ring stays crisp at any scale.
+  - Blasty/SummonGroundCircle must stay in Project Settings > Graphics > Always
+    Included Shaders. The material is created at runtime via Shader.Find, so
+    Unity's dependency scan cannot see it and it would strip from a mobile build.

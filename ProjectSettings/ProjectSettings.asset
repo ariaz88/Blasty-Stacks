@@ -683,7 +683,7 @@ PlayerSettings:
   webWasm2023: 0
   webEnableSubmoduleStrippingCompatibility: 0
   scriptingDefineSymbols:
-    Android: DOTWEEN;GOOGLE_MOBILE_ADS
+    Android: DOTWEEN;GOOGLE_MOBILE_ADS;SUMMON_VFX_GRAPH
     EmbeddedLinux: DOTWEEN
     GameCoreScarlett: DOTWEEN
     GameCoreXboxOne: DOTWEEN
@@ -694,12 +694,12 @@ PlayerSettings:
     PS4: DOTWEEN
     PS5: DOTWEEN
     QNX: DOTWEEN
-    Standalone: DOTWEEN;SENTIS_ANALYTICS_ENABLED;APP_UI_EDITOR_ONLY;GOOGLE_MOBILE_ADS
+    Standalone: DOTWEEN;SENTIS_ANALYTICS_ENABLED;APP_UI_EDITOR_ONLY;GOOGLE_MOBILE_ADS;SUMMON_VFX_GRAPH
     VisionOS: DOTWEEN
     WebGL: DOTWEEN
     Windows Store Apps: DOTWEEN
     XboxOne: DOTWEEN
-    iPhone: DOTWEEN;GOOGLE_MOBILE_ADS
+    iPhone: DOTWEEN;GOOGLE_MOBILE_ADS;SUMMON_VFX_GRAPH
     tvOS: DOTWEEN
   additionalCompilerArguments: {}
   platformArchitecture: {}

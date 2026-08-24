@@ -76,6 +76,28 @@ public class FrogJumpTransformOnly : MonoBehaviour
     private bool isJumping;
     public bool IsJumping => isJumping;
 
+    // Arrival VFX hooks. BeginJump/Land are private and the jump is driven from
+    // several places (wave unlock, reinforcements, the debug key), so polling
+    // IsJumping from outside would miss the exact landing frame - the flash and
+    // the light pillar have to fire ON it, not a frame or two late.
+    // SummonArrivalBinder is the only subscriber today.
+    public event System.Action Jumped;
+    public event System.Action Landed;
+
+    /// <summary>
+    /// Where this jump will END. Resolved in BeginJump and valid for the whole
+    /// flight, which is what lets the arrival VFX put its ground telegraph on
+    /// the landing cell BEFORE the unit gets there.
+    /// </summary>
+    public Vector3 LandingPosition => endPos;
+
+    /// <summary>
+    /// Seconds left until touchdown, or 0 when not jumping. Uses activeDuration
+    /// (the distance-scaled value this jump actually plays at), not the
+    /// serialized jumpDuration baseline.
+    /// </summary>
+    public float TimeUntilLanding => isJumping ? Mathf.Max(0f, activeDuration - tElapsed) : 0f;
+
     private bool loopPlayed;
     private float lastJumpPressedTime = -999f;
     private float tElapsed;
@@ -261,6 +283,8 @@ public class FrogJumpTransformOnly : MonoBehaviour
         }
 
         PlayAnim(jumpStartState);
+
+        Jumped?.Invoke();
     }
 
 
@@ -464,6 +488,10 @@ public class FrogJumpTransformOnly : MonoBehaviour
 
         isJumping = false;
         loopPlayed = false;
+
+        // Fired last, so a subscriber that reads transform.position / IsJumping
+        // sees the fully settled landing pose rather than a half-applied one.
+        Landed?.Invoke();
     }
 
 

@@ -1,0 +1,108 @@
+================================================================================
+  SummonArrivalBinder.cs
+  Path : Assets/Scripts/Combat/VFX/SummonArrivalBinder.cs
+  Type : MonoBehaviour
+  Layer: Combat / VFX
+  Added: 2026-08-23  (summon arrival VFX)
+================================================================================
+
+PURPOSE
+-------
+Hangs the summon VFX off the arrival a unit ALREADY performs. It deliberately
+animates nothing itself.
+
+The toss-in already existed before this feature: the castle gate's Animator
+"Throw" trigger leads to FrogJumpTransformOnly, which owns the arc, the apex
+scale and the ground shadow. This component only adds the things the
+reference clip has and this game did not:
+
+  (pre-landing, polled)         -> filled white ground circle telegraph
+  FrogJumpTransformOnly.Jumped  -> trail ribbon follows the unit through the arc
+  FrogJumpTransformOnly.Landed  -> trail stops; flash + ring + pillar fire
+
+WHERE IT COMES FROM
+-------------------
+Added at spawn time by PlayerWaveManager.SpawnUnitAt (one AddComponent call), so
+BOTH player arrival paths get it with no prefab edits:
+  - the puzzle-blast wave unlock  (SpawnOneAt -> SpawnUnitAt)
+  - bought reinforcements         (SpawnReinforcements -> SpawnUnitAt)
+
+Enemies are NOT covered - EnemySpawner has its own Instantiate and was left
+alone on purpose (scope decision, 2026-08-23).
+
+INSPECTOR FIELDS
+----------------
+  overrideTint (bool, default false)  off = use the director's shared tint
+  tint         (Color, default 1, 0.88, 0.29, 1)
+
+  Both are effectively defaults-only in practice: the component is added by
+  AddComponent at runtime, so nothing deserializes Inspector values onto it.
+  Use SetTint(Color) for a per-unit colour.
+
+RUNTIME STATE
+-------------
+  _jumper       FrogJumpTransformOnly, resolved in Awake
+  _followTarget Transform the trail rides (PlayerManager.visualRoot if present)
+  _emitter      the rented ISummonEmitter, non-null only mid-arrival
+  _subscribed   guards double subscription across enable/disable cycles
+  _circleFired  latches the pre-landing telegraph to once per jump [2026-08-24]
+
+FLOW
+----
+  Awake()
+      GetComponentInChildren<FrogJumpTransformOnly>(true) - NOT GetComponent.
+      PlayerWaveManager looks for the jumper on the root, but runtime prefabs are
+      free to put it on the visual child and some do.
+      No jumper -> `enabled = false` and the component stays silent. That is not
+      an error: stage scenery and gate props run through the same spawn funnel.
+      Picks _followTarget = PlayerManager.visualRoot ?? _jumper.transform, so the
+      ribbon lines up with the SPRITE rather than the physics root's pivot.
+
+  OnEnable()   subscribes Jumped/Landed (guarded by _subscribed)
+  OnDisable()  unsubscribes AND releases any held emitter
+
+  HandleJumped()
+      Releases any previous emitter first (a second Jumped without a Landed must
+      not leak one), rents a fresh emitter, BeginTrail.
+
+  HandleLanded()
+      Rents an emitter if there is none - a Landed with no preceding Jumped
+      (jump started before this component woke) still plays the impact, which is
+      the more important half of the effect.
+      EndTrail, then PlayBurst at the JUMPER's transform position, then Release.
+
+  SetTint(Color)  public; sets overrideTint = true
+
+  Update()                                                      [2026-08-24]
+      Fires the ground telegraph while the unit is STILL IN THE AIR, then latches
+      _circleFired so it happens once per jump (re-armed in HandleJumped).
+      Conditions: jumping, not yet fired, director present and
+      GroundCircleEnabled, and TimeUntilLanding <= director.CircleLeadTime.
+      Plays at _jumper.LandingPosition, NOT the unit's current position.
+
+      This is the ONE poll in the whole feature, and it is justified: every other
+      part hangs off Jumped/Landed, but "a moment BEFORE landing" is not an event
+      the jumper raises - it is a threshold on how much flight is left.
+
+HOW IT CONNECTS
+---------------
+  - Requires the Jumped / Landed events added to FrogJumpTransformOnly on
+    2026-08-23, plus LandingPosition / TimeUntilLanding added 2026-08-24 for the
+    ground telegraph. Without them this does not compile.
+  - Talks to SummonVfxDirector.Instance for Rent/Release/BuildParams.
+  - Reads PlayerManager.visualRoot but never writes to PlayerManager.
+
+NOTES
+-----
+  - Hooking the jumper's EVENTS rather than polling IsJumping is the whole point.
+    The flash has to land on the same frame as the unit; a poll in Update would
+    be one frame late roughly half the time, which reads as a mistimed effect.
+    BeginJump/Land are private and the jump is started from several places (wave
+    unlock, reinforcements, the debug key), so events were the only clean seam.
+  - The unit is NOT gated by this component. It does not need to be:
+    PlayerWaveManager.JumpThenSwitch already withholds PlayerPursueTargetState
+    until the jump completes AND WaitForCombatLive() passes, so "locked until it
+    lands" was already true before this feature existed.
+  - OnDisable releasing the emitter matters for units killed mid-jump - otherwise
+    an emitter would keep following a dead transform forever and never return to
+    the pool.
