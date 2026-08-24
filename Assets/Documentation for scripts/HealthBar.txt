@@ -13,6 +13,10 @@ to current health, keeps itself readable when the parent character flips to face
 the other direction, forces itself above the character sprites while the battle
 runs (and gives that priority back when the battle ends so win/lose panels can
 cover it), and can stay hidden until the unit is actually IN the fight.
+Since 2026-08-24 it also draws a DAMAGE TRAIL: a yellow chunk left behind at the
+pre-hit health that drains away and fades, so a hit reads as a size rather than a
+teleport. The trail Image is built at runtime by cloning the main bar, so units,
+enemies and gates all get one with no prefab or scene re-authoring.
 
 FIELDS
 ------
@@ -35,6 +39,23 @@ FIELDS
                       OFF = always visible. Keep off for GATE bars, which are
                             meant to be readable during the puzzle phase.
 
+  Damage Trail  [2026-08-24]
+    delayedBar        (Image) the second fill Image drawn BEHIND the main bar.
+                      Holds the pre-hit health, then drains and fades. EMPTY +
+                      autoCreateTrail = built at runtime; assign by hand only to
+                      override the look.
+    autoCreateTrail   (bool, default true) clone the main bar at Awake to make
+                      the trail. This is why no prefab and no scene had to be
+                      re-authored, and why GATE bars get one too.
+    delayedColor      (Color, default 1.0/0.82/0.15) forced onto the trail in
+                      Awake so no prefab can drift off-palette.
+    trailHoldSeconds  (float, default 0.18) how long the chunk sits STILL at the
+                      old value before draining. This pause is the readability.
+    trailDrainPerSecond (float, default 0.9) drain speed as a fraction of the
+                      FULL bar per second - so a 20% chip takes ~0.22s, and a
+                      big hit visibly takes longer than a small one.
+    trailFadeSeconds  (float, default 0.12) alpha fade once it has caught up.
+
   Runtime state
     ownerCanvas             (Canvas) the canvas shown/hidden. The COMPONENT is
                             disabled, not the GameObject, so nothing re-runs its
@@ -46,6 +67,12 @@ FIELDS
                             what the prefab SHIPPED with, captured before
                             ApplyRenderOrder overwrites it.
     _baseLocalScaleX        (float) original absolute X scale, captured in Awake.
+    trailFill               (float) what the trail is CURRENTLY showing. This is
+                            the authority, NOT delayedBar.fillAmount, so the fade
+                            cannot corrupt the drain maths.
+    trailHoldTimer / trailFadeTimer / trailSeeded
+                            hold-then-fade timers, and "the first
+                            SetCurrentHealth was the spawn value, not a hit".
 
 LIFECYCLE
 ---------
@@ -62,12 +89,38 @@ LIFECYCLE
       Finally stores the absolute base X scale.
 
   LateUpdate()
-      Reads the sign of the parent's lossyScale.x. If the character has been
-      flipped (negative X scale, the usual 2D way to face left), the bar's own
-      localScale.x is inverted to cancel it out - so the bar always renders
-      left-to-right in world space and never appears mirrored.
+      Calls TickDamageTrail() then KeepUnmirrored(). Both used to be inline here.
+
+  KeepUnmirrored()   [private, was the body of LateUpdate]
+      Keeps the bar UNMIRRORED IN WORLD SPACE. Measures the world direction of
+      the fill Image's own local +X, via
+        healthBar.transform.localToWorldMatrix.MultiplyVector(Vector3.right).x
+      and, only if that points along world -X, inverts this transform's
+      localScale.x to cancel it. Early-outs when the value is ~0 (bar edge-on)
+      or when the fill Image is not a descendant of this transform (it could
+      not fix what it is measuring, and would flip-flop forever).
       Running in LateUpdate ensures it happens AFTER any facing logic has
       flipped the parent this frame.
+
+      [2026-08-24] REWRITTEN. It used to read the sign of the PARENT's
+      lossyScale.x and mirror itself whenever that was negative. That is a
+      DOUBLE correction on the enemy prefabs: their root is authored at
+      scale.x = -1, and the bar hierarchy already cancels that by hand - the
+      Canvas ("PlayerProgressBarUI (1)"), "Bar (1)" and "BG (1)" each carry a
+      180-degree Y rotation, and the two graphics also carry scale.x = -1
+      (the un-mirrored "Bar"/"BG" originals are left in the prefab, disabled).
+      Four inversions cancel to "upright", which is why the enemy bar looked
+      correct in the Prefab/Scene view; the old LateUpdate then added a fifth
+      at runtime, so enemy bars rendered MIRRORED in Play mode only - draining
+      left->right against the player's right->left. Because the old code forced
+      the Canvas sign to equal the root sign, the parity never changed with
+      facing: it was mirrored whichever way the enemy turned.
+      Two reasons the fix probes the world matrix rather than lossyScale:
+      lossyScale cannot see a 180-degree rotation, and probing the FILL IMAGE
+      (not this transform) accounts for the flips authored BELOW the Canvas.
+      Player prefabs are clean (identity all the way down), so they now measure
+      positive and are never written to at all.
+      NOT YET VERIFIED IN PLAY MODE.
 
   OnDestroy()
       Unsubscribes from BOTH static events. Without this a hero destroyed before
@@ -78,6 +131,45 @@ METHODS
   SetCurrentHealth(currentHealth, maxHealth)
       Clamps currentHealth to >= 0 and maxHealth to >= 0.0001 to avoid a
       divide-by-zero, then sets fillAmount = current / max.
+
+      [2026-08-24] It now also ARMS THE DAMAGE TRAIL, in three cases:
+        - FIRST call ever (trailSeeded false): this is the spawn value, not a
+          hit. Seed trailFill and stay hidden. EnemyStats.Start and
+          PlayerStats.Start are the calls this catches; without it every unit
+          would flash a chunk on frame one.
+        - target >= trailFill (healed, or unchanged): snap trailFill up and hide.
+          Otherwise a yellow chunk would be stranded ABOVE the real health.
+        - target <  trailFill (damaged): trailFill still holds the PRE-HIT value,
+          which IS the chunk, so just show it and re-arm trailHoldTimer. Re-arming
+          on every hit makes a combo read as one continuous chunk, not a stutter.
+
+  TickDamageTrail()   [private, called from LateUpdate]
+      Hold -> drain -> fade, one stage per frame:
+        holdTimer > 0            : count down, draw nothing new.
+        trailFill > fillAmount   : MoveTowards at trailDrainPerSecond, write
+                                   delayedBar.fillAmount; on arrival start the fade.
+        fadeTimer > 0            : scale delayedColor.a down to 0.
+        otherwise                : HideTrail().
+      Uses SCALED Time.deltaTime on purpose - when the game is paused or a panel
+      has frozen the level, the chunk should freeze with it rather than quietly
+      finishing behind the pause menu.
+
+  BuildTrail()   [private, called from Awake when delayedBar is empty]
+      CLONES healthBar's GameObject into a sibling named "<name>_DamageTrail",
+      strips its children and any component that is not Transform/CanvasRenderer/
+      Image, and takes the main bar's sibling index - which pushes the main bar
+      one slot LATER, and later siblings draw ON TOP in uGUI. That ordering is
+      what makes the trail peek out only where health USED to be.
+      Cloning rather than building from scratch is deliberate: it inherits the
+      sprite, the RectTransform AND the enemy prefabs' hand-authored mirroring
+      (180-degree Y rotation + scale.x = -1), so nothing has to re-derive that.
+      HARD STOP: if the fill Image shares its GameObject with a HealthBar (the
+      GetComponent<Image>() fallback), cloning would clone THIS script and the
+      clone's Awake would clone again, forever. It logs a warning and bails.
+
+  HideTrail()   [private]
+      Disables the trail Image, restores delayedColor (undoing any fade alpha)
+      and clears both timers.
 
   SetHiddenOnGate(hidden)   [public, added 2026-08-23]
       Hides the bar while its hero is STANDING ON THE CASTLE GATE, and gives it
@@ -123,11 +215,21 @@ HOW IT CONNECTS
 
 NOTES
 -----
-  - The counter-flip runs every LateUpdate for every unit on screen. It is only
-    a few float operations, but with large waves it is worth remembering that
-    this is per-unit per-frame work.
-  - A code comment says "fill from right -> left" while the code sets
-    fillOrigin = Left; the code is what matters - it fills left to right.
+  - [2026-08-24] NOT VERIFIED IN PLAY MODE. The Unity Editor was closed for this
+    session, so nothing below has been seen running - not the trail, not the
+    mirroring fix. Both are compile-checked by reading only.
+  - [2026-08-24] CALLER INCONSISTENCY that the trail makes visible:
+    PlayerStats.Start passes maxHealth but PlayerStats.ApplyDamageToPlayer passes
+    PlayerManager.statsBase.maxHP. If those two ever differ, the FIRST hit
+    changes the denominator, so the fill jumps for a reason that is not damage
+    and the trail shows a chunk of the wrong size (or none, if the ratio went
+    up). EnemyStats uses maxHealth in both places and is fine.
+  - The world-axis probe runs every LateUpdate for every unit on screen, but it
+    is read-only unless the bar is actually mirrored - a matrix fetch and one
+    float compare. Only enemy bars ever take the write branch.
+  - [2026-08-24] The stale "fill from right -> left" comment next to
+    fillOrigin = Left was corrected: the fill is anchored LEFT and empties from
+    the RIGHT.
   - [2026-08-23] WHY SetHiddenOnGate EXISTS ALONGSIDE hideUntilBattleStarts.
     They hide the bar for the same visual reason ("not in the fight yet") but
     key off different things, and neither can replace the other:

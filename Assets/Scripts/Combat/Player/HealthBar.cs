@@ -20,6 +20,36 @@ public class HealthBar : MonoBehaviour
              "the Canvas's current layer and rely on the order alone.")]
     [SerializeField] private string onTopSortingLayer = "";
 
+    [Header("Damage Trail")]
+    [Tooltip("Second fill Image sitting BEHIND the main bar. It holds the health " +
+             "the unit had BEFORE the last hit, then drains down to the real value " +
+             "and fades out - so a 20% hit reads as a 20% yellow chunk peeling " +
+             "away instead of the bar teleporting.\n" +
+             "Leave EMPTY and it is BUILT AT RUNTIME from the main bar (see Auto " +
+             "Create Trail). Assign one by hand only to override the look.")]
+    [SerializeField] private Image delayedBar;
+
+    [Tooltip("ON = clone the main bar at Awake to make the trail, so no prefab or " +
+             "scene needs a hand-authored object and every bar in the game gets " +
+             "one (units AND castle gates).\n" +
+             "OFF with an empty Delayed Bar = no trail, exactly the old behaviour.")]
+    [SerializeField] private bool autoCreateTrail = true;
+
+    [Tooltip("Colour forced onto the trail Image at Awake, so every prefab reads " +
+             "the same without per-prefab tinting.")]
+    [SerializeField] private Color delayedColor = new Color(1f, 0.82f, 0.15f, 1f);
+
+    [Tooltip("Seconds the trail SITS STILL at the old value after a hit, before it " +
+             "starts draining. This pause is what makes the chunk readable.")]
+    [SerializeField, Min(0f)] private float trailHoldSeconds = 0.18f;
+
+    [Tooltip("Drain speed as a FRACTION OF THE FULL BAR per second. 0.9 = a full " +
+             "bar would empty in a bit over a second, so a 20% chip takes ~0.22s.")]
+    [SerializeField, Min(0.01f)] private float trailDrainPerSecond = 0.9f;
+
+    [Tooltip("Alpha fade-out once the trail has caught up with the real health.")]
+    [SerializeField, Min(0f)] private float trailFadeSeconds = 0.12f;
+
     [Header("Battle Gate")]
     [Tooltip("ON  = the bar stays hidden through the puzzle phase AND the camera " +
              "move, appearing only once the FIRST ENEMY is actually on screen. " +
@@ -47,6 +77,14 @@ public class HealthBar : MonoBehaviour
 
     float _baseLocalScaleX;
 
+    // Damage-trail state. trailFill is the fill the trail is CURRENTLY showing -
+    // it is the authority, not delayedBar.fillAmount, so a fade can run without
+    // the drain maths reading a value someone else changed.
+    private float trailFill = 1f;
+    private float trailHoldTimer;
+    private float trailFadeTimer;
+    private bool trailSeeded;
+
     void Awake()
     {
         if (!healthBar)
@@ -71,24 +109,169 @@ public class HealthBar : MonoBehaviour
         // Make sure the image is a filled horizontal bar
         healthBar.type = Image.Type.Filled;
         healthBar.fillMethod = Image.FillMethod.Horizontal;
-        healthBar.fillOrigin = (int)Image.OriginHorizontal.Left; // fill from right → left
+        healthBar.fillOrigin = (int)Image.OriginHorizontal.Left; // anchored left, empties from the right
+
+        if (!delayedBar && autoCreateTrail)
+            BuildTrail();
+
+        // Same treatment for the trail, and it starts INVISIBLE - an undamaged
+        // unit must not show a yellow sliver under a full bar.
+        if (delayedBar)
+        {
+            delayedBar.type = Image.Type.Filled;
+            delayedBar.fillMethod = Image.FillMethod.Horizontal;
+            delayedBar.fillOrigin = (int)Image.OriginHorizontal.Left;
+            delayedBar.color = delayedColor;
+            delayedBar.raycastTarget = false;
+            delayedBar.fillAmount = 1f;
+            delayedBar.enabled = false;
+        }
 
         _baseLocalScaleX = Mathf.Abs(transform.localScale.x);
     }
 
     void LateUpdate()
     {
-        // If parent flips (scale.x negative), flip this child back
-        // so in world space it always stays upright.
-        if (transform.parent != null)
-        {
-            float parentSign = Mathf.Sign(transform.parent.lossyScale.x);
-            float localSign = (parentSign >= 0f) ? 1f : -1f;
+        TickDamageTrail();
+        KeepUnmirrored();
+    }
 
-            Vector3 ls = transform.localScale;
-            ls.x = _baseLocalScaleX * localSign;
-            transform.localScale = ls;
+    /// <summary>
+    /// Hold -> drain -> fade. Runs on scaled time on purpose: when the game is
+    /// paused or a panel has frozen the level, the chunk should freeze with it
+    /// rather than quietly finishing behind the pause menu.
+    /// </summary>
+    void TickDamageTrail()
+    {
+        if (!delayedBar || !delayedBar.enabled) return;
+
+        float target = healthBar.fillAmount;
+        float dt = Time.deltaTime;
+
+        if (trailHoldTimer > 0f)
+        {
+            trailHoldTimer -= dt;
+            return;
         }
+
+        if (trailFill > target + 0.0001f)
+        {
+            trailFill = Mathf.MoveTowards(trailFill, target, trailDrainPerSecond * dt);
+            delayedBar.fillAmount = trailFill;
+
+            // Caught up: hand over to the fade. Zero fade time still needs one
+            // frame here, which HideTrail below resolves immediately.
+            if (trailFill <= target + 0.0001f)
+                trailFadeTimer = trailFadeSeconds;
+            return;
+        }
+
+        if (trailFadeTimer > 0f)
+        {
+            trailFadeTimer -= dt;
+            float a = (trailFadeSeconds > 0f) ? Mathf.Clamp01(trailFadeTimer / trailFadeSeconds) : 0f;
+            var c = delayedColor;
+            c.a *= a;
+            delayedBar.color = c;
+            if (trailFadeTimer > 0f) return;
+        }
+
+        HideTrail();
+    }
+
+    /// <summary>
+    /// Clones the main bar Image into a sibling that renders one slot BEHIND it.
+    ///
+    /// Cloning rather than building from scratch is deliberate: it inherits the
+    /// sprite, the RectTransform, and - the part that actually matters here - the
+    /// enemy prefabs' hand-authored mirroring (180 degree Y rotation plus
+    /// scale.x = -1 on the graphics). A from-scratch Image would have to
+    /// re-derive all of that and would drift the first time someone re-authors a
+    /// prefab.
+    /// </summary>
+    void BuildTrail()
+    {
+        if (!healthBar || healthBar.transform.parent == null) return;
+
+        var src = healthBar.gameObject;
+
+        // HARD STOP. If the fill Image sits on the SAME object as this script
+        // (the GetComponent<Image>() fallback above), cloning it clones this
+        // script too - and the clone's Awake would clone again, forever. Same
+        // for a HealthBar anywhere inside. Bail loudly instead of hanging.
+        if (src.GetComponentInChildren<HealthBar>(true) != null)
+        {
+            Debug.LogWarning("[HealthBar] Auto trail skipped on '" + name +
+                             "': the fill Image shares its object with a HealthBar. " +
+                             "Assign Delayed Bar by hand, or move the Image to its own child.", this);
+            return;
+        }
+
+        var go = Instantiate(src, src.transform.parent, false);
+        go.name = src.name + "_DamageTrail";
+
+        // A bar graphic is a lone Image in every prefab here, but strip anything
+        // that came along anyway - a cloned script would run a second copy of
+        // whatever it does, silently.
+        for (int i = go.transform.childCount - 1; i >= 0; i--)
+            Destroy(go.transform.GetChild(i).gameObject);
+        foreach (var c in go.GetComponents<Component>())
+            if (!(c is Transform) && !(c is CanvasRenderer) && !(c is Image))
+                Destroy(c);
+
+        go.SetActive(true);
+
+        // Taking the main bar's slot pushes the main bar one later in the child
+        // list, and later siblings draw ON TOP in uGUI. That is what keeps the
+        // trail peeking out only where health USED to be.
+        go.transform.SetSiblingIndex(src.transform.GetSiblingIndex());
+
+        delayedBar = go.GetComponent<Image>();
+    }
+
+    void HideTrail()
+    {
+        if (!delayedBar) return;
+        delayedBar.enabled = false;
+        delayedBar.color = delayedColor;
+        trailFadeTimer = 0f;
+        trailHoldTimer = 0f;
+    }
+
+    /// <summary>
+    /// Keep the bar unmirrored in WORLD space, whatever the unit does.
+    /// </summary>
+    void KeepUnmirrored()
+    {
+        // This used to mirror itself whenever the PARENT's lossyScale.x was
+        // negative. That is a double correction on the enemy prefabs: their root
+        // is authored at scale.x = -1 and the bar hierarchy already cancels it by
+        // hand (the Canvas, `Bar (1)` and `BG (1)` each carry a 180 degree Y
+        // rotation, plus scale.x = -1 on the two graphics). Those flips cancel out
+        // to "upright" in the Editor, then this method added one more at runtime -
+        // so the enemy bar rendered mirrored in Play mode only, draining left->right
+        // while the player's drained right->left.
+        //
+        // Measuring the FILL IMAGE's own world axis instead fixes both families
+        // without touching a prefab: lossyScale cannot see a 180 degree rotation,
+        // but the world matrix can. Player bars (clean, identity all the way down)
+        // now measure positive and are never written to at all.
+        var probe = healthBar ? healthBar.transform : transform;
+
+        float worldRightX = probe.localToWorldMatrix.MultiplyVector(Vector3.right).x;
+
+        // ~0 means the bar is edge-on (rotated 90 degrees); there is no meaningful
+        // side to correct, so leave it alone rather than flapping.
+        if (worldRightX >= -0.0001f) return;
+
+        // Our own scale only moves the probe if the probe hangs off us. A bar
+        // wired to an Image somewhere else entirely would otherwise flip-flop
+        // every frame, never able to fix what it is measuring.
+        if (!probe.IsChildOf(transform)) return;
+
+        Vector3 ls = transform.localScale;
+        ls.x = (ls.x >= 0f) ? -_baseLocalScaleX : _baseLocalScaleX;
+        transform.localScale = ls;
     }
 
     /// <summary>
@@ -238,6 +421,39 @@ public class HealthBar : MonoBehaviour
         currentHealth = Mathf.Max(0f, currentHealth);
         maxHealth = Mathf.Max(0.0001f, maxHealth); // avoid divide-by-zero
 
-        healthBar.fillAmount = currentHealth / maxHealth;
+        float target = currentHealth / maxHealth;
+        healthBar.fillAmount = target;
+
+        if (!delayedBar) return;
+
+        // The FIRST call is the spawn value, not a hit - seed and stay quiet.
+        // Without this every unit whose max HP is applied after Awake would
+        // flash a trail on frame one.
+        if (!trailSeeded)
+        {
+            trailSeeded = true;
+            trailFill = target;
+            HideTrail();
+            return;
+        }
+
+        // Healed (or unchanged): the trail has nothing to show, so snap it up
+        // and get out of the way. Anything else would leave a yellow chunk
+        // stranded ABOVE the real health.
+        if (target >= trailFill - 0.0001f)
+        {
+            trailFill = target;
+            HideTrail();
+            return;
+        }
+
+        // Took damage. trailFill still holds the PRE-HIT value, which is exactly
+        // the chunk we want to show; re-arming the hold on every hit means a
+        // combo reads as one continuous chunk rather than a stutter.
+        delayedBar.fillAmount = trailFill;
+        delayedBar.color = delayedColor;
+        delayedBar.enabled = true;
+        trailHoldTimer = trailHoldSeconds;
+        trailFadeTimer = 0f;
     }
 }

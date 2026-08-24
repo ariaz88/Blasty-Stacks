@@ -55,6 +55,23 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-08-24] The HP-bar work has NEVER RUN.** Unity was closed for that whole session, so the
+  mirroring fix (`HealthBar.KeepUnmirrored`) and the new yellow damage trail are not verified and
+  not even compile-checked. Play a stage and confirm both together: the enemy bar should drain
+  right→left like the players', and a yellow chunk should peel away behind every hit. Also judge
+  the three tunables (`trailHoldSeconds` 0.18, `trailDrainPerSecond` 0.9, `trailFadeSeconds` 0.12)
+  at a real frame rate, and decide whether the CASTLE GATE bars should keep the trail — they get
+  one automatically and nobody has asked for it either way.
+- **[2026-08-24] Optional follow-up: bake real `DelayedBar` objects into the prefabs.** The trail
+  is currently cloned at runtime (see Decisions). An editor script to create authored objects in
+  all 13 `HealthBar` prefabs and wire `delayedBar` was written but never ran — the Editor was
+  closed. Only worth doing if a designer wants to restyle the trail per prefab; the runtime clone
+  is otherwise strictly less to maintain.
+- **[2026-08-24] `PlayerStats` disagrees with itself about max HP.** `Start` passes `maxHealth`,
+  `ApplyDamageToPlayer` passes `PlayerManager.statsBase.maxHP`
+  (`Assets/Scripts/Combat/Player/PlayerStats.cs:14` and `:22`). If those two values ever differ,
+  the first hit silently changes the denominator. Pre-existing; the damage trail just makes it
+  visible. `EnemyStats` uses `maxHealth` in both places and is fine.
 - **RELEASE BLOCKERS from the 2026-08-21 ads work** (all currently set for testing):
   `BattleStartController.doNotPersistAllowance` must go OFF (otherwise the 24h battle cap resets
   every app restart); `AdManager.useTestIds` must go OFF with real unit ids filled in;
@@ -214,12 +231,91 @@ _Durable choices with their reasons, so no session reopens them blindly._
 | 2026-08-23 | **A per-scene trigger arms on an EVENT that fired in this scene — never on a static flag, and never on the ABSENCE of static state.** `LastStandOffer` arms only on `BattleStartController.OnAnyBattleStarted`; `HeroRoster` clears itself on `sceneLoaded`. | Both cheaper-looking options are the same bug. (1) The first version relied on "`TotalStarting()` is 0 until the battle-start snapshot" as an implicit guard — true on a fresh Play session, FALSE after a scene reload, because `HeroRoster` is static, `ResetStatics()` runs once per PLAY SESSION, and `ClearAll()` had zero call sites. A replayed stage inherited the last battle's `StartingCount` while `TotalAlive()` was 0, so the ratio read "army wiped out" and the offer appeared during the puzzle phase. (2) Reading `BattleStartController.BattleIsRunning` instead would have failed identically one layer down: it is also static, it DEFAULTS TO TRUE, and the new stage only sets it false in `Awake` — a component enabling first reads the previous stage's value. An event cannot lie about which scene it came from. Corollary: any NEW reader of a static tally must assume the tally is stale until something in this scene says otherwise. |
 | 2026-08-23 | **Reinforcements reuse `PlayerWaveManager.SpawnReinforcements` verbatim; new callers add a trigger and a look, never a second arrival path.** | The gate pose, the hidden HP bar, the lane choice, the 90% landing and the FSM handover are five coupled behaviours. `LastStandOffer` is ~190 lines of trigger + UI that bottom out in one call, so a fix to the arrival is a fix everywhere. The same rule is why `HeroStatCell` gained a third look (`ShowAsOffer()`) instead of the offer growing its own cell class — and why `SetAlive(0)` was NOT reused for it: that state greys the portrait, which is correct for "wiped out" and wrong for a purchase prompt. Reuse the mechanism, not the state that happens to look similar. |
 | 2026-08-20 | The conversion is done by a repeatable editor tool (`Assets/Scripts/Editor/TMPFontAssetStaticBaker.cs`), not by hand-editing the Inspector or patching the `.asset` YAML directly. | Hand-editing does not scale and is not reproducible for the next font added; direct YAML patching was considered and rejected because it cannot repopulate an atlas — only TMP's `TryAddCharacters` can, and it needs a loaded font face. The tool also re-runs safely on assets that are already correct. |
+| 2026-08-24 | **A "keep me upright" correction measures the WORLD AXIS of the thing it is correcting, never a parent's `lossyScale`.** `HealthBar.KeepUnmirrored` probes `healthBar.transform.localToWorldMatrix.MultiplyVector(Vector3.right).x`. | `lossyScale` is blind to a 180° rotation, and reading the PARENT ignores every flip authored below it. The enemy prefabs use both — a mirrored root, then three 180° Y rotations and two negative scales further down that cancel it — so a parent-sign correction was a fifth inversion on top of four, and the bar drained backwards in Play mode while looking correct in the Scene view. Probing the actual Image's world axis is self-correcting and needs no knowledge of how a prefab was authored. Corollary: the fix is prefab-agnostic, so the three-flip authoring was left in place rather than "cleaned up" — undoing it by hand across 6 prefabs would have been 6 chances to get it wrong for no gain. |
+| 2026-08-24 | **The damage-trail Image is CLONED from the main bar at runtime (`HealthBar.BuildTrail`), not authored per prefab.** `delayedBar` stays serialized so a hand-assigned override still wins. | Three reasons, in order of weight. (1) Cloning inherits the enemy prefabs' hand-authored mirroring for free; a from-scratch Image would have to re-derive it and would silently drift the next time someone re-authors a prefab. (2) The castle-gate bars live in the SCENES, not a prefab, so authored objects would have to be wired into all 20 stage scenes by hand — the clone reaches them automatically. (3) It made the feature deliverable with the Editor closed. Accepted cost: one extra GameObject per bar at spawn, and designers cannot restyle the trail per prefab without assigning `delayedBar` manually. |
 
 ---
 
 ## Session Log
 
 _Newest first._
+
+### 2026-08-24 — HP bars: enemy bars were mirrored in Play mode, plus a yellow damage trail
+
+- **Goal:** two things, asked in order. (1) "Why are the enemy HP bars reversed?" — answer first,
+  change nothing. (2) Make damage read as a *size* instead of a teleport: add a second bar in a
+  different colour that holds the pre-hit health, drains away and fades, for players AND enemies,
+  in the UI as well as in code.
+- **Status:** done — but **nothing ran**. The Unity Editor was CLOSED for this entire session.
+- **Commits:** none — working tree only.
+
+**(1) Why the enemy bars were mirrored — root cause, verified by reading the prefab YAML.**
+The enemy prefabs and `HealthBar` were each correcting the SAME flip, so the corrections stacked
+to an odd number. Every one of the 6 prefabs in `Assets/PREFABS/Characters/New Characters/Enemies/`
+is authored identically:
+
+| object | rotation | scale.x |
+|---|---|---|
+| root (e.g. `Enemy_Orc`) | identity | **-1** (art faces left) |
+| `PlayerProgressBarUI (1)` (Canvas + `HealthBar`) | **180° on Y** | +1 |
+| `Bar (1)` — the Image wired to `healthBar` | **180° on Y** | **-1** |
+| `BG (1)` | **180° on Y** | **-1** |
+| `Bar` / `BG` (originals) | — | — **disabled**, left in place |
+
+Four inversions cancel to "upright", which is why the bar looked CORRECT in the Prefab/Scene view.
+The old `LateUpdate` then added a fifth at runtime — it mirrored itself whenever the PARENT's
+`lossyScale.x` was negative, which on an enemy root is always. Hence: mirrored in **Play mode only**,
+draining left→right against the player's right→left. And because that code forced the Canvas sign
+to equal the root sign, the parity never changed with facing — it was wrong whichever way the enemy
+turned. Player prefabs are clean (identity all the way down) and were never affected.
+
+- **Changed:** `Assets/Scripts/Combat/Player/HealthBar.cs`
+  - `LateUpdate` split into `TickDamageTrail()` + `KeepUnmirrored()`.
+  - `KeepUnmirrored()` rewritten: it now measures the **fill Image's own world axis**
+    (`healthBar.transform.localToWorldMatrix.MultiplyVector(Vector3.right).x`) and only corrects
+    when that points along world -X. Two reasons over the old `lossyScale` read — `lossyScale`
+    cannot see a 180° rotation, and probing the IMAGE (not this transform) accounts for flips
+    authored BELOW the Canvas. Early-outs at ~0 (bar edge-on) and when the Image is not a
+    descendant (it could not fix what it measures, and would flip-flop forever).
+    Side effect: player bars now measure positive and are **never written to at all**; the old
+    version rewrote every bar's localScale every frame.
+  - **New damage trail.** `delayedBar` Image renders one sibling slot BEHIND the main bar.
+    On a hit the main bar snaps to the real value while the trail keeps the pre-hit one, holds
+    `trailHoldSeconds` (0.18) dead still, drains at `trailDrainPerSecond` (0.9 of a full bar/sec,
+    so a 20% chip ≈ 0.22s and a big hit visibly takes longer), then fades over `trailFadeSeconds`
+    (0.12). Colour `delayedColor` = 1.0/0.82/0.15 yellow, forced in `Awake` so no prefab drifts.
+    Heal/unchanged snaps it up and hides — a chunk must never be stranded ABOVE real health.
+    `trailSeeded` treats the FIRST `SetCurrentHealth` (from `EnemyStats.Start` / `PlayerStats.Start`)
+    as the spawn value, not a hit, so nothing flashes on frame one. Scaled `Time.deltaTime` on
+    purpose: the chunk should freeze with the pause menu, not finish behind it.
+  - `BuildTrail()` — creates that Image at Awake by CLONING the main bar (see Decisions).
+    Hard stop included: if the fill Image shares its GameObject with a `HealthBar` (the
+    `GetComponent<Image>()` fallback), cloning would clone this script and the clone's Awake
+    would clone again forever. Logs a warning and bails.
+  - Corrected the stale `// fill from right → left` comment on the `fillOrigin = Left` line.
+- **Changed:** `Assets/Documentation for scripts/HealthBar.txt` — PURPOSE, the new fields, the
+  rewritten `LateUpdate`/`KeepUnmirrored`, and `SetCurrentHealth` / `TickDamageTrail` /
+  `BuildTrail` / `HideTrail`. The full prefab-parity explanation above is recorded there too.
+- **Scene/Prefab/SO edits:** **none.** No prefab and no scene was touched — that is the point of
+  building the trail at runtime.
+- **Verified:** **NOT VERIFIED.** Unity was closed the whole session (`Temp/UnityLockfile` dated
+  2026-08-21), so neither change has ever run, and the code is not even compile-checked.
+  Note for the next session: `Unity_GetConsoleLogs` returned `success` with an empty log list
+  while the Editor was closed — that empty result is NOT evidence of a clean compile. It was
+  briefly reported as such in this session before `Unity_RunCommand` failed with
+  "Unity not detected" and exposed it.
+- **Gotchas:**
+  - The mirroring is a **Play-mode-only** symptom by construction. Comparing the Scene view
+    against Play mode is the fastest way to confirm the fix; they should now agree.
+  - The disabled `Bar` / `BG` duplicates sitting in every enemy prefab are the fingerprint of
+    someone previously fighting this same flip by hand. Left alone deliberately.
+  - `PlayerStats.Start` passes `maxHealth` but `ApplyDamageToPlayer` passes
+    `PlayerManager.statsBase.maxHP`. If those differ, the first hit changes the denominator, so
+    the fill jumps for a reason that is not damage and the trail shows a chunk of the wrong size.
+    The trail did not cause this — it makes it visible. `EnemyStats` uses `maxHealth` in both.
+- **Next:** Play a stage and confirm both at once (enemy bar drains right→left; yellow chunk peels
+  away behind it). Then decide whether the gate bars should keep the trail they now get for free.
+
 
 ### 2026-08-24 — Summon arrival: the pre-landing ground telegraph (disc → ring)
 - **Goal:** the user watched the previous session's result against the reference clip and said
