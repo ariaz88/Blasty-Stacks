@@ -50,15 +50,19 @@ INSPECTOR FIELDS
                      behaviour). Because the drag is 1:1 the piece can be up to
                      half a cell off centre at release, which pops visibly
                      without this ease.
-    gapAssistCells   (float 0-0.49, default 0.4) how far, in cells, the piece may
+    restExactlyWhereReleased
+                     (bool, default OFF) NO-SNAP MODE. ON: the piece does not move
+                     at all on release - it stays exactly where the finger left it
+                     and reserves every cell its body overlaps. OFF: it eases onto
+                     the nearest cell over settleDuration. See NO-SNAP below.
+    gapAssistCells   (float 0-0.49, default 0.15) how far, in cells, the piece may
                      be pulled onto the nearest cell LINE on the perpendicular
                      axis when the axis it is being pushed along is walled.
-                     WITHOUT THIS a gap exactly as tall as the piece cannot be
-                     entered by hand at all - see GAP ASSIST below. 0 = off.
-    maxPointerOvershootCells
-                     (float 0.1-2, default 0.5) how far the pointer may run ahead
-                     of a blocked piece before the grab rubber-bands. See
-                     ClampPointerOvershoot.
+                     KEEP THIS SMALL - it displaces the piece WITHOUT moving the
+                     finger, so a large value is felt directly as "I released it
+                     here and it landed there". It was 0.4 and that was a large
+                     part of that complaint. Only a safety net for the
+                     zero-clearance corridor case. 0 = off. See GAP ASSIST below.
   REMOVED: smoothTime and maxSpeed. The drag is now 1:1 with the pointer, so
   there is nothing left to damp. Scenes still carry the old YAML lines; Unity
   ignores serialized fields that no longer exist, so nothing breaks.
@@ -206,13 +210,54 @@ DRAGGING  (the interesting part)
       straight back off the line it was just helped onto and the two fight
       sub-step by sub-step - visible as jitter.
 
-  ClampPointerOvershoot(desired)
-      A walled piece stops while the pointer keeps travelling, and with a fixed
-      grab offset that gap is remembered forever: shove a piece three cells into
-      a wall and the player must drag three cells back before anything moves.
-      This bleeds the excess out of grabOffsetLocal so at most
-      maxPointerOvershootCells of slack can ever accumulate, and the piece
-      responds the instant the player reverses.
+  NO-SNAP RELEASE - restExactlyWhereReleased / TryRestInPlace / BuildOverlappedCells
+      When the toggle is ON, EndDrag leaves the transform's X/Y untouched (only the
+      drag lift is dropped) and books the piece onto EVERY cell its body overlaps,
+      via PieceSimple.TryPlaceExact(..., snapRootToAnchor: false).
+
+      Why reserve the overlap rather than just the rounded cell: a piece resting at
+      x = 3.4 visually covers parts of cells 3 and 4. If it only booked cell 3, the
+      next piece could legally take cell 4 and the two would visibly overlap. Booking
+      both keeps the occupancy grid truthful, so matching, blocked cells and the move
+      budget all keep working with no changes to their rules.
+      COST: a piece dropped between cells consumes 2 cells instead of 1, so the board
+      fills faster and sloppy drops waste space. That is the trade for zero snap.
+
+      MatchResolver was updated to match: FindConnectedIdenticalGroup now builds its
+      4-neighbour set from piece.OccupiedCells (the real cells) rather than
+      anchor + shapeOffsets, or a straddling piece would probe the wrong cells and
+      miss matches.
+
+      TryBeginDrag seeds freeAnchor from the piece's ACTUAL transform, not from its
+      whole-cell anchor - otherwise touching an off-grid piece would teleport it onto
+      its cell and undo the whole point of the mode.
+
+      If the board refuses the reservation, TryRestInPlace returns false and EndDrag
+      falls through to the ordinary snap-to-cell path.
+
+  REJECTED AND REMOVED: detent magnetism.
+      An attempt to kill the release snap by bending the requested position toward
+      whole cells (a power curve, flat near a cell and steep at the boundary) so the
+      piece would already be on a cell at release.
+      IT WAS WRONG AND WAS REMOVED THE SAME DAY. Bending the position toward cells
+      IS cell-to-cell movement: the piece visibly lingers on a cell and then jumps
+      the boundary - precisely the stepped, robotic feel this whole rewrite exists to
+      eliminate. The requirement is a finger moving freely through space, and ANY
+      position-bending scheme (lerp-to-centre, SmoothStep, power detents) contradicts
+      it. DO NOT RE-INTRODUCE IT IN ANY FORM.
+
+  REMOVED: ClampPointerOvershoot. It used to bleed slack out of grabOffsetLocal
+      when a piece was walled, so the pointer could not run away from a stuck
+      piece. But it MUTATED THE GRAB OFFSET, and cumulatively across separate
+      blocking events - so the piece progressively slid out from under the finger,
+      and the release then landed on the cell under the PIECE, not under the
+      finger. That was a major part of "it snapped somewhere else".
+      grabOffsetLocal is now fixed for the whole drag: the piece is rigidly
+      attached to the grab point. A piece pushed into a wall separates from the
+      finger and re-attaches exactly when the finger comes back, which is
+      physically honest. The symptom it was papering over ("the mouse runs ahead
+      and the stack is dead") was really the corridor jam, which the gap assist
+      and magnetism fix properly.
 
   ResolveAxis(anchor, axis, target)
       Moves one axis toward target and stops FLUSH against the obstruction.
@@ -228,6 +273,13 @@ RELEASE
   EndDrag()
       Commits with TryPlace(lastValidAnchor) - which updates occupancy and
       jumps the root to the cell centre.
+      ON FAILURE it falls back to dragStartAnchor, NEVER to p.Anchor.
+      PieceSimple._anchor can hold a value that was never validated or occupied,
+      because AutoBuildOffsetsFromChildren assigns it directly (bypassing
+      TryPlace) and BoardBootstrapper calls that unconditionally - the `if` its
+      own comment describes is missing. Trusting it could fling the piece to the
+      far side of the board. dragStartAnchor is always a position the piece
+      legitimately held.
       Then COUNTS THE MOVE, but only when lastValidAnchor != dragStartAnchor.
       That single comparison is the whole rule: a tap-and-release, and a drag
       the board refused (the anchor never advanced past the start), both leave

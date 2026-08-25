@@ -141,7 +141,13 @@ public class MatchResolver : MonoBehaviour
             result.Add(cur);
 
             // Build the 4-neighbor cell set around cur's footprint
-            BuildFootprintNeighbors4(cur.Anchor, cur.ShapeOffsets, _neighborCells);
+            // Use the cells the piece ACTUALLY holds, not anchor + offsets. A piece
+            // resting between cells reserves every cell it overlaps, and looking at
+            // the nominal footprint there would probe the wrong cells and miss matches.
+            if (cur.OccupiedCells != null && cur.OccupiedCells.Count > 0)
+                BuildCellNeighbors4(cur.OccupiedCells, _neighborCells);
+            else
+                BuildFootprintNeighbors4(cur.Anchor, cur.ShapeOffsets, _neighborCells);
 
             foreach (var nCell in _neighborCells)
             {
@@ -170,22 +176,34 @@ public class MatchResolver : MonoBehaviour
     /// </summary>
     private void BuildFootprintNeighbors4(Vector2Int anchor, IReadOnlyList<Vector2Int> shape, HashSet<Vector2Int> outNeighbors)
     {
-        outNeighbors.Clear();
         _footprint.Clear();
         board.ShapeToCells(anchor, shape, _footprint);
+        BuildCellNeighbors4(_footprint, outNeighbors);
+    }
 
-        for (int i = 0; i < _footprint.Count; i++)
+    /// <summary>
+    /// Same as <see cref="BuildFootprintNeighbors4"/> but over an explicit set of
+    /// cells, so it works for a piece resting between cells that holds more cells
+    /// than its nominal shape.
+    /// </summary>
+    private void BuildCellNeighbors4(IReadOnlyList<Vector2Int> cells, HashSet<Vector2Int> outNeighbors)
+    {
+        outNeighbors.Clear();
+
+        for (int i = 0; i < cells.Count; i++)
         {
-            var c = _footprint[i];
+            var c = cells[i];
             outNeighbors.Add(new Vector2Int(c.x + 1, c.y));
             outNeighbors.Add(new Vector2Int(c.x - 1, c.y));
             outNeighbors.Add(new Vector2Int(c.x, c.y + 1));
             outNeighbors.Add(new Vector2Int(c.x, c.y - 1));
         }
 
-        // Remove the footprint’s own cells so we don't re-detect the same piece
-        for (int i = 0; i < _footprint.Count; i++)
-            outNeighbors.Remove(_footprint[i]);
+        // Remove the piece's own cells so we don't re-detect the same piece.
+        // Must strip THESE cells, not _footprint - when called with a piece's real
+        // occupied set, _footprint holds someone else's leftovers.
+        for (int i = 0; i < cells.Count; i++)
+            outNeighbors.Remove(cells[i]);
     }
 
     private PieceSimple FindNearestWithWarriors(PieceSimple origin, List<PieceSimple> group)

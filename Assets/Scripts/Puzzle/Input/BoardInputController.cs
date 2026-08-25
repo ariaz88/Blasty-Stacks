@@ -34,19 +34,22 @@ public class BoardInputController : MonoBehaviour
     [Tooltip("Safety cap on sub-steps per frame, so a huge pointer jump cannot stall the frame.")]
     [SerializeField, Min(1)] private int maxSubStepsPerFrame = 64;
 
-    [Tooltip("Seconds spent easing onto the exact cell center after the pointer is released.")]
-    [SerializeField, Range(0f, 0.3f)] private float settleDuration = 0.07f;
+    [Tooltip("NO-SNAP MODE. ON: the piece does not move at all when released - it stays exactly " +
+             "where the finger left it, and reserves every cell its body overlaps so nothing " +
+             "visually overlaps and matching still works. Cost: a piece dropped between cells " +
+             "takes up 2 cells instead of 1, so the board fills faster. " +
+             "OFF: the piece eases onto the nearest cell over settleDuration (up to half a cell).")]
+    [SerializeField] private bool restExactlyWhereReleased = false;
+
+    [Tooltip("Seconds spent easing onto the exact cell center after the pointer is released. " +
+             "Unused when Rest Exactly Where Released is on.")]
+    [SerializeField, Range(0f, 0.3f)] private float settleDuration = 0.10f;
 
     [Tooltip("When a piece is walled on the axis it is being pushed along, it may be pulled onto " +
              "the nearest cell line on the OTHER axis by up to this many cells to slip into a gap. " +
-             "Without it, a gap exactly as tall as the piece is impossible to enter by hand. " +
-             "0 disables the assist.")]
-    [SerializeField, Range(0f, 0.49f)] private float gapAssistCells = 0.4f;
-
-    [Tooltip("How far, in cells, the pointer may run ahead of a blocked piece before the grab " +
-             "rubber-bands. Keeps the piece responsive the instant the player reverses direction " +
-             "instead of making them drag all the way back.")]
-    [SerializeField, Range(0.1f, 2f)] private float maxPointerOvershootCells = 0.5f;
+             "Keep this SMALL: it displaces the piece without moving the finger, so a large value " +
+             "is felt directly as 'I released it here and it landed there'. 0 disables the assist.")]
+    [SerializeField, Range(0f, 0.49f)] private float gapAssistCells = 0.15f;
 
     // ---- drag state ----
     private PieceSimple activePiece;
@@ -271,12 +274,19 @@ public class BoardInputController : MonoBehaviour
 
         lastValidAnchor = anchor;
         dragStartAnchor = anchor;
-        freeAnchor = anchor;
+
+        // Seed the continuous position from where the piece ACTUALLY is, not from the
+        // whole-cell anchor. In no-snap mode a piece can legitimately be resting
+        // between cells, and seeding from the anchor would teleport it onto its cell
+        // the instant it is touched — undoing the very thing that mode exists for.
+        Vector3 restLocal = board.transform.InverseTransformPoint(piece.transform.position);
+        freeAnchor = LocalToAnchor(new Vector2(restLocal.x, restLocal.y));
+        if (!IsFreeAnchorLegal(freeAnchor, piece)) freeAnchor = anchor;
 
         // Keep the sub-cell grab point: the piece must not jump under the finger.
         // Measure the offset against where the piece is ABOUT to be drawn, not
-        // against its old transform — if the root was even slightly off its cell
-        // center the two disagree and the piece lurches on the very first drag frame.
+        // against its old transform — if the two disagree the piece lurches on the
+        // very first drag frame.
         Vector3 pieceLocal = board.transform.InverseTransformPoint(AnchorToWorld(freeAnchor));
         grabOffsetLocal = new Vector2(pieceLocal.x, pieceLocal.y) - PointerToBoardLocal(screenPos);
 
@@ -303,7 +313,6 @@ public class BoardInputController : MonoBehaviour
         if (!activePiece.AllowsY) desired.y = dragStartAnchor.y;
 
         MoveFreeAnchorTowards(desired);
-        ClampPointerOvershoot(desired);
 
         // Rounding a legal continuous anchor always lands on one of its corner
         // anchors, which IsFreeAnchorLegal already proved legal.
@@ -311,25 +320,6 @@ public class BoardInputController : MonoBehaviour
 
         activePiece.transform.position =
             AnchorToWorld(freeAnchor) + board.BoardPlaneNormal() * liftWhileDragging;
-    }
-
-    /// <summary>
-    /// A walled piece stops while the pointer keeps travelling, and that gap is
-    /// remembered in grabOffsetLocal forever — so after shoving a piece three cells
-    /// into a wall the player has to drag three cells back before anything happens,
-    /// which reads as "the mouse ran off and the stack is dead". Bleeding the excess
-    /// out of the grab offset keeps the piece responsive the moment they reverse.
-    /// </summary>
-    private void ClampPointerOvershoot(Vector2 desired)
-    {
-        float pitch = board.CellPitch;
-        float limit = maxPointerOvershootCells;
-
-        float slackX = desired.x - freeAnchor.x;
-        float slackY = desired.y - freeAnchor.y;
-
-        grabOffsetLocal.x += (Mathf.Clamp(slackX, -limit, limit) - slackX) * pitch;
-        grabOffsetLocal.y += (Mathf.Clamp(slackY, -limit, limit) - slackY) * pitch;
     }
 
     /// <summary>
@@ -466,9 +456,16 @@ public class BoardInputController : MonoBehaviour
         var p = activePiece;
         activePiece = null;
 
+        if (restExactlyWhereReleased && TryRestInPlace(p)) return;
+
         // TryPlace updates occupancy and jumps the root to the cell center.
+        // On failure fall back to where this drag STARTED, never to p.Anchor:
+        // PieceSimple._anchor can hold a value that was never validated or occupied,
+        // because AutoBuildOffsetsFromChildren assigns it directly and
+        // BoardBootstrapper calls that unconditionally. Trusting it can fling the
+        // piece to the far side of the board.
         if (!p.TryPlace(lastValidAnchor))
-            lastValidAnchor = p.Anchor;
+            lastValidAnchor = dragStartAnchor;
 
         // A move only counts if the piece actually ended up on a different
         // cell. Tapping a piece and letting go, or a drag the board refused
@@ -485,6 +482,61 @@ public class BoardInputController : MonoBehaviour
 
         if (settleDuration <= 0f) CompleteSettle();
         else p.transform.position = settleFrom;
+    }
+
+    /// <summary>
+    /// NO-SNAP RELEASE. Leaves the piece exactly where the finger left it and books
+    /// every cell its body overlaps, so the occupancy grid still tells the truth and
+    /// matching, blocked cells and the move budget all keep working unchanged.
+    /// Returns false if the board refuses the reservation, in which case the caller
+    /// falls back to the ordinary snap-to-cell path.
+    /// </summary>
+    private bool TryRestInPlace(PieceSimple p)
+    {
+        BuildOverlappedCells(freeAnchor, p, tmpFootprint);
+
+        if (!p.TryPlaceExact(lastValidAnchor, tmpFootprint, snapRootToAnchor: false))
+            return false;
+
+        // Drop the drag lift, but do NOT touch X/Y - that is the whole point.
+        p.transform.position = AnchorToWorld(freeAnchor);
+
+        if (moveBudget && lastValidAnchor != dragStartAnchor)
+            moveBudget.RegisterMove();
+
+        var resolver = GetComponent<MatchResolver>() ?? FindObjectOfType<MatchResolver>();
+        if (resolver) resolver.ResolveFrom(p);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Every cell a piece at a CONTINUOUS anchor overlaps: the union of its footprint
+    /// at the surrounding whole anchors. A piece straddling a boundary covers both
+    /// sides, so it must reserve both.
+    /// </summary>
+    private void BuildOverlappedCells(Vector2 anchor, PieceSimple piece, List<Vector2Int> outCells)
+    {
+        anchor = SnapNearWhole(anchor);
+
+        int x0 = Mathf.FloorToInt(anchor.x), x1 = Mathf.CeilToInt(anchor.x);
+        int y0 = Mathf.FloorToInt(anchor.y), y1 = Mathf.CeilToInt(anchor.y);
+
+        outCells.Clear();
+        AddCorner(x0, y0, piece, outCells);
+        if (x1 != x0) AddCorner(x1, y0, piece, outCells);
+        if (y1 != y0) AddCorner(x0, y1, piece, outCells);
+        if (x1 != x0 && y1 != y0) AddCorner(x1, y1, piece, outCells);
+    }
+
+    private static void AddCorner(int ax, int ay, PieceSimple piece, List<Vector2Int> outCells)
+    {
+        var offsets = piece.ShapeOffsets;
+        for (int i = 0; i < offsets.Count; i++)
+        {
+            var c = new Vector2Int(ax + offsets[i].x, ay + offsets[i].y);
+            if (!outCells.Contains(c)) outCells.Add(c);
+        }
     }
 
     private void TickSettle()

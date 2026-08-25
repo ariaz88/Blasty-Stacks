@@ -8859,8 +8859,11 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   liftWhileDragging: -0.5
-  smoothTime: 0.08
-  maxSpeed: 100
+  maxSubStepCells: 0.25
+  maxSubStepsPerFrame: 64
+  restExactlyWhereReleased: 1
+  settleDuration: 0.1
+  gapAssistCells: 0.15
 --- !u!4 &1011363208
 Transform:
   m_ObjectHideFlags: 0
@@ -16581,6 +16584,8 @@ MonoBehaviour:
   deadFraction: 0.8
   offerContainer: {fileID: 0}
   cellTemplate: {fileID: 253776559}
+  pulseScale: 0.8
+  pulseDuration: 0.75
   waveManager: {fileID: 0}
 --- !u!114 &1863599304
 MonoBehaviour:

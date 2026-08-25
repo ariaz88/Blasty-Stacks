@@ -601,8 +601,11 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   liftWhileDragging: -0.5
-  smoothTime: 0.08
-  maxSpeed: 100
+  maxSubStepCells: 0.25
+  maxSubStepsPerFrame: 64
+  restExactlyWhereReleased: 1
+  settleDuration: 0.1
+  gapAssistCells: 0.15
 --- !u!4 &559985861
 Transform:
   m_ObjectHideFlags: 0

@@ -508,6 +508,45 @@ public class PieceSimple : MonoBehaviour
         return true;
     }
 
+    /// <summary>The cells this piece ACTUALLY holds on the board right now.</summary>
+    /// <remarks>
+    /// Normally this equals anchor + shapeOffsets. It does NOT when the piece was
+    /// placed with <see cref="TryPlaceExact"/> while resting between cells, where it
+    /// reserves every cell its body overlaps. Anything reasoning about what this
+    /// piece touches (match adjacency in particular) must read THIS, not
+    /// anchor + offsets, or it will look at the wrong cells.
+    /// </remarks>
+    public IReadOnlyList<Vector2Int> OccupiedCells => _lastOccupied;
+
+    /// <summary>
+    /// Place the piece on an EXPLICIT set of cells and, optionally, leave the
+    /// transform exactly where it is instead of snapping the root to the anchor's
+    /// cell centre.
+    ///
+    /// This is what lets a stack rest precisely where the player dropped it: a piece
+    /// straddling two cells reserves both, so nothing ever visually overlaps and the
+    /// occupancy grid stays truthful for matching, blocked cells and the move budget.
+    /// </summary>
+    public bool TryPlaceExact(Vector2Int anchor, List<Vector2Int> cells, bool snapRootToAnchor)
+    {
+        if (!board || cells == null || cells.Count == 0) return false;
+
+        if (!board.AreCellsPlaceableForMover(cells, pieceId)) return false;
+
+        if (_isPlaced) board.ReleaseCellsOwnedBy(_lastOccupied, pieceId);
+        board.OccupyCells(cells, pieceId);
+
+        _lastOccupied.Clear(); _lastOccupied.AddRange(cells);
+        _anchor = anchor;
+        _isPlaced = true;
+
+        if (snapRootToAnchor) transform.position = board.CellCenterWorld(_anchor);
+
+        if (enforceSubBlocksToOffsets) SnapSubBlocksToOffsets();
+
+        return true;
+    }
+
     public void ReleaseFromBoard()
     {
         if (!board || !_isPlaced) return;

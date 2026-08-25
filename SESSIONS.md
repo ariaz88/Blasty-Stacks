@@ -347,9 +347,68 @@ _Newest first._
 - **Verified (round 2/3):** compiles clean, 0 errors. Confirmed via Unity MCP in Play mode that
   sub-blocks now sit at `/pitch = 1.0000` at runtime (they would have been `1.0506` before).
   The gap assist and the ghost are NOT play-tested by me — the user tests those.
-- **Next:** the release snap is still open — try `settleDuration` 0.15 first (Inspector only, no
-  code). Then re-check `Level_1_Stage_5` — circle drag, diagonal into a corner, fast flick into an
-  obstacle, axis-locked pieces, and that the move budget counts exactly one move per real move.
+- **Round 4 — the release snap, properly fixed.** User restated the requirement precisely: *wherever
+  I release the stack it must sit there, movement free in every direction, and all existing rules
+  keep working.* Diagnosis: **most of the snap was my own regression from round 2**, not the
+  inherent half-cell rounding. Three things stacked up to move the piece off the finger before
+  release: the gap assist yanking it up to **0.4 cell** sideways while the finger stayed put;
+  `ClampPointerOvershoot` **mutating `grabOffsetLocal`** every blocked frame, cumulatively across
+  separate blocking events; and only then the ≤0.5 cell rounding. Worst case ≈ a full cell.
+  - **Deleted `ClampPointerOvershoot`.** `grabOffsetLocal` is now fixed for the whole drag, so the
+    piece is rigidly attached to the grab point. A piece shoved into a wall separates and
+    re-attaches exactly on the way back.
+  - **`gapAssistCells` 0.4 → 0.15.** It displaces the piece without moving the finger, so it must
+    stay small; magnetism does its job properly now.
+  - ~~**Added detent magnetism (`magnetStrength`, default 0.6)**~~ — **WRONG, REVERTED SAME DAY.
+    Do not re-introduce in any form.** Per axis,
+    `k = Lerp(1,4,strength)`, `f<0.5 → 0.5*(2f)^k`, else `1-0.5*(2(1-f))^k`. Flat near a cell,
+    steep only at the boundary: the piece rests on a cell while the finger crosses most of it, so
+    at release there is essentially nothing left to travel. Tracking stays 1:1; applied per axis
+    so movement is still free in **every** direction. `k==1` is the identity, so strength 0 is
+    genuinely today's free movement.
+    Curve choices rejected with numbers: plain Lerp-to-centre (rubbery, constant lag);
+    `Mathf.SmoothStep` (too weak — at 0.3 across a cell it leaves the piece 0.25 away vs 0.12).
+    **Why it was wrong:** bending the position toward cells *is* cell-to-cell movement — the
+    piece visibly lingers on a cell then jumps the boundary, which is exactly the stepped,
+    robotic feel the whole rewrite exists to remove. The user tested it and rejected it
+    immediately and correctly. **Any** position-bending scheme contradicts the requirement
+    ("like moving your finger through the air"). Removed entirely.
+  - **Fixed a real teleport bug:** `EndDrag` fell back to `p.Anchor` when `TryPlace` failed, but
+    `PieceSimple._anchor` can hold a never-validated value (`AutoBuildOffsetsFromChildren` assigns
+    it directly and `BoardBootstrapper` calls that unconditionally). Now falls back to
+    `dragStartAnchor`.
+  - `settleDuration` default 0.07 → 0.10.
+- **Why not remove the grid entirely** (the user asked): `MatchResolver.FindConnectedIdenticalGroup`
+  builds the 4-neighbour cell set around the footprint and reads `board.GetOccupant(nCell)` — the
+  "any part touching counts" rule **is** the integer occupancy grid, as are `BoardGhostMask`,
+  `PuzzleMoveBudget`, `TutorialBoardHints` and the win check. Continuous resting positions would
+  break the very rules the user asked to keep. Hence "already be on a cell when released" instead.
+- **Reference videos** (`Assets/Arts/Reference videos/`): frames pulled with ffmpeg.
+  `ScreenRecorderProject491.mkv` — every *resting* frame is grid-aligned; the off-grid positions at
+  t≈18.4/27.5/28.9 are pieces mid fly-to-merge. `Stack movement.mp4` — pieces there carry ↔/↕
+  arrows and are locked to one axis; **user explicitly said those are special blocks and NOT the
+  general rule — his blocks must move freely in any direction.** Do not restrict axes.
+- **Round 5 — real no-snap, behind a toggle.** After the magnetism was reverted, the user chose
+  "show me both". Added **`restExactlyWhereReleased`** (default OFF) on `BoardInputController`:
+  - ON: `EndDrag` leaves the transform's X/Y completely untouched (only the drag lift is dropped)
+    and books the piece onto **every cell its body overlaps** via the new
+    `PieceSimple.TryPlaceExact(anchor, cells, snapRootToAnchor:false)`. Reserving the overlap —
+    not just the rounded cell — is what stops a straddling piece from visually overlapping the
+    next piece placed beside it, and keeps the occupancy grid truthful so matching, blocked cells
+    and the move budget need no rule changes. **Cost: an off-grid drop consumes 2 cells, so the
+    board fills faster.**
+  - `MatchResolver.FindConnectedIdenticalGroup` now builds its 4-neighbour set from
+    `piece.OccupiedCells` (new accessor for `_lastOccupied`) instead of `anchor + shapeOffsets`,
+    via a new `BuildCellNeighbors4` overload — a straddling piece would otherwise probe the wrong
+    cells and miss matches. The user's "any part touching counts" rule is unchanged.
+  - `TryBeginDrag` now seeds `freeAnchor` from the piece's **actual transform**, not its
+    whole-cell anchor; otherwise touching an off-grid piece teleported it back onto its cell.
+  - OFF: unchanged behaviour (ease onto the nearest cell over `settleDuration`).
+- **Next:** play-test `Tutorial_Board_01` and flip `restExactlyWhereReleased` in Play mode to
+  compare. Watch specifically for: pieces visually overlapping (should be impossible), matches
+  still firing on a single-cell touch, and whether the 2-cells-per-off-grid-drop cost makes levels
+  unsolvable. Also re-check `Level_1_Stage_5` — circle drag, diagonal into a corner, fast flick
+  into an obstacle, the corridor pass, and the move budget.
 
 ### 2026-08-24 — HP bars: enemy bars were mirrored in Play mode, plus a yellow damage trail
 
