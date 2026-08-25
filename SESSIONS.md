@@ -520,6 +520,25 @@ Found along the way: **`Pink` (3) and `MidPink` (4) use the same sprite** and sa
   - `TryBeginDrag` now seeds `freeAnchor` from the piece's **actual transform**, not its
     whole-cell anchor; otherwise touching an off-grid piece teleported it back onto its cell.
   - OFF: unchanged behaviour (ease onto the nearest cell over `settleDuration`).
+- **Round 6 — no-snap matched across a visible gap; fixed with a geometric touch test.**
+  User likes no-snap mode but reported pieces matching with a one-or-two-cell visible gap.
+  **Cause, and it was a real flaw in round 5:** a piece resting at x=3.4 reserves cells 3 AND 4
+  (correct, that is what stops visual overlap) while its body only spans 3.4→4.4. The BFS then
+  expanded one *more* cell out from that inflated reservation, so match reach became
+  `body + up to 1 cell inflation + 1 cell neighbour search`. Using the reservation for collision
+  is right; using it for matching is not.
+  - The cell sweep is now only a **candidate filter** (over-reaching is fine for a broad phase).
+    Each candidate is confirmed by **`MatchResolver.ArePiecesTouching`**: each sub-block is a 1×1
+    box in continuous cell units, and two boxes touch when they overlap on one axis by
+    ≥ `minTouchOverlapCells` (0.2) and are separated on the other by ≤ `touchTolerance` (0.05).
+  - New `BoardGridXY.WorldToContinuousAnchor(world)` — the fractional version of `TryWorldToCell`.
+  - **For grid-aligned pieces this reduces exactly to the original 4-neighbour rule**, so snap
+    mode is unchanged. Verified numerically over 7 cases (aligned/gap/diagonal/straddling/pushed).
+  - Toggle `requireGeometricTouch` (default ON) if it ever needs disabling.
+  - **Consequence:** a straddling piece reserves the cell it partially covers, so a neighbour can
+    never sit flush against it *on that axis* — in no-snap mode you generally must PUSH pieces
+    together to match. Collision parks a pushed piece exactly on the whole-cell boundary, which is
+    a true touch, so pushing always works.
 - **Next:** play-test `Tutorial_Board_01` and flip `restExactlyWhereReleased` in Play mode to
   compare. Watch specifically for: pieces visually overlapping (should be impossible), matches
   still firing on a single-cell touch, and whether the 2-cells-per-off-grid-drop cost makes levels

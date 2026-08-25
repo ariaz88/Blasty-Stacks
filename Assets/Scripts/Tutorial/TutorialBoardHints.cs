@@ -200,10 +200,20 @@ public static class TutorialBoardHints
                                 ref PieceSimple bestMover, ref PieceSimple bestTarget,
                                 ref Vector2Int bestLanding, ref int bestSteps)
     {
-        // footprint of the piece that stays put
+        // Footprint of the piece that stays put. Prefer the cells it ACTUALLY
+        // holds over anchor + offsets: a piece resting between cells reserves
+        // every cell it overlaps, and MatchResolver reads it the same way.
         _targetCells.Clear();
-        board.ShapeToCells(target.Anchor, target.ShapeOffsets, _cellsB);
-        for (int i = 0; i < _cellsB.Count; i++) _targetCells.Add(_cellsB[i]);
+        var held = target.OccupiedCells;
+        if (held != null && held.Count > 0)
+        {
+            for (int i = 0; i < held.Count; i++) _targetCells.Add(held[i]);
+        }
+        else
+        {
+            board.ShapeToCells(target.Anchor, target.ShapeOffsets, _cellsB);
+            for (int i = 0; i < _cellsB.Count; i++) _targetCells.Add(_cellsB[i]);
+        }
 
         // every anchor that would put ANY of the mover's cells against the target
         _candidates.Clear();

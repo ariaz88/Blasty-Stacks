@@ -208,6 +208,23 @@ public class BoardGridXY : MonoBehaviour
         return transform.TransformPoint(CellCenterLocal(cell));
     }
 
+    /// <summary>
+    /// Where a world position sits in CONTINUOUS cell units - the fractional version
+    /// of TryWorldToCell. (3.0, 4.0) is exactly on cell (3,4); (3.4, 4.0) is 40% of
+    /// the way toward cell 4 on X.
+    /// </summary>
+    /// <remarks>
+    /// Needed because a piece may legitimately rest between cells, and anything that
+    /// has to reason about where a piece REALLY is - rather than which cells it has
+    /// reserved - must work in these units. One cell unit == CellPitch in world space.
+    /// </remarks>
+    public Vector2 WorldToContinuousAnchor(Vector3 world)
+    {
+        Vector3 local = transform.InverseTransformPoint(SnapToPlane(world));
+        float half = cellSize * 0.5f;
+        return new Vector2((local.x - half) / CellPitch, (local.y - half) / CellPitch);
+    }
+
     // True if local point is inside the square area of this cell (not in the gap).
     private bool IsInsideCellSquareLocal(Vector2 localXY, Vector2Int cell)
     {

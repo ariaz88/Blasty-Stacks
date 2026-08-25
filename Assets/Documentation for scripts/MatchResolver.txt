@@ -30,9 +30,59 @@ INSPECTOR FIELDS
                                are needed before a match resolves
   preferMergeIfImmovablePresent (bool, default true) prefer sliding pieces
                                together over blasting them in place
+  requireGeometricTouch        (bool, default true) LEAVE ON. Confirms two pieces
+                               are REALLY touching before matching them, measured
+                               on their actual bodies rather than on the cells
+                               they have reserved. See GEOMETRIC TOUCH below.
+  touchTolerance               (float 0-0.4, default 0.05) largest gap between two
+                               bodies, in cells, still counted as touching. Keep
+                               small: collision already parks a pushed piece
+                               exactly flush, so this only absorbs float noise.
+  minTouchOverlapCells         (float 0.05-1, default 0.2) how much of an edge two
+                               bodies must share to count as touching. Stops a
+                               pure diagonal corner-kiss from matching, exactly as
+                               the old 4-neighbour rule did.
   killAnimTime                 (float, default 0.10) anticipation-beat duration,
                                measured at ~100 ms off the reference video
   enableDebug                  (bool) verbose logging
+
+GEOMETRIC TOUCH  (ArePiecesTouching)
+------------------------------------
+  WHY IT EXISTS. BoardInputController's no-snap release mode
+  (restExactlyWhereReleased) lets a piece rest between cells, and such a piece
+  RESERVES every cell it overlaps so nothing can visually overlap it. A piece at
+  x = 3.4 therefore holds cells 3 AND 4 while its body only spans 3.4 -> 4.4.
+  The cell sweep in FindConnectedIdenticalGroup then expands one further cell out
+  from that inflated reservation, so the match reach became
+      body + up to 1 cell of inflation + 1 cell of neighbour search
+  and pieces matched across a visible one- or two-cell gap. That was the bug.
+
+  THE FIX. The cell sweep is now only a CANDIDATE filter - it deliberately
+  over-reaches, which is exactly what you want from a cheap broad phase. Each
+  candidate is then confirmed against real geometry.
+
+  Each sub-block is a 1x1 box in continuous cell units at (anchor + offset), with
+  the anchor read via BoardGridXY.WorldToContinuousAnchor. Two boxes touch when
+  they overlap along one axis by >= minTouchOverlapCells and are separated along
+  the other by <= touchTolerance.
+
+  For GRID-ALIGNED pieces this reduces EXACTLY to the original 4-neighbour rule -
+  orthogonal neighbours match, diagonals do not - so snap mode is unchanged and
+  only the between-cells case is corrected. Verified against these cases:
+      aligned side by side            -> match
+      aligned, one cell gap           -> no match
+      aligned, diagonal corner        -> no match
+      A straddling at 3.4, B at 5     -> no match   (this was the reported bug)
+      pushed flush by collision       -> match
+      straddling Y only, touching X   -> match
+      straddling X, 0.6 gap           -> no match
+
+  CONSEQUENCE WORTH KNOWING. Because a straddling piece reserves the cell it
+  partially covers, a neighbour can never sit flush against it ON THAT AXIS - so
+  in no-snap mode you generally have to PUSH pieces together to match. Collision
+  parks a pushed piece at exactly the whole-cell boundary, which is a true touch,
+  so pushing always works. A piece can still be straddling on one axis and match
+  on the other.
 
 REUSED BUFFERS
 --------------

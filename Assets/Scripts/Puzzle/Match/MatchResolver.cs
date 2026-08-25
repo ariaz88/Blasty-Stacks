@@ -16,6 +16,20 @@ public class MatchResolver : MonoBehaviour
     [SerializeField, Min(2)] private int minGroupSize = 3; // e.g., 3+ connected to resolve
     [SerializeField] private bool preferMergeIfImmovablePresent = true;
 
+    [Tooltip("Require pieces to be REALLY touching to match, measured on their actual bodies " +
+             "instead of on the cells they have reserved. Leave ON. With no-snap releases a " +
+             "piece straddling two cells reserves both, and matching off that inflated " +
+             "reservation lets pieces match across a visible one- or two-cell gap.")]
+    [SerializeField] private bool requireGeometricTouch = true;
+
+    [Tooltip("Largest gap between two bodies, in cells, still counted as touching. Keep small - " +
+             "collision already parks a pushed piece exactly flush, so this only absorbs float noise.")]
+    [SerializeField, Range(0f, 0.4f)] private float touchTolerance = 0.05f;
+
+    [Tooltip("How much of an edge two bodies must share, in cells, to count as touching. " +
+             "Stops a pure corner kiss from matching, the same way the 4-neighbour rule did.")]
+    [SerializeField, Range(0.05f, 1f)] private float minTouchOverlapCells = 0.2f;
+
     [Header("FX")]
     [SerializeField] private float killAnimTime = 0.10f;   // anticipation beat, measured at ~100 ms
     [SerializeField] private bool enableDebug = false;
@@ -170,6 +184,12 @@ public class MatchResolver : MonoBehaviour
 
                 if (/*piece.ShapeId == seed.ShapeId &&*/ AreShapesMatchCompatible(piece.ShapeId, seed.ShapeId) && piece.ColorId == seed.ColorId)
                 {
+                    // The cell sweep above is only a CANDIDATE filter. A piece resting
+                    // between cells reserves every cell it overlaps, so that sweep
+                    // reaches further than the piece actually extends and would match
+                    // across a visible gap. Confirm the bodies genuinely touch.
+                    if (requireGeometricTouch && !ArePiecesTouching(cur, piece)) continue;
+
                     seen.Add(piece);
                     q.Enqueue(piece);
                 }
@@ -212,6 +232,55 @@ public class MatchResolver : MonoBehaviour
         // occupied set, _footprint holds someone else's leftovers.
         for (int i = 0; i < cells.Count; i++)
             outNeighbors.Remove(cells[i]);
+    }
+
+    /// <summary>
+    /// True when two pieces' actual bodies share an edge - the honest version of the
+    /// old 4-neighbour cell test, measured in continuous cell units so it stays
+    /// correct for a piece resting between cells.
+    /// </summary>
+    /// <remarks>
+    /// Each sub-block is a 1x1 box in cell units at (anchor + offset). Two boxes touch
+    /// when they overlap along one axis by at least minTouchOverlapCells and are
+    /// separated along the other by no more than touchTolerance.
+    ///
+    /// For grid-aligned pieces this reduces EXACTLY to the original rule: orthogonal
+    /// neighbours match, diagonal corner-kisses do not. So snap mode behaves as it
+    /// always did, and only the between-cells case is corrected.
+    /// </remarks>
+    private bool ArePiecesTouching(PieceSimple a, PieceSimple b)
+    {
+        if (!board || !a || !b) return false;
+
+        Vector2 aAnchor = board.WorldToContinuousAnchor(a.transform.position);
+        Vector2 bAnchor = board.WorldToContinuousAnchor(b.transform.position);
+
+        var aOffsets = a.ShapeOffsets;
+        var bOffsets = b.ShapeOffsets;
+
+        for (int i = 0; i < aOffsets.Count; i++)
+        {
+            float ax0 = aAnchor.x + aOffsets[i].x;
+            float ay0 = aAnchor.y + aOffsets[i].y;
+
+            for (int j = 0; j < bOffsets.Count; j++)
+            {
+                float bx0 = bAnchor.x + bOffsets[j].x;
+                float by0 = bAnchor.y + bOffsets[j].y;
+
+                // Overlap along each axis; negative means a gap of that size.
+                float ox = Mathf.Min(ax0 + 1f, bx0 + 1f) - Mathf.Max(ax0, bx0);
+                float oy = Mathf.Min(ay0 + 1f, by0 + 1f) - Mathf.Max(ay0, by0);
+
+                // Side by side: share an edge vertically, touch horizontally.
+                if (oy >= minTouchOverlapCells && Mathf.Abs(ox) <= touchTolerance) return true;
+
+                // Stacked: share an edge horizontally, touch vertically.
+                if (ox >= minTouchOverlapCells && Mathf.Abs(oy) <= touchTolerance) return true;
+            }
+        }
+
+        return false;
     }
 
     private PieceSimple FindNearestWithWarriors(PieceSimple origin, List<PieceSimple> group)
