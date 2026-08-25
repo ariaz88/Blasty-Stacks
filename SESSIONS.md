@@ -55,6 +55,30 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-08-25] The board drag rewrite has never been play-tested.** `BoardInputController` was
+  rebuilt around a continuous anchor and compiles clean, but Play mode was never entered. Test on
+  `Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_5.unity` (real 8×6 board, `cellPadding
+  0.055`): slow circle drag must stay glued to the cursor with no drift; diagonal in open space
+  must be a straight line, not a staircase; diagonal into a corner must slide along the wall;
+  a fast flick must stop flush and never tunnel; axis-locked pieces must not budge on the locked
+  axis. Then judge `settleDuration` (0.07) and `maxSubStepCells` (0.25) at a real frame rate.
+  Also confirm `Tutorial_Board_01` hints still line up and the move budget counts one per move.
+- **[2026-08-25] Sanity-check multi-cell pieces across the stages after the `CellPitch` fix.**
+  `PieceSimple.SnapSubBlocksToOffsets` no longer re-spaces sub-blocks at `CellSize`, so pieces now
+  render at the authored pitch spacing and line up with their cells. Verified in
+  `Tutorial_Board_01`; the other stages have not been eyeballed. Any prefab that was hand-nudged
+  to *compensate* for the old wrong spacing will now look slightly wide — check 3+ cell pieces.
+- **[2026-08-25] `BoardBootstrapper` calls `AutoBuildOffsetsFromChildren()` unconditionally**
+  (`BoardBootstrapper.cs:23`) even though the comment says "if offsets were not authored" — the
+  `if` is missing. That method *rewrites* `shapeOffsets` from collider centres and sets `_anchor`
+  directly **without occupying the board**, bypassing `TryPlace`. It also races `PieceSimple.Start`,
+  which is where `pieceId` is assigned — so if the bootstrapper wins, `TryPlace` runs with
+  `pieceId == 0` and `OccupyCells(cells, 0)` writes 0, i.e. "empty", claiming nothing. Not touched
+  this session and not proven to bite, but it is fragile and worth a look.
+- **[2026-08-25] Nothing in the project sets `Application.targetFrameRate`.** On Android that can
+  leave the game at a low cap that no input code can compensate for. One line in a boot script
+  would rule it out — only worth chasing if the drag still feels slow on a device *after* the
+  rewrite is play-tested.
 - **[2026-08-24] The HP-bar work has NEVER RUN.** Unity was closed for that whole session, so the
   mirroring fix (`HealthBar.KeepUnmirrored`) and the new yellow damage trail are not verified and
   not even compile-checked. Play a stage and confirm both together: the enemy bar should drain
@@ -239,6 +263,93 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-08-25 — Board drag felt chunky/cell-by-cell: rewrote BoardInputController around a continuous anchor
+
+- **Goal:** user reported that dragging a stack doesn't move like a free object — it slides
+  cell-to-cell instead of following the finger, mild on horizontal/vertical, blatant on diagonals.
+  Wanted free movement in every direction with no friction or stepping.
+- **Status:** done (code + compile verified; NOT yet play-tested — see Next)
+- **Changed:** `Assets/Scripts/Puzzle/Input/BoardInputController.cs` — rewrote the drag core.
+  The piece now lives at a **continuous** `Vector2 freeAnchor` (cell units) instead of being
+  parked on a cell centre and `SmoothDamp`ed toward it. Four separate causes were fixed:
+  (1) the visual target was always `CellCenterWorld(anchor)`, so pointer motion inside a cell
+  produced *zero* movement and a boundary crossing produced a full-cell lurch;
+  (2) collision consumed the **entire X delta before looking at Y**, so a diagonal drag traced an
+  L-shaped staircase and a "Y-first" diagonal stalled outright — now resolved per axis in
+  ≤0.25-cell sub-steps, with a legal-diagonal fast path and independent per-axis wall clamps, so
+  the piece glides along a wall instead of snagging;
+  (3) **real bug** — pointer→cell divided by `CellSize` instead of `CellPitch`
+  (`cellSize + cellPadding`); with the authored `1.086 / 0.055` that is a ~5% error *per cell*,
+  so the piece fell almost half a cell behind the finger across the board;
+  (4) pickup teleported the piece to the cell centre and kept only a whole-cell grab offset —
+  now `grabOffsetLocal` preserves the exact sub-cell grab point in board-local units.
+  Also: pointer→world now uses a proper `Plane.Raycast` (correct under perspective/rotated board);
+  pickup takes the anchor from `piece.Anchor` instead of the old fallback that clamped
+  `Vector2Int.zero` and could teleport a piece to the bottom-left corner; release eases onto the
+  cell centre over `settleDuration` (0.07s) instead of popping up to half a cell.
+  Removed the now-meaningless `smoothTime` / `maxSpeed` fields.
+- **Changed:** `Assets/Documentation for scripts/BoardInputController.txt` — rewritten to match.
+- **Scene/Prefab/SO edits:** none. 24 scenes still carry stale `smoothTime`/`maxSpeed` YAML lines;
+  Unity ignores serialized fields that no longer exist, so nothing breaks. `liftWhileDragging`
+  (`-0.5` in scenes) was deliberately kept under the same name.
+- **Verified:** full recompile through Unity MCP, **0 errors**, no warnings from the changed file.
+  Not play-tested — Play mode was not entered this session.
+- **Gotchas:**
+  - `PieceDragHandlerSimple.cs` looks like the drag path but has **zero** scene/prefab references
+    (verified by GUID search across `Assets/**`). It is dead. `BoardInputController` is the only
+    live one, present in all `Level_1_Stage_*`, `Stage0/1` and `Tutorial_Board_01`.
+  - **Match resolution timing moved.** `MatchResolver.ResolveFrom` now fires at the *end* of the
+    release settle (~70 ms after the pointer lifts), not on the release frame. `CompleteSettle()`
+    is force-called at the top of `TryBeginDrag` so a fast second tap can never see stale
+    occupancy. Set `settleDuration` to 0 to get the old instant behaviour back.
+  - The whole design rests on one invariant: `freeAnchor` is only ever assigned a value that
+    `IsFreeAnchorLegal` accepted. `RoundToInt(freeAnchor)` therefore always lands on an already
+    proven-legal corner anchor — that is why `lastValidAnchor` needs no check of its own.
+  - `maxSubStepCells` **must stay ≤ 0.5**, or a fast flick can skip an integer bracket entirely
+    and tunnel through an occupied cell.
+- **Round 2 (same day), after the user play-tested `Tutorial_Board_01`:** movement confirmed smooth,
+  but three real problems remained. All fixed:
+  - **Pieces jammed at the mouth of a gap and the pointer ran away.** With a genuinely free 1:1
+    drag, a corridor exactly as tall as the piece requires holding the perpendicular axis at a
+    float-exact whole cell — impossible by hand, so the piece stuck. Added a **gap assist**
+    (`ResolveAxisAssisted`): when the axis being pushed is walled, retry after pulling the other
+    axis onto its nearest cell line (≤ `gapAssistCells`, default 0.4). The pulled axis is
+    lane-locked for the rest of the frame or the perpendicular resolve fights it sub-step by
+    sub-step, which showed up as jitter.
+  - **Pointer ran ahead of a blocked piece forever.** `ClampPointerOvershoot` bleeds excess out of
+    `grabOffsetLocal` so at most `maxPointerOvershootCells` (0.5) of slack accumulates.
+  - **Wall shiver.** `SnapNearWhole` (1e-4) in `IsFreeAnchorLegal` and after each move; rounding
+    switched from `Mathf.RoundToInt` (half-to-EVEN — snapped left or right by cell parity, looking
+    random) to explicit round-half-up.
+- **Round 3 — the release snap. TRIED AND REVERTED.** User asked to fix "it snaps somewhere else
+  when I let go". This is NOT a bug: with a 1:1 drag the piece can be half a cell from any centre
+  at release and must land on a whole cell, so it always travels; `lastValidAnchor` is always the
+  nearest legal cell. Offered four remedies; user picked a **landing preview ghost** (translucent
+  square on each cell the piece would land on). Built it, user play-tested it, called it bad, and
+  asked to revert. **The ghost is fully removed** — code, fields and docs — back to the round-2
+  state they had approved. Movement itself was never touched by round 3, so nothing they liked was
+  lost. Reverted surgically rather than via git, because nothing this session is committed and a
+  `git checkout` would have thrown away rounds 1 and 2 as well.
+  **The release snap therefore still exists and is unaddressed.** Remaining untried options:
+  light magnetism toward the nearest legal cell while dragging, or simply raising `settleDuration`
+  (0.07 → ~0.15) so the travel reads as motion instead of a teleport — that one needs no new code.
+  If a preview is ever rebuilt: do NOT `Instantiate` the piece to make it (brings `PieceSimple`,
+  which claims a second `pieceId` and occupies real cells) — generated quads only.
+- **Changed (round 2/3):** `Assets/Scripts/Puzzle/Pieces/PieceSimple.cs` — `SnapSubBlocksToOffsets`
+  spaced sub-blocks at `offset * CellSize` while the grid steps by `CellPitch`. **This was the
+  deferred item below and I had it wrong: it is not cosmetic.** The authored prefabs are already
+  correct at pitch spacing (verified: `Cell_1_0.localPosition.x == 1.1410 == pitch`), and
+  `PieceShapeLayout` also uses pitch — so this ran inside `TryPlace` during `Start` and *corrupted*
+  the authored layout at runtime, also drifting the collider centres
+  `TrySolveAnchorFromChildren` reads back. Now pitch for SPACING, `CellSize` for collider SIZE.
+  `CollectChildCells`' fallback divisor fixed the same way.
+- **Verified (round 2/3):** compiles clean, 0 errors. Confirmed via Unity MCP in Play mode that
+  sub-blocks now sit at `/pitch = 1.0000` at runtime (they would have been `1.0506` before).
+  The gap assist and the ghost are NOT play-tested by me — the user tests those.
+- **Next:** the release snap is still open — try `settleDuration` 0.15 first (Inspector only, no
+  code). Then re-check `Level_1_Stage_5` — circle drag, diagonal into a corner, fast flick into an
+  obstacle, axis-locked pieces, and that the move budget counts exactly one move per real move.
 
 ### 2026-08-24 — HP bars: enemy bars were mirrored in Play mode, plus a yellow damage trail
 

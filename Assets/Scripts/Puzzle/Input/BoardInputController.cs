@@ -1,6 +1,14 @@
-﻿﻿﻿using System.Collections.Generic;
+﻿﻿using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Pointer-driven dragging for board pieces.
+///
+/// The piece follows the pointer 1:1 in CONTINUOUS board space; the grid is only
+/// used to test legality and to snap once on release. Collision is resolved per
+/// axis in small sub-steps, so a piece slides flush along a wall instead of
+/// snagging, and diagonal drags move diagonally instead of tracing a staircase.
+/// </summary>
 public class BoardInputController : MonoBehaviour
 {
     [Header("Refs")]
@@ -16,18 +24,43 @@ public class BoardInputController : MonoBehaviour
     [SerializeField] private LayerMask pieceLayer2D = ~0; // default: Everything (set to your Pieces layer)
 
     [Header("Visuals")]
-    [SerializeField] private float liftWhileDragging = 0.10f;  // along +Z (toward camera in 2D)
+    [SerializeField] private float liftWhileDragging = 0.10f;  // along the board normal (toward camera in 2D)
 
-    [Header("Smoothing")]
-    [SerializeField, Range(0.01f, 0.35f)] private float smoothTime = 0.12f;  // seconds
-    [SerializeField] private float maxSpeed = 100f;
+    [Header("Drag Feel")]
+    [Tooltip("Largest movement resolved in one collision sub-step, in cells. " +
+             "Must stay <= 0.5 so a fast flick cannot tunnel through an occupied cell.")]
+    [SerializeField, Range(0.05f, 0.5f)] private float maxSubStepCells = 0.25f;
 
-    // runtime state
+    [Tooltip("Safety cap on sub-steps per frame, so a huge pointer jump cannot stall the frame.")]
+    [SerializeField, Min(1)] private int maxSubStepsPerFrame = 64;
+
+    [Tooltip("Seconds spent easing onto the exact cell center after the pointer is released.")]
+    [SerializeField, Range(0f, 0.3f)] private float settleDuration = 0.07f;
+
+    [Tooltip("When a piece is walled on the axis it is being pushed along, it may be pulled onto " +
+             "the nearest cell line on the OTHER axis by up to this many cells to slip into a gap. " +
+             "Without it, a gap exactly as tall as the piece is impossible to enter by hand. " +
+             "0 disables the assist.")]
+    [SerializeField, Range(0f, 0.49f)] private float gapAssistCells = 0.4f;
+
+    [Tooltip("How far, in cells, the pointer may run ahead of a blocked piece before the grab " +
+             "rubber-bands. Keeps the piece responsive the instant the player reverses direction " +
+             "instead of making them drag all the way back.")]
+    [SerializeField, Range(0.1f, 2f)] private float maxPointerOvershootCells = 0.5f;
+
+    // ---- drag state ----
     private PieceSimple activePiece;
     private Vector2Int lastValidAnchor;
     private Vector2Int dragStartAnchor;   // anchor the piece sat on when it was picked up
-    private Vector2Int grabbedOffset;     // which subcell of the piece the pointer grabbed (grid space)
-    private float _velX, _velY;           // per-axis smooth damp temps
+    private Vector2 freeAnchor;           // CONTINUOUS anchor, in cell units
+    private Vector2 grabOffsetLocal;      // pieceLocal - pointerLocal at pickup (board-local units)
+    private float boardLocalZ;            // board plane depth in board-local space
+    private int laneLockedAxis = -1;      // axis the gap assist pinned for the rest of this frame
+
+    // ---- release settle state ----
+    private PieceSimple settlePiece;
+    private Vector3 settleFrom, settleTo;
+    private float settleT;
 
     private readonly List<Vector2Int> tmpFootprint = new();
 
@@ -44,6 +77,8 @@ public class BoardInputController : MonoBehaviour
 
     private void Update()
     {
+        TickSettle();
+
 #if UNITY_EDITOR || UNITY_STANDALONE
         MouseUpdate();
 #else
@@ -72,19 +107,123 @@ public class BoardInputController : MonoBehaviour
         else if (t.phase == TouchPhase.Ended || t.phase == TouchPhase.Canceled) EndDrag();
     }
 
+    // ------------------------ Board space helpers ------------------------
+
+    /// <summary>Board plane depth expressed in the board's own local space.</summary>
+    private float BoardLocalZ()
+        => board.transform.InverseTransformPoint(board.CellCenterWorld(Vector2Int.zero)).z;
+
+    /// <summary>Pointer ray intersected with the board plane, in world space.</summary>
+    private Vector3 PointerToBoardWorld(Vector2 screenPos)
+    {
+        var plane = new Plane(board.BoardPlaneNormal(), board.CellCenterWorld(Vector2Int.zero));
+        Ray ray = cam.ScreenPointToRay(screenPos);
+
+        if (plane.Raycast(ray, out float enter))
+            return ray.GetPoint(enter);
+
+        // Ray parallel to the plane (degenerate camera setup): fall back to a
+        // straight screen->world projection at the board's depth.
+        return cam.ScreenToWorldPoint(new Vector3(
+            screenPos.x, screenPos.y, Mathf.Abs(cam.transform.position.z - board.BoardWorldZ)));
+    }
+
+    private Vector2 PointerToBoardLocal(Vector2 screenPos)
+    {
+        Vector3 local = board.transform.InverseTransformPoint(PointerToBoardWorld(screenPos));
+        return new Vector2(local.x, local.y);
+    }
+
+    // Continuous anchor <-> board-local, using CellPitch (cellSize + cellPadding),
+    // which is the real cell-to-cell distance. CellSize alone drifts by the
+    // padding on every cell crossed.
+    private Vector2 LocalToAnchor(Vector2 local)
+    {
+        float pitch = board.CellPitch;
+        float half = board.CellSize * 0.5f;
+        return new Vector2((local.x - half) / pitch, (local.y - half) / pitch);
+    }
+
+    private Vector3 AnchorToWorld(Vector2 anchor)
+    {
+        float pitch = board.CellPitch;
+        float half = board.CellSize * 0.5f;
+        return board.transform.TransformPoint(new Vector3(
+            anchor.x * pitch + half,
+            anchor.y * pitch + half,
+            boardLocalZ));
+    }
+
+    // ------------------------ Legality ------------------------
+
+    private const float AnchorEpsilon = 1e-4f;
+
+    /// <summary>Round-half-UP. Mathf.RoundToInt is round-half-to-EVEN, so a piece
+    /// sitting on exactly x.5 would snap left or right depending on the parity of
+    /// the cell — which reads as "it snapped somewhere random".</summary>
+    private static float RoundWhole(float v) => Mathf.Floor(v + 0.5f);
+
+    private static Vector2Int RoundAnchor(Vector2 v)
+        => new Vector2Int(Mathf.FloorToInt(v.x + 0.5f), Mathf.FloorToInt(v.y + 0.5f));
+
+    private static float SnapNearWhole(float v)
+    {
+        float r = RoundWhole(v);
+        return Mathf.Abs(v - r) < AnchorEpsilon ? r : v;
+    }
+
+    private static Vector2 SnapNearWhole(Vector2 v)
+        => new Vector2(SnapNearWhole(v.x), SnapNearWhole(v.y));
+
+    private static float Axis(Vector2 v, int axis) => axis == 0 ? v.x : v.y;
+
+    private static Vector2 WithAxis(Vector2 v, int axis, float value)
+    {
+        if (axis == 0) v.x = value; else v.y = value;
+        return v;
+    }
+
+    private bool IsAnchorLegal(Vector2Int anchor, PieceSimple piece)
+    {
+        board.ShapeToCells(anchor, piece.ShapeOffsets, tmpFootprint);
+        return board.AreCellsPlaceableForMover(tmpFootprint, piece.PieceId);
+    }
+
+    /// <summary>
+    /// Legality of a CONTINUOUS anchor. A piece sitting between cells overlaps the
+    /// union of its footprints at the surrounding integer anchors, so testing the
+    /// (up to) four floor/ceil corners is exact.
+    /// </summary>
+    private bool IsFreeAnchorLegal(Vector2 anchor, PieceSimple piece)
+    {
+        // A value a hair off a whole cell must count as being ON that cell, or float
+        // noise flips the corner set between one column and two and the piece
+        // shivers against every wall it touches.
+        anchor = SnapNearWhole(anchor);
+
+        int x0 = Mathf.FloorToInt(anchor.x), x1 = Mathf.CeilToInt(anchor.x);
+        int y0 = Mathf.FloorToInt(anchor.y), y1 = Mathf.CeilToInt(anchor.y);
+
+        if (!IsAnchorLegal(new Vector2Int(x0, y0), piece)) return false;
+        if (x1 != x0 && !IsAnchorLegal(new Vector2Int(x1, y0), piece)) return false;
+        if (y1 != y0 && !IsAnchorLegal(new Vector2Int(x0, y1), piece)) return false;
+        if (x1 != x0 && y1 != y0 && !IsAnchorLegal(new Vector2Int(x1, y1), piece)) return false;
+
+        return true;
+    }
+
     // ------------------------ Picking ------------------------
 
-    private bool TryPickPiece(Vector2 screenPos, out PieceSimple piece, out Collider2D col2D, out Collider col3D)
+    private bool TryPickPiece(Vector2 screenPos, out PieceSimple piece)
     {
-        piece = null; col2D = null; col3D = null;
+        piece = null;
         if (!cam) return false;
 
         // Prefer 2D pick in XY mode
-        Vector3 wp = cam.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, Mathf.Abs(cam.transform.position.z - board.BoardWorldZ)));
+        Vector3 wp = PointerToBoardWorld(screenPos);
         var hit2D = Physics2D.OverlapPoint(wp, pieceLayer2D);
         if (hit2D)
         {
-            col2D = hit2D;
             piece = hit2D.GetComponentInParent<PieceSimple>();
             if (piece) return true;
         }
@@ -93,7 +232,6 @@ public class BoardInputController : MonoBehaviour
         Ray ray = cam.ScreenPointToRay(screenPos);
         if (Physics.Raycast(ray, out RaycastHit hit, 1000f, pieceLayer3D, QueryTriggerInteraction.Ignore))
         {
-            col3D = hit.collider;
             piece = hit.collider.GetComponentInParent<PieceSimple>();
             if (piece) return true;
         }
@@ -105,103 +243,221 @@ public class BoardInputController : MonoBehaviour
     {
         if (!cam || !board) return;
 
+        // Land any piece still easing onto its cell before touching the board again,
+        // so occupancy and match resolution are settled before a new pickup.
+        CompleteSettle();
+
         // Move budget spent -> the board is no longer interactable. An already
         // running drag is unaffected; only NEW pickups are refused.
         if (moveBudget && !moveBudget.HasMovesLeft) return;
 
-        if (!TryPickPiece(screenPos, out var piece, out var col2D, out var col3D))
+        if (!TryPickPiece(screenPos, out var piece))
             return;
 
         if (!piece /*|| piece.IsFrozen*/) return;
 
         activePiece = piece;
+        boardLocalZ = BoardLocalZ();
 
-        // Determine the current anchor on the board from the piece root
-        if (!board.TryWorldToCell(activePiece.transform.position, out lastValidAnchor))
-            lastValidAnchor = board.ClampAnchorToFitShape(Vector2Int.zero, activePiece.ShapeOffsets);
+        // PieceSimple.TryPlace keeps _anchor authoritative, so trust it first and
+        // only fall back to reading the transform back off the grid.
+        Vector2Int anchor = piece.Anchor;
+        if (!IsAnchorLegal(anchor, piece))
+        {
+            if (!board.TryWorldToCell(piece.transform.position, out anchor))
+                anchor = board.ClampAnchorToFitShape(
+                    WorldToAnchorRounded(piece.transform.position), piece.ShapeOffsets);
+        }
 
-        // Figure out which sub-cell we actually grabbed (grid space) from collider center
-        Vector3 hitCenterWorld = activePiece.transform.position;
-        if (col2D) hitCenterWorld = col2D.bounds.center;
-        else if (col3D) hitCenterWorld = col3D.bounds.center;
+        lastValidAnchor = anchor;
+        dragStartAnchor = anchor;
+        freeAnchor = anchor;
 
-        hitCenterWorld = board.SnapToPlane(hitCenterWorld);
+        // Keep the sub-cell grab point: the piece must not jump under the finger.
+        // Measure the offset against where the piece is ABOUT to be drawn, not
+        // against its old transform — if the root was even slightly off its cell
+        // center the two disagree and the piece lurches on the very first drag frame.
+        Vector3 pieceLocal = board.transform.InverseTransformPoint(AnchorToWorld(freeAnchor));
+        grabOffsetLocal = new Vector2(pieceLocal.x, pieceLocal.y) - PointerToBoardLocal(screenPos);
 
-        Vector2Int hitCell;
-        if (!board.TryWorldToCell(hitCenterWorld, out hitCell))
-            hitCell = lastValidAnchor;
+        // Only the lift changes on pickup — no snap to the cell center.
+        piece.transform.position = AnchorToWorld(freeAnchor) + board.BoardPlaneNormal() * liftWhileDragging;
+    }
 
-        grabbedOffset = hitCell - lastValidAnchor;
-        dragStartAnchor = lastValidAnchor;   // remembered so EndDrag can tell a real move from a tap
-        _velX = _velY = 0f;
-
-        // Put the visual on the exact center (Z lifted a bit for clarity)
-        Vector3 c = board.CellCenterWorld(lastValidAnchor);
-        activePiece.transform.position = c + board.BoardPlaneNormal() * liftWhileDragging;
+    private Vector2Int WorldToAnchorRounded(Vector3 world)
+    {
+        Vector3 local = board.transform.InverseTransformPoint(world);
+        return Vector2Int.RoundToInt(LocalToAnchor(new Vector2(local.x, local.y)));
     }
 
     // ------------------------ Dragging ------------------------
-
-    private bool IsAnchorLegal(Vector2Int anchor, PieceSimple piece)
-    {
-        board.ShapeToCells(anchor, piece.ShapeOffsets, tmpFootprint);
-        return board.AreCellsPlaceableForMover(tmpFootprint, piece.PieceId);
-    }
 
     private void TryDrag(Vector2 screenPos)
     {
         if (!activePiece) return;
 
-        // Convert screen to world → local board → grid cell under pointer
-        Vector3 wp = cam.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, Mathf.Abs(cam.transform.position.z - board.BoardWorldZ)));
-        Vector3 local = board.transform.InverseTransformPoint(wp);
+        Vector2 desired = LocalToAnchor(PointerToBoardLocal(screenPos) + grabOffsetLocal);
 
-        float s = board.CellSize;
-        Vector2Int pointerCell = new Vector2Int(
-            Mathf.FloorToInt(local.x / s),
-            Mathf.FloorToInt(local.y / s)
-        );
+        // Axis locks pin the blocked component to where the drag started.
+        if (!activePiece.AllowsX) desired.x = dragStartAnchor.x;
+        if (!activePiece.AllowsY) desired.y = dragStartAnchor.y;
 
-        // Where we want the anchor if we keep grabbing the same sub-cell
-        Vector2Int desiredAnchor = pointerCell - grabbedOffset;
+        MoveFreeAnchorTowards(desired);
+        ClampPointerOvershoot(desired);
 
-        if (!activePiece.AllowsX) desiredAnchor.x = lastValidAnchor.x;
-        if (!activePiece.AllowsY) desiredAnchor.y = lastValidAnchor.y;
+        // Rounding a legal continuous anchor always lands on one of its corner
+        // anchors, which IsFreeAnchorLegal already proved legal.
+        lastValidAnchor = RoundAnchor(freeAnchor);
 
-        // Step cell-by-cell toward desiredAnchor, validating each step
-        Vector2Int stepAnchor = lastValidAnchor;
-
-        int dx = desiredAnchor.x - stepAnchor.x;
-        int sx = dx == 0 ? 0 : (dx > 0 ? 1 : -1);
-        if (!activePiece.AllowsX) { dx = 0; sx = 0; }
-        while (dx != 0)
-        {
-            var cand = new Vector2Int(stepAnchor.x + sx, stepAnchor.y);
-            if (IsAnchorLegal(cand, activePiece)) { stepAnchor.x += sx; dx -= sx; } else break;
-        }
-
-        int dy = desiredAnchor.y - stepAnchor.y;
-        int sy = dy == 0 ? 0 : (dy > 0 ? 1 : -1);
-        if (!activePiece.AllowsY) { dy = 0; sy = 0; }
-        while (dy != 0)
-        {
-            var cand = new Vector2Int(stepAnchor.x, stepAnchor.y + sy);
-            if (IsAnchorLegal(cand, activePiece)) { stepAnchor.y += sy; dy -= sy; } else break;
-        }
-
-        lastValidAnchor = stepAnchor;
-
-        // Smooth the visual toward the exact cell center (keep Z lift)
-        Vector3 target = board.CellCenterWorld(lastValidAnchor);
-        Transform tr = activePiece.transform;
-
-        float newX = Mathf.SmoothDamp(tr.position.x, target.x, ref _velX, smoothTime, maxSpeed, Time.deltaTime);
-        float newY = Mathf.SmoothDamp(tr.position.y, target.y, ref _velY, smoothTime, maxSpeed, Time.deltaTime);
-
-        // clamp to plane & add lift along +Z
-        Vector3 basePos = new Vector3(newX, newY, board.BoardWorldZ);
-        tr.position = basePos + board.BoardPlaneNormal() * liftWhileDragging;
+        activePiece.transform.position =
+            AnchorToWorld(freeAnchor) + board.BoardPlaneNormal() * liftWhileDragging;
     }
+
+    /// <summary>
+    /// A walled piece stops while the pointer keeps travelling, and that gap is
+    /// remembered in grabOffsetLocal forever — so after shoving a piece three cells
+    /// into a wall the player has to drag three cells back before anything happens,
+    /// which reads as "the mouse ran off and the stack is dead". Bleeding the excess
+    /// out of the grab offset keeps the piece responsive the moment they reverse.
+    /// </summary>
+    private void ClampPointerOvershoot(Vector2 desired)
+    {
+        float pitch = board.CellPitch;
+        float limit = maxPointerOvershootCells;
+
+        float slackX = desired.x - freeAnchor.x;
+        float slackY = desired.y - freeAnchor.y;
+
+        grabOffsetLocal.x += (Mathf.Clamp(slackX, -limit, limit) - slackX) * pitch;
+        grabOffsetLocal.y += (Mathf.Clamp(slackY, -limit, limit) - slackY) * pitch;
+    }
+
+    /// <summary>
+    /// Walks <see cref="freeAnchor"/> toward <paramref name="desired"/> in sub-cell
+    /// steps. Each step takes the diagonal when it is free and otherwise resolves X
+    /// and Y independently, which is what lets a piece keep gliding along a wall.
+    /// </summary>
+    private void MoveFreeAnchorTowards(Vector2 desired)
+    {
+        Vector2 delta = desired - freeAnchor;
+        float span = Mathf.Max(Mathf.Abs(delta.x), Mathf.Abs(delta.y));
+        if (span <= AnchorEpsilon) return;
+
+        int steps = Mathf.Clamp(Mathf.CeilToInt(span / maxSubStepCells), 1, maxSubStepsPerFrame);
+        Vector2 step = delta / steps;
+
+        laneLockedAxis = -1;
+
+        for (int i = 0; i < steps; i++)
+        {
+            Vector2 want = freeAnchor + step;
+
+            // Fast path: a clean diagonal (or straight) move with nothing in the way.
+            if (IsFreeAnchorLegal(want, activePiece))
+            {
+                freeAnchor = want;
+                continue;
+            }
+
+            Vector2 before = freeAnchor;
+
+            // Resolve the axis the player is pushing hardest FIRST, so the gap assist
+            // aligns the piece with the lane it is trying to enter rather than the
+            // one it is leaving.
+            if (Mathf.Abs(step.x) >= Mathf.Abs(step.y))
+            {
+                ResolveAxisAssisted(0, want.x);
+                ResolveAxisAssisted(1, want.y);
+            }
+            else
+            {
+                ResolveAxisAssisted(1, want.y);
+                ResolveAxisAssisted(0, want.x);
+            }
+
+            // Wedged on both axes — further sub-steps cannot help this frame.
+            if (freeAnchor == before) break;
+        }
+
+        freeAnchor = SnapNearWhole(freeAnchor);
+    }
+
+    /// <summary>
+    /// Moves one axis of <see cref="freeAnchor"/> toward <paramref name="target"/>.
+    /// When that axis is completely walled, it retries after pulling the OTHER axis
+    /// onto its nearest cell line. That assist is what makes a gap exactly as tall as
+    /// the piece passable at all: without it the player would have to hold the
+    /// perpendicular axis at a float-exact whole cell by hand, so the piece jams at
+    /// the mouth of the corridor while the pointer sails on.
+    /// </summary>
+    private void ResolveAxisAssisted(int axis, float target)
+    {
+        if (axis == laneLockedAxis) return;
+
+        float from = Axis(freeAnchor, axis);
+        float moved = ResolveAxis(freeAnchor, axis, target);
+        if (!Mathf.Approximately(moved, from))
+        {
+            freeAnchor = WithAxis(freeAnchor, axis, moved);
+            return;
+        }
+
+        if (gapAssistCells <= 0f) return;
+
+        int other = 1 - axis;
+
+        // A locked axis must never be "helped" onto a different lane.
+        if (other == 0 && !activePiece.AllowsX) return;
+        if (other == 1 && !activePiece.AllowsY) return;
+
+        float perp = Axis(freeAnchor, other);
+        float lane = RoundWhole(perp);
+        float drift = Mathf.Abs(perp - lane);
+        if (drift <= AnchorEpsilon || drift > gapAssistCells) return;
+
+        Vector2 aligned = WithAxis(freeAnchor, other, lane);
+        if (!IsFreeAnchorLegal(aligned, activePiece)) return;
+
+        float retry = ResolveAxis(aligned, axis, target);
+        if (Mathf.Approximately(retry, Axis(aligned, axis))) return;  // still walled - don't nudge for nothing
+
+        freeAnchor = WithAxis(aligned, axis, retry);
+
+        // Hold the lane for the rest of the frame. Otherwise the perpendicular
+        // resolve later in this same frame drags the piece straight back off the
+        // line it was just helped onto, and the two fight sub-step by sub-step.
+        laneLockedAxis = other;
+    }
+
+    /// <summary>
+    /// Moves one axis of <paramref name="anchor"/> toward <paramref name="target"/>,
+    /// stopping flush against the obstruction. Blocking boundaries always fall on
+    /// whole cells, so the flush position is the integer boundary ahead.
+    /// </summary>
+    private float ResolveAxis(Vector2 anchor, int axis, float target)
+    {
+        float current = axis == 0 ? anchor.x : anchor.y;
+        if (Mathf.Approximately(current, target)) return current;
+
+        Vector2 test = anchor;
+        if (axis == 0) test.x = target; else test.y = target;
+        if (IsFreeAnchorLegal(test, activePiece)) return target;
+
+        bool forward = target > current;
+        float boundary = forward ? Mathf.Ceil(current) : Mathf.Floor(current);
+
+        // Ceil/Floor of a legal position is itself legal (it overlaps fewer cells),
+        // but guard anyway rather than trusting the invariant blindly.
+        if (forward ? boundary <= target : boundary >= target)
+        {
+            if (axis == 0) test.x = boundary; else test.y = boundary;
+            if (IsFreeAnchorLegal(test, activePiece)) return boundary;
+        }
+
+        return current;
+    }
+
+    // ------------------------ Release ------------------------
 
     private void EndDrag()
     {
@@ -210,11 +466,9 @@ public class BoardInputController : MonoBehaviour
         var p = activePiece;
         activePiece = null;
 
-        p.TryPlace(lastValidAnchor); // updates occupancy
-
-        // final: exact center on plane (no lift)
-        var center = board.CellCenterWorld(lastValidAnchor);
-        p.transform.position = center;
+        // TryPlace updates occupancy and jumps the root to the cell center.
+        if (!p.TryPlace(lastValidAnchor))
+            lastValidAnchor = p.Anchor;
 
         // A move only counts if the piece actually ended up on a different
         // cell. Tapping a piece and letting go, or a drag the board refused
@@ -222,7 +476,38 @@ public class BoardInputController : MonoBehaviour
         if (moveBudget && lastValidAnchor != dragStartAnchor)
             moveBudget.RegisterMove();
 
-        // trigger resolving if you need it
+        // Ease from where the finger left it (lift included) onto the exact
+        // center, instead of popping up to half a cell on release.
+        settlePiece = p;
+        settleFrom = AnchorToWorld(freeAnchor) + board.BoardPlaneNormal() * liftWhileDragging;
+        settleTo = board.CellCenterWorld(lastValidAnchor);
+        settleT = 0f;
+
+        if (settleDuration <= 0f) CompleteSettle();
+        else p.transform.position = settleFrom;
+    }
+
+    private void TickSettle()
+    {
+        if (!settlePiece) { settlePiece = null; return; }
+
+        settleT += Time.deltaTime / Mathf.Max(0.0001f, settleDuration);
+        if (settleT >= 1f) { CompleteSettle(); return; }
+
+        settlePiece.transform.position =
+            Vector3.Lerp(settleFrom, settleTo, Mathf.SmoothStep(0f, 1f, settleT));
+    }
+
+    /// <summary>Finishes a pending settle right now: exact center, then match resolution.</summary>
+    private void CompleteSettle()
+    {
+        if (!settlePiece) { settlePiece = null; return; }
+
+        var p = settlePiece;
+        settlePiece = null;
+
+        p.transform.position = settleTo;
+
         var resolver = GetComponent<MatchResolver>() ?? FindObjectOfType<MatchResolver>();
         if (resolver) resolver.ResolveFrom(p);
     }

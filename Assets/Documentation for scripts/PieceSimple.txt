@@ -94,7 +94,16 @@ SUB-BLOCK SNAPPING
 ------------------
   SnapSubBlocksToOffsets()
       Forces each cell-like child to its exact local position.
-      - Builds target local positions from the offsets.
+      - Builds target local positions from the offsets, at CellPitch spacing.
+        SPACING IS PITCH, SIZE IS CELLSIZE - do not collapse the two. Until
+        2026-08-25 this used offset * CellSize, which with cellPadding 0.055 put
+        every block after the first ~0.055 short of the cell it occupies, and
+        compounding along the piece. It ran inside TryPlace, which Start always
+        calls, so it OVERWROTE the correct pitch layout PieceShapeLayout had
+        just applied and corrupted the authored prefabs at runtime. It also
+        drifted the collider centres that TrySolveAnchorFromChildren and
+        CollectChildCells read back, so a block centre could land in the padding
+        gap and TryWorldToCell would reject it outright.
       - Collects "cell-like" children (name starts with "Cell", or has any
         collider).
       - If the child count does not match the offset count it bails out to

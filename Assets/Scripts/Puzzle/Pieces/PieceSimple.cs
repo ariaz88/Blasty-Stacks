@@ -162,7 +162,7 @@ public class PieceSimple : MonoBehaviour
         outCells.Clear();
         if (!board) return;
 
-        float s = board.CellSize;
+        float pitch = board.CellPitch;   // cell-to-cell distance, NOT cellSize
         // both 2D and 3D supported (though this board is XY)
         var cols2D = GetComponentsInChildren<Collider2D>(false);
         var cols3D = GetComponentsInChildren<Collider>(false);
@@ -174,7 +174,7 @@ public class PieceSimple : MonoBehaviour
 
             // rare fallback
             var local = board.transform.InverseTransformPoint(onPlane);
-            var c = new Vector2Int(Mathf.FloorToInt(local.x / s), Mathf.FloorToInt(local.y / s));
+            var c = new Vector2Int(Mathf.FloorToInt(local.x / pitch), Mathf.FloorToInt(local.y / pitch));
             outCells.Add(c);
         }
 
@@ -253,6 +253,12 @@ public class PieceSimple : MonoBehaviour
     {
         if (!board) return;
 
+        // SPACING is CellPitch (cellSize + cellPadding) - the board steps by pitch,
+        // so sub-blocks laid out at cellSize drift by the padding on every cell and
+        // stop lining up with the cells they occupy. PieceShapeLayout already uses
+        // pitch; this used to overwrite its work with cellSize on the first
+        // TryPlace. SIZE (colliders) stays cellSize - that is the square itself.
+        float pitch = board.CellPitch;
         float s = board.CellSize;
 
         // 1) Build target local positions for each shape offset
@@ -260,7 +266,7 @@ public class PieceSimple : MonoBehaviour
         for (int i = 0; i < shapeOffsets.Count; i++)
         {
             var off = shapeOffsets[i];
-            targets.Add((off, new Vector3(off.x * s, off.y * s, 0f)));
+            targets.Add((off, new Vector3(off.x * pitch, off.y * pitch, 0f)));
         }
 
         // 2) Collect candidate children (cell-like)

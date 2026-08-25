@@ -3,15 +3,21 @@
   Path : Assets/Scripts/Puzzle/Input/BoardInputController.cs
   Type : MonoBehaviour
   Layer: Puzzle / Input
-  Scenes: all 7 gameplay stages
+  Scenes: all Level_1_Stage_* gameplay scenes, Stage0/Stage1, Tutorial_Board_01
 ================================================================================
 
 PURPOSE
 -------
 The PRIMARY input handler for the puzzle board. It picks up a piece under the
-pointer, drags it around the grid with smoothing, refuses illegal moves, drops
-it, and then asks MatchResolver to check for a match. This is the script the
-player interacts with on every turn.
+pointer, drags it FREELY around the board, refuses illegal positions, snaps it
+onto the grid on release, and then asks MatchResolver to check for a match.
+This is the script the player interacts with on every turn.
+
+REWRITTEN 2026-08-25. The old version parked the piece on a cell centre and
+SmoothDamp'ed toward it, so the piece only moved when the pointer crossed a cell
+boundary - it read as chunky, cell-by-cell sliding, worst on diagonals. The
+piece now lives at a CONTINUOUS position; the grid is only consulted for
+legality and for the single snap on release.
 
 INSPECTOR FIELDS
 ----------------
@@ -28,82 +34,237 @@ INSPECTOR FIELDS
                      layer - leaving it as Everything makes picking slower and
                      can grab unintended colliders.
   Visuals
-    liftWhileDragging (float, default 0.10)  lift along the board normal (+Z)
-  Smoothing
-    smoothTime       (float 0.01-0.35, default 0.12) SmoothDamp time
-    maxSpeed         (float, default 100)
+    liftWhileDragging (float, default 0.10) lift along the board normal. Scenes
+                     currently author -0.5, i.e. toward the camera.
+  Drag Feel
+    maxSubStepCells  (float 0.05-0.5, default 0.25) largest movement resolved in
+                     one collision sub-step, in CELLS. MUST stay <= 0.5 or a
+                     fast flick can tunnel straight through an occupied cell,
+                     because a sub-step longer than one cell can skip a whole
+                     integer bracket without ever testing it.
+    maxSubStepsPerFrame (int, default 64) safety cap so a huge pointer jump
+                     cannot stall a frame. On an 8x6 board the real worst case
+                     is ~32 sub-steps, so the cap never binds in practice.
+    settleDuration   (float 0-0.3, default 0.07) seconds spent easing onto the
+                     exact cell centre after release. 0 = snap instantly (old
+                     behaviour). Because the drag is 1:1 the piece can be up to
+                     half a cell off centre at release, which pops visibly
+                     without this ease.
+    gapAssistCells   (float 0-0.49, default 0.4) how far, in cells, the piece may
+                     be pulled onto the nearest cell LINE on the perpendicular
+                     axis when the axis it is being pushed along is walled.
+                     WITHOUT THIS a gap exactly as tall as the piece cannot be
+                     entered by hand at all - see GAP ASSIST below. 0 = off.
+    maxPointerOvershootCells
+                     (float 0.1-2, default 0.5) how far the pointer may run ahead
+                     of a blocked piece before the grab rubber-bands. See
+                     ClampPointerOvershoot.
+  REMOVED: smoothTime and maxSpeed. The drag is now 1:1 with the pointer, so
+  there is nothing left to damp. Scenes still carry the old YAML lines; Unity
+  ignores serialized fields that no longer exist, so nothing breaks.
 
 RUNTIME STATE
 -------------
   activePiece      the piece currently held
-  lastValidAnchor  the most recent LEGAL anchor
+  freeAnchor       (Vector2) THE CONTINUOUS ANCHOR, in cell units. This is the
+                   heart of the rewrite. freeAnchor == (3, 4) means the piece
+                   sits exactly on cell (3,4); (3.4, 4.0) means it straddles
+                   cells 3 and 4 on X. Everything the player sees is drawn from
+                   this value.
+  lastValidAnchor  Vector2Int.RoundToInt(freeAnchor) - the cell the piece will
+                   commit to if released now. Always legal, see NOTES.
   dragStartAnchor  the anchor the piece sat on when it was picked up. EndDrag
                    compares it against lastValidAnchor to tell a real move from
                    a tap - this is the whole definition of "a move".
-  grabbedOffset    WHICH sub-cell of the piece the player grabbed, in grid space.
-                   This is what makes dragging feel correct: the piece keeps the
-                   same cell under the finger instead of snapping its origin to
-                   the pointer.
-  _velX, _velY     SmoothDamp velocity temporaries
+  grabOffsetLocal  (Vector2) pieceLocal - pointerLocal at pickup, in BOARD-LOCAL
+                   units (not cells). This is what makes dragging feel correct:
+                   the piece keeps the exact sub-cell point under the finger
+                   instead of jumping its origin to the pointer. Replaces the
+                   old whole-cell `grabbedOffset`, which could only preserve the
+                   grabbed cell, not the grabbed point.
+  boardLocalZ      board plane depth in the board's own local space, cached at
+                   pickup so AnchorToWorld does not have to re-derive it.
+  settlePiece / settleFrom / settleTo / settleT
+                   the release ease. Driven from Update, not a coroutine, so it
+                   can be force-completed at any moment (see CompleteSettle).
   tmpFootprint     reused list
 
 INPUT ROUTING
 -------------
-  Update() selects the input path by platform:
+  Update() first ticks the release settle, then selects the input path:
       UNITY_EDITOR || UNITY_STANDALONE  ->  MouseUpdate()
       otherwise (mobile)                ->  TouchUpdate()
   MouseUpdate  maps GetMouseButtonDown/GetMouseButton/GetMouseButtonUp.
   TouchUpdate  maps touch 0 Began / Moved+Stationary / Ended+Canceled.
   Both funnel into TryBeginDrag, TryDrag and EndDrag.
+  Note that on the mouse path, Down and Held are BOTH true on the pickup frame,
+  so TryDrag runs immediately after TryBeginDrag. That is harmless: the grab
+  offset makes the first frame's desired anchor equal the current one.
+
+BOARD SPACE HELPERS
+-------------------
+  BoardLocalZ()
+      The board plane's depth in board-local space, read back through
+      CellCenterWorld(0,0). BoardGridXY keeps its `localZ` private, so this is
+      how the controller learns it without widening that API.
+
+  PointerToBoardWorld(screenPos)
+      Intersects the pointer ray with the board plane
+      (Plane(BoardPlaneNormal(), CellCenterWorld(0,0))). Correct for both
+      orthographic and perspective cameras and for a rotated board. Falls back
+      to the old flat ScreenToWorldPoint projection only if the ray is parallel
+      to the plane. Both picking and drag maths go through this, so the grab
+      offset can never disagree with the drag position.
+
+  LocalToAnchor(local) / AnchorToWorld(anchor)
+      Continuous anchor <-> position, using board.CellPitch (cellSize +
+      cellPadding) and a half-cell offset, mirroring CellCenterLocal in
+      BoardGridXY. THIS IS THE BUG FIX for the old drift: the previous code
+      divided by CellSize, so with cellPadding 0.055 on a 1.086 cell the piece
+      fell ~5% behind the finger per cell crossed - nearly half a cell across
+      the board.
+
+LEGALITY
+--------
+  IsAnchorLegal(anchor, piece)
+      Builds the footprint and calls AreCellsPlaceableForMover with the piece's
+      own id, so its current cells never block itself. Note the piece stays
+      registered on its ORIGINAL cells for the whole drag - TryPlace only runs
+      on release - which is exactly why passing its own id matters.
+
+  IsFreeAnchorLegal(anchor, piece)
+      Legality of a CONTINUOUS anchor. A piece sitting between cells overlaps
+      the union of its footprints at the surrounding integer anchors, so testing
+      the (up to) four floor/ceil corners is EXACT, not an approximation. This
+      is what stops a piece from visually overlapping a neighbour's corner while
+      moving diagonally - a per-axis check alone would miss that case.
 
 PICKING
 -------
-  TryPickPiece(screenPos, out piece, out col2D, out col3D)
-      Prefers a 2D pick: converts the screen point to world at the board's depth
-      and uses Physics2D.OverlapPoint, then walks up with
-      GetComponentInParent<PieceSimple>.
+  TryPickPiece(screenPos, out piece)
+      Prefers a 2D pick: PointerToBoardWorld + Physics2D.OverlapPoint, then
+      walks up with GetComponentInParent<PieceSimple>.
       Falls back to a 3D Physics.Raycast for any legacy prefabs that still have
       3D colliders.
 
   TryBeginDrag(screenPos)
-      FIRST refuses the pickup entirely when moveBudget exists and
-      HasMovesLeft is false - that is how "the board stops being interactable
-      after n moves" is enforced. A drag already in flight is unaffected,
-      because only new pickups pass through here.
-      Then picks the piece, resolves its current anchor, records it as
-      dragStartAnchor, and works out grabbedOffset from the actual collider
-      that was hit (so grabbing the far end of an L-shape behaves naturally).
-      Resets the smoothing velocities and lifts the piece toward the camera.
+      1. CompleteSettle() first, so a piece still easing onto its cell is landed
+         and match-resolved before the board is touched again. Without this a
+         fast second tap would read stale occupancy.
+      2. Refuses the pickup entirely when moveBudget exists and HasMovesLeft is
+         false - that is how "the board stops being interactable after n moves"
+         is enforced. A drag already in flight is unaffected, because only new
+         pickups pass through here.
+      3. Resolves the anchor from piece.Anchor, which PieceSimple.TryPlace keeps
+         authoritative. Only if that is somehow illegal does it fall back to
+         TryWorldToCell and then to a clamped rounded read of the transform.
+         The old code went straight to TryWorldToCell and, on failure, clamped
+         Vector2Int.zero - which teleported the piece to the bottom-left corner.
+      4. Records grabOffsetLocal, seeds freeAnchor from the integer anchor, and
+         applies ONLY the lift. There is no snap to the cell centre on pickup.
 
 DRAGGING  (the interesting part)
 --------------------------------
-  IsAnchorLegal(anchor, piece)
-      Builds the footprint and calls AreCellsPlaceableForMover with the piece's
-      own id, so its current cells never block itself.
-
   TryDrag(screenPos)
-      1. Converts the pointer to a grid cell.
-      2. desiredAnchor = pointerCell - grabbedOffset.
-      3. Applies the piece's axis constraints (AllowsX / AllowsY), freezing the
-         locked axis to its current value.
-      4. STEPS ONE CELL AT A TIME toward the desired anchor - first along X,
-         then along Y - and STOPS at the first illegal cell.
-         This is the key design decision: it means a piece can never "teleport"
-         through a wall or another piece when the player flicks the pointer
-         quickly. Movement is collision-swept, not snapped.
-      5. Smooth-damps the visual position toward the cell centre on each axis
-         and re-applies the lift along the board normal.
+      1. desired = LocalToAnchor(pointerLocal + grabOffsetLocal) - a FLOAT
+         anchor, not a cell.
+      2. Axis constraints (AllowsX / AllowsY) pin the locked component to
+         dragStartAnchor, continuously.
+      3. MoveFreeAnchorTowards(desired).
+      4. lastValidAnchor = RoundToInt(freeAnchor).
+      5. Writes the transform straight from freeAnchor plus the lift. No
+         damping, no snapping - the piece is exactly where the finger is, minus
+         whatever the collision clamps took away.
 
+  MoveFreeAnchorTowards(desired)
+      Splits the frame's delta into sub-steps of at most maxSubStepCells and
+      walks them. Per sub-step:
+        - fast path: if the full diagonal is legal, take it. This is what makes
+          an unobstructed diagonal drag a straight line instead of a staircase.
+        - otherwise resolve X and Y INDEPENDENTLY via ResolveAxisAssisted, in
+          order of which axis the player is pushing hardest. If X is walled the
+          Y component still moves, so the piece glides along the wall rather
+          than snagging. THIS is the fix for the old code, which consumed the
+          entire X delta before even looking at Y and therefore traced an
+          L-shaped path through the grid.
+        - if neither axis moved, the piece is wedged; break out for this frame.
+      Finally snaps near-whole components (see SnapNearWhole) so a corridor stays
+      float-exact instead of drifting by rounding dust.
+
+  GAP ASSIST - ResolveAxisAssisted(axis, target)
+      Resolves one axis, and IF that axis is completely walled, retries after
+      pulling the OTHER axis onto its nearest whole cell line (at most
+      gapAssistCells away, and never an axis the piece has locked).
+      WHY THIS EXISTS: with a genuinely free 1:1 drag, a corridor exactly as tall
+      as the piece demands that the player hold the perpendicular axis at a
+      float-exact whole number. That is impossible by hand, so the piece jams at
+      the mouth of the gap while the pointer sails on - which is precisely the
+      "it gets stuck and the mouse runs ahead" bug. The assist snaps the piece
+      into the lane the moment it tries to enter and it then glides through.
+      The pulled axis is LANE-LOCKED (laneLockedAxis) for the rest of the frame,
+      otherwise the perpendicular resolve later in the same frame drags the piece
+      straight back off the line it was just helped onto and the two fight
+      sub-step by sub-step - visible as jitter.
+
+  ClampPointerOvershoot(desired)
+      A walled piece stops while the pointer keeps travelling, and with a fixed
+      grab offset that gap is remembered forever: shove a piece three cells into
+      a wall and the player must drag three cells back before anything moves.
+      This bleeds the excess out of grabOffsetLocal so at most
+      maxPointerOvershootCells of slack can ever accumulate, and the piece
+      responds the instant the player reverses.
+
+  ResolveAxis(anchor, axis, target)
+      Moves one axis toward target and stops FLUSH against the obstruction.
+      Blocking boundaries always fall on whole cells (at an integer anchor the
+      piece overlaps exactly one column/row; anywhere between it overlaps two),
+      so the flush position is simply Ceil/Floor of the current value in the
+      direction of travel. Because the current position is always legal, that
+      boundary is guaranteed legal too - it is still checked anyway rather than
+      trusting the invariant blindly.
+
+RELEASE
+-------
   EndDrag()
-      Commits with TryPlace(lastValidAnchor) and removes the lift so the piece
-      sits exactly on the plane.
+      Commits with TryPlace(lastValidAnchor) - which updates occupancy and
+      jumps the root to the cell centre.
       Then COUNTS THE MOVE, but only when lastValidAnchor != dragStartAnchor.
       That single comparison is the whole rule: a tap-and-release, and a drag
       the board refused (the anchor never advanced past the start), both leave
       the anchor unchanged and are therefore free.
-      Finally finds a MatchResolver (on this object first, else in the scene)
-      and calls ResolveFrom(piece) - which is what can trigger a blast and
-      therefore a warrior wave.
+      Finally it arms the settle: the piece is put BACK where the finger left it
+      (lift included) and eased onto the centre over settleDuration.
+
+  TickSettle() / CompleteSettle()
+      TickSettle runs from Update and SmoothStep-lerps toward the centre.
+      CompleteSettle finishes immediately - exact centre, then find a
+      MatchResolver (on this object first, else in the scene) and call
+      ResolveFrom(piece), which is what can trigger a blast and therefore a
+      warrior wave. It is called from TickSettle when the ease finishes, from
+      TryBeginDrag before a new pickup, and directly from EndDrag when
+      settleDuration is 0.
+      IMPORTANT: match resolution now happens at the END of the settle, roughly
+      70 ms after the pointer is released, not on the release frame itself.
+
+THE RELEASE SNAP  (understood and ACCEPTED, not a bug)
+-----------------------------------------------------
+  With a true 1:1 drag the piece can sit up to HALF A CELL from any cell centre
+  when the player lets go, and it must land on a whole cell - so it always has
+  somewhere to travel. Nothing picks the "wrong" cell: lastValidAnchor is always
+  the nearest LEGAL one. You cannot have both "the piece is exactly under my
+  finger" and "the piece is always exactly on a cell".
+
+  A landing-preview ghost was built on 2026-08-25 to announce the landing in
+  advance, and REMOVED the same day at the user's request - it looked bad in the
+  scene. If this is revisited, the options considered were: a landing preview,
+  light magnetism toward the nearest legal cell while dragging (shrinks the snap
+  distance at the cost of a faint tug), both, or simply a longer settleDuration
+  so the travel reads as motion rather than a teleport. The cheapest experiment
+  is raising settleDuration - it needs no new code.
+
+  IF A PREVIEW IS REBUILT: do NOT Instantiate the piece to make the ghost.
+  Cloning it brings PieceSimple along, whose Start claims a second pieceId and
+  occupies cells on the real board. Build it from generated quads instead.
 
 HOW IT CONNECTS
 ---------------
@@ -115,12 +276,32 @@ HOW IT CONNECTS
 
 NOTES
 -----
+  - INVARIANT: freeAnchor is only ever assigned a value that IsFreeAnchorLegal
+    accepted. Everything else leans on that - RoundToInt(freeAnchor) lands on
+    one of the corner anchors IsFreeAnchorLegal already proved legal, which is
+    why lastValidAnchor never needs its own check and why TryPlace on release
+    cannot realistically fail.
   - Uses the LEGACY Input class (Input.mousePosition, Input.GetTouch) even though
     the project has com.unity.inputsystem installed. Works, but is inconsistent
     with the package set and will break if the project ever switches the Active
     Input Handling setting to "Input System Package (New)" only.
-  - TryDrag converts using board.CellSize rather than board.CellPitch. When
-    cellPadding is greater than 0 the pointer-to-cell mapping will drift across
-    the board. It is correct only while cellPadding is 0.
-  - The per-frame cost is small: the step loops are bounded by how far the
-    pointer moved in one frame.
+  - Per-frame cost: sub-steps x up to 4 corner anchors x shape cells. For a
+    5-cell piece flicked across the board that is a few hundred array reads -
+    negligible, and bounded by maxSubStepsPerFrame.
+  - Rounding is deliberately round-half-UP (RoundWhole / RoundAnchor), NOT
+    Mathf.RoundToInt. Mathf rounds half to EVEN, so a piece released on exactly
+    x.5 would snap left or right depending on the parity of the cell - which
+    looks random to a player.
+  - SnapNearWhole treats anything within 1e-4 of a whole cell AS that cell, in
+    both IsFreeAnchorLegal and after each move. Without it, float dust flips the
+    corner set between one column and two and the piece shivers against walls.
+  - FIXED 2026-08-25 (was listed here as out of scope, wrongly):
+    PieceSimple.SnapSubBlocksToOffsets laid sub-blocks out at
+    (offset * board.CellSize) while the grid steps by CellPitch, overwriting the
+    correct pitch spacing PieceShapeLayout had just applied - on the first
+    TryPlace, which Start always runs. It was not cosmetic: the authored prefabs
+    were already correct at pitch spacing, so this CORRUPTED them at runtime and
+    drifted the collider centres TrySolveAnchorFromChildren depends on. Now uses
+    CellPitch for SPACING and keeps CellSize for collider SIZE.
+  - PieceDragHandlerSimple is a dead alternative drag path - zero scene and
+    prefab references (verified by GUID). Do not confuse the two.
