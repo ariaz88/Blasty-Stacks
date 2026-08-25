@@ -30,7 +30,8 @@ INSPECTOR FIELDS
                                are needed before a match resolves
   preferMergeIfImmovablePresent (bool, default true) prefer sliding pieces
                                together over blasting them in place
-  killAnimTime                 (float, default 0.15) clear animation duration
+  killAnimTime                 (float, default 0.10) anticipation-beat duration,
+                               measured at ~100 ms off the reference video
   enableDebug                  (bool) verbose logging
 
 REUSED BUFFERS
@@ -103,15 +104,50 @@ ACTIONS
       (currently NOT defined, so the manual coroutine path is live).
 
   ScaleDownAndExplode(p)  [coroutine, non-DOTween path]
-      Lerps the piece scale down to 5% over killAnimTime, then finds the
-      FractureObject manager in the scene and calls Explode(transform, colorId)
-      to spawn the debris VFX, then destroys the piece after 0.05s.
-      !! Calls FindObjectOfType<FractureObject>() once PER PIECE per clear.
+      Thin wrapper - delegates to CollapseThenBurst. Kept because ClearGroup
+      calls it by name.
+
+  CollapseThenBurst(p)  [coroutine]   -- rewritten 2026-08-25
+      The shared clear beat for BOTH clear paths.
+      1. Collapses the piece over killAnimTime (now 0.10s). It scales each
+         per-cell CHILD independently with an ease-in, plus an 8% inward pull
+         toward the footprint centre - not the root as one object. Splitting per
+         cell is what reads as "it broke" instead of "it disappeared"; this is
+         measured off Assets/Arts/Reference videos/Stack movement.mp4.
+         Falls back to scaling the root if the piece has no renderer children.
+      2. Calls FireBurst(), then destroys the piece immediately.
+      The piece's sprite is sampled via PieceTintSampler at the START of the
+      coroutine - while the GameObject still exists - so the shards match the
+      block exactly. Sampling after the destroy would return nothing.
+      Reuses the _collapseParts / _collapseOrigins scratch lists so a large
+      clear allocates nothing.
+
+  FireBurst(centre, footprintCells, colorId, tint)
+      Calls ShardBurst.Play(centre, footprint, colorId, tint). Falls back to
+      FractureObject.ExplodeAtPosition if no ShardBurst exists, so the VFX
+      degrades rather than breaks.
+      Both managers are cached in fields - the old code called
+      FindObjectOfType<FractureObject>() once PER PIECE per clear.
+
+  FootprintCentreWorld(p) / FootprintCells(p)
+      Average of the piece's OccupiedCells centres, and the bounding box of
+      those cells in cell units. Feed the burst position and emitter size.
+      Both fall back sanely when OccupiedCells is empty.
 
   MergePieceInto(mover, target)  [coroutine]
       Computes a simple L-shaped path, steps the mover one cell per frame along
-      it, then releases the target, fires OnBlast(1), and fades/destroys both.
+      it, then releases the target, fires OnBlast(1), and destroys both via
+      FadeAndScaleDownThenDestroy.
       If no clear path exists it falls back to simply clearing both pieces.
+
+  FadeAndScaleDownThenDestroy(p, t)  [coroutine, non-DOTween path]
+      Now a thin wrapper over CollapseThenBurst.
+      !! HISTORY WORTH KNOWING: until 2026-08-25 this only faded the piece to
+      0.85 scale and destroyed it - it never touched the VFX at all. Since
+      MergePieceInto is the path most real matches take (preferMergeIfImmovable-
+      Present is on by default), most matches produced NO shatter effect
+      whatsoever, no matter how FractureObject was tuned. If the effect ever
+      "stops working" again, check that both paths still reach FireBurst.
 
   TryComputeStraightPath(from, to, shape, outPath) -> bool
       Greedy L path: all X movement first, then all Y. Every intermediate anchor
@@ -125,6 +161,6 @@ ACTIONS
 HOW IT CONNECTS
 ---------------
   - Reads BoardGridXY occupancy; resolves ids through PieceSimple.GetById.
-  - Triggers FractureObject for the shatter VFX.
+  - Triggers ShardBurst for the shatter VFX (FractureObject is the fallback).
   - Fires OnBlast -> PlayerWaveManager spawns a warrior wave. THE core link
     between puzzle and combat.

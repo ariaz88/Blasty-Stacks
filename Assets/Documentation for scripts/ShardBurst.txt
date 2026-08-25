@@ -1,0 +1,139 @@
+================================================================================
+  ShardBurst.cs
+  Path : Assets/Scripts/Puzzle/Match/ShardBurst.cs
+  Type : MonoBehaviour  (self-bootstrapping scene-level VFX manager, singleton)
+  Layer: Puzzle / Match
+  Scenes: none - it creates itself at runtime
+================================================================================
+
+PURPOSE
+-------
+The match-clear shatter effect. Replaces the per-particle GameObject spraying in
+FractureObject with a small pool of mesh-particle systems: a dense cloud of
+irregular 3D shards that pops at full size, tumbles, sinks about one board cell
+and dies in ~370 ms.
+
+Written 2026-08-25 from a frame-by-frame reading of
+Assets/Arts/Reference videos/Stack movement.mp4 (30 fps). The measured beat is:
+
+  0 ms      block intact
+  0-100 ms  ANTICIPATION - the block splits into one cube per board cell and
+            each collapses in place. This lives in MatchResolver, not here.
+  100 ms    burst appears ALREADY at full width (~2 cells). No grow-in.
+  100-470   cloud tumbles, barely travels outward, sinks ~1 cell, fades from
+            the top down.
+
+TUNED LONGER 2026-08-25 after play-testing: the reference timing read as too
+quick in-game, so the lifetime is now 0.80-0.95s (was 0.26-0.42) and gravity
+dropped to 0.45 (was 0.95) so the longer fall still lands ~2 cells rather than
+carrying the shards off-board. The shrink and fade ramps were widened to match -
+see CURVES below.
+
+NOTHING TO WIRE
+---------------
+A [RuntimeInitializeOnLoadMethod] (AfterSceneLoad) creates a "~ShardBurst"
+GameObject if none exists, marked DontDestroyOnLoad. Add the component to a
+scene by hand ONLY if you want per-level tuning of the serialized fields.
+
+  - Shard meshes  : Resources.LoadAll<Mesh>("VFX")  -> Assets/Resources/VFX/
+  - Material      : built at runtime from Shader.Find("Blasty/ShardUnlit")
+  - Colour palette: copied off any FractureObject already in the scene, so the
+                    colours tuned there carry over. Falls back to the defaults
+                    in the serialized `palette` array if none is present.
+
+PUBLIC API
+----------
+  Play(Vector3 centre, Vector2 footprintCells, int colorId)
+      The real entry point. footprintCells is the cleared piece's bounding box
+      in board cells, e.g. (2,1) for a 2-wide piece. Scales both the emitter box
+      and the shard count.
+
+  Explode(Transform origin, int colorId)
+  ExplodeAtPosition(Vector3 worldPosition, int colorId)
+      Signature-compatible with FractureObject so old call sites keep working.
+      Both assume a 1x1 footprint.
+
+  Initialize()
+      Loads meshes, builds the material, fills the pool. Called from Awake;
+      public and idempotent so a loading screen can pre-warm it.
+
+INSPECTOR FIELDS
+----------------
+  Look
+    shardsPerCell      (int, default 40)   shards per board cell of the piece
+    maxShardsPerBurst  (int, default 160)  ceiling regardless of group size
+    shardSizeRange     (Vector2, 0.10-0.28) world units; board cell is ~1.086
+    lifetimeRange      (Vector2, 0.80-0.95) upper bound sets the tail length
+    speedRange         (Vector2, 1.6-3.8)   damping stalls this within ~100 ms
+    gravityModifier    (float, 0.45)        ~2 cell sink over the longer life
+
+  Sorting
+    sortingLayer  (string, "Default")
+    sortingOrder  (int, 20)   board pieces sit at -10..-1, so 20 draws on top
+
+  Pool
+    poolSize      (int, 6)    systems are reused round-robin, oldest first
+
+  Colours
+    palette       (Color[10]) indexed by PieceSimple.ColorId
+
+PARTICLE SETUP  (all built in code in BuildSystem)
+--------------------------------------------------
+  Shape          Box, flattened to the board plane (z scale 0.02), Volume,
+                 randomDirectionAmount 0.55. A BOX not a sphere - the block is a
+                 rectangle, and a sphere emitter is the giveaway of a generic burst.
+  Limit Velocity dampen 0.42, limit 0.6. THIS is what makes the cloud stall
+                 instead of flying off like confetti. Do not disable it.
+  Rotation       separate axes, +/-480 deg/s on X and Y, +/-700 on Z. Faster on
+                 the camera axis because that spin is what reads in an ortho 2D view.
+  Size over life flat 1.0 hold to 0.30, then a WIDE ramp down to 0 at 1.0
+                 (mid-key 0.70 -> 0.62). No grow-in. Keep the ramp wide: a late
+                 cliff here is what made the burst read as vanishing too early.
+  Colour o/life  colour held CONSTANT across the whole life; alpha holds to 0.40
+                 then fades out. An earlier version cooled toward grey at the
+                 tail - invisible at 0.42s, but dusty and washed out at 0.95s,
+                 and it fought the sampled sprite tint.
+  Renderer       Mesh mode, 4 meshes, sortMode None, shadows/probes off.
+
+  Deliberately OFF: Noise (reads as smoke), Collision (most expensive Shuriken
+  module on mobile), Trails and Sub Emitters (double the draw calls).
+
+HOW IT CONNECTS
+---------------
+  - MatchResolver.FireBurst() calls Play(). Both clear paths reach it:
+    ClearGroup -> ScaleDownAndExplode and MergePieceInto ->
+    FadeAndScaleDownThenDestroy, which both delegate to CollapseThenBurst.
+  - Falls back to FractureObject.ExplodeAtPosition if no ShardBurst is found,
+    so removing this script degrades rather than breaks.
+  - Reads BoardGridXY.CellSize to size the emitter box (defaults to 1.086).
+
+NOTES
+-----
+  - The shard meshes in Assets/Resources/VFX/ were baked out of
+    Assets/Arts/VFX/NewCubeFrags.fbx (Blender Cell Fracture output, 60 pieces).
+    Four were picked for distinct silhouettes - chunky, wedge, splinter, rubble -
+    then re-centred on their bounding box, scaled so the longest axis is exactly
+    1 unit, and flat-shaded by un-sharing every vertex. 12-20 triangles each.
+    The re-centring matters: an off-centre pivot makes a shard orbit instead of
+    tumble. If you rebake, keep both steps.
+  - Because the meshes are normalised to 1 unit, shardSizeRange reads directly
+    in world units.
+  - enableGPUInstancing is OFF: Blasty/ShardUnlit has no instancing path yet.
+    Adding one (procedural:ParticleInstancingSetup) would collapse a burst to a
+    single draw call - worthwhile if bursts ever overlap heavily.
+  - The gameplay scenes contain no Light or Light2D, and the URP 2D Renderer
+    never draws a UniversalForward pass, so a Lit material would be invisible.
+    All shading is faked in Blasty/ShardUnlit against a fixed light vector.
+  - COLOUR now comes from PieceTintSampler, which reads the body colour straight
+    off the block's own sprite. MatchResolver samples the piece before destroying
+    it and passes the result into Play(). The serialized `palette` array is only
+    the fallback for when sampling fails.
+    !! Do NOT go back to a hand-maintained colour table. The old one was
+    !! mis-mapped - PieceColorPalette.cs (dead, unreferenced) uses a completely
+    !! different id order than FractureObject - which is what made the shard
+    !! colours look wrong in the first play-test.
+  - Verified 2026-08-25 in the Editor: 80 particles for a 2x1 footprint, mesh
+    mode, 4 meshes, Default/20; a 4-frame filmstrip at t=0.10/0.40/0.65/0.90
+    showing the hold-then-shrink tail with the tint held constant; and all 10
+    stack families sampling to the same hex values as an independent read of the
+    source PNGs.

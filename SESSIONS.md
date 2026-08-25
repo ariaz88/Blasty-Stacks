@@ -55,6 +55,17 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-08-25] The shard-burst match VFX has had one tuning pass; the shape of the burst is still
+  open.** Play-tested once — spawn pattern and density were called good, timing and colour were
+  fixed in a follow-up (lifetime 0.80–0.95s, tint sampled off the sprite). Still unverified in play
+  *after* that follow-up. Remaining knobs if it needs more: `shardsPerCell` (40), `shardSizeRange`
+  (0.10–0.28 world units, cell is ~1.086), `sortingOrder` (20) if shards ever draw behind the board,
+  and the Limit Velocity `dampen 0.42` which is what stops the cloud flying off.
+  `FractureObject` is still in the scenes as the fallback and can be deleted once this is signed off.
+
+- **[2026-08-25] `Pink` (id 3) and `MidPink` (id 4) stack prefabs use the same sprite.** Both sample
+  to `#EF7CC1`, so the two block types are visually identical when they shatter. Art issue, not a
+  code one — worth a decision on whether MidPink should have its own colour.
 - **[2026-08-25] The board drag rewrite has never been play-tested.** `BoardInputController` was
   rebuilt around a continuous anchor and compiles clean, but Play mode was never entered. Test on
   `Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_5.unity` (real 8×6 board, `cellPadding
@@ -263,6 +274,111 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-08-25 — Match-clear shatter VFX: found the effect was never firing on the merge path, then rebuilt it as mesh-particle shards
+
+**The complaint.** The match effect "isn't good" — a previous attempt (`FractureObject`, referred
+to as FractionManager) sprayed sprite drops and did not resemble the reference. Reference material:
+`Assets/Arts/Reference videos/Stack movement.mp4` plus a still of a yellow block shatter.
+
+**The actual root cause, found before touching any VFX.** `MatchResolver` has two clear paths:
+
+- `ClearGroup` → `ScaleDownAndExplode` → called `FractureObject.Explode`. ✔ had an effect
+- `MergePieceInto` → `FadeAndScaleDownThenDestroy` → **never touched the VFX at all.** ✘
+
+`preferMergeIfImmovablePresent` defaults to true and `FindNearestWithWarriors` almost always returns
+a piece, so the merge path is what most real matches take. Confirmed against the live Editor console:
+every match in the log read `[MatchResolver] Merge Yellow 2X (2) → Yellow 2X`. So most matches were
+producing **no shatter effect whatsoever**, regardless of how `FractureObject` was tuned. Note also
+that `DOTWEEN_ENABLED` is never defined — the project defines `DOTWEEN`, not `DOTWEEN_ENABLED` — so
+every `#if DOTWEEN_ENABLED` branch in that file is dead code.
+
+**What the reference actually does** (measured frame-by-frame at 30 fps, ffmpeg from KMPlayer's
+LAVFilters — there is no ffmpeg on PATH):
+
+| t | what happens |
+|---|---|
+| 0 ms | block intact |
+| 0–100 ms | splits into one cube per board cell, each collapsing **in place** with a slight inward pull |
+| 100 ms | cloud appears **already at full width** (~2 cells). No grow-in, no expanding fireball |
+| 100–470 ms | tumbles, barely travels, sinks ~1 cell, fades from the top down |
+
+The anticipation beat is the part that reads as "it broke" rather than "it disappeared", and it was
+entirely missing before.
+
+**What was built.**
+
+- `Assets/Arts/VFX/ShardUnlit.shader` — unlit, fakes facet contrast against a fixed light vector.
+  Necessary because the gameplay scenes contain no Light/Light2D and the URP **2D Renderer** never
+  draws a `UniversalForward` pass, so any Lit material is invisible. The pass carries no LightMode
+  tag so it falls into `SRPDefaultUnlit`, which `Render2DLightingPass` does collect. Tint comes from
+  the particle COLOR stream, so one material serves every block colour.
+- `Assets/Resources/VFX/ShardMesh_0..3.asset` — baked out of the existing
+  `Assets/Arts/VFX/NewCubeFrags.fbx` (Blender Cell Fracture, 60 pieces). Four picked for distinct
+  silhouettes (chunky / wedge / splinter / rubble), re-centred on their bounding box, scaled so the
+  longest axis is exactly 1 unit, flat-shaded by un-sharing every vertex. 12–20 tris each.
+  **No Blender round-trip was needed.**
+- `Assets/Scripts/Puzzle/Match/ShardBurst.cs` — pooled mesh-particle systems, all built in code.
+  Self-bootstraps via `[RuntimeInitializeOnLoadMethod]`, loads meshes from `Resources/VFX`, builds
+  its material from the shader, and **copies its colour palette off any `FractureObject` already in
+  the scene** so previously tuned colours carry over. Nothing to wire in the Inspector.
+- `MatchResolver` — both clear paths now delegate to a shared `CollapseThenBurst`, so the merge path
+  finally produces an effect. Manager lookups cached in fields (the old code called
+  `FindObjectOfType<FractureObject>()` once **per piece per clear**). `killAnimTime` 0.15 → 0.10.
+
+**Verified in the live Editor** (Unity MCP bridge — the Editor was open the whole session):
+shader compiles clean and `isSupported`; a 3×3 static probe renders with crisp light/shadow facets;
+a real `ShardBurst.Play()` simulated at t=133 ms yields 80 particles for a 2×1 footprint, Mesh mode,
+4 meshes, `Blasty/ShardUnlit`, sorting `Default/20`. Test objects were removed afterwards.
+
+**Not done:** never play-tested in a live match. GPU instancing is off — `Blasty/ShardUnlit` has no
+`procedural:ParticleInstancingSetup` path yet, which would collapse a burst to one draw call.
+
+**Process note worth keeping.** The first pass on this task delivered only a written spec and then
+asked whether to implement — the user reasonably read that as "you did nothing", because `git status`
+on `Assets/` was genuinely empty. When the ask is "this effect is bad, fix it", build the thing.
+
+#### Follow-up the same day, after play-testing
+
+Spawn pattern and density were good. Two things were not.
+
+**1. It vanished too quickly.** Lifetime `0.26–0.42s` → `0.80–0.95s`. Gravity had to come down with
+it (`0.95` → `0.45`) or the longer fall carried the shards ~3.6 cells instead of ~2. The size and
+alpha ramps were widened to match — size now holds to 0.30 of life then ramps down across the whole
+rest, alpha holds to 0.40. The old curves had a late cliff, which is what made it read as vanishing.
+Also **removed the colour-over-lifetime cool-down toward grey**: invisible at 0.42s, but over 0.95s
+it read as dusty and washed out, and it fought the exact-tint work below.
+
+**2. The shard colours were wrong** — and the cause is worth remembering. The stack prefabs are
+tinted white (`m_Color 1,1,1,1`); **all colour lives in the sprite texture**, so there is no Color
+field anywhere to read. The shard colours had been inherited from `FractureObject`'s ten named
+Color fields, which had drifted from the art. The project had TWO parallel colour tables that
+disagree on id order:
+
+    FractureObject     blue=0 crimson=1 green=2 pink=3 midPink=4 darkPink=5 purple=6
+                       midPurple=7 orange=8 yellow=9
+    PieceColorPalette  blue=0 green=1 orange=2 pink=3 purple=4 red=5 yellow=6
+                       (dead — referenced by nothing)
+
+The art filenames lie too: `Mid Pink 1X.png` is actually purple `#A46ACD`, and `Purple 1X.png` is a
+light lavender `#C49CCF`.
+
+Fixed by sampling the pixels instead — new `PieceTintSampler`. It blits the sprite through a
+RenderTexture (so it works on textures **without** Read/Write enabled, which is all of them),
+histograms the opaque pixels ignoring the black outline and soft rim, and takes the most common
+bucket. The blocks are a light top face over a bevel band and dark base, and the top face is ~59% of
+the sprite, so the mode lands on the body colour every time. Cached per Sprite.
+
+`MatchResolver` samples the piece at the *start* of `CollapseThenBurst`, while the GameObject still
+exists, and passes the Color into `ShardBurst.Play(..., tint)`. The serialized palette is now only a
+fallback.
+
+Verified three ways: an independent read of the source PNGs in PowerShell/System.Drawing, the
+in-engine sampler (identical hex for all 10 families), and a rendered strip of each sprite next to
+its sampled swatch. Plus a 4-frame filmstrip at t=0.10/0.40/0.65/0.90 confirming the longer
+hold-then-shrink tail with the tint held constant.
+
+Found along the way: **`Pink` (3) and `MidPink` (4) use the same sprite** and sample identically.
 
 ### 2026-08-25 — Board drag felt chunky/cell-by-cell: rewrote BoardInputController around a continuous anchor
 

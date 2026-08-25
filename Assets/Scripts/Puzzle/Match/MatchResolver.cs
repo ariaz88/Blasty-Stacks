@@ -17,11 +17,19 @@ public class MatchResolver : MonoBehaviour
     [SerializeField] private bool preferMergeIfImmovablePresent = true;
 
     [Header("FX")]
-    [SerializeField] private float killAnimTime = 0.15f;
+    [SerializeField] private float killAnimTime = 0.10f;   // anticipation beat, measured at ~100 ms
     [SerializeField] private bool enableDebug = false;
 
     private readonly List<Vector2Int> _footprint = new();
     private readonly HashSet<Vector2Int> _neighborCells = new();
+
+    // Scratch buffers for the collapse beat, reused so a big clear allocates nothing.
+    private readonly List<Transform> _collapseParts = new();
+    private readonly List<Vector3> _collapseOrigins = new();
+
+    // Cached once instead of a FindObjectOfType per piece per clear.
+    private ShardBurst _burst;
+    private FractureObject _legacyFracture;
 
     private void Awake()
     {
@@ -272,35 +280,138 @@ public class MatchResolver : MonoBehaviour
     }
     private IEnumerator ScaleDownAndExplode(PieceSimple p)
     {
+        yield return CollapseThenBurst(p);
+    }
+
+    /// <summary>
+    /// The 100 ms anticipation beat, then the shard burst.
+    ///
+    /// Measured off Assets/Arts/Reference videos/Stack movement.mp4: the block does not
+    /// shrink as one object. It splits into one cube per board cell and each collapses in
+    /// place with a slight pull toward the group centre, over three frames at 30 fps.
+    /// That is what reads as "it broke" instead of "it disappeared".
+    /// </summary>
+    private IEnumerator CollapseThenBurst(PieceSimple p)
+    {
         if (!p) yield break;
 
         Transform tr = p.transform;
-        Vector3 startScale = tr.localScale;
-        Vector3 targetScale = startScale * 0.05f;   // 1/3 scale
+        int colorId = p.ColorId;
 
+        Vector3 centre = FootprintCentreWorld(p);
+        Vector2 footprint = FootprintCells(p);
+
+        // Sample the block's own sprite NOW, while the piece still exists, so the shards
+        // match the stack exactly rather than following a parallel colour table.
+        Color? tint = PieceTintSampler.TryGetTint(p.gameObject, out Color sampled)
+            ? sampled
+            : (Color?)null;
+
+        // Per-cell children if the piece has them, otherwise the root as a single cube.
+        _collapseParts.Clear();
+        _collapseOrigins.Clear();
+        for (int i = 0; i < tr.childCount; i++)
+        {
+            var child = tr.GetChild(i);
+            if (child && child.GetComponentInChildren<Renderer>(true) != null)
+            {
+                _collapseParts.Add(child);
+                _collapseOrigins.Add(child.position);
+            }
+        }
+        if (_collapseParts.Count == 0)
+        {
+            _collapseParts.Add(tr);
+            _collapseOrigins.Add(tr.position);
+        }
+
+        var startScales = new Vector3[_collapseParts.Count];
+        for (int i = 0; i < _collapseParts.Count; i++)
+            startScales[i] = _collapseParts[i].localScale;
+
+        float duration = Mathf.Max(0.01f, killAnimTime);
         float t = 0f;
-        float duration = killAnimTime;   // use same variable
+
         while (t < duration)
         {
+            if (!p) break;
+
             t += Time.deltaTime;
             float k = Mathf.Clamp01(t / duration);
-            tr.localScale = Vector3.Lerp(startScale, targetScale, k);
+            float s = (1f - k) * (1f - k);   // ease-in collapse: 1 -> 0.6 -> 0.3 -> 0
+
+            for (int i = 0; i < _collapseParts.Count; i++)
+            {
+                var part = _collapseParts[i];
+                if (!part) continue;
+
+                part.localScale = startScales[i] * s;
+                // slight inward pull, 8% of the distance to the group centre
+                part.position = Vector3.Lerp(_collapseOrigins[i], centre, k * 0.08f);
+            }
+
             yield return null;
         }
 
-        // ----------------------------------------------------
-        // CALL MANAGER-BASED EXPLOSION (correct version)
-        // ----------------------------------------------------
-        FractureObject manager = FindObjectOfType<FractureObject>();   // manager in scene
-        if (manager != null)
+        FireBurst(centre, footprint, colorId, tint);
+
+        if (p) Destroy(p.gameObject);
+    }
+
+    /// <summary>Fires the shard burst, falling back to the legacy FractureObject if present.</summary>
+    private void FireBurst(Vector3 centre, Vector2 footprintCells, int colorId, Color? tint = null)
+    {
+        if (!_burst) _burst = ShardBurst.Instance ? ShardBurst.Instance : FindObjectOfType<ShardBurst>();
+
+        if (_burst)
         {
-            manager.Explode(p.transform, p.ColorId);
+            _burst.Play(centre, footprintCells, colorId, tint);
+            return;
         }
 
-        // ----------------------------------------------------
-        // Destroy original piece AFTER triggering explosion
-        // ----------------------------------------------------
-        Destroy(p.gameObject , 0.05f);
+        if (!_legacyFracture) _legacyFracture = FindObjectOfType<FractureObject>();
+        if (_legacyFracture) _legacyFracture.ExplodeAtPosition(centre, colorId);
+    }
+
+    private Vector3 FootprintCentreWorld(PieceSimple p)
+    {
+        var cells = (p.OccupiedCells != null && p.OccupiedCells.Count > 0)
+            ? p.OccupiedCells
+            : null;
+
+        if (board != null && cells != null && cells.Count > 0)
+        {
+            Vector3 sum = Vector3.zero;
+            for (int i = 0; i < cells.Count; i++) sum += board.CellCenterWorld(cells[i]);
+            var c = sum / cells.Count;
+            c.z = 0f;
+            return c;
+        }
+
+        var fallback = p.transform.position;
+        fallback.z = 0f;
+        return fallback;
+    }
+
+    private Vector2 FootprintCells(PieceSimple p)
+    {
+        var cells = (p.OccupiedCells != null && p.OccupiedCells.Count > 0)
+            ? p.OccupiedCells
+            : null;
+
+        if (cells == null || cells.Count == 0) return Vector2.one;
+
+        int minX = int.MaxValue, maxX = int.MinValue;
+        int minY = int.MaxValue, maxY = int.MinValue;
+        for (int i = 0; i < cells.Count; i++)
+        {
+            var c = cells[i];
+            if (c.x < minX) minX = c.x;
+            if (c.x > maxX) maxX = c.x;
+            if (c.y < minY) minY = c.y;
+            if (c.y > maxY) maxY = c.y;
+        }
+        return new Vector2(maxX - minX + 1, maxY - minY + 1);
     }
 
 
@@ -403,39 +514,13 @@ public class MatchResolver : MonoBehaviour
 
 
 #if !DOTWEEN_ENABLED
+    // The merge path is what runs for most matches (see MergePieceInto). It used to just
+    // fade the two pieces to 0.85 scale and destroy them, so a merged match produced no
+    // effect at all no matter how the fracture VFX was tuned. It now runs the same
+    // collapse-then-burst beat as a plain group clear.
     private IEnumerator FadeAndScaleDownThenDestroy(PieceSimple p, float t)
     {
-        if (!p) yield break;
-
-        var srs = p.GetComponentsInChildren<SpriteRenderer>(true);
-        var startCols = new Color[srs.Length];
-        for (int i = 0; i < srs.Length; i++) startCols[i] = srs[i].color;
-
-        var tr = p.transform;
-        Vector3 startScale = tr.localScale;
-
-        float e = 0f;
-        while (e < t)
-        {
-            e += Time.deltaTime;
-            float k = Mathf.Clamp01(e / t);
-
-            // fade
-            for (int i = 0; i < srs.Length; i++)
-            {
-                if (!srs[i]) continue;
-                var c = startCols[i];
-                c.a = Mathf.Lerp(c.a, 0f, k);
-                srs[i].color = c;
-            }
-
-            // scale
-            tr.localScale = Vector3.Lerp(startScale, startScale * 0.85f, k);
-
-            yield return null;
-        }
-
-        if (p) Destroy(p.gameObject);
+        yield return CollapseThenBurst(p);
     }
 #endif
 

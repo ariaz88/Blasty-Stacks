@@ -1,0 +1,86 @@
+================================================================================
+  PieceTintSampler.cs
+  Path : Assets/Scripts/Puzzle/Match/PieceTintSampler.cs
+  Type : static class (no MonoBehaviour, nothing to place in a scene)
+  Layer: Puzzle / Match
+================================================================================
+
+PURPOSE
+-------
+Reads a stack's body colour straight off its own sprite, so the shatter shards
+match the block EXACTLY instead of tracking a hand-maintained colour table.
+
+WHY THIS EXISTS
+---------------
+The stack prefabs are tinted white (m_Color 1,1,1,1) - all colour lives in the
+texture - so there is no Color field anywhere to read. Before this, the shard
+colours came from FractureObject's ten named Color fields, which had drifted
+from the art. There were TWO parallel tables in the project and they disagreed:
+
+  FractureObject      blue=0 crimson=1 green=2 pink=3 midPink=4 darkPink=5
+                      purple=6 midPurple=7 orange=8 yellow=9
+  PieceColorPalette   blue=0 green=1 orange=2 pink=3 purple=4 red=5 yellow=6
+                      (dead - referenced by nothing, kept only as a warning)
+
+The art filenames are also unreliable: "Mid Pink 1X.png" is actually purple
+(#A46ACD), and "Purple 1X.png" is a light lavender (#C49CCF). Sampling the
+pixels sidesteps all of it and stays correct when the art changes.
+
+PUBLIC API
+----------
+  TryGetTint(GameObject root, out Color tint) -> bool
+      Finds the LARGEST sprite under root (by sprite rect area, so a multi-cell
+      piece samples its main block, not a decal), samples it, then multiplies by
+      that SpriteRenderer's own .color so a per-instance tint is respected.
+      Returns false when there is no sprite to sample.
+
+  TryGetSpriteTint(Sprite sprite, out Color tint) -> bool
+      Same, for a Sprite directly.
+
+HOW THE SAMPLING WORKS
+----------------------
+  1. Blit the source texture into a temporary RenderTexture and ReadPixels out
+     of that. This is the reason it works on textures that do NOT have
+     Read/Write enabled in their importer - which is all of them. Do not
+     "simplify" this to texture.GetPixels(); it will throw.
+     Only sprite.textureRect is read, so atlased sprites work.
+  2. Histogram the opaque pixels, quantised to 32 levels per channel:
+       - alpha < 0.9 skipped (the antialiased rim)
+       - luma  < 0.14 skipped (the black outline)
+  3. Take the most common bucket and return the true average of the pixels in
+     it, so the result is exact rather than quantised.
+
+  The blocks are a light top face + a mid bevel band + a dark base. The top face
+  is ~59% of the sprite, so the mode reliably lands on the body colour. That 59%
+  figure is worth re-checking if the block art is ever redrawn.
+
+  Results are cached per Sprite in a static Dictionary, so the read-back cost is
+  paid once per sprite per session, not per match.
+
+VALUES IT PRODUCES  (measured 2026-08-25, 1X prefabs)
+------------------------------------------------------
+  id 0 Blue       #2E7DC8      id 5 DarkPink   #C82E64
+  id 1 Crimson    #D14A3C      id 6 Purple     #C49CCF
+  id 2 Green      #2EC892      id 7 MidPurple  #A46ACD
+  id 3 Pink       #EF7CC1      id 8 Orange     #E58A3F
+  id 4 MidPink    #EF7CC1      id 9 Yellow     #F2C14E
+
+  !! Pink (3) and MidPink (4) sample to the SAME colour - their prefabs use the
+  !! same sprite. That is an art issue, not a sampler bug, but it means those
+  !! two block types are visually identical when they shatter.
+
+HOW IT CONNECTS
+---------------
+  - MatchResolver.CollapseThenBurst calls TryGetTint on the piece at the START
+    of the coroutine, while the GameObject still exists, and passes the Color
+    into ShardBurst.Play(). Sampling after the destroy would return nothing.
+  - ShardBurst falls back to its serialized `palette` array when the sampler
+    returns false.
+
+NOTES
+-----
+  - Destroy vs DestroyImmediate on the scratch Texture2D is branched on
+    Application.isPlaying, because this also runs from editor tooling where
+    Object.Destroy throws.
+  - The RenderTexture is sRGB, so the returned Color matches what a Color
+    literal means in the Inspector regardless of project colour space.
