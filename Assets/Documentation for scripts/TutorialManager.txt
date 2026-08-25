@@ -1,0 +1,63 @@
+================================================================================
+  TutorialManager.cs
+  Path : Assets/Scripts/Tutorial/TutorialManager.cs
+  Type : MonoBehaviour (singleton, DontDestroyOnLoad)
+  Layer: Tutorial
+  Scenes: none required - it creates itself on demand
+================================================================================
+
+PURPOSE
+-------
+The entry point of the tutorial system and the owner of the "player has already
+seen this one" flags. Anything that wants to show a tutorial goes through here:
+
+    TutorialManager.Get().Play(sequenceSO, overlay, onFinished);
+
+It also answers the question every gate needs, without needing an instance:
+
+    TutorialManager.IsTutorialDone("board_basics")
+
+INSPECTOR FIELDS
+----------------
+  none. Everything it needs arrives through Play().
+
+PUBLIC API
+----------
+  static Instance                 the live manager, or null
+  static Get()                    the manager, CREATING one if no scene placed it
+  static IsTutorialDone(id)       has this tutorial been completed?
+  static MarkTutorialDone(id)     record completion
+  static ResetAllProgress()       forget every tutorial (Tools/Tutorial menu)
+  Play(sequence, overlay, onDone)  start a tutorial; false if it could not start
+  StopCurrent()                   cut it short WITHOUT marking it as seen
+  IsPlaying / PlayingId           what is running now
+  static OnTutorialStarted/Finished   events, passing the tutorialId
+
+FLOW
+----
+  Play()
+    -> refuses if another tutorial is running, or the sequence is null
+    -> finds a TutorialOverlay (the one passed in, else FindInScene)
+    -> adds/reuses a TutorialRunner ON THE OVERLAY and binds it
+    -> raises OnTutorialStarted, runs the sequence
+    -> Finish(): clears IsPlaying, marks done when playOnce, raises
+       OnTutorialFinished, then calls the caller's onFinished
+
+HOW IT CONNECTS
+---------------
+  - Progress flags go through SaveSystem.IsTutorialCompleted /
+    SetTutorialCompleted, so they ride the same GAME_SAVE_V1 blob as coins and
+    units. Nothing here touches PlayerPrefs directly.
+  - TutorialTrigger is the usual caller (one per scene that has a tutorial).
+  - MenuLoader calls the STATIC IsTutorialDone at boot to decide whether to
+    detour through the tutorial scene.
+
+NOTES
+-----
+  - It deviates from the project's singleton pattern in one deliberate way:
+    Get() creates the manager if no scene placed one. That is what lets you open
+    Tutorial_Board_01 directly in the Editor and have it work with no boot scene.
+    Awake still does the usual guard-and-destroy on duplicates.
+  - The runner lives on the OVERLAY, not on the manager, so unloading the scene
+    kills a half-finished tutorial instead of leaving a coroutine pointed at
+    destroyed objects.

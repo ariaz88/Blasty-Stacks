@@ -33,6 +33,11 @@ public class SaveData
     // --- Battle allowance (BATTLE button daily cap + energy)
     public BattleEnergyState battleEnergy = new BattleEnergyState();
 
+    // --- Tutorials the player has already been shown (TutorialSequenceSO.TutorialId).
+    // Adding this needed no version bump: saves written before it simply have no
+    // such key, and JsonUtility leaves the field initializer in place.
+    public List<string> completedTutorials = new List<string>();
+
     // --- Optional
     public string savedAtUtc;
 

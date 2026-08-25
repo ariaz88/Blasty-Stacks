@@ -364,7 +364,11 @@ public class MatchResolver : MonoBehaviour
         return board.AreCellsPlaceableForMover(_footprint, 0); // treat as empty mover
     }
 
-    private bool AreShapesMatchCompatible(string a, string b)
+    /// <summary>
+    /// The match rule for shapes. Public and static so the tutorial layer can ask
+    /// "would these two blast?" without duplicating (and drifting from) the rule.
+    /// </summary>
+    public static bool AreShapesMatchCompatible(string a, string b)
     {
         if (a == b) return true;
 

@@ -1,0 +1,47 @@
+================================================================================
+  TutorialTarget.cs
+  Path : Assets/Scripts/Tutorial/TutorialTarget.cs
+  Type : [Serializable] struct
+  Layer: Tutorial
+================================================================================
+
+PURPOSE
+-------
+WHERE a tutorial step points. This is the only place in the tutorial system that
+knows how to turn "the thing I mean" into a screen position, which is what keeps
+the rest of it generic: a step never holds a scene reference.
+
+KINDS
+-----
+  BoardCell    a cell on the puzzle BoardGridXY. cellOffset adds an offset IN
+               CELLS, in board space, so (0, 0.5) aims at the middle of a
+               vertical 2-cell stack instead of its bottom cell. Being in board
+               space, it keeps working if the board is rotated or scaled.
+  SceneAnchor  any object carrying a TutorialAnchor with a matching anchorId.
+               Works for world objects AND UI RectTransforms, so this is what a
+               future "press THIS button" tutorial will use.
+  ScreenPoint  a normalised (0..1) screen position. Escape hatch.
+  WorldPoint   a fixed world position.
+
+FIELDS
+------
+  kind, boardCell, cellOffset, anchorId, screenPoint01, worldPoint, pixelOffset
+
+PUBLIC API
+----------
+  TryResolveScreen(worldCamera, board, out screenPos)
+      false when it cannot be resolved right now (no board, anchor not loaded),
+      so the caller can warn instead of pointing the hand at (0,0).
+  static Cell(x, y, offsetX, offsetY)     convenience for building from code
+
+HOW IT CONNECTS
+---------------
+  - TutorialRunner.TryResolve calls it; TutorialHandDragStep and
+    TutorialHandTapStep hold them.
+  - TutorialMatchGuideStep does NOT use it - it asks TutorialBoardHints for a
+    live target instead.
+
+NOTES
+-----
+  - pixelOffset is in SCREEN pixels, so it does not scale with resolution. Prefer
+    cellOffset for board work.

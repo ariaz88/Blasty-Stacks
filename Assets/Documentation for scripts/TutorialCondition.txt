@@ -1,0 +1,48 @@
+================================================================================
+  TutorialCondition.cs
+  Path : Assets/Scripts/Tutorial/TutorialCondition.cs
+  Type : [Serializable] struct + TutorialConditionWatcher (plain class)
+  Layer: Tutorial
+================================================================================
+
+PURPOSE
+-------
+WHEN a tutorial step is finished. Together with TutorialTarget this is what makes
+the step list data instead of code: a step says "point here, until that happens".
+
+KINDS
+-----
+  Duration       after `seconds`
+  TapAnywhere    the player touches or clicks anywhere
+  MatchBlasted   the board blasted a group, `requiredCount` times (0 counts as 1)
+  BoardEmpty     no occupied cells left on the BoardGridXY
+  AnchorClicked  a UI Button carrying a TutorialAnchor was pressed
+  Never          never satisfied on its own; useful while authoring
+
+FIELDS
+------
+  kind, seconds, requiredCount, anchorId
+  static ForDuration(s), static ForMatch(count)
+
+TUTORIALCONDITIONWATCHER
+------------------------
+  Begin(condition, board)   subscribes
+  Tick(unscaledDeltaTime)   polls; sets IsSatisfied
+  End()                     unsubscribes
+
+HOW IT CONNECTS
+---------------
+  - TutorialRunner.WaitFor drives the watcher, wrapped in try/finally.
+  - MatchBlasted rides the EXISTING static hook MatchResolver.OnBlast, so nothing
+    in the puzzle code had to change to support it.
+  - BoardEmpty uses the existing BoardGridXY.HasAnyOccupiedCells().
+
+NOTES
+-----
+  - End() MUST run. MatchResolver.OnBlast is STATIC, so a watcher that never
+    unsubscribes keeps a dead delegate alive across scene loads. That is exactly
+    why TutorialRunner.WaitFor uses try/finally rather than a plain loop.
+  - TapAnywhere reads legacy Input (the project ships activeInputHandler = Both,
+    and BoardInputController is legacy too), so it behaves like the rest of the
+    game.
+  - AnchorClicked logs a warning if the named anchor has no Button on it.

@@ -1,0 +1,60 @@
+================================================================================
+  TutorialOverlay.cs
+  Path : Assets/Scripts/Tutorial/TutorialOverlay.cs
+  Type : MonoBehaviour
+  Layer: Tutorial
+  Prefab: Assets/PREFABS/Tutorial/TutorialOverlay.prefab
+  Scenes: Tutorial_Board_01
+================================================================================
+
+PURPOSE
+-------
+The tutorial screen furniture: one canvas holding the pointing hand, the caption,
+a dimmer and a full-screen input blocker. Drop the prefab into any scene that
+needs a tutorial - it is the ONLY scene-side dependency of the whole system.
+
+PREFAB CONTENTS
+---------------
+  TutorialOverlay   Canvas (Screen Space - Overlay, sortingOrder 100),
+                    CanvasScaler 1125x2436 match=1 (same as the gameplay
+                    canvases), GraphicRaycaster, TutorialOverlay, TutorialRunner
+    Dimmer          full-screen black Image + CanvasGroup, INACTIVE
+    Blocker         full-screen transparent raycast target, INACTIVE
+    Caption         TMP text + CanvasGroup, anchoredPosition (0, -520),
+                    font LILITAONE-REGULAR SDF, size 58, white, centred
+    Hand            TutorialHand -> Ripple, HandSprite
+
+INSPECTOR FIELDS
+----------------
+  canvas, hand, caption, dimmer, blocker
+
+PUBLIC API
+----------
+  Canvas / Hand / Caption
+  SetDim(alpha)        0 = fully lit board
+  SetBlockInput(bool)
+  ClearAll()           back to "nothing showing"
+  static FindInScene()
+
+FLOW
+----
+  Awake -> if the canvas is Screen-Space-Camera with no camera, claim Camera.main
+           (a prefab cannot reference a scene camera, so such a canvas would
+           render nothing) -> hand.Configure(canvas) -> dim 0, blocker off
+
+HOW IT CONNECTS
+---------------
+  - TutorialManager finds it (FindInScene) when a trigger does not name one, and
+    puts a TutorialRunner on it.
+
+NOTES
+-----
+  - The dimmer and blocker exist but are switched OFF. The first tutorial matches
+    the reference video, which keeps the board fully lit and fully playable. They
+    are here so a later "spotlight this button" tutorial needs no new prefab.
+  - The canvas is Screen-Space-OVERLAY on purpose: always on top, and no
+    dependency on a camera being assigned. Note that means camera-render
+    screenshots (Unity MCP capture) will NOT show the tutorial layer - that is
+    expected, not a bug.
+  - Caption y = -520 sits just under the board, which spans canvas y -340..+340
+    in Tutorial_Board_01. Re-check it if the board framing changes.

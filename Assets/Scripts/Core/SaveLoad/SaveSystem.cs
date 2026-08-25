@@ -129,6 +129,41 @@ public static class SaveSystem
         return Data.battleEnergy;
     }
 
+    // NEW: Tutorials already shown. Keyed by TutorialSequenceSO.TutorialId, so a
+    // renamed id makes every player see that tutorial again - see TutorialManager.
+    public static bool IsTutorialCompleted(string tutorialId)
+    {
+        if (string.IsNullOrEmpty(tutorialId)) return false;
+
+        // Old saves predate this list, so JsonUtility may leave it null.
+        Data.completedTutorials ??= new List<string>();
+        return Data.completedTutorials.Contains(tutorialId);
+    }
+
+    public static void SetTutorialCompleted(string tutorialId, bool completed = true)
+    {
+        if (string.IsNullOrEmpty(tutorialId)) return;
+
+        Data.completedTutorials ??= new List<string>();
+
+        bool has = Data.completedTutorials.Contains(tutorialId);
+        if (has == completed) return;                 // nothing to write
+
+        if (completed) Data.completedTutorials.Add(tutorialId);
+        else Data.completedTutorials.Remove(tutorialId);
+
+        Save();
+        Debug.Log($"[SaveSystem] Tutorial '{tutorialId}' completed: {completed}");
+    }
+
+    /// <summary>Forgets every tutorial, so they all play again. Debug / testing.</summary>
+    public static void ResetTutorials()
+    {
+        Data.completedTutorials = new List<string>();
+        Save();
+        Debug.Log("[SaveSystem] Tutorial progress cleared.");
+    }
+
     public static void SetBattleEnergy(string windowStartUtc, int battlesUsed, int energy)
     {
         var state = GetBattleEnergy();

@@ -43,6 +43,24 @@ UNIT PERSISTENCE
       Bulk-saves the player's card arrangement. Sanitizes both lists: drops
       negative ids and removes duplicates. Null input becomes an empty list.
 
+TUTORIALS
+---------
+  IsTutorialCompleted(tutorialId) -> bool
+      Has this tutorial already been shown? Empty id returns false. Lazily
+      creates the list, because saves written before this field existed
+      deserialize it as null.
+
+  SetTutorialCompleted(tutorialId, completed = true)
+      Adds or removes the id, then Save(). No-ops when the flag already matches,
+      so it never writes for nothing.
+
+  ResetTutorials()
+      Clears the list so every tutorial plays again. Debug / testing only -
+      reached from Tools/Tutorial/Reset Tutorial Progress.
+
+  Keyed on TutorialSequenceSO.TutorialId, so RENAMING that id makes every
+  existing player see that tutorial again. See TutorialManager.
+
 BATTLE ALLOWANCE
 ----------------
   GetBattleEnergy()  ->  SaveData.BattleEnergyState

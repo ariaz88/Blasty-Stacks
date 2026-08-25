@@ -36,6 +36,14 @@ FIELDS
                        and its (placeholder) energy balance. Global, not
                        per-scene - see BattleEnergyService.
 
+  Tutorials
+    completedTutorials (List<string>) TutorialSequenceSO.TutorialId of every
+                       tutorial the player has been shown. Added 2026-08-25 with
+                       NO version bump: saves written before it simply have no
+                       such key, and JsonUtility leaves the field initializer in
+                       place. Written only through SaveSystem.SetTutorialCompleted
+                       / ResetTutorials - see TutorialManager.
+
   savedAtUtc           (string) timestamp of last save
 
 NESTED TYPES

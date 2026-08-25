@@ -1,0 +1,48 @@
+================================================================================
+  TutorialAnchor.cs
+  Path : Assets/Scripts/Tutorial/TutorialAnchor.cs
+  Type : MonoBehaviour
+  Layer: Tutorial
+  Scenes: none yet - it exists for the tutorials that come after the board one
+================================================================================
+
+PURPOSE
+-------
+Tags any object in a scene with a string id, so a tutorial step can point at it
+without the TutorialSequenceSO holding a scene reference (an asset cannot
+reference a scene object anyway).
+
+Works for BOTH kinds of object:
+  a world object (Transform)      resolved through the world camera
+  a UI element (RectTransform)    resolved through its own Canvas
+
+Drop one on a button, a HUD icon, a castle gate - anything a future tutorial
+needs to point at - then reference it by id from TutorialTarget.SceneAnchor, or
+from TutorialCondition.AnchorClicked.
+
+INSPECTOR FIELDS
+----------------
+  anchorId   (string) e.g. "battle_button"
+
+PUBLIC API
+----------
+  AnchorId
+  static Find(id)                                enabled anchors only
+  TryGetScreenPosition(worldCamera, out screenPos)
+
+FLOW
+----
+  OnEnable / OnDisable maintain a static list of live anchors. Find walks it.
+
+HOW IT CONNECTS
+---------------
+  - TutorialTarget.SceneAnchor resolves through Find + TryGetScreenPosition.
+  - TutorialCondition.AnchorClicked looks for a Button on the anchor.
+
+NOTES
+-----
+  - A plain List, not a Dictionary: there are only ever a handful, and duplicate
+    ids should be visible rather than silently overwritten. Find returns the
+    first match.
+  - UI anchors read their own Canvas render mode, so they work whether that
+    canvas is Overlay or Screen-Space-Camera.

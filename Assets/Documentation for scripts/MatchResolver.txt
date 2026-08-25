@@ -79,9 +79,13 @@ CORE SEARCH
       Collects every 4-neighbour cell of every cell in the footprint, then
       REMOVES the footprint's own cells so a piece never rediscovers itself.
 
-  AreShapesMatchCompatible(a, b) -> bool
+  AreShapesMatchCompatible(a, b) -> bool     PUBLIC STATIC
       Shapes match if their ids are equal, OR they are one of two hard-coded
       compatible pairs:  B6 <-> B7,  and  B4 <-> B5.
+      Made public static on 2026-08-25 so the tutorial layer
+      (TutorialBoardHints) can ask "would these two blast?" without duplicating
+      the rule and drifting from it. Behaviour is unchanged - it never used
+      instance state.
       !! These shape ids are magic strings in code. A designer renaming a shape
       !! in the Inspector would silently break matching with no error.
 

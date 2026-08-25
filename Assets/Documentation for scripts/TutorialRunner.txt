@@ -1,0 +1,61 @@
+================================================================================
+  TutorialRunner.cs
+  Path : Assets/Scripts/Tutorial/TutorialRunner.cs
+  Type : MonoBehaviour
+  Layer: Tutorial
+  Lives on: the TutorialOverlay prefab (added automatically if missing)
+================================================================================
+
+PURPOSE
+-------
+Walks the step list of a TutorialSequenceSO and gives each step the services it
+needs: resolving targets to screen points, the hand, the caption, and waiting on
+conditions.
+
+RUNTIME STATE
+-------------
+  _overlay      the overlay it draws through
+  _worldCamera  lazily Camera.main
+  _board        lazily FindObjectOfType<BoardGridXY>(); null in non-board scenes
+  _sequence     the running coroutine
+
+PUBLIC API
+----------
+  Bind(overlay)            attach to an overlay and clear it
+  Run(sequence, onDone)    run to the end, then call onDone
+  Stop()                   cut it short (does NOT call onDone)
+  IsRunning
+  TryResolve(target, out screenPos)     TutorialTarget -> screen position
+  ShowCaption / HideCaption
+  WaitFor(condition)                    coroutine that blocks on a condition
+  ResolveMatchHint()                    the gesture to demonstrate right now
+  ResolveMatchHint(preferred, sticky, out chosenMover)
+
+RESOLVEMATCHHINT
+----------------
+  Asks TutorialBoardHints for the best available match, then returns SCREEN
+  points for the hand:
+      from = centre of the stack to drag, at its CURRENT anchor
+      to   = centre of the stack it should meet
+
+  It deliberately aims at the TARGET STACK, not at the empty landing cell beside
+  it. Aiming at the landing cell made the hand stop short of the second stack,
+  and kept the path flat whenever the two stacks sat at different heights.
+
+  preferred - teach the pair containing this stack first
+  sticky    - keep this stack as the one that MOVES, so the demonstrated gesture
+              never reverses direction under the player
+  chosenMover comes back so the caller can feed it in as sticky next cycle.
+
+HOW IT CONNECTS
+---------------
+  - TutorialManager creates/binds it on the overlay and calls Run.
+  - Steps call back into it; TutorialBoardHints does the board reasoning.
+
+NOTES
+-----
+  - WaitFor wraps its loop in try/finally. That matters: if the coroutine is
+    stopped mid-wait, End() still runs and the watcher lets go of the STATIC
+    MatchResolver.OnBlast hook, which would otherwise survive a scene load.
+  - It lives on the overlay so unloading the scene takes a half-finished
+    tutorial with it, rather than leaving a coroutine pointed at dead objects.

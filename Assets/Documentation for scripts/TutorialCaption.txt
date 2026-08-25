@@ -1,0 +1,42 @@
+================================================================================
+  TutorialCaption.cs
+  Path : Assets/Scripts/Tutorial/TutorialCaption.cs
+  Type : MonoBehaviour
+  Layer: Tutorial
+  Lives on: TutorialOverlay prefab -> "Caption"
+================================================================================
+
+PURPOSE
+-------
+The one line of text a tutorial step shows. In the first tutorial that is the
+"Drag to match 2 same blocks" caption under the board, matching the reference
+video.
+
+Deliberately dumb: it fades text in and out and nothing else. WHERE it sits is
+authored on the TutorialOverlay prefab, because that is a layout decision per
+game, not per tutorial.
+
+INSPECTOR FIELDS
+----------------
+  label      (TMP_Text)
+  group      (CanvasGroup)
+  fadeTime   (float, default 0.25) unscaled
+
+PUBLIC API
+----------
+  Show(text)   sets the text and fades in. Re-showing the SAME text that is
+               already fully visible does nothing, so a looping step can call it
+               every cycle without restarting the fade.
+  Hide()
+
+HOW IT CONNECTS
+---------------
+  - TutorialRunner.ShowCaption / HideCaption; steps call those.
+
+NOTES
+-----
+  - Unscaled time throughout, so the caption still animates if a tutorial pauses
+    the game.
+  - Plain white text, no outline. TMP does not work with the UI Outline/Shadow
+    components, so an outline would mean a material instance baked into the
+    prefab - not worth it while the backdrop stays dark.

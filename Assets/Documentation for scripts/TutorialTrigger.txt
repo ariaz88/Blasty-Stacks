@@ -1,0 +1,55 @@
+================================================================================
+  TutorialTrigger.cs
+  Path : Assets/Scripts/Tutorial/TutorialTrigger.cs
+  Type : MonoBehaviour
+  Layer: Tutorial
+  Scenes: Tutorial_Board_01
+================================================================================
+
+PURPOSE
+-------
+The scene-side hook that starts a tutorial, and decides what happens after it.
+This is the piece that makes the system reusable with NO new code: to add a
+tutorial anywhere, make a TutorialSequenceSO, drop the TutorialOverlay prefab
+into the scene, and add one of these pointing at the sequence.
+
+INSPECTOR FIELDS
+----------------
+  What to play
+    sequence              (TutorialSequenceSO) the tutorial to run
+    overlay               (TutorialOverlay, optional) left empty, the one in the
+                          scene is found
+  When
+    playOnStart           (bool, default true)
+    startDelay            (float, default 0.4) delay before starting. It matters:
+                          BoardBootstrapper places the stacks in Start, and the
+                          hand must point at where they ENDED UP.
+  When the tutorial finishes
+    loadSceneOnComplete   (string) scene to load afterwards. Empty = stay put.
+                          Set to "MenuScene" in Tutorial_Board_01.
+    loadSceneDelay        (float, default 0.6)
+  Testing
+    forceReplayInEditor   (bool) EDITOR ONLY - play even if already marked seen
+
+FLOW
+----
+  Start()  -> waits startDelay (realtime) -> Play()
+  Play()   -> if the sequence is playOnce AND already done: log, skip straight
+              to HandleComplete
+           -> else TutorialManager.Get().Play(...); if that returns false,
+              HandleComplete anyway
+  HandleComplete() -> loads loadSceneOnComplete after loadSceneDelay
+
+HOW IT CONNECTS
+---------------
+  - TutorialManager runs the sequence; this only starts it and routes onwards.
+  - In the boot flow: MenuLoader sends a first-run player to Tutorial_Board_01,
+    and THIS component is what sends them on to MenuScene when they are done.
+
+NOTES
+-----
+  - Already-seen deliberately still runs loadSceneOnComplete. Without that, a
+    player who somehow re-entered the tutorial scene after finishing it would be
+    stranded on a board with no way out.
+  - forceReplayInEditor is inside #if UNITY_EDITOR, so it can never affect a
+    build even if it is left ticked.

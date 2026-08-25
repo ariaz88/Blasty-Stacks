@@ -1,0 +1,29 @@
+================================================================================
+  TutorialMenu.cs
+  Path : Assets/Scripts/Editor/TutorialMenu.cs
+  Type : static class, EDITOR ONLY
+  Layer: Tutorial / Editor
+================================================================================
+
+PURPOSE
+-------
+Editor helpers for testing tutorials. Without these, re-testing a playOnce
+tutorial would mean wiping the whole save.
+
+MENU ITEMS
+----------
+  Tools/Tutorial/Reset Tutorial Progress
+      SaveSystem.ResetTutorials() - every tutorial plays again on the next run.
+
+  Tools/Tutorial/Log Tutorial Progress
+      Prints the ids currently marked as seen.
+
+HOW IT CONNECTS
+---------------
+  - Reads/writes SaveData.completedTutorials through SaveSystem.
+  - The other way to re-test one tutorial is forceReplayInEditor on its
+    TutorialTrigger, which does not touch the save at all.
+
+NOTES
+-----
+  - Must stay in a folder named Editor; it references UnityEditor.

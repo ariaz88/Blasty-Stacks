@@ -1,0 +1,70 @@
+================================================================================
+  TutorialBoardHints.cs
+  Path : Assets/Scripts/Tutorial/TutorialBoardHints.cs
+  Type : static class
+  Layer: Tutorial
+================================================================================
+
+PURPOSE
+-------
+Works out, from the CURRENT state of the board, which stack the player should
+drag and where it should land to make a match. This is what lets the tutorial
+keep pointing at the right thing instead of at fixed cells.
+
+The answer is always a LEGAL, REACHABLE move: the landing anchor is a spot the
+piece can actually slide to in one drag, checked with the same cell-by-cell rule
+BoardInputController uses, so the hand never demonstrates an impossible move.
+
+PUBLIC API
+----------
+  PieceCenterWorld(board, piece, anchor)
+      World centre of the whole footprint if the piece sat at anchor. Averaging
+      the cells points at the middle of a 2-tall stack rather than its bottom
+      cell, and needs no per-shape tuning.
+
+  TryFindMatchHint(board, out mover, out target, out landing)
+  TryFindMatchHint(board, preferred, out mover, out target, out landing)
+  TryFindMatchHint(board, preferred, sticky, out mover, out target, out landing)
+      The best match available right now.
+
+  PieceAtCell(board, cell)
+      The placed piece whose footprint covers a cell, via board occupancy.
+
+FLOW
+----
+  CollectPlaced      every active PieceSimple that the board says owns its own
+                     anchor cell. That check skips pieces mid-blast or never
+                     bootstrapped.
+  pair filter        same ColorId AND MatchResolver.AreShapesMatchCompatible -
+                     the real blast rule, called directly rather than copied.
+  TryPair            candidate anchors are generated FROM the target footprint
+                     (each 4-neighbour cell, minus each mover offset), then each
+                     is checked for: placeable, actually touching the target, and
+                     reachable.
+  CanSlide / Walk    steps one cell at a time, X-then-Y and Y-then-X, respecting
+                     the piece AllowsX / AllowsY flags.
+
+PRIORITY ORDER
+--------------
+  1. sticky    the stack already being demonstrated, while it still has a move
+  2. preferred the pair the tutorial asked to teach first
+  3. cheapest  fewest steps
+
+  Without (1) the search would re-pick the cheapest direction every cycle, so
+  moving either stack could make the hand suddenly demonstrate dragging the OTHER
+  one, and the gesture would appear to reverse under the player.
+
+HOW IT CONNECTS
+---------------
+  - TutorialRunner.ResolveMatchHint turns its answer into screen points.
+  - TutorialMatchGuideStep is the only step that uses it today.
+  - It required ONE change outside the tutorial folder: MatchResolver
+    .AreShapesMatchCompatible became public static so the rule is shared, not
+    duplicated.
+
+NOTES
+-----
+  - Reused static scratch lists keep the per-cycle hint allocation-free. Safe
+    because Unity calls this on the main thread only.
+  - It calls FindObjectsOfType each time it is asked, which is once per hand
+    cycle (roughly 2 seconds), not per frame.

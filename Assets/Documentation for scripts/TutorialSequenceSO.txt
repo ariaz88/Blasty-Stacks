@@ -1,0 +1,46 @@
+================================================================================
+  TutorialSequenceSO.cs
+  Path : Assets/Scripts/Tutorial/TutorialSequenceSO.cs
+  Type : ScriptableObject   (Create > Blasty > Tutorial Sequence)
+  Layer: Tutorial
+  Assets: Assets/Scriptable Objects/Tutorial/Tut_Board_Basics.asset
+================================================================================
+
+PURPOSE
+-------
+One whole tutorial as a single asset: an id for the save flag, and an ordered
+list of steps. Authoring a tutorial means filling one of these in - no code.
+
+INSPECTOR FIELDS
+----------------
+  tutorialId   (string) STABLE save key. Empty falls back to the asset name.
+  playOnce     (bool, default true) mark as seen when it finishes
+  steps        ([SerializeReference] List<TutorialStep>) the ordered beats. The
+               + button offers every TutorialStep subclass.
+
+PUBLIC API
+----------
+  TutorialId   tutorialId, or the asset name when it is blank
+  HasSteps     convenience null/empty check
+
+HOW IT CONNECTS
+---------------
+  - TutorialTrigger points at one; TutorialRunner walks its steps.
+  - MenuLoader holds a direct reference to the first-run one so it can ask
+    TutorialManager.IsTutorialDone(seq.TutorialId) at boot.
+
+NOTES
+-----
+  - [SerializeReference] is what allows different step TYPES in one list, so a
+    tutorial is one asset instead of one asset per step. It also means renaming
+    or moving a step class breaks existing assets - Unity matches managed
+    references by type name.
+  - NEVER rename tutorialId after release: the flag is keyed on it, so a changed
+    id makes every existing player see that tutorial again.
+
+CURRENT ASSET
+-------------
+  Tut_Board_Basics  id "board_basics", playOnce, 2 steps:
+    1. TutorialMatchGuideStep  caption "Drag to match 2 same blocks",
+                               firstPairAtCell (6,2), until BoardEmpty
+    2. TutorialCaptionStep     "Nice!" for 1.2s

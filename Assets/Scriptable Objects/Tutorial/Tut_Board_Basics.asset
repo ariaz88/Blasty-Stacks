@@ -1,0 +1,51 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f8c1f6a5be446b342ae44f848a279bc7, type: 3}
+  m_Name: Tut_Board_Basics
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialSequenceSO
+  tutorialId: board_basics
+  playOnce: 1
+  steps:
+  - rid: 2479097993925755140
+  - rid: 2479097993925755141
+  references:
+    version: 2
+    RefIds:
+    - rid: 2479097993925755140
+      type: {class: TutorialMatchGuideStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: Guide every matchable pair, vertical stacks first
+        caption: Drag to match 2 same blocks
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 3
+          seconds: 0
+          requiredCount: 0
+          anchorId: 
+        hideCaptionWhenDone: 1
+        firstPairAtCell: {x: 6, y: 2}
+    - rid: 2479097993925755141
+      type: {class: TutorialCaptionStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: Well done
+        text: Nice!
+        hideCaptionWhenDone: 1
+        until:
+          kind: 0
+          seconds: 1.2
+          requiredCount: 0
+          anchorId: 

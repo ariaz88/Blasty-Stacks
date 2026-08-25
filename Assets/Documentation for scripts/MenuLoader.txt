@@ -22,11 +22,23 @@ INSPECTOR FIELDS
         true  = Additive, then the preload scene is unloaded afterwards.
   loadingFillImage (Image)   must be set to Image Type = Filled
   loadingText      (TMP_Text) shows "45%" etc.
+  First-run tutorial
+    firstRunTutorial      (TutorialSequenceSO) the tutorial that must be seen
+                          before the menu. Empty = always go to targetSceneName.
+                          Set to Tut_Board_Basics in StarterScene.
+    firstRunTutorialScene (string, default "Tutorial_Board_01")
 
 FLOW  (all inside the Start coroutine)
 --------------------------------------
   1. yield return null - one frame so GameStartManager, CurrencyManager and
      friends can finish Awake/Start before the menu needs them.
+  1b. FIRST-RUN DETOUR: if firstRunTutorial is set and
+     TutorialManager.IsTutorialDone(its id) is false, targetSceneName is swapped
+     for firstRunTutorialScene. Everything below is untouched, so the loading bar
+     works exactly the same. The tutorial scene's own TutorialTrigger is what
+     sends the player on to MenuScene afterwards.
+     The flag lives in SaveSystem, so this happens exactly once per save; clear
+     it with Tools/Tutorial/Reset Tutorial Progress to test again.
   2. Optional WaitForSeconds(delaySeconds).
   3. Begin SceneManager.LoadSceneAsync in the chosen mode and immediately set
      allowSceneActivation = false, so Unity loads but does not switch yet.

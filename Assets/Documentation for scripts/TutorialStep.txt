@@ -1,0 +1,62 @@
+================================================================================
+  TutorialStep.cs
+  Path : Assets/Scripts/Tutorial/TutorialStep.cs
+  Type : [Serializable] classes (NOT MonoBehaviours), stored by [SerializeReference]
+  Layer: Tutorial
+================================================================================
+
+PURPOSE
+-------
+One beat of a tutorial. A step is a coroutine: it sets the overlay up, waits for
+its condition, then tidies up. TutorialRunner just walks the list, so adding a
+new KIND of beat means adding a class here and nothing else.
+
+    abstract class TutorialStep
+        string note                       inspector-only label
+        IEnumerator Run(TutorialRunner)   the beat itself
+
+THE STEPS
+---------
+  TutorialCaptionStep
+      text, hideCaptionWhenDone, until
+      Shows a line of text and waits. No hand.
+
+  TutorialHandDragStep
+      caption, from (TutorialTarget), to (TutorialTarget), timings, until,
+      hideCaptionWhenDone
+      Loops a press-drag-release between two FIXED targets. Endpoints are
+      re-resolved every cycle, so a target that moves stays pointed at.
+
+  TutorialHandTapStep
+      caption, at (TutorialTarget), timings, until, hideCaptionWhenDone
+      Loops a tap in place. For "press this button" tutorials.
+
+  TutorialMatchGuideStep          <- what the first tutorial actually uses
+      caption, timings, until (default BoardEmpty), hideCaptionWhenDone,
+      firstPairAtCell (default (-1,-1) = automatic)
+      Points at whatever match the BOARD currently offers instead of at
+      hard-coded cells. Every hand cycle re-asks, so:
+        - drag the hinted stack somewhere else and the hint re-aims from its NEW
+          position;
+        - blast a pair and the hint moves on to the NEXT pair, all the way to an
+          empty board, with no step authored per pair.
+      It holds a "sticky" mover across cycles so the hand keeps dragging the SAME
+      stack rather than flipping to whichever direction is shortest this frame.
+      firstPairAtCell names the stack to teach first, because the shortest drag
+      is not always the clearest first lesson.
+
+  TutorialWaitStep
+      seconds. Dead time, e.g. to let a blast animation finish.
+
+HOW IT CONNECTS
+---------------
+  - Lives inside TutorialSequenceSO.steps.
+  - Calls back into TutorialRunner for target resolving, the hand, the caption
+    and condition waiting. See TutorialRunner and TutorialBoardHints.
+
+NOTES
+-----
+  - These are plain classes, not ScriptableObjects, on purpose: one asset per
+    tutorial instead of one asset per step.
+  - Because [SerializeReference] matches by type name, renaming a step class
+    silently empties that row in every existing sequence asset.

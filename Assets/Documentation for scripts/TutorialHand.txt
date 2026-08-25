@@ -1,0 +1,72 @@
+================================================================================
+  TutorialHand.cs
+  Path : Assets/Scripts/Tutorial/TutorialHand.cs
+  Type : MonoBehaviour  (+ structs TutorialDragPoints, TutorialHandLoopTimings)
+  Layer: Tutorial
+  Lives on: TutorialOverlay prefab -> "Hand"
+  Art   : Assets/Arts/UI-Tutorial/Hand_Tutorial.png
+          Assets/Arts/UI-Tutorial/Hand_Tutorial_FingerAnimation.png
+================================================================================
+
+PURPOSE
+-------
+The pointing-hand view. TutorialRunner resolves targets to SCREEN positions and
+hands them here; this component owns the whole look of the gesture.
+
+Neither sprite is a frame sequence (both are single sprites), so all motion is
+done on the transform.
+  Hand_Tutorial.png                 the hand itself
+  Hand_Tutorial_FingerAnimation.png the soft ellipse used as the touch ripple
+
+EXPECTED HIERARCHY
+------------------
+  Hand          <- this RectTransform IS the touch point
+    Ripple      <- centred on the touch point, own CanvasGroup
+    HandSprite  <- pivot (0.12, 0.92) = the FINGERTIP, own CanvasGroup
+
+  Because the child pivot sits on the fingertip and its anchoredPosition is zero,
+  the fingertip lands exactly on the touch point, and the press scale pivots at
+  the tip the way a real finger does.
+
+INSPECTOR FIELDS
+----------------
+  Parts        handSprite, handGroup, ripple, rippleGroup
+  Placement    fingerTipNudge      final tweak, canvas units
+  Press look   pressedScale (0.92), rippleMinScale (0.55), rippleMaxScale (1.15),
+               rippleAlpha (0.55), ripplePulseSpeed (1.6), ripplePulseAmount (0.12)
+
+PUBLIC API
+----------
+  Configure(canvas)                caches the canvas rect and UI camera; works
+                                   for Overlay and Screen-Space-Camera alike
+  SetScreenPosition(screenPos)
+  StartDragLoop(Func<TutorialDragPoints>, timings)   <- the real one
+  StartDragLoop(from, to, timings)                   fixed-endpoint convenience
+  StartTapLoop(at | provider, timings)
+  StopAndHide()
+  IsLooping
+
+THE CYCLE (all unscaled time, so it survives a paused game)
+-----------------------------------------------------------
+  ask provider -> appear (0.15) -> press (0.12) -> travel (0.85, smoothstep)
+  -> release (0.20) -> pause (0.45) -> repeat.  About 1.8s, matching the
+  reference video.
+
+  THE PROVIDER IS ASKED AT THE START OF EVERY CYCLE, not once. That is the whole
+  point: if the player moves the hinted stack, the next demonstration starts from
+  where the stack now IS, and once a pair blasts the provider can hand back the
+  next pair. A provider returning an invalid TutorialDragPoints hides the hand
+  for that cycle and asks again shortly.
+
+HOW IT CONNECTS
+---------------
+  - TutorialOverlay calls Configure in Awake.
+  - Steps drive it; TutorialRunner.ResolveMatchHint is the usual provider.
+
+NOTES
+-----
+  - Coroutines, not DOTween. MatchResolver shows DOTWEEN_ENABLED is not defined
+    in this project, so relying on it here would have been a trap.
+  - Every setter is null-safe, so a half-wired prefab warns instead of throwing.
+  - fingerTipNudge exists because the pivot fraction was read off the sprite
+    alpha by eye; nudge it rather than editing the prefab pivot.

@@ -37,10 +37,29 @@ public class MenuLoader : MonoBehaviour
     [SerializeField] private Image loadingFillImage;   // Image type = Filled
     [SerializeField] private TMP_Text loadingText;     // e.g. "45%"
 
+    [Header("First-run tutorial")]
+    [Tooltip("The tutorial that must be seen before the menu. Leave empty to always go " +
+             "straight to targetSceneName.")]
+    [SerializeField] private TutorialSequenceSO firstRunTutorial;
+
+    [Tooltip("Scene that plays that tutorial. Its TutorialTrigger is what sends the " +
+             "player on to the menu afterwards.")]
+    [SerializeField] private string firstRunTutorialScene = "Tutorial_Board_01";
+
     private IEnumerator Start()
     {
         // 1) give managers a frame to run Awake/Start (GameStartManager, CurrencyManager, etc.)
         yield return null;
+
+        // 1b) First launch only: detour through the tutorial scene instead of the
+        // menu. The flag lives in SaveSystem, so this happens exactly once per
+        // save - clear it with Tools/Tutorial/Reset Tutorial Progress to test again.
+        if (firstRunTutorial && !string.IsNullOrEmpty(firstRunTutorialScene)
+            && !TutorialManager.IsTutorialDone(firstRunTutorial.TutorialId))
+        {
+            Debug.Log($"[MenuLoader] First run: routing to tutorial scene '{firstRunTutorialScene}'.");
+            targetSceneName = firstRunTutorialScene;
+        }
 
         // 2) optional delay (e.g. splash logo)
         if (delaySeconds > 0f)

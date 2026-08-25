@@ -563,6 +563,8 @@ MonoBehaviour:
   loadAdditiveThenUnloadPreload: 0
   loadingFillImage: {fileID: 496829386}
   loadingText: {fileID: 1299600552}
+  firstRunTutorial: {fileID: 11400000, guid: c35200cb672c4e64bbe7488cd2561dda, type: 2}
+  firstRunTutorialScene: Tutorial_Board_01
 --- !u!4 &971912672
 Transform:
   m_ObjectHideFlags: 0
