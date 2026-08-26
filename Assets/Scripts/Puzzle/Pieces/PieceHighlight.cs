@@ -35,8 +35,19 @@ public class PieceHighlight : MonoBehaviour
     private const float FadeTime = 0.12f;    // halo fade in / out
 
     // ---- emphasis ---------------------------------------------------------------
-    private const float EmphasisScale = 1.03f;   // +3%
+    private const float EmphasisScale = 1.05f;   // +8%
     private const float EmphasisTime = 0.10f;
+
+    // How far the held piece's sorting order is pushed while it is carried, so it draws
+    // OVER anything it overlaps instead of sliding under its neighbours.
+    private const int OnTopOrderBoost = 200;
+
+    /// <summary>
+    /// Master switch for the rim + brighten halo. OFF by default; turned on only if
+    /// PieceHighlightDirector is configured to. When off the halo copies are never even
+    /// built, so the silhouette read-back never happens either.
+    /// </summary>
+    public static bool HaloEnabled = true;
 
     // ---- shake ------------------------------------------------------------------
     private const float ShakeDegrees = 5f;    // +/- 5 degrees
@@ -46,9 +57,11 @@ public class PieceHighlight : MonoBehaviour
     private struct Visual
     {
         public Transform transform;
+        public SpriteRenderer renderer;
+        public int baseOrder;
         public Vector3 baseScale;
         public Quaternion baseRotation;
-        public SpriteRenderer[] halo;   // 4 rim copies + 1 brighten copy
+        public SpriteRenderer[] halo;   // 4 rim copies + 1 brighten copy, null when off
         public Color glowTint;          // the stack's own highlight band
     }
 
@@ -100,12 +113,40 @@ public class PieceHighlight : MonoBehaviour
         enabled = true;
     }
 
+    /// <summary>
+    /// Lifts the piece's sorting order while it is being carried, so a held piece draws
+    /// OVER anything it overlaps. Without this the drag lift moves the piece toward the
+    /// camera but sprites sort by sortingOrder FIRST, so a piece with a lower authored
+    /// order (the 1X stacks sit at -1, the 3X ones at +1) slides underneath its
+    /// neighbours while the player is dragging it.
+    /// </summary>
+    public void SetOnTop(bool on)
+    {
+        Build();
+
+        for (int i = 0; i < _visuals.Count; i++)
+        {
+            var v = _visuals[i];
+            int delta = on ? OnTopOrderBoost : 0;
+
+            if (v.renderer) v.renderer.sortingOrder = v.baseOrder + delta;
+
+            if (v.halo != null)
+            {
+                for (int j = 0; j < 4; j++)
+                    if (v.halo[j]) v.halo[j].sortingOrder = v.baseOrder - 1 + delta;
+                if (v.halo[4]) v.halo[4].sortingOrder = v.baseOrder + 1 + delta;
+            }
+        }
+    }
+
     /// <summary>Drops everything immediately - used when a drag ends.</summary>
     public void ClearAll()
     {
         _haloTarget = 0f;
         _emphasisTarget = 0f;
         _shakeT = -1f;
+        SetOnTop(false);
         enabled = true;
     }
 
@@ -126,37 +167,42 @@ public class PieceHighlight : MonoBehaviour
         {
             if (!src || !src.sprite) continue;
 
-            // The stack's own highlight band drives the body lift, so the piece brightens
-            // along its own colour ramp instead of fading toward white. Falls back to a
-            // plain lighten if the sprite cannot be sampled.
-            Color glowTint = Color.white;
-            if (PieceTintSampler.TryGetSpriteBands(src.sprite, out var bands))
-                glowTint = bands.light;
-
             var v = new Visual
             {
                 transform = src.transform,
+                renderer = src,
+                baseOrder = src.sortingOrder,
                 baseScale = src.transform.localScale,
                 baseRotation = src.transform.localRotation,
-                halo = new SpriteRenderer[5],
-                glowTint = glowTint
+                halo = null,
+                glowTint = Color.white
             };
 
-            // Rim offset in WORLD units, derived from the sprite's own pixels-per-unit so a
-            // 114px stack and a 228px stack get the same visual thickness.
-            float unit = RimPixels / Mathf.Max(1f, src.sprite.pixelsPerUnit);
-
-            Vector2[] offsets =
+            if (HaloEnabled)
             {
-                new Vector2(+unit, 0f), new Vector2(-unit, 0f),
-                new Vector2(0f, +unit), new Vector2(0f, -unit),
-            };
+                // The stack's own highlight band drives the body lift, so the piece
+                // brightens along its own colour ramp instead of fading toward white.
+                if (PieceTintSampler.TryGetSpriteBands(src.sprite, out var bands))
+                    v.glowTint = bands.light;
 
-            for (int i = 0; i < 4; i++)
-                v.halo[i] = MakeCopy(src, offsets[i], src.sortingOrder - 1, "Rim" + i);
+                v.halo = new SpriteRenderer[5];
 
-            // Brighten sits on top of the piece.
-            v.halo[4] = MakeCopy(src, Vector2.zero, src.sortingOrder + 1, "Glow");
+                // Rim offset in WORLD units, from the sprite's own pixels-per-unit, so a
+                // 114px stack and a 228px stack get the same visual thickness.
+                float unit = RimPixels / Mathf.Max(1f, src.sprite.pixelsPerUnit);
+
+                Vector2[] offsets =
+                {
+                    new Vector2(+unit, 0f), new Vector2(-unit, 0f),
+                    new Vector2(0f, +unit), new Vector2(0f, -unit),
+                };
+
+                for (int i = 0; i < 4; i++)
+                    v.halo[i] = MakeCopy(src, offsets[i], src.sortingOrder - 1, "Rim" + i);
+
+                // Brighten sits on top of the piece.
+                v.halo[4] = MakeCopy(src, Vector2.zero, src.sortingOrder + 1, "Glow");
+            }
 
             _visuals.Add(v);
         }
@@ -316,6 +362,8 @@ public class PieceHighlight : MonoBehaviour
         for (int i = 0; i < _visuals.Count; i++)
         {
             var halo = _visuals[i].halo;
+            if (halo == null) continue;      // halo switched off - nothing was built
+
             for (int j = 0; j < 4; j++)
                 if (halo[j]) halo[j].color = new Color(1f, 1f, 1f, rim);
 

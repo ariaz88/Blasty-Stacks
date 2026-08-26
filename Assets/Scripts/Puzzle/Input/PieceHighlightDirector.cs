@@ -23,9 +23,19 @@ public class PieceHighlightDirector : MonoBehaviour
 {
     public static PieceHighlightDirector Instance { get; private set; }
 
+    [Tooltip("OFF by default. Turns on the white rim + brighten halo on the held piece and " +
+             "on every stack it could match. The scale-up and the shake are NOT affected by " +
+             "this - they always run.")]
+    [SerializeField] private bool enableHalo =true;
+
     [Tooltip("Empty cells that may remain between the held piece and a match before that " +
-             "match scales up and shakes. Measured along a row or a column only.")]
+             "match SHAKES. Measured along a row or a column only. The match only scales up " +
+             "when the two actually touch - see matchTouchCells.")]
     [SerializeField, Min(0f)] private float matchNearCells = 2f;
+
+    [Tooltip("Gap, in cells, still counted as contact for the scale-up. Small but non-zero " +
+             "so float dust on a flush edge does not flicker it.")]
+    [SerializeField, Min(0f)] private float matchTouchCells = 0.12f;
 
     [Tooltip("Extra distance a match must travel back out before it can shake again, so a " +
              "piece jiggled on the boundary does not retrigger every other frame.")]
@@ -55,6 +65,7 @@ public class PieceHighlightDirector : MonoBehaviour
     {
         if (Instance && Instance != this) { Destroy(this); return; }
         Instance = this;
+        PieceHighlight.HaloEnabled = enableHalo;
     }
 
     private void OnDestroy()
@@ -89,21 +100,37 @@ public class PieceHighlightDirector : MonoBehaviour
         _held = held;
         if (!_board) _board = FindObjectOfType<BoardGridXY>();
 
-        // The held piece: glow, grow, and shake straight away - "as soon as it is touched".
+        // The held piece: grow and shake straight away - "as soon as it is touched" - and
+        // lift its sorting order so it rides OVER the pieces it is dragged across.
         var self = Get(held);
         if (self)
         {
-            self.SetHalo(true);
+            if (enableHalo) self.SetHalo(true);
             self.SetEmphasis(true);
+            self.SetOnTop(true);
             self.PlayShake();
         }
 
-        // Every possible match on the board glows for the whole drag.
+        // EVERY possible match shakes right now, wherever it is on the board.
+        //
+        // !! This is deliberately DISTANCE-INDEPENDENT. The shake used to be driven only
+        // !! from OnDrag's proximity test, and LineGapCells returns MaxValue for two pieces
+        // !! that share neither a row nor a column - so a match sitting diagonally from the
+        // !! held piece never shook at all. That is what made it look random: pieces in line
+        // !! shook, pieces on a diagonal never did.
+        //
+        // They are seeded into _shaken so the first OnDrag frame does not immediately shake
+        // them a second time; they re-arm normally once they fall outside the near band.
         CollectMatches(held, _matches);
         for (int i = 0; i < _matches.Count; i++)
         {
-            var h = Get(_matches[i]);
-            if (h) h.SetHalo(true);
+            var other = _matches[i];
+            var h = Get(other);
+            if (!h) continue;
+
+            if (enableHalo) h.SetHalo(true);
+            h.PlayShake();
+            _shaken.Add(other);
         }
     }
 
@@ -116,21 +143,28 @@ public class PieceHighlightDirector : MonoBehaviour
             var other = _matches[i];
             if (!other) continue;
 
+            var h = Get(other);
+            if (!h) continue;
+
             float gap = LineGapCells(held, other);
+
+            // TWO separate thresholds on purpose:
+            //   SHAKE  fires early, at matchNearCells, as a "this one pairs with you" nudge.
+            //   SCALE  holds only while the two bodies actually TOUCH.
             bool near = gap <= matchNearCells;
+            bool touching = gap <= matchTouchCells;
+
+            h.SetEmphasis(touching);
 
             if (near && !_shaken.Contains(other))
             {
                 _shaken.Add(other);
-                var h = Get(other);
-                if (h) { h.SetEmphasis(true); h.PlayShake(); }
+                h.PlayShake();
             }
             else if (!near && _shaken.Contains(other) &&
                      gap > matchNearCells + rearmHysteresisCells)
             {
                 _shaken.Remove(other);
-                var h = Get(other);
-                if (h) h.SetEmphasis(false);
             }
         }
     }

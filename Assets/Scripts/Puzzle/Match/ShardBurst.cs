@@ -29,13 +29,13 @@ public class ShardBurst : MonoBehaviour
 
     [Header("Look")]
     [Tooltip("Shards spawned per board cell of the cleared piece.")]
-    [SerializeField, Min(1)] private int shardsPerCell = 34;      // -15% (was 40)
+    [SerializeField, Min(1)] private int shardsPerCell = 29;      // 40 -> 34 -> 29
 
     [Tooltip("Hard ceiling regardless of how big the cleared group was.")]
-    [SerializeField, Min(1)] private int maxShardsPerBurst = 136; // -15% (was 160)
+    [SerializeField, Min(1)] private int maxShardsPerBurst = 116; // 160 -> 136 -> 116
 
     [Tooltip("Smallest / largest shard, in world units. Board cell is ~1.09.")]
-    [SerializeField] private Vector2 shardSizeRange = new Vector2(0.12f, 0.34f); // +20%
+    [SerializeField] private Vector2 shardSizeRange = new Vector2(0.13f, 0.37f); // +20%, +10%
 
     // Lifetime is NOT authored. It is solved per shard in Play() from that shard's own launch
     // speed, so every shard dies exactly on the floor of the box no matter how hard it was
