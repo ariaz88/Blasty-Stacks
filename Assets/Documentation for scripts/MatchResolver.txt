@@ -25,6 +25,11 @@ THE KEY EVENT
 
 INSPECTOR FIELDS
 ----------------
+  collapseTimeScale            (float, 0.75) collapse runs this much of
+                               killAnimTime - faster, so the shrink finishes
+                               clearly before the shards appear
+  collapseFloorScale           (float, 0.20) the collapse STOPS here instead of
+                               reaching zero, leaving a visible nub to shatter
   board                        (BoardGridXY) auto-found in Awake if unassigned
   minGroupSize                 (int, min 2, default 3) how many connected pieces
                                are needed before a match resolves
@@ -166,9 +171,29 @@ ACTIONS
          measured off Assets/Arts/Reference videos/Stack movement.mp4.
          Falls back to scaling the root if the piece has no renderer children.
       2. Calls FireBurst(), then destroys the piece immediately.
+      !! The collapse STOPS AT collapseFloorScale (0.20), it does not shrink to
+      !! zero, and it runs at killAnimTime * collapseTimeScale (0.75) so it is
+      !! ~25% faster than the beat ClearGroup waits on. Both were requested after
+      !! play-testing: shrinking all the way to nothing made the shards look like
+      !! they appeared MID-shrink. The reference game leaves a small still-visible
+      !! nub per cell which then shatters, and that nub is the 0.20 floor.
+      !! The piece is then destroyed BEFORE FireBurst is called, so no frame can
+      !! ever carry both the nub and its own shards.
       The piece's sprite is sampled via PieceTintSampler at the START of the
       coroutine - while the GameObject still exists - so the shards match the
       block exactly. Sampling after the destroy would return nothing.
+      FireBurst is handed the per-cell world positions captured before the inward
+      pull, so ShardBurst can spawn ONE dense clump per board cell. A two-cell
+      piece breaks into two clumps, never one merged cloud.
+
+      !! THE COLLAPSE LISTS ARE LOCAL TO THIS COROUTINE ON PURPOSE. ClearGroup
+      !! starts one CollapseThenBurst per piece and they ALL RUN IN PARALLEL, so
+      !! a shared scratch list is overwritten by whichever piece started last.
+      !! They used to be _collapseParts / _collapseOrigins instance fields, and
+      !! the symptom was that only ONE stack in a cleared group appeared to
+      !! shatter - every piece was collapsing and bursting at that one piece's
+      !! cell positions, stacked on top of each other. Do not "optimise" these
+      !! back into shared fields to avoid the allocation.
       Awake() also calls PieceTintSampler.WarmUp() once, which registers the
       canonical colour of every stack on the board with the flat 1X squares
       sampled FIRST, so the first clear of the session snaps onto a square's

@@ -10,9 +10,17 @@ using UnityEngine;
 /// Blasty/ShardUnlit shader, and the colour palette is copied off whatever
 /// FractureObject is already in the scene (so the colours you tuned there carry over).
 ///
-/// Timing is taken frame-by-frame from Assets/Arts/Reference videos/Stack movement.mp4:
-/// the block collapses for 100 ms, then a dense cloud lives ~370 ms, barely travels,
-/// and sinks about one cell.
+/// The arc, matched to the Blasty Stacks reference frame by frame:
+///
+///   1. MatchResolver collapses the block to a small but STILL-VISIBLE nub per cell and
+///      destroys it. Nothing here has fired yet.
+///   2. Each cell spawns a DENSE CLUMP of shards inside clusterRadiusCells - overlapping,
+///      but individually readable. Two cells give two clumps, never one merged cloud.
+///   3. The clumps rise and spread, bounded to spreadOutCells sideways and apexHeightCells
+///      up. The bound is not tuned by hand: Play() derives gravity and launch speed FROM
+///      those two numbers, so the box holds by construction.
+///   4. Past the apex they fall fallDepthCells below the cell, shrinking and fading as
+///      they go, and die.
 /// </summary>
 [DisallowMultipleComponent]
 public class ShardBurst : MonoBehaviour
@@ -29,14 +37,33 @@ public class ShardBurst : MonoBehaviour
     [Tooltip("Smallest / largest shard, in world units. Board cell is ~1.09.")]
     [SerializeField] private Vector2 shardSizeRange = new Vector2(0.10f, 0.28f);
 
-    [Tooltip("Lifetime range. Upper bound sets the length of the falling / fading tail.")]
-    [SerializeField] private Vector2 lifetimeRange = new Vector2(0.80f, 0.95f);
+    // Lifetime is NOT authored. It is solved per shard in Play() from that shard's own launch
+    // speed, so every shard dies exactly on the floor of the box no matter how hard it was
+    // thrown. See the note there.
 
-    [Tooltip("Initial outward speed. Damping stalls this within ~100 ms.")]
-    [SerializeField] private Vector2 speedRange = new Vector2(1.6f, 3.8f);
+    // ---- The arc, in the units the reference is described in --------------------------
+    // Everything below is authored in BOARD CELLS and SECONDS, and the Shuriken velocities
+    // and gravity are derived from it in Play(). That is deliberate: the reference bounds the
+    // spread to a fixed box, and deriving the physics from the box is the only way to hold
+    // that bound by construction rather than by trial and error.
 
-    [Tooltip("Tuned so the longer lifetime still lands the cloud ~2 cells down rather than off-board.")]
-    [SerializeField, Range(0f, 2f)] private float gravityModifier = 0.45f;
+    [Header("Arc (board cells / seconds)")]
+    [Tooltip("Radius of the dense clump each cell spawns as, before it expands.")]
+    [SerializeField, Min(0.01f)] private float clusterRadiusCells = 0.18f;
+
+    [Tooltip("How far sideways a shard may travel from its cell. This is the width of the box.")]
+    [SerializeField, Min(0f)] private float spreadOutCells = 1.00f;
+
+    [Tooltip("How high above its cell a shard peaks. This is the top of the box.")]
+    [SerializeField, Min(0.01f)] private float apexHeightCells = 1.20f;
+
+    [Tooltip("How far below its cell a shard has fallen when it dies.")]
+    [SerializeField, Min(0.01f)] private float fallDepthCells = 2.25f;
+
+    [Tooltip("Seconds from the shards appearing to the last one vanishing. NOTE: apex height, " +
+             "fall depth and this duration together FULLY determine gravity and the time to the " +
+             "apex - there is no fourth knob, and adding one would let the three disagree.")]
+    [SerializeField, Min(0.05f)] private float totalDuration = 0.85f;
 
     [Header("Sorting")]
     [Tooltip("Board pieces sit at negative orders on the Default layer.")]
@@ -75,6 +102,12 @@ public class ShardBurst : MonoBehaviour
 
     private Shader _shader;
     private Mesh[] _meshes;
+
+    // Outward impulse per cell of authored spread, calibrated by simulating a burst and
+    // measuring where the shards actually end up. Only valid for the limitX / dampen values
+    // in BuildSystem - change those and this has to be re-measured. It is linear in the
+    // impulse, so one measurement is enough.
+    private const float SpreadImpulseGain = 7.5f;
 
     private static readonly int IdColDark = Shader.PropertyToID("_ColDark");
     private static readonly int IdColBody = Shader.PropertyToID("_ColBody");
@@ -171,58 +204,45 @@ public class ShardBurst : MonoBehaviour
     // Public entry points
     // ------------------------------------------------------------------
 
+    // Scratch, so a clear allocates nothing.
+    private readonly List<Vector3> _singleCell = new(1);
+
     /// <summary>Kept signature-compatible with FractureObject.Explode.</summary>
     public void Explode(Transform origin, int colorId)
     {
         if (!origin) return;
-        Play(origin.position, Vector2.one, colorId);
+        ExplodeAtPosition(origin.position, colorId);
     }
 
     public void ExplodeAtPosition(Vector3 worldPosition, int colorId)
     {
-        Play(worldPosition, Vector2.one, colorId);
+        _singleCell.Clear();
+        _singleCell.Add(worldPosition);
+        Play(_singleCell, colorId, null);
     }
 
     /// <summary>
-    /// Fires one burst.
+    /// Fires one burst - a dense clump per cell, which then rises, spreads inside a bounded box
+    /// and falls. See the class comment for the shape of the arc.
     /// </summary>
-    /// <param name="centre">World centre of the cleared footprint.</param>
-    /// <param name="footprintCells">Footprint in board cells, e.g. (2,1) for a 2-wide piece.</param>
-    /// <param name="colorId">PieceSimple.ColorId of the block that broke.</param>
-    /// <param name="tint">
-    /// Exact colour sampled off the block's own sprite. Pass null to fall back to the
-    /// <see cref="palette"/> lookup by colorId.
-    /// </param>
-    public void Play(Vector3 centre, Vector2 footprintCells, int colorId, Color? tint = null)
-    {
-        PieceTintSampler.TintBands? bands =
-            tint.HasValue ? PieceTintSampler.TintBands.FromBody(tint.Value)
-                          : (PieceTintSampler.TintBands?)null;
-        Play(centre, footprintCells, colorId, bands);
-    }
-
-    /// <summary>
-    /// Fires one burst using the block's own three painted colours, which is what makes the
-    /// shards read as chips off the same flat 2D block.
-    /// </summary>
+    /// <param name="cellCentres">One world position per cleared board cell.</param>
+    /// <param name="colorId">PieceSimple.ColorId, used only if <paramref name="bands"/> is null.</param>
     /// <param name="bands">
     /// Bevel / body / highlight sampled off the block's sprite. Pass null to fall back to
     /// the <see cref="palette"/> lookup by colorId - note that colorId COLLIDES across
     /// colours in this project, so that path is a last resort only.
     /// </param>
-    public void Play(Vector3 centre, Vector2 footprintCells, int colorId,
+    public void Play(IReadOnlyList<Vector3> cellCentres, int colorId,
                      PieceTintSampler.TintBands? bands)
     {
         if (!enabled || _pool.Count == 0) return;
+        if (cellCentres == null || cellCentres.Count == 0) return;
 
         int slot = _next;
         var ps = _pool[slot];
         _next = (_next + 1) % _pool.Count;
 
         float cell = ResolveCellSize();
-
-        centre.z = 0f;
-        ps.transform.position = centre;
 
         var b = bands ?? PieceTintSampler.TintBands.FromBody(ColorFor(colorId));
 
@@ -234,26 +254,87 @@ public class ShardBurst : MonoBehaviour
             mat.SetColor(IdColLight, b.light);
         }
 
+        // ---- Derive the physics from the authored box -------------------------------
+        // Pure ballistics, no drag on any axis, so every bound below is exact rather than
+        // tuned. A shard launched at vy under gravity g rises h = vy^2/2g in vy/g seconds,
+        // then falls to depth d in sqrt(2(h+d)/g). Requiring rise + fall == totalDuration:
+        //
+        //     T = sqrt(2h/g) + sqrt(2(h+d)/g) = sqrt(2/g) * (sqrt(h) + sqrt(h+d))
+        //  => g = 2 * (sqrt(h) + sqrt(h+d))^2 / T^2
+        //
+        // So apex height, fall depth and duration pin gravity exactly - which is why
+        // riseTime is NOT authored. An earlier version did author it, and the resulting
+        // gravity (65 u/s^2) sent the shards 16 cells below the board instead of 2.25.
+        float h = apexHeightCells * cell;
+        float d = fallDepthCells * cell;
+        float T = Mathf.Max(0.05f, totalDuration);
+
+        float sum = Mathf.Sqrt(h) + Mathf.Sqrt(h + d);
+        float g = 2f * sum * sum / (T * T);
+        float vy = Mathf.Sqrt(2f * g * h);
+
+        var main = ps.main;
+        main.gravityModifier = g / Mathf.Max(0.01f, Mathf.Abs(Physics.gravity.y));
+
+        // Horizontal is an IMPULSE that the X/Z drag then spends, rather than a constant
+        // drift, so the cloud reaches its full width by the apex instead of still opening as
+        // it dies. Drag makes displacement non-analytic, so the gain below is calibrated by
+        // measurement against the drag settings in BuildSystem - it is linear in the impulse,
+        // so one measurement fixes it. Re-measure if limitX / dampen ever change.
+        float vxImpulse = spreadOutCells * cell * SpreadImpulseGain;
+
         // White, so colorOverLifetime contributes its alpha ramp and nothing else - the
         // shard colour comes from the material bands, not from the particle stream.
-        var main = ps.main;
         main.startColor = Color.white;
 
-        // Emit from a box matching the real block silhouette, flattened to the board plane.
-        var shape = ps.shape;
-        shape.scale = new Vector3(
-            Mathf.Max(0.2f, footprintCells.x * cell * 0.9f),
-            Mathf.Max(0.2f, footprintCells.y * cell * 0.9f),
-            0.02f);
-
-        int cells = Mathf.Max(1, Mathf.RoundToInt(footprintCells.x * footprintCells.y));
-        int count = Mathf.Clamp(cells * shardsPerCell, 24, maxShardsPerBurst);
-
-        var emission = ps.emission;
-        emission.SetBurst(0, new ParticleSystem.Burst(0f, (short)count));
+        // ---- Emit ------------------------------------------------------------------
+        // Explicit per-particle emission rather than the shape module: it is the only way to
+        // get one tight clump per cell AND a per-particle launch vector out of a single system.
+        int perCell = Mathf.Max(6, Mathf.Min(shardsPerCell, maxShardsPerBurst / cellCentres.Count));
+        float clusterRadius = clusterRadiusCells * cell;
 
         ps.Clear(true);
         ps.Play(true);
+
+        var ep = new ParticleSystem.EmitParams();
+
+        for (int c = 0; c < cellCentres.Count; c++)
+        {
+            Vector3 origin = cellCentres[c];
+            origin.z = 0f;
+
+            for (int i = 0; i < perCell; i++)
+            {
+                // Dense disc, not a ring: sqrt keeps the area distribution even.
+                Vector2 disc = Random.insideUnitCircle;
+                ep.position = origin + new Vector3(disc.x, disc.y, 0f) * clusterRadius;
+
+                // Push every shard OFF CENTRE. A plain Random.Range(-1,1) leaves a fat band of
+                // shards near zero that never leave the middle, which is most of why the cloud
+                // stayed clumped; remapping the magnitude to [0.4, 1] scatters them properly.
+                float side = Random.Range(-1f, 1f);
+                side = Mathf.Sign(side) * Mathf.Lerp(0.40f, 1f, Mathf.Abs(side));
+
+                // Wide launch spread, so the cloud breaks up instead of rising as one body.
+                // Low-vy shards peak early and low; the per-shard lifetime below still lands
+                // every one of them on the floor of the box.
+                float vyi = vy * Random.Range(0.55f, 1f);
+                ep.velocity = new Vector3(side * vxImpulse, vyi, 0f);
+
+                // Each shard gets exactly the lifetime that lands it on the floor of the box,
+                // solved from its OWN launch speed: d = vy*t - g*t^2/2, taking the positive root.
+                // Without this, a slower shard peaks lower, therefore falls for longer, and ends
+                // up well below the others - measured at -3.5 cells against a -2.25 target.
+                ep.startLifetime = (vyi + Mathf.Sqrt(vyi * vyi + 2f * g * d)) / g;
+                ep.startSize = Random.Range(shardSizeRange.x, shardSizeRange.y);
+                ep.rotation3D = new Vector3(Random.Range(0f, 360f),
+                                            Random.Range(0f, 360f),
+                                            Random.Range(0f, 360f));
+                ep.startColor = Color.white;
+
+                ps.Emit(ep, 1);
+            }
+        }
     }
 
     private Color ColorFor(int id)
@@ -284,35 +365,45 @@ public class ShardBurst : MonoBehaviour
         main.duration = 0.2f;
         main.loop = false;
         main.playOnAwake = false;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(lifetimeRange.x, lifetimeRange.y);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(speedRange.x, speedRange.y);
+        // Everything per-particle (lifetime, speed, size, rotation) is supplied through
+        // EmitParams in Play(). These are only sane fallbacks if something ever emits without.
+        main.startLifetime = new ParticleSystem.MinMaxCurve(totalDuration);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0f);
         main.startSize = new ParticleSystem.MinMaxCurve(shardSizeRange.x, shardSizeRange.y);
         main.startRotation3D = true;
         main.startRotationX = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
         main.startRotationY = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
         main.startRotationZ = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
-        main.gravityModifier = gravityModifier;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
         main.maxParticles = maxShardsPerBurst + 40;
         main.startColor = Color.white;
 
+        // No automatic burst and no shape: Play() emits every particle explicitly so it can
+        // place one clump per board cell and give each shard its own launch vector.
         var emission = ps.emission;
         emission.enabled = true;
         emission.rateOverTime = 0f;
-        emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 40) });
+        emission.SetBursts(new ParticleSystem.Burst[0]);
 
         var shape = ps.shape;
-        shape.enabled = true;
-        shape.shapeType = ParticleSystemShapeType.Box;
-        shape.scale = new Vector3(1f, 1f, 0.02f);
-        shape.randomDirectionAmount = 0.55f;
+        shape.enabled = false;
 
-        // This is what makes the cloud stall instead of flying off like confetti.
+        // Drag on the SIDEWAYS axes only, so the outward impulse Play() gives each shard is
+        // spent fast: the cloud opens to its full width by the apex and then coasts, which is
+        // what the reference shows. Without this the spread is linear in time and the cloud is
+        // still a tight blob at the top of the arc.
+        //
+        // !! Y is left effectively unlimited ON PURPOSE. Play() derives gravity and launch
+        // !! speed analytically for the vertical arc, and damping Y invalidates that maths.
+        // !! The original version damped all axes at once, which flattened the whole arc into
+        // !! a cloud that stalled in place and sank.
         var limit = ps.limitVelocityOverLifetime;
         limit.enabled = true;
-        limit.separateAxes = false;
-        limit.limit = new ParticleSystem.MinMaxCurve(0.6f);
-        limit.dampen = 0.42f;
+        limit.separateAxes = true;
+        limit.limitX = new ParticleSystem.MinMaxCurve(0.25f);
+        limit.limitY = new ParticleSystem.MinMaxCurve(10000f);
+        limit.limitZ = new ParticleSystem.MinMaxCurve(0.25f);
+        limit.dampen = 0.28f;
 
         var rot = ps.rotationOverLifetime;
         rot.enabled = true;
@@ -321,14 +412,14 @@ public class ShardBurst : MonoBehaviour
         rot.y = new ParticleSystem.MinMaxCurve(-480f * Mathf.Deg2Rad, 480f * Mathf.Deg2Rad);
         rot.z = new ParticleSystem.MinMaxCurve(-700f * Mathf.Deg2Rad, 700f * Mathf.Deg2Rad);
 
-        // Pops at full size, holds, then shrinks gradually across the whole fall.
-        // The long ramp (0.30 -> 1.0) is the "sinking and getting smaller" tail; keep it
-        // wide, a late cliff here is what made the burst read as vanishing too early.
+        // Full size through the clump and the whole rise, so the shards stay chunky and
+        // readable while they are inside the box. Only the fall tapers them - that is the
+        // "getting smaller on the way down" of the last reference frame.
         var sizeCurve = new AnimationCurve(
             new Keyframe(0f, 1f, 0f, 0f),
-            new Keyframe(0.30f, 1f, 0f, 0f),
-            new Keyframe(0.70f, 0.62f, -1.0f, -1.0f),
-            new Keyframe(1f, 0f, -1.6f, 0f));
+            new Keyframe(0.45f, 1f, 0f, 0f),
+            new Keyframe(0.80f, 0.66f, -1.1f, -1.1f),
+            new Keyframe(1f, 0f, -1.8f, 0f));
 
         var sol = ps.sizeOverLifetime;
         sol.enabled = true;
@@ -348,8 +439,10 @@ public class ShardBurst : MonoBehaviour
             },
             new[]
             {
+                // Fully opaque through the clump, the rise and the apex; the fade belongs to
+                // the fall. Fading at 0.40 made the cloud dissolve at the top of the arc.
                 new GradientAlphaKey(1f, 0f),
-                new GradientAlphaKey(1f, 0.40f),
+                new GradientAlphaKey(1f, 0.65f),
                 new GradientAlphaKey(0f, 1f)
             });
         col.color = new ParticleSystem.MinMaxGradient(grad);

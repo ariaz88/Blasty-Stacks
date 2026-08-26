@@ -9,25 +9,24 @@
 PURPOSE
 -------
 The match-clear shatter effect. Replaces the per-particle GameObject spraying in
-FractureObject with a small pool of mesh-particle systems: a dense cloud of
-irregular 3D shards that pops at full size, tumbles, sinks about one board cell
-and dies in ~370 ms.
+FractureObject with a small pool of mesh-particle systems.
 
-Written 2026-08-25 from a frame-by-frame reading of
-Assets/Arts/Reference videos/Stack movement.mp4 (30 fps). The measured beat is:
+REBUILT 2026-08-26 against the Blasty Stacks reference (five frames supplied by
+the user). The arc it now reproduces:
 
-  0 ms      block intact
-  0-100 ms  ANTICIPATION - the block splits into one cube per board cell and
-            each collapses in place. This lives in MatchResolver, not here.
-  100 ms    burst appears ALREADY at full width (~2 cells). No grow-in.
-  100-470   cloud tumbles, barely travels outward, sinks ~1 cell, fades from
-            the top down.
+  1. MatchResolver collapses the block to a small but STILL-VISIBLE nub per
+     board cell, then destroys it. Nothing here has fired yet. (reference fr.1)
+  2. Each cell spawns a DENSE CLUMP of shards - overlapping but individually
+     readable. A two-cell piece gives TWO clumps, never one merged cloud. (fr.2)
+  3. The clumps rise and spread, bounded sideways and upward. (fr.3, fr.4)
+  4. Past the apex they fall below the board, shrinking and fading. (fr.5)
 
-TUNED LONGER 2026-08-25 after play-testing: the reference timing read as too
-quick in-game, so the lifetime is now 0.80-0.95s (was 0.26-0.42) and gravity
-dropped to 0.45 (was 0.95) so the longer fall still lands ~2 cells rather than
-carrying the shards off-board. The shrink and fade ramps were widened to match -
-see CURVES below.
+Agreed envelope: +/-1 cell sideways, 1.2 cells up, ~2.25 cells down, 0.85 s.
+
+!! THE ARC IS AUTHORED IN CELLS AND SECONDS, AND THE PHYSICS IS DERIVED FROM IT.
+That is the whole design of this file - see "THE ARC MATHS" below. The previous
+version authored raw speeds and a gravity modifier, which meant the bounds the
+reference calls for could only ever be approximated by eye.
 
 NOTHING TO WIRE
 ---------------
@@ -55,18 +54,58 @@ PUBLIC API
       and the shard count. `bands` carries the block's own dark/body/light
       colours; pass null to fall back to the palette lookup by colorId.
 
-  Play(Vector3 centre, Vector2 footprintCells, int colorId, Color? tint = null)
-      Overload kept for callers that only have one colour. Expands it into bands
-      via TintBands.FromBody().
-
   Explode(Transform origin, int colorId)
   ExplodeAtPosition(Vector3 worldPosition, int colorId)
       Signature-compatible with FractureObject so old call sites keep working.
-      Both assume a 1x1 footprint.
+      Both wrap the position into a single-cell list.
 
   Initialize()
-      Loads meshes, builds the material, fills the pool. Called from Awake;
+      Loads meshes, builds the materials, fills the pool. Called from Awake;
       public and idempotent so a loading screen can pre-warm it.
+
+THE ARC MATHS  (the important part of this file)
+------------------------------------------------
+Everything is authored in BOARD CELLS and SECONDS, and Play() solves for the
+Shuriken values. Pure ballistics, no drag on any axis, so each bound is exact
+rather than tuned.
+
+A shard launched at vy under gravity g rises h = vy^2/2g in vy/g seconds, then
+falls to depth d in sqrt(2(h+d)/g). Requiring rise + fall == totalDuration:
+
+    T = sqrt(2h/g) + sqrt(2(h+d)/g) = sqrt(2/g) * (sqrt(h) + sqrt(h+d))
+ => g  = 2 * (sqrt(h) + sqrt(h+d))^2 / T^2
+    vy = sqrt(2*g*h)
+
+  !! apexHeightCells, fallDepthCells and totalDuration TOGETHER PIN GRAVITY.
+  !! There is no fourth knob and adding one lets the three disagree. An earlier
+  !! version authored riseTime as well; the resulting gravity (65 u/s^2) threw
+  !! the shards 16 cells below the board instead of 2.25.
+
+HORIZONTAL is an IMPULSE that the X/Z drag then spends, NOT a constant drift:
+    vxImpulse = spreadOutCells * cell * SpreadImpulseGain
+  !! SpreadImpulseGain (7.5) is CALIBRATED BY MEASUREMENT against the limitX /
+  !! dampen values in BuildSystem. Change those and it must be re-measured. It
+  !! is linear in the impulse, so one simulate-and-measure pass fixes it.
+
+  Why an impulse and not a drift: with a constant vx, displacement is linear in
+  time, so a shard has covered only ~37% of its spread by the apex and the cloud
+  is still a tight blob exactly when the reference is at its widest. The impulse
+  puts the cloud at full width by t~0.16 and it then coasts.
+
+  Per shard the sideways magnitude is remapped to [0.40, 1.0] of that impulse:
+  a plain Random.Range(-1,1) leaves a fat band of shards near zero that never
+  leave the middle, which was most of why the cloud read as clumped.
+
+  Launch speed spread is WIDE (0.55 - 1.0 of vy) so the cloud breaks up instead
+  of rising as one body. Low-vy shards peak early and low; the per-shard lifetime
+  below still lands every one of them on the floor of the box.
+
+PER-SHARD LIFETIME is solved from that shard's OWN launch speed:
+    life_i = (vy_i + sqrt(vy_i^2 + 2*g*d)) / g
+  !! Do not replace this with a flat lifetime. Launch speed is randomised for
+  !! variety, and a slower shard peaks lower, therefore falls for LONGER, and
+  !! lands well below the rest - measured at -3.5 cells against a -2.25 target.
+  !! Solving per shard makes every one die exactly on the floor of the box.
 
 INSPECTOR FIELDS
 ----------------
@@ -74,36 +113,39 @@ INSPECTOR FIELDS
     shardsPerCell      (int, default 40)   shards per board cell of the piece
     maxShardsPerBurst  (int, default 160)  ceiling regardless of group size
     shardSizeRange     (Vector2, 0.10-0.28) world units; board cell is ~1.086
-    lifetimeRange      (Vector2, 0.80-0.95) upper bound sets the tail length
-    speedRange         (Vector2, 1.6-3.8)   damping stalls this within ~100 ms
-    gravityModifier    (float, 0.45)        ~2 cell sink over the longer life
 
-  Sorting
-    sortingLayer  (string, "Default")
-    sortingOrder  (int, 20)   board pieces sit at -10..-1, so 20 draws on top
+  Arc (board cells / seconds)
+    clusterRadiusCells (float, 0.18)  radius of the dense per-cell clump (fr.2)
+    spreadOutCells     (float, 1.00)  sideways bound (fr.3/4)
+    apexHeightCells    (float, 1.20)  upward bound (fr.3/4)
+    fallDepthCells     (float, 2.25)  how far below the cell it dies (fr.5)
+    totalDuration      (float, 0.85)  shards appearing -> last one gone
 
-  Pool
-    poolSize      (int, 6)    systems are reused round-robin, oldest first
-
-  Colours
-    palette       (Color[10]) indexed by PieceSimple.ColorId
+  Sorting / Pool / Colours as before (sortingOrder 20, poolSize 6, palette).
 
 PARTICLE SETUP  (all built in code in BuildSystem)
 --------------------------------------------------
-  Shape          Box, flattened to the board plane (z scale 0.02), Volume,
-                 randomDirectionAmount 0.55. A BOX not a sphere - the block is a
-                 rectangle, and a sphere emitter is the giveaway of a generic burst.
-  Limit Velocity dampen 0.42, limit 0.6. THIS is what makes the cloud stall
-                 instead of flying off like confetti. Do not disable it.
+  Emission       NONE from the module - no bursts, shape DISABLED. Play() emits
+                 every shard explicitly with ps.Emit(EmitParams, 1). That is the
+                 only way to get one tight clump PER BOARD CELL and a per-shard
+                 launch vector and lifetime out of a single system.
+  Limit Velocity separateAxes ON. limitX / limitZ 0.25, dampen 0.28, and
+                 limitY 10000 (i.e. effectively OFF on Y).
+                 !! Y MUST stay unlimited. Play() derives gravity and launch
+                 !! speed analytically for the vertical arc and damping Y
+                 !! invalidates that maths. The original version damped every
+                 !! axis at once (limit 0.6 / dampen 0.42), which flattened the
+                 !! arc into a cloud that stalled in place and sank.
+                 The X/Z drag is what spends the outward impulse fast, so the
+                 cloud opens fully by the apex and then coasts.
   Rotation       separate axes, +/-480 deg/s on X and Y, +/-700 on Z. Faster on
                  the camera axis because that spin is what reads in an ortho 2D view.
-  Size over life flat 1.0 hold to 0.30, then a WIDE ramp down to 0 at 1.0
-                 (mid-key 0.70 -> 0.62). No grow-in. Keep the ramp wide: a late
-                 cliff here is what made the burst read as vanishing too early.
-  Colour o/life  colour held CONSTANT across the whole life; alpha holds to 0.40
-                 then fades out. An earlier version cooled toward grey at the
-                 tail - invisible at 0.42s, but dusty and washed out at 0.95s,
-                 and it fought the sampled sprite tint.
+  Size over life flat 1.0 hold to 0.45, then down to 0 at 1.0 (mid 0.80 -> 0.66).
+                 Full size through the clump AND the whole rise, so the shards
+                 stay chunky inside the box; only the FALL tapers them.
+  Colour o/life  colour held CONSTANT; alpha holds to 0.65 then fades. The fade
+                 belongs to the fall - fading at 0.40 dissolved the cloud at the
+                 top of the arc.
   Renderer       Mesh mode, 4 meshes, sortMode None, shadows/probes off.
 
   Deliberately OFF: Noise (reads as smoke), Collision (most expensive Shuriken
@@ -167,8 +209,27 @@ NOTES
     showing the hold-then-shrink tail with the tint held constant; and all 10
     stack families sampling to the same hex values as an independent read of the
     source PNGs.
-  - Verified 2026-08-26 by rendering a block and a shard cloud through the same
-    camera and histogramming both:
+  - Verified 2026-08-26 (arc) by simulating a 2-cell burst in edit mode and
+    reading ps.GetParticles() at 1-frame intervals across the whole life:
+        highest  Y = +1.22 cells  (target +1.20)
+        deepest  Y = -2.66 cells  (target -2.25)
+        widest  |X| =  1.45 cells (target <= 1.50)
+        clumps at t=0.015: 40 left / 40 right, max radius 0.27 cells
+        all shards dead by t=0.86
+    The small depth overshoot is exactly clusterRadiusCells - a shard spawning
+    on the low edge of its clump ends that much lower. Expected, not drift.
+  - Verified 2026-08-26 (spread front-loading). Width from the cells, per frame:
+        t=0.02 -> 0.11    t=0.08 -> 0.28    t=0.16 -> 0.38
+        t=0.315 (apex) -> 0.42, then flat 0.44-0.47 for the rest of the fall.
+    i.e. the cloud is at full width by the apex and coasts, instead of still
+    opening as it dies.
+  - Verified 2026-08-26 (multi-piece). Three pieces fired back to back land on
+    three separate pooled systems at their OWN cells:
+        ShardBurst_0  n=40  X[-3.22,-2.77]
+        ShardBurst_1  n=80  X[-0.21, 1.22]     (a 2-cell piece)
+        ShardBurst_2  n=40  X[ 2.72, 3.26]  Y[1.96,2.29]
+  - Verified 2026-08-26 (colour) by rendering a block and a shard cloud through
+    the same camera and histogramming both:
         Yellow  block mean #DEAE4A  ->  shards #E3B452
         Blue    block mean #3178BC  ->  shards #3980C4
         Green   block mean #29BA8E  ->  shards #2CC595

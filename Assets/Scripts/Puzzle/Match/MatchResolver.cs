@@ -32,14 +32,25 @@ public class MatchResolver : MonoBehaviour
 
     [Header("FX")]
     [SerializeField] private float killAnimTime = 0.10f;   // anticipation beat, measured at ~100 ms
+
+    [Tooltip("Shortens the collapse beat relative to killAnimTime. The shards must not appear " +
+             "while the stack is still visibly shrinking, so the collapse is run faster than the " +
+             "beat the rest of ClearGroup waits on.")]
+    [SerializeField, Range(0.5f, 1f)] private float collapseTimeScale = 0.75f;
+
+    [Tooltip("The collapse stops here instead of shrinking to nothing. The reference game leaves " +
+             "a small STILL-VISIBLE nub per cell, which then shatters - shrinking all the way to " +
+             "zero first is what made the two beats read as one.")]
+    [SerializeField, Range(0f, 0.6f)] private float collapseFloorScale = 0.20f;
+
     [SerializeField] private bool enableDebug = false;
 
     private readonly List<Vector2Int> _footprint = new();
     private readonly HashSet<Vector2Int> _neighborCells = new();
 
-    // Scratch buffers for the collapse beat, reused so a big clear allocates nothing.
-    private readonly List<Transform> _collapseParts = new();
-    private readonly List<Vector3> _collapseOrigins = new();
+    // NOTE: the collapse beat deliberately allocates its own lists per piece - see
+    // CollapseThenBurst. They used to be shared scratch fields here, which silently broke
+    // once every piece in a group runs its own coroutine in parallel.
 
     // Cached once instead of a FindObjectOfType per piece per clear.
     private ShardBurst _burst;
@@ -383,28 +394,34 @@ public class MatchResolver : MonoBehaviour
                 : (PieceTintSampler.TintBands?)null;
 
         // Per-cell children if the piece has them, otherwise the root as a single cube.
-        _collapseParts.Clear();
-        _collapseOrigins.Clear();
+        //
+        // !! These MUST be local. ClearGroup starts one of these coroutines per piece and they
+        // !! all run in parallel, so a shared scratch list is overwritten by whichever piece
+        // !! started last - every piece then collapses and bursts at that one piece's cells,
+        // !! which looked like "only one stack shatters".
+        var collapseParts = new List<Transform>();
+        var collapseOrigins = new List<Vector3>();
+
         for (int i = 0; i < tr.childCount; i++)
         {
             var child = tr.GetChild(i);
             if (child && child.GetComponentInChildren<Renderer>(true) != null)
             {
-                _collapseParts.Add(child);
-                _collapseOrigins.Add(child.position);
+                collapseParts.Add(child);
+                collapseOrigins.Add(child.position);
             }
         }
-        if (_collapseParts.Count == 0)
+        if (collapseParts.Count == 0)
         {
-            _collapseParts.Add(tr);
-            _collapseOrigins.Add(tr.position);
+            collapseParts.Add(tr);
+            collapseOrigins.Add(tr.position);
         }
 
-        var startScales = new Vector3[_collapseParts.Count];
-        for (int i = 0; i < _collapseParts.Count; i++)
-            startScales[i] = _collapseParts[i].localScale;
+        var startScales = new Vector3[collapseParts.Count];
+        for (int i = 0; i < collapseParts.Count; i++)
+            startScales[i] = collapseParts[i].localScale;
 
-        float duration = Mathf.Max(0.01f, killAnimTime);
+        float duration = Mathf.Max(0.01f, killAnimTime * collapseTimeScale);
         float t = 0f;
 
         while (t < duration)
@@ -413,35 +430,49 @@ public class MatchResolver : MonoBehaviour
 
             t += Time.deltaTime;
             float k = Mathf.Clamp01(t / duration);
-            float s = (1f - k) * (1f - k);   // ease-in collapse: 1 -> 0.6 -> 0.3 -> 0
 
-            for (int i = 0; i < _collapseParts.Count; i++)
+            // Ease-in collapse that lands on collapseFloorScale rather than zero, so the beat
+            // ends on a small but still-visible nub per cell - that nub IS the frame before the
+            // shatter in the reference. Running this to 0 is what made the shards look like they
+            // appeared mid-shrink.
+            float ease = 1f - (1f - k) * (1f - k);
+            float s = Mathf.Lerp(1f, collapseFloorScale, ease);
+
+            for (int i = 0; i < collapseParts.Count; i++)
             {
-                var part = _collapseParts[i];
+                var part = collapseParts[i];
                 if (!part) continue;
 
                 part.localScale = startScales[i] * s;
                 // slight inward pull, 8% of the distance to the group centre
-                part.position = Vector3.Lerp(_collapseOrigins[i], centre, k * 0.08f);
+                part.position = Vector3.Lerp(collapseOrigins[i], centre, k * 0.08f);
             }
 
             yield return null;
         }
 
-        FireBurst(centre, footprint, colorId, tint);
-
+        // Destroy BEFORE firing, so there is never a frame carrying both the nub and its shards.
         if (p) Destroy(p.gameObject);
+
+        // One dense cluster per board cell, at the positions the cells occupied before the
+        // collapse pulled them inward.
+        FireBurst(collapseOrigins, centre, footprint, colorId, tint);
     }
 
     /// <summary>Fires the shard burst, falling back to the legacy FractureObject if present.</summary>
-    private void FireBurst(Vector3 centre, Vector2 footprintCells, int colorId,
+    /// <param name="cellCentres">
+    /// One world position per board cell of the cleared piece. Each gets its own dense cluster,
+    /// which is what the reference shows - a two-cell piece breaks into TWO clumps, not one.
+    /// </param>
+    private void FireBurst(IReadOnlyList<Vector3> cellCentres, Vector3 centre,
+                           Vector2 footprintCells, int colorId,
                            PieceTintSampler.TintBands? tint = null)
     {
         if (!_burst) _burst = ShardBurst.Instance ? ShardBurst.Instance : FindObjectOfType<ShardBurst>();
 
         if (_burst)
         {
-            _burst.Play(centre, footprintCells, colorId, tint);
+            _burst.Play(cellCentres, colorId, tint);
             return;
         }
 
