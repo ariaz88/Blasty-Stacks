@@ -169,6 +169,10 @@ ACTIONS
       The piece's sprite is sampled via PieceTintSampler at the START of the
       coroutine - while the GameObject still exists - so the shards match the
       block exactly. Sampling after the destroy would return nothing.
+      Awake() also calls PieceTintSampler.WarmUp() once, which registers the
+      canonical colour of every stack on the board with the flat 1X squares
+      sampled FIRST, so the first clear of the session snaps onto a square's
+      colour rather than one inferred from a bevelled 3X shape.
       Reuses the _collapseParts / _collapseOrigins scratch lists so a large
       clear allocates nothing.
 

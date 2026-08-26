@@ -48,6 +48,11 @@ public class MatchResolver : MonoBehaviour
     private void Awake()
     {
         if (!board) board = FindObjectOfType<BoardGridXY>();
+
+        // Register the canonical shard colour of every stack on the board now, sampling the
+        // flat 1X squares first, so the very first clear already snaps onto them rather than
+        // onto a colour inferred from a bevelled 3X shape.
+        PieceTintSampler.WarmUp();
     }
 
 
@@ -372,9 +377,10 @@ public class MatchResolver : MonoBehaviour
 
         // Sample the block's own sprite NOW, while the piece still exists, so the shards
         // match the stack exactly rather than following a parallel colour table.
-        Color? tint = PieceTintSampler.TryGetTint(p.gameObject, out Color sampled)
-            ? sampled
-            : (Color?)null;
+        PieceTintSampler.TintBands? tint =
+            PieceTintSampler.TryGetBands(p.gameObject, out PieceTintSampler.TintBands sampled)
+                ? sampled
+                : (PieceTintSampler.TintBands?)null;
 
         // Per-cell children if the piece has them, otherwise the root as a single cube.
         _collapseParts.Clear();
@@ -428,7 +434,8 @@ public class MatchResolver : MonoBehaviour
     }
 
     /// <summary>Fires the shard burst, falling back to the legacy FractureObject if present.</summary>
-    private void FireBurst(Vector3 centre, Vector2 footprintCells, int colorId, Color? tint = null)
+    private void FireBurst(Vector3 centre, Vector2 footprintCells, int colorId,
+                           PieceTintSampler.TintBands? tint = null)
     {
         if (!_burst) _burst = ShardBurst.Instance ? ShardBurst.Instance : FindObjectOfType<ShardBurst>();
 

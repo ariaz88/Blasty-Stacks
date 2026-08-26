@@ -36,17 +36,28 @@ GameObject if none exists, marked DontDestroyOnLoad. Add the component to a
 scene by hand ONLY if you want per-level tuning of the serialized fields.
 
   - Shard meshes  : Resources.LoadAll<Mesh>("VFX")  -> Assets/Resources/VFX/
-  - Material      : built at runtime from Shader.Find("Blasty/ShardUnlit")
-  - Colour palette: copied off any FractureObject already in the scene, so the
-                    colours tuned there carry over. Falls back to the defaults
-                    in the serialized `palette` array if none is present.
+                    These are 3D SOLIDS: 36-60 verts, 12-20 tris, 6-7 distinct
+                    face normals each, real depth on Z. Spawned with random
+                    rotation on all three axes.
+  - Materials     : ONE PER POOLED SYSTEM, built at runtime from
+                    Shader.Find("Blasty/ShardUnlit"). Not one shared material -
+                    see the note below, this matters.
+  - Colour palette: copied off any FractureObject already in the scene. This is
+                    a LAST-RESORT fallback only; colour normally arrives per
+                    burst from PieceTintSampler. See NOTES.
 
 PUBLIC API
 ----------
-  Play(Vector3 centre, Vector2 footprintCells, int colorId)
+  Play(Vector3 centre, Vector2 footprintCells, int colorId,
+       PieceTintSampler.TintBands? bands)
       The real entry point. footprintCells is the cleared piece's bounding box
       in board cells, e.g. (2,1) for a 2-wide piece. Scales both the emitter box
-      and the shard count.
+      and the shard count. `bands` carries the block's own dark/body/light
+      colours; pass null to fall back to the palette lookup by colorId.
+
+  Play(Vector3 centre, Vector2 footprintCells, int colorId, Color? tint = null)
+      Overload kept for callers that only have one colour. Expands it into bands
+      via TintBands.FromBody().
 
   Explode(Transform origin, int colorId)
   ExplodeAtPosition(Vector3 worldPosition, int colorId)
@@ -123,17 +134,45 @@ NOTES
     single draw call - worthwhile if bursts ever overlap heavily.
   - The gameplay scenes contain no Light or Light2D, and the URP 2D Renderer
     never draws a UniversalForward pass, so a Lit material would be invisible.
-    All shading is faked in Blasty/ShardUnlit against a fixed light vector.
-  - COLOUR now comes from PieceTintSampler, which reads the body colour straight
-    off the block's own sprite. MatchResolver samples the piece before destroying
-    it and passes the result into Play(). The serialized `palette` array is only
-    the fallback for when sampling fails.
+  - COLOUR comes from PieceTintSampler as THREE bands - the block's own painted
+    bevel / body / highlight. MatchResolver samples the piece before destroying
+    it and passes the TintBands into Play(). The serialized `palette` array is
+    only the fallback for when sampling fails.
     !! Do NOT go back to a hand-maintained colour table. The old one was
     !! mis-mapped - PieceColorPalette.cs (dead, unreferenced) uses a completely
     !! different id order than FractureObject - which is what made the shard
-    !! colours look wrong in the first play-test.
+    !! colours look wrong in the first play-test. Worse, PieceSimple.colorId
+    !! itself COLLIDES: id 8 is used by Orange, Red AND Yellow sprites. Any
+    !! palette indexed by colorId is unfixable by construction.
+  - !! ONE MATERIAL PER POOLED SYSTEM, not one shared material. The three band
+    colours are material properties, because the particle COLOR stream carries
+    only one colour per particle and we need three. Two bursts of different
+    colours can be alive at once, so they must not share a material.
+    MaterialPropertyBlock is NOT an option here: the properties live in
+    UnityPerMaterial and the SRP Batcher ignores per-renderer overrides of those.
+    main.startColor is set to WHITE - the colourOverLifetime module then
+    contributes its alpha ramp and nothing else.
+  - !! The shader does NO shading multiply, on purpose. It picks one of the three
+    flat colours per facet by angle. The previous version used
+    shade = lerp(_Ambient, 1.0, ndl), which cannot exceed 1.0, so every shard was
+    darker than the block: measured mean shade 0.646 and 31% of the visible facet
+    area pinned at the 0.42 floor. Yellow #F2C14E reached the screen as #C89E3E
+    mud. If the shards ever look dull again, look here first.
+  - _LightDir points mostly AT THE VIEWER (-0.30, 0.60, -0.74), which looks wrong
+    for a key light but is correct here: with backface culling the visible facets
+    are the camera-facing ones, so a steep light leaves most of them at ndl = 0.
+    The old (-0.35, 0.85, -0.40) put 31% of visible area there; this puts 13%.
   - Verified 2026-08-25 in the Editor: 80 particles for a 2x1 footprint, mesh
     mode, 4 meshes, Default/20; a 4-frame filmstrip at t=0.10/0.40/0.65/0.90
     showing the hold-then-shrink tail with the tint held constant; and all 10
     stack families sampling to the same hex values as an independent read of the
     source PNGs.
+  - Verified 2026-08-26 by rendering a block and a shard cloud through the same
+    camera and histogramming both:
+        Yellow  block mean #DEAE4A  ->  shards #E3B452
+        Blue    block mean #3178BC  ->  shards #3980C4
+        Green   block mean #29BA8E  ->  shards #2CC595
+        Red     block mean #C44C3F  ->  shards #C65145
+    with the body band covering 62-64% of the pixels in BOTH, matching the
+    block's own flat-shaded split. Before the change yellow shards came out
+    #C89E3E against a #DEAE4A block.

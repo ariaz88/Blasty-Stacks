@@ -10,6 +10,10 @@ PURPOSE
 Reads a stack's body colour straight off its own sprite, so the shatter shards
 match the block EXACTLY instead of tracking a hand-maintained colour table.
 
+The rule it implements (set 2026-08-26): sample ONE small square block per
+colour, then give that same colour to EVERY shape carrying that colour - 1X, 2X,
+3X, L-shapes, all of them. Shape is irrelevant; only the colour family matters.
+
 WHY THIS EXISTS
 ---------------
 The stack prefabs are tinted white (m_Color 1,1,1,1) - all colour lives in the
@@ -22,20 +26,63 @@ from the art. There were TWO parallel tables in the project and they disagreed:
   PieceColorPalette   blue=0 green=1 orange=2 pink=3 purple=4 red=5 yellow=6
                       (dead - referenced by nothing, kept only as a warning)
 
-The art filenames are also unreliable: "Mid Pink 1X.png" is actually purple
-(#A46ACD), and "Purple 1X.png" is a light lavender (#C49CCF). Sampling the
-pixels sidesteps all of it and stays correct when the art changes.
+NEITHER colorId NOR sprite names can be used as the grouping key. Both lie, and
+this was measured, not assumed (2026-08-26):
+
+  - PieceSimple.colorId COLLIDES. colorId 8 is used by Orange (#E58A3F), Red
+    (#C82E64) AND Yellow (#F2C14E) sprites. colorId 3 by Pink and lavender.
+    colorId 6 by Purple and Pink. colorId 5 by Dark Pink and Orange.
+    => any palette-indexed-by-colorId is unfixable. Do not add one back.
+  - Filenames lie. "Mid Pink 1X.png" is actually purple (#A46ACD) and groups
+    with the Mid Purple sprites. "Purple 1X.png" is a light lavender (#C49CCF).
+
+So the colours group THEMSELVES, by sampled value. See "HOW THE GROUPING WORKS".
+
+THE THREE BANDS
+---------------
+The blocks are FLAT-SHADED with exactly three painted colours: a dark bevel, the
+body top face, and a highlight. The sampler returns all three as a TintBands
+struct, and ShardUnlit.shader paints the shard facets with ONLY those three, in
+flat bands. That is what makes a shard read as a chip off the same 2D block
+rather than as a lit 3D rock. Measured 2026-08-26:
+
+    Blue     dark #0E477E   body #2E7DC8   light #93CAFF
+    Green    dark #147C74   body #2EC892   light #3DFFBB
+    Yellow   dark #9D651C   body #F2C14E   light #FFE19B
+    Red      dark #842A21   body #D14A3C   light #E4968E
+    Orange   dark #953C14   body #E58A3F   light #EEB689
+    Purple   dark #754682   body #C49CCF   light #EFC2FC
+
+  TintBands.FromBody(Color) builds a plausible dark/light pair around a single
+  colour, for the fallback paths where only one is known. Factors 0.62 and
+  lerp-to-white 0.42 are fitted to the real art: yellow body #F2C14E gives
+  #967830 / #F7DB98 against the painted #9D651C / #FFE19B.
 
 PUBLIC API
 ----------
-  TryGetTint(GameObject root, out Color tint) -> bool
+  TryGetBands(GameObject root, out TintBands bands) -> bool
       Finds the LARGEST sprite under root (by sprite rect area, so a multi-cell
       piece samples its main block, not a decal), samples it, then multiplies by
       that SpriteRenderer's own .color so a per-instance tint is respected.
-      Returns false when there is no sprite to sample.
+      Returns false when there is no sprite to sample. THIS IS THE ONE THE
+      SHARD BURST USES.
 
-  TryGetSpriteTint(Sprite sprite, out Color tint) -> bool
+  TryGetSpriteBands(Sprite sprite, out TintBands bands) -> bool
       Same, for a Sprite directly.
+
+  TryGetTint(GameObject, out Color) / TryGetSpriteTint(Sprite, out Color)
+      Convenience wrappers returning just .body. Kept for callers that only
+      need one colour.
+
+  WarmUp() -> void
+      Scans every PieceSimple in the OPEN SCENE and registers the canonical
+      colour of each, flat squares first (see below). Optional - the palette
+      also builds itself lazily - but calling it once at board setup means the
+      first clear of the session is already snapped correctly.
+      Called from MatchResolver.Awake().
+
+  Clear() -> void
+      Drops the cache and the palette. For editor tooling after art changes.
 
 HOW THE SAMPLING WORKS
 ----------------------
@@ -44,43 +91,103 @@ HOW THE SAMPLING WORKS
      Read/Write enabled in their importer - which is all of them. Do not
      "simplify" this to texture.GetPixels(); it will throw.
      Only sprite.textureRect is read, so atlased sprites work.
-  2. Histogram the opaque pixels, quantised to 32 levels per channel:
+     ONE read-back per sprite; both probes below run off the same pixel array.
+
+  2. CENTRE PROBE (preferred). Average the opaque pixels in a box covering the
+     middle 30% of the sprite rect, and check every pixel in that box is within
+     UniformTolerance (0.05) of that average.
+       - On a 1X or 2X block the box sits squarely on the flat top face and the
+         spread is literally 0.000. The sprite is flagged isSquare = true and
+         becomes a canonical REFERENCE for its colour family.
+       - On an L-shaped 3X the geometric centre lands on a BEVEL, spread hits
+         0.8-1.2, and the probe correctly refuses.
+
+  3. BAND HISTOGRAM, which always runs and supplies dark + light (and supplies
+     the body too for shapes the centre probe rejected). Bucket the opaque
+     pixels at 32 levels per channel:
        - alpha < 0.9 skipped (the antialiased rim)
        - luma  < 0.14 skipped (the black outline)
-  3. Take the most common bucket and return the true average of the pixels in
-     it, so the result is exact rather than quantised.
+     BODY  = the most common bucket. The top face is ~62% of the opaque pixels,
+             so the mode lands on it. Re-check that if the art is redrawn.
+     DARK  = lowest-luma bucket below the body that covers at least MinBandShare
+             (2%) of the opaque pixels.
+     LIGHT = highest-luma bucket above the body, same 2% floor.
+     Each band is averaged inside its bucket, so the value is exact rather than
+     quantised. The 2% floor rejects antialiasing between two bands: the real
+     bands are 62 / 14 / 8 percent and the next contender is 4.7%.
+     If no band qualifies on a side, TintBands.FromBody() supplies it.
 
-  The blocks are a light top face + a mid bevel band + a dark base. The top face
-  is ~59% of the sprite, so the mode reliably lands on the body colour. That 59%
-  figure is worth re-checking if the block art is ever redrawn.
+HOW THE GROUPING WORKS
+----------------------
+  Every sampled colour is folded into a palette of canonical entries:
 
-  Results are cached per Sprite in a static Dictionary, so the read-back cost is
-  paid once per sprite per session, not per match.
+    - FindNear() looks for an existing entry within SnapDistance (0.09) in RGB.
+    - No match -> the colour is added as a new entry and returned as-is.
+    - Match    -> the EXISTING entry's colour is returned, so every shape of one
+                  colour comes out bit-identical.
+    - A flat square (isReference) outranks a colour that was only ever inferred
+      from a bevelled shape: it overwrites the entry and clears the cache, so
+      anything already snapped to the weaker value re-samples.
 
-VALUES IT PRODUCES  (measured 2026-08-25, 1X prefabs)
-------------------------------------------------------
-  id 0 Blue       #2E7DC8      id 5 DarkPink   #C82E64
-  id 1 Crimson    #D14A3C      id 6 Purple     #C49CCF
-  id 2 Green      #2EC892      id 7 MidPurple  #A46ACD
-  id 3 Pink       #EF7CC1      id 8 Orange     #E58A3F
-  id 4 MidPink    #EF7CC1      id 9 Yellow     #F2C14E
+  WarmUp() runs two passes - squares first, everything else second - so that
+  promote-and-clear path is rare in practice.
 
-  !! Pink (3) and MidPink (4) sample to the SAME colour - their prefabs use the
-  !! same sprite. That is an art issue, not a sampler bug, but it means those
-  !! two block types are visually identical when they shatter.
+  SnapDistance is safe by a wide margin: the closest genuine pair in the art is
+  Crimson #D14A3C vs Dark Pink #C82E64 at 0.198 apart, while the shape-to-square
+  drift it needs to absorb is under 1/255 (~0.004).
+
+VALUES IT PRODUCES  (measured 2026-08-26 over all 120 stack sprites)
+--------------------------------------------------------------------
+  120 sprites collapse to 11 distinct colours; every shape in a family is
+  bit-identical:
+
+    #2E7DC8  Blue                7 sprites
+    #D14A3C  Crimson             7
+    #2EC892  Green               7
+    #EF7CC1  Pink                7
+    #F24E9A  Mid Pink           11
+    #C82E64  Dark Pink / Red    12
+    #C49CCF  lavender / Purple  12
+    #A46ACD  Mid Purple         12   (includes the mislabelled "Mid Pink 1X")
+    #E58A3F  Orange              7
+    #F2C14E  Yellow              7
+    #394049  Black               1
+
+  Dark Pink and Red are the SAME paint, as are lavender and Purple. That is
+  duplicated art, not a sampler bug - those block types shatter identically.
+
+  Before the grouping was added, the 3X shapes drifted: Yellow 3X sampled
+  #CEA042 instead of #F2C14E, Pink 3X sampled #D062A3 instead of #EF7CC1.
 
 HOW IT CONNECTS
 ---------------
+  - MatchResolver.Awake calls WarmUp() once.
   - MatchResolver.CollapseThenBurst calls TryGetTint on the piece at the START
     of the coroutine, while the GameObject still exists, and passes the Color
     into ShardBurst.Play(). Sampling after the destroy would return nothing.
   - ShardBurst falls back to its serialized `palette` array when the sampler
-    returns false.
+    returns false. That array is indexed by colorId and is therefore WRONG for
+    the colliding ids listed above - it is a last-resort fallback only, and is
+    a good candidate for deletion.
 
 NOTES
 -----
+  - RESOLVED 2026-08-26 (was a known open issue): ShardUnlit.shader used to
+    multiply the sampled colour by lerp(_Ambient, 1.0, ndl) = 0.42..1.0, which
+    can never exceed 1.0, so every shard rendered darker than the block -
+    measured mean shade 0.646, yellow #F2C14E arriving on screen as #C89E3E.
+    The shader now paints flat bands from these three colours and does no
+    shading multiply at all. Do not reintroduce one.
+    After the change, rendered block vs rendered shard cloud:
+        Yellow  block mean #DEAE4A  ->  shards #E3B452
+        Blue    block mean #3178BC  ->  shards #3980C4
+        Green   block mean #29BA8E  ->  shards #2CC595
+        Red     block mean #C44C3F  ->  shards #C65145
+    and the body band covers 62-64% of both, matching the block's own split.
   - Destroy vs DestroyImmediate on the scratch Texture2D is branched on
     Application.isPlaying, because this also runs from editor tooling where
     Object.Destroy throws.
   - The RenderTexture is sRGB, so the returned Color matches what a Color
-    literal means in the Inspector regardless of project colour space.
+    literal means in the Inspector regardless of project colour space. Project
+    is Linear; Unity's gamma->linear conversion of ParticleSystem.startColor was
+    verified correct and is NOT a source of colour error here.

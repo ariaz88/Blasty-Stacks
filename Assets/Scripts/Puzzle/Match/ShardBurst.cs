@@ -65,8 +65,20 @@ public class ShardBurst : MonoBehaviour
 
     private readonly List<ParticleSystem> _pool = new();
     private int _next;
-    private Material _material;
+
+    // One material per pooled system, NOT one shared material. The three band colours are
+    // material properties (the particle COLOR stream carries only one colour, and we need
+    // three), so two bursts of different colours alive at once must not share a material.
+    // MaterialPropertyBlock is not an option: the properties live in UnityPerMaterial and
+    // the SRP Batcher ignores per-renderer overrides of those.
+    private readonly List<Material> _materials = new();
+
+    private Shader _shader;
     private Mesh[] _meshes;
+
+    private static readonly int IdColDark = Shader.PropertyToID("_ColDark");
+    private static readonly int IdColBody = Shader.PropertyToID("_ColBody");
+    private static readonly int IdColLight = Shader.PropertyToID("_ColLight");
 
     // ------------------------------------------------------------------
     // Boot
@@ -112,15 +124,13 @@ public class ShardBurst : MonoBehaviour
             return;
         }
 
-        var shader = Shader.Find("Blasty/ShardUnlit");
-        if (!shader)
+        _shader = Shader.Find("Blasty/ShardUnlit");
+        if (!_shader)
         {
             Debug.LogError("[ShardBurst] Shader 'Blasty/ShardUnlit' not found. Effect disabled.", this);
             enabled = false;
             return;
         }
-
-        _material = new Material(shader) { name = "M_Shard (runtime)" };
 
         InheritPaletteFromLegacy();
 
@@ -131,7 +141,9 @@ public class ShardBurst : MonoBehaviour
     private void OnDestroy()
     {
         if (Instance == this) Instance = null;
-        if (_material) Destroy(_material);
+        for (int i = 0; i < _materials.Count; i++)
+            if (_materials[i]) Destroy(_materials[i]);
+        _materials.Clear();
     }
 
     /// <summary>
@@ -183,9 +195,28 @@ public class ShardBurst : MonoBehaviour
     /// </param>
     public void Play(Vector3 centre, Vector2 footprintCells, int colorId, Color? tint = null)
     {
+        PieceTintSampler.TintBands? bands =
+            tint.HasValue ? PieceTintSampler.TintBands.FromBody(tint.Value)
+                          : (PieceTintSampler.TintBands?)null;
+        Play(centre, footprintCells, colorId, bands);
+    }
+
+    /// <summary>
+    /// Fires one burst using the block's own three painted colours, which is what makes the
+    /// shards read as chips off the same flat 2D block.
+    /// </summary>
+    /// <param name="bands">
+    /// Bevel / body / highlight sampled off the block's sprite. Pass null to fall back to
+    /// the <see cref="palette"/> lookup by colorId - note that colorId COLLIDES across
+    /// colours in this project, so that path is a last resort only.
+    /// </param>
+    public void Play(Vector3 centre, Vector2 footprintCells, int colorId,
+                     PieceTintSampler.TintBands? bands)
+    {
         if (!enabled || _pool.Count == 0) return;
 
-        var ps = _pool[_next];
+        int slot = _next;
+        var ps = _pool[slot];
         _next = (_next + 1) % _pool.Count;
 
         float cell = ResolveCellSize();
@@ -193,8 +224,20 @@ public class ShardBurst : MonoBehaviour
         centre.z = 0f;
         ps.transform.position = centre;
 
+        var b = bands ?? PieceTintSampler.TintBands.FromBody(ColorFor(colorId));
+
+        var mat = _materials[slot];
+        if (mat)
+        {
+            mat.SetColor(IdColDark, b.dark);
+            mat.SetColor(IdColBody, b.body);
+            mat.SetColor(IdColLight, b.light);
+        }
+
+        // White, so colorOverLifetime contributes its alpha ramp and nothing else - the
+        // shard colour comes from the material bands, not from the particle stream.
         var main = ps.main;
-        main.startColor = tint ?? ColorFor(colorId);
+        main.startColor = Color.white;
 
         // Emit from a box matching the real block silhouette, flattened to the board plane.
         var shape = ps.shape;
@@ -320,9 +363,12 @@ public class ShardBurst : MonoBehaviour
         var r = ps.GetComponent<ParticleSystemRenderer>();
         r.renderMode = ParticleSystemRenderMode.Mesh;
         r.SetMeshes(_meshes, _meshes.Length);
-        r.sharedMaterial = _material;
         r.alignment = ParticleSystemRenderSpace.World;
         r.sortMode = ParticleSystemSortMode.None;
+        var mat = new Material(_shader) { name = "M_Shard_" + index + " (runtime)" };
+        _materials.Add(mat);
+        r.sharedMaterial = mat;
+
         r.sortingLayerName = sortingLayer;
         r.sortingOrder = sortingOrder;
         r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
