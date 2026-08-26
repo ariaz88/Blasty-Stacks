@@ -21,7 +21,7 @@ the user). The arc it now reproduces:
   3. The clumps rise and spread, bounded sideways and upward. (fr.3, fr.4)
   4. Past the apex they fall below the board, shrinking and fading. (fr.5)
 
-Agreed envelope: +/-1 cell sideways, 1.2 cells up, ~2.25 cells down, 0.85 s.
+Agreed envelope: +/-1 cell sideways, 1.2 cells up, ~2.25 cells down, 0.58 s.
 
 !! THE ARC IS AUTHORED IN CELLS AND SECONDS, AND THE PHYSICS IS DERIVED FROM IT.
 That is the whole design of this file - see "THE ARC MATHS" below. The previous
@@ -109,17 +109,18 @@ PER-SHARD LIFETIME is solved from that shard's OWN launch speed:
 
 INSPECTOR FIELDS
 ----------------
-  Look
-    shardsPerCell      (int, default 40)   shards per board cell of the piece
-    maxShardsPerBurst  (int, default 160)  ceiling regardless of group size
-    shardSizeRange     (Vector2, 0.10-0.28) world units; board cell is ~1.086
+  Look    (retuned 2026-08-26: 15% fewer shards, each 20% bigger)
+    shardsPerCell      (int, default 34)   shards per board cell of the piece
+    maxShardsPerBurst  (int, default 136)  ceiling regardless of group size
+    shardSizeRange     (Vector2, 0.12-0.34) world units; board cell is ~1.086
 
   Arc (board cells / seconds)
     clusterRadiusCells (float, 0.18)  radius of the dense per-cell clump (fr.2)
     spreadOutCells     (float, 1.00)  sideways bound (fr.3/4)
     apexHeightCells    (float, 1.20)  upward bound (fr.3/4)
     fallDepthCells     (float, 2.25)  how far below the cell it dies (fr.5)
-    totalDuration      (float, 0.85)  shards appearing -> last one gone
+    totalDuration      (float, 0.58)  shards appearing -> last one gone
+                                      (was 0.85; shortened 2026-08-26)
 
   Sorting / Pool / Colours as before (sortingOrder 20, poolSize 6, palette).
 
@@ -223,6 +224,14 @@ NOTES
         t=0.315 (apex) -> 0.42, then flat 0.44-0.47 for the rest of the fall.
     i.e. the cloud is at full width by the apex and coasts, instead of still
     opening as it dies.
+  - Re-verified 2026-08-26 AFTER the retune (34 shards, +20% size, T=0.58):
+        highest +1.17   deepest -2.78   widest |X| 1.41
+        68 shards for a 2-cell piece (was 80), last one dead at t=0.57
+    The horizontal calibration survived the shorter duration unchanged, because
+    the drag spends the impulse in the first ~0.15 s either way.
+    The deeper floor reading is a MEASUREMENT artifact, not drift: gravity is now
+    56 u/s^2, so a shard covers ~0.2 cells in a single simulate step and the
+    sweep catches it just past its death point. Size is ~0 and alpha ~0 by then.
   - Verified 2026-08-26 (multi-piece). Three pieces fired back to back land on
     three separate pooled systems at their OWN cells:
         ShardBurst_0  n=40  X[-3.22,-2.77]

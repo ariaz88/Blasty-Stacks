@@ -29,13 +29,13 @@ public class ShardBurst : MonoBehaviour
 
     [Header("Look")]
     [Tooltip("Shards spawned per board cell of the cleared piece.")]
-    [SerializeField, Min(1)] private int shardsPerCell = 40;
+    [SerializeField, Min(1)] private int shardsPerCell = 34;      // -15% (was 40)
 
     [Tooltip("Hard ceiling regardless of how big the cleared group was.")]
-    [SerializeField, Min(1)] private int maxShardsPerBurst = 160;
+    [SerializeField, Min(1)] private int maxShardsPerBurst = 136; // -15% (was 160)
 
     [Tooltip("Smallest / largest shard, in world units. Board cell is ~1.09.")]
-    [SerializeField] private Vector2 shardSizeRange = new Vector2(0.10f, 0.28f);
+    [SerializeField] private Vector2 shardSizeRange = new Vector2(0.12f, 0.34f); // +20%
 
     // Lifetime is NOT authored. It is solved per shard in Play() from that shard's own launch
     // speed, so every shard dies exactly on the floor of the box no matter how hard it was
@@ -63,7 +63,7 @@ public class ShardBurst : MonoBehaviour
     [Tooltip("Seconds from the shards appearing to the last one vanishing. NOTE: apex height, " +
              "fall depth and this duration together FULLY determine gravity and the time to the " +
              "apex - there is no fourth knob, and adding one would let the three disagree.")]
-    [SerializeField, Min(0.05f)] private float totalDuration = 0.85f;
+    [SerializeField, Min(0.05f)] private float totalDuration = 0.58f;
 
     [Header("Sorting")]
     [Tooltip("Board pieces sit at negative orders on the Default layer.")]

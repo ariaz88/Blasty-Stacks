@@ -262,6 +262,10 @@ public class BoardInputController : MonoBehaviour
         activePiece = piece;
         boardLocalZ = BoardLocalZ();
 
+        // Pick-up feedback: the held piece grows/shakes/glows and every stack it could
+        // match lights up. Purely cosmetic - see PieceHighlightDirector.
+        PieceHighlightDirector.NotifyPickup(piece);
+
         // PieceSimple.TryPlace keeps _anchor authoritative, so trust it first and
         // only fall back to reading the transform back off the grid.
         Vector2Int anchor = piece.Anchor;
@@ -320,6 +324,10 @@ public class BoardInputController : MonoBehaviour
 
         activePiece.transform.position =
             AnchorToWorld(freeAnchor) + board.BoardPlaneNormal() * liftWhileDragging;
+
+        // Shakes a lit-up match once the held piece closes on it. After the move, so it
+        // tests where the piece actually ended up rather than where the pointer asked for.
+        PieceHighlightDirector.NotifyDrag(activePiece);
     }
 
     /// <summary>
@@ -455,6 +463,9 @@ public class BoardInputController : MonoBehaviour
 
         var p = activePiece;
         activePiece = null;
+
+        // Before the no-snap early return below, so the highlights clear on BOTH paths.
+        PieceHighlightDirector.NotifyRelease();
 
         if (restExactlyWhereReleased && TryRestInPlace(p)) return;
 
