@@ -296,11 +296,15 @@ public class PlayerWaveManager : MonoBehaviour
         {
             int gi = freeIndices[i];
             var pm = SpawnOneAt(gatePoints[gi].position, gatePoints[gi].rotation);
-            GameObject.FindObjectOfType<RogueliteManager>().RegisterPlayer(pm.GetComponent<PlayerStatsApplier>());
-
 
             if (pm != null)
             {
+                // Registering catches this unit up on every buff already picked
+                // for its hero type, so a late arrival is never under-buffed.
+                var roguelite = FindObjectOfType<RogueliteManager>();
+                if (roguelite != null)
+                    roguelite.RegisterPlayer(pm.GetComponent<PlayerStatsApplier>());
+
                 ApplyLock(pm, true);
                 currentWave.Add(pm);
             }

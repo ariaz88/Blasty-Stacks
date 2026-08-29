@@ -89,10 +89,11 @@ LIFECYCLE
       later restoration on revive.
 
   Start()
-      Disables the damage collider, applies initial facing, and registers itself
-      with the scene's RogueliteManager via
-      GameObject.FindObjectOfType<RogueliteManager>().RegisterEnemy(this) -
-      NOT NULL-CHECKED, so a scene without a RogueliteManager would throw here.
+      Disables the damage collider, applies initial facing, then CACHES the
+      scene's RogueliteManager into the `roguelite` field and registers itself
+      with it. Both the cache and the call are null-checked, so a scene with no
+      RogueliteManager (the older test scenes) is fine. The cache exists because
+      the death path in Update() needs the same reference every frame.
 
   Update()  (the live version)
       1. Respects GameplayPause.
@@ -235,9 +236,10 @@ HOW IT CONNECTS
     reverse path; this class computes the OUTGOING damage number that
     EnemyDamageCollider applies.
   - RogueliteManager.RegisterEnemy links this enemy into the roguelite XP
-    system, presumably so its death later grants XP (the actual kill-XP hookup
-    is commented out elsewhere - see EnemyManager NOTES below and
-    RogueliteManager's own doc).
+    system, and Update() now calls RogueliteManager.NotifyEnemyKilled(this) the
+    frame it dies, granting XpValue. THIS IS THE ONLY XP SOURCE IN THE GAME -
+    it was previously missing entirely, which left the whole level-up / buff-card
+    loop dead.
   - PlayerGateStats.OnGateDestroyed drives HandleGateDestroyed.
 
 NOTES / RISKS
@@ -248,18 +250,24 @@ NOTES / RISKS
     progression, targeting, facing, combat decision, gate logic and revive
     handling in one class - a strong candidate for splitting if it is ever
     touched again.
-  - Six numbered-but-unused sibling methods remain as METHODS (not classes, so
-    the earlier class-level cleanup did not remove them): Initialize1,
-    RebuildFromBase1, UpdateFacing1, Update1, FixedUpdate1, HandleCurrentAction1,
-    HandleGateDestroyed1, OnTriggerEnter2D1, ResetAfterRevive1. None of them are
-    called - Unity only invokes the exactly-named Awake/Start/Update/FixedUpdate,
-    and the others are simply dead code sitting next to their live twins.
+  - Numbered-but-unused sibling METHODS remain: Initialize1, RebuildFromBase1,
+    UpdateFacing1, FixedUpdate1, HandleCurrentAction1, HandleGateDestroyed1,
+    OnTriggerEnter2D1, ResetAfterRevive1. None are called - Unity only invokes
+    the exactly-named Awake/Start/Update/FixedUpdate, and the others are dead
+    code sitting next to their live twins.
+    Update1 WAS in this list and has now been DELETED, since the XP hookup landed
+    in the live Update() and leaving a stale copy of the death branch next to it
+    would be actively misleading.
   - DetectPlayerTargets allocates every frame per enemy (see PERFORMANCE note
     above) - the single largest per-frame GC source among the Combat/Enemy
     scripts.
-  - GameObject.FindObjectOfType<RogueliteManager>() in Start() is not
-    null-checked - a gameplay scene without exactly one RogueliteManager object
-    would throw a NullReferenceException for every enemy that spawns.
+  - xpValue (float, default 1) is the XP this enemy grants on death, in "basic
+    enemy" units. Give elites 2-3 so they visibly fill more of the bar - the
+    reference game's elites are worth roughly 2-3x a basic kill. The per-level
+    scaling is NOT here; it comes from the growing threshold in RogueliteConfigSO.
+  - The xpGiven flag guards the once-per-death work: awarding XP and starting the
+    despawn coroutine. It is named for the XP grant, which for a long time was
+    missing - the flag guarded only the despawn.
   - "PlayerCastle" and the "PlayerGate" tag are magic strings/names on which
     Awake and revive both depend; renaming either silently breaks gate
     targeting.

@@ -1,0 +1,81 @@
+================================================================================
+  RogueliteConfigSO.cs
+  Path : Assets/Scripts/Roguelite/RogueliteConfigSO.cs
+  Type : ScriptableObject   (Create > Roguelite > Roguelite Config)
+  Layer: Roguelite
+  Scenes: referenced by RogueliteManager.config
+================================================================================
+
+PURPOSE
+-------
+Every tunable number for the in-battle roguelite layer, in one asset, so pacing
+and draw feel can be changed without touching code or re-editing 21 scenes.
+
+Stage length is deliberately NOT a setting here. The XP curve is self-balancing:
+a longer stage has more enemies, so it produces more level-ups on its own.
+maxLevel is the only cap.
+
+FIELDS
+------
+  XP Curve
+    baseKills  (float, default 2)   basic-enemy kills needed for the FIRST
+               level-up. The reference game uses 2 - the first card lands almost
+               immediately, which is deliberate.
+    ratio      (float, default 1.32) threshold(L) = baseKills * ratio^(L-1)
+    maxLevel   (int, default 0)     hard cap; 0 = uncapped. Past it no XP is
+               collected and no cards are offered.
+
+  Draw - fairness (rotation)
+    pityStep         (float, default 1)  weight added per level-up a hero has gone
+                     WITHOUT appearing. 1 = a hero that sat out one round has
+                     double weight next round. 0 = no rotation.
+    forceAfterRounds (int, default 2)    a hero unseen this many rounds is FORCED
+                     onto the next screen. The hard fairness floor. 0 = never.
+
+  Draw - specialization (investment)
+    investmentStep (float, default 0.5) weight added per STAR a hero already
+                   holds, so a buffed hero keeps appearing more often than an
+                   unbuffed one. 0.5 = a 2-star hero has double the weight.
+    momentumBonus  (float, default 1.5) extra multiplier for the hero picked on
+                   the PREVIOUS screen, on top of investment.
+
+  Draw - global cards
+    globalCardChance (float 0..1, default 0.15)  chance ONE slot is an army-wide
+                     card. Never more than one per screen.
+
+METHODS
+-------
+  ThresholdFor(int level)  ->  baseKills * ratio^(level-1).  Level is 1-BASED.
+
+THE CURVE, MEASURED
+-------------------
+Fitted against the reference clip (Assets/Arts/Reference videos/Roguelite Clip.MP4),
+where the game prints the per-kill share on screen as "XP +N%":
+
+  L1 +50%   L2 +38%   L3 +29%   L4 +22%   L5 +17%
+  L6 +13%   L7  +9%   L8  +7%   L9  +5%   L10 +4%
+
+with baseKills=2, ratio=1.32. Observed popups in the clip: +50% at L1, +20% at
+L2, +4% and +22% at L7 (two enemy tiers), +3% at L8-L9, +5% at L10.
+
+Two consequences worth keeping:
+  - The FIRST card arrives after only 2 kills. The run starts making choices
+    immediately rather than after a warm-up.
+  - The felt cadence stays roughly constant even though the threshold grows,
+    because the army is killing faster and faster.
+
+For a shorter stage use a steeper ratio, e.g. baseKills=2 ratio=1.6
+  -> 2, 3, 5, 8, 13, 21 kills = 6 picks in ~52 kills.
+
+HOW IT CONNECTS
+---------------
+  RogueliteManager  -> ThresholdFor() drives level-ups; maxLevel caps the run.
+  BuffDraw          -> reads every "Draw -" field in its weight formula.
+
+NOTES
+-----
+  - Without this asset assigned, RogueliteManager falls back to the LEGACY linear
+    threshold (initialThreshold + level - 1) and BuffDraw runs unweighted. It
+    still works, but the pacing and the rotation/investment behaviour are lost.
+  - Elite enemies are NOT configured here - XP per enemy lives on
+    EnemyManager.xpValue, in "basic enemy" units (1 = basic, 2-3 = elite).

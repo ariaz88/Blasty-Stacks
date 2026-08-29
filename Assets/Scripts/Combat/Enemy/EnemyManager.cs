@@ -28,6 +28,17 @@ public class EnemyManager : MonoBehaviour
     // runtime multipliers
     float _atkM = 1f, _defM = 1f, _hpM = 1f, _mvM = 1f, _asM = 1f, _rngM = 1f;
 
+    [Header("Roguelite")]
+    [Tooltip("XP this enemy grants the roguelite bar when it dies, in 'basic enemy' units. " +
+             "1 = a basic enemy. Give elites 2-3 so they visibly fill more of the bar.")]
+    [Min(0f)] public float xpValue = 1f;
+
+    /// <summary>XP granted on death. Read by RogueliteManager.NotifyEnemyKilled.</summary>
+    public float XpValue => xpValue;
+
+    private RogueliteManager roguelite;
+
+    // Guards the once-per-death work: awarding XP and starting the despawn.
     private bool xpGiven = false;
 
     public void Initialize1(int stageLevelFromSpawner)
@@ -224,7 +235,10 @@ public class EnemyManager : MonoBehaviour
         if (faceCenterOnStart)
             SetInitialFacingByScreenHalf();
 
-        GameObject.FindObjectOfType<RogueliteManager>().RegisterEnemy(this);
+        // Cached once: the death path needs it too, and a scene may legitimately
+        // have no roguelite manager (the old test scenes do not).
+        roguelite = FindObjectOfType<RogueliteManager>();
+        if (roguelite != null) roguelite.RegisterEnemy(this);
     }
 
     #region Facing
@@ -335,31 +349,6 @@ public class EnemyManager : MonoBehaviour
 
     }
 
-    private void Update1()
-    {
-
-        if (GameplayPause.IsPaused)
-            return;
-
-
-        if (enemyAnimationManager == null || enemyLocoMotion == null)
-            return;
-
-        HandleRecoveryTimer();
-
-        isInteracting = enemyAnimationManager.anim.GetBool("isInteracting");
-
-        if (enemyStats.enemyIsdead)
-        {
-            StopMovingEnemy();
-
-            if (!xpGiven)
-            {
-                xpGiven = true;
-                StartCoroutine(DestroyAfterDelayRealtime(3f));
-            }
-        }
-    }
     private void Update()
     {
         if (GameplayPause.IsPaused)
@@ -384,6 +373,11 @@ public class EnemyManager : MonoBehaviour
             if (!xpGiven)
             {
                 xpGiven = true;
+
+                // This is what fills the roguelite bar. Without it the whole
+                // level-up / buff-card loop never runs.
+                if (roguelite != null) roguelite.NotifyEnemyKilled(this);
+
                 StartCoroutine(DestroyAfterDelayRealtime(0.5f));
             }
 

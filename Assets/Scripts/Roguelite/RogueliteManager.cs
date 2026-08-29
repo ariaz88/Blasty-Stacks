@@ -1,36 +1,58 @@
-﻿using System.Collections.Generic;
-using System.Collections;
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Controls XP progression, level-ups, skill selection, and applies skill effects.
-/// Supports multiple player characters and dynamic enemy tracking.
+/// The in-battle roguelite layer.
+///
+/// PHASES. This only exists during the BATTLE phase. While the player is solving
+/// the puzzle there is no XP, no level bar and no cards - the army is being
+/// assembled and nothing is fighting yet. It starts on
+/// <see cref="BattleStartController.OnAnyBattleStarted"/>, which means the roster
+/// is already final before the first card is ever drawn.
+///
+/// LOOP. Enemies killed grant XP -> the bar fills -> the game pauses and offers
+/// three cards -> the pick multiplies the matching players' UnitStatsRuntime ->
+/// the game resumes.
+///
+/// TWO STAT LAYERS, kept strictly apart:
+///   PERMANENT  PlayerStatsApplier computes baseStats x growth(saved upgrade level)
+///              into CurrentStats. Owned by the Units UI, saved to disk.
+///   PER-STAGE  this class multiplies CurrentStats on top. Never saved, wiped by
+///              ResetForNewStage().
+///
+/// Which hero each card targets is decided by <see cref="BuffDraw"/>; this class
+/// only applies the result.
 /// </summary>
 public class RogueliteManager : MonoBehaviour
 {
     [Header("XP Progression")]
     [SerializeField] private Slider xpSlider;
     [SerializeField] private TextMeshProUGUI levelCounterText;
+
+    [Tooltip("LEGACY fallback, used only when no Config asset is assigned: the bar needs " +
+             "initialThreshold kills at level 1, then one more per level.")]
     [SerializeField] private int initialThreshold = 1;
 
-    // Keep a reference to a running animation so we can stop it
-    private Coroutine xpAnimationCoroutine;
-    [SerializeField] private float xpIncreaseDuration = 0.5f; // seconds
+    [Tooltip("Seconds for the bar to travel its full width. Purely cosmetic - the logical " +
+             "XP is never delayed by it.")]
+    [SerializeField] private float xpIncreaseDuration = 0.5f;
 
+    [Header("Config")]
+    [Tooltip("XP curve and card-draw tuning. Strongly recommended; without it the legacy " +
+             "linear threshold above is used and the draw runs unweighted.")]
+    [SerializeField] private RogueliteConfigSO config;
 
-    private int currentThreshold;
-    private int currentXP;
-    private int levelCounter;
+    [Tooltip("Used only to look up a hero PORTRAIT for the cards, by matching classType. " +
+             "Safe to leave empty - cards then fall back to the buff icon.")]
+    [SerializeField] private UnitsDatabaseSO unitsDatabase;
 
     [Header("Skill Pool")]
+    [Tooltip("One asset PER STAT, not per hero. The hero on each card is chosen at draw " +
+             "time, so 5 assets x a 4-hero roster already gives 20 distinct cards.")]
     [SerializeField] private List<SkillData> skillPool;
-    private readonly int evolveThreshold = 6; // sixth pick triggers the final evolution
-
-
-    private Dictionary<SkillData, int> skillPickCounts = new Dictionary<SkillData, int>();
-    private Dictionary<SkillData, float> skillCurrentMultipliers = new Dictionary<SkillData, float>();
 
     [Header("UI References")]
     [SerializeField] private GameObject levelUpOverlay;
@@ -39,388 +61,474 @@ public class RogueliteManager : MonoBehaviour
     [SerializeField] private Image[] offensiveSlots;
     [SerializeField] private Image[] defensiveSlots;
 
-    private bool isPaused;
+    /// <summary>Raised on every XP gain with its share of the current bar (20f = "+20%").</summary>
+    public event Action<float> OnXpGained;
 
-    // Dynamic player and enemy lists
-    // These collections track all players and enemies currently active in the scene.  They are
-    // populated automatically at game start via FindObjectsOfType and updated when new
-    // characters spawn or enemies die.  Keeping these lists up to date allows the manager
-    // to apply roguelite effects only to present characters and award XP accurately.
-    private List<PlayerStatsApplier> activePlayers = new List<PlayerStatsApplier>();
-    private List<EnemyManager> activeEnemies = new List<EnemyManager>();
-    // In RogueliteManager, add a new field:
-    private Dictionary<SkillData, Image> skillToSlot = new Dictionary<SkillData, Image>();
+    /// <summary>Raised after each level-up with the new level.</summary>
+    public event Action<int> OnLevelUp;
+
+    // ------------------------------------------------------------------ state
+
+    private BuffDraw draw;
+
+    private int level = 1;
+    private float xp;
+    private float xpDisplay;
+    private bool isPaused;
+    private bool running;
+
+    private readonly List<PlayerStatsApplier> activePlayers = new List<PlayerStatsApplier>();
+    private readonly List<EnemyManager> activeEnemies = new List<EnemyManager>();
+
+    // The multiplier ONE buff currently contributes to one hero. Applying only the
+    // ratio new/old is what stops repeated picks of the same card compounding.
+    private readonly Dictionary<(FighterType, SkillData), float> skillMultiplier =
+        new Dictionary<(FighterType, SkillData), float>();
+
+    // The product of every buff on one (hero, stat). Used to catch up a player
+    // that joins the fight after a card has already been taken.
+    private readonly Dictionary<(FighterType, SkillEffectType), float> statMultiplier =
+        new Dictionary<(FighterType, SkillEffectType), float>();
+
+    private readonly Dictionary<SkillData, Image> skillToSlot = new Dictionary<SkillData, Image>();
+
+    private float Threshold => config != null
+        ? config.ThresholdFor(level)
+        : Mathf.Max(1, initialThreshold + level - 1);
+
+    private bool AtMaxLevel => config != null && config.maxLevel > 0 && level >= config.maxLevel;
+
+    private float Fraction => AtMaxLevel ? 1f : Mathf.Clamp01(xp / Mathf.Max(0.0001f, Threshold));
+
+    // -------------------------------------------------------------- lifecycle
+
+    private void Awake()
+    {
+        draw = new BuffDraw(config);
+    }
+
+    private void OnEnable()
+    {
+        BattleStartController.OnAnyBattleStarted += BeginBattlePhase;
+    }
+
+    private void OnDisable()
+    {
+        BattleStartController.OnAnyBattleStarted -= BeginBattlePhase;
+    }
 
     private void Start()
     {
-        // Initialize XP values and the level counter.  The XP bar will fill to
-        // 'initialThreshold' before the first level‑up.  After each level‑up the
-        // threshold increases by one.
-        currentThreshold = initialThreshold;
-        currentXP = 0;
-        levelCounter = 0;
-        xpSlider.maxValue = currentThreshold;
-        xpSlider.value = currentXP;
-        levelCounterText.text = levelCounter.ToString();
+        HideAllPanels();
+        ResetProgressionState();
 
-        // Initialize the dictionaries that track how many times each skill has
-        // been selected and what multiplier is currently applied.  Each skill
-        // starts with zero picks and a multiplier of 1.0 (no bonus).
-        foreach (var skill in skillPool)
+        if (xpSlider != null)
         {
-            skillPickCounts[skill] = 0;
-            skillCurrentMultipliers[skill] = 1f;
+            xpSlider.minValue = 0f;
+            xpSlider.maxValue = 1f;
+            xpSlider.value = 0f;
         }
 
-        // Hide the level‑up and skill selection overlays at the beginning of the run.
-        if (levelUpOverlay != null) levelUpOverlay.SetActive(false);
-        if (skillSelectPanel != null) skillSelectPanel.SetActive(false);
-
-
-        foreach (var slot in offensiveSlots)
-        {
-            if (slot != null) slot.gameObject.SetActive(false);
-        }
-        foreach (var slot in defensiveSlots)
-        {
-            if (slot != null) slot.gameObject.SetActive(false);
-        }
-
-
-        // Populate the active player and enemy lists.  These calls find all
-        // PlayerStatsApplier and EnemyManager components that currently exist in the scene.
-        // If additional characters or enemies spawn later, they should register
-        // themselves with this manager via RegisterPlayer and RegisterEnemy.
-        UpdateActivePlayers();
-        UpdateActiveEnemies();
+        // BattleIsRunning defaults to TRUE and is only cleared by a stage that
+        // actually has a BattleStartController. So a scene without one behaves
+        // exactly as before: the roguelite is live from the start.
+        if (BattleStartController.BattleIsRunning)
+            BeginBattlePhase();
     }
 
-    /// <summary>
-    /// Refreshes the list of active player characters in the scene.  This method
-    /// uses FindObjectsOfType to locate every PlayerStatsApplier currently
-    /// instantiated and replaces the existing list.  Call this at game start
-    /// and whenever new characters spawn if the spawn system does not call
-    /// RegisterPlayer.
-    /// </summary>
-    private void UpdateActivePlayers()
+    private void Update()
     {
-        activePlayers.Clear();
-        activePlayers.AddRange(FindObjectsOfType<PlayerStatsApplier>());
+        if (xpSlider == null) return;
+
+        float target = Fraction;
+
+        // Unscaled, so the bar still settles while the card screen has the game paused.
+        xpDisplay = xpIncreaseDuration <= 0f
+            ? target
+            : Mathf.MoveTowards(xpDisplay, target, Time.unscaledDeltaTime / xpIncreaseDuration);
+
+        xpSlider.value = xpDisplay;
     }
 
     /// <summary>
-    /// Refreshes the list of active enemies.  This method finds all
-    /// EnemyManager components currently present and rebuilds the active list.
-    /// It can be called at the beginning of a stage or whenever a major
-    /// wave of enemies has spawned.  Individual spawners should call
-    /// RegisterEnemy and NotifyEnemyKilled when appropriate.
+    /// The battle has begun: snapshot the roster and build the card pool from the
+    /// hero types actually on the field, so a card can never target a hero that
+    /// is not in this fight.
     /// </summary>
-    private void UpdateActiveEnemies()
+    public void BeginBattlePhase()
+    {
+        if (running) return;
+        running = true;
+
+        RefreshActivePlayers();
+        RefreshActiveEnemies();
+        ReconfigureDraw();
+        UpdateXpUI();
+    }
+
+    private void ReconfigureDraw()
+    {
+        var roster = new List<FighterType>();
+
+        for (int i = 0; i < activePlayers.Count; i++)
+        {
+            var p = activePlayers[i];
+            if (p == null || p.CurrentStats == null) continue;
+
+            var t = p.CurrentStats.type;
+            if (!roster.Contains(t)) roster.Add(t);
+        }
+
+        if (roster.Count == 0)
+            Debug.LogWarning("[RogueliteManager] Battle started with no players on the field - " +
+                             "no hero cards can be drawn.", this);
+
+        draw.Configure(roster, skillPool);
+    }
+
+    // ---------------------------------------------------------------- roster
+
+    private void RefreshActivePlayers()
+    {
+        var found = FindObjectsOfType<PlayerStatsApplier>();
+        for (int i = 0; i < found.Length; i++) RegisterPlayer(found[i]);
+    }
+
+    private void RefreshActiveEnemies()
     {
         activeEnemies.Clear();
         activeEnemies.AddRange(FindObjectsOfType<EnemyManager>());
     }
 
     /// <summary>
-    /// Registers a newly spawned player character.
-    /// Should be called by the character spawn system.
+    /// Registers a player. Any buff already taken for its hero type is applied
+    /// immediately, so a unit that reaches the field late is never under-buffed.
     /// </summary>
     public void RegisterPlayer(PlayerStatsApplier player)
     {
-        if (!activePlayers.Contains(player))
-        {
-            activePlayers.Add(player);
-        }
+        if (player == null || activePlayers.Contains(player)) return;
+
+        activePlayers.Add(player);
+        ApplyAccumulatedTo(player);
     }
 
-    /// <summary>
-    /// Registers a newly spawned enemy.
-    /// Should be called by the enemy spawner.
-    /// </summary>
     public void RegisterEnemy(EnemyManager enemy)
     {
-        if (!activeEnemies.Contains(enemy))
-        {
-            activeEnemies.Add(enemy);
-        }
+        if (enemy == null || activeEnemies.Contains(enemy)) return;
+        activeEnemies.Add(enemy);
     }
 
-    /// <summary>
-    /// Called by an EnemyManager when it dies to award XP and remove it from the list.
-    /// </summary>
+    /// <summary>Called by an EnemyManager as it dies: grants that enemy's XP and drops it.</summary>
     public void NotifyEnemyKilled(EnemyManager enemy)
     {
-        AddXP(1);
-        activeEnemies.Remove(enemy);
+        AddXP(enemy != null ? enemy.XpValue : 1f);
+        if (enemy != null) activeEnemies.Remove(enemy);
     }
+
+    // -------------------------------------------------------------------- XP
+
+    public void AddXP(int amount) => AddXP((float)amount);
 
     /// <summary>
-    /// Adds XP to the bar. Call this whenever an enemy dies (via NotifyEnemyKilled).
+    /// Adds XP and levels up if the threshold is crossed. The remainder ALWAYS
+    /// carries into the next level - the bar is never reset to zero.
     /// </summary>
-    public void AddXP1(int amount)
+    public void AddXP(float amount)
     {
-        if (isPaused) return;
-        currentXP += amount;
-        if (currentXP >= currentThreshold)
-        {
-            LevelUp();
-        }
-        else
-        {
-            xpSlider.value = currentXP;
-        }
+        if (!running || AtMaxLevel || amount <= 0f) return;
+
+        // Logical XP is credited immediately and in full. Update() catches the
+        // bar up separately, so kills landing faster than the fill animation can
+        // never be dropped or double-counted.
+        xp += amount;
+
+        OnXpGained?.Invoke(amount / Mathf.Max(0.0001f, Threshold) * 100f);
+
+        TryLevelUp();
     }
 
-    public void AddXP(int amount)
+    private void TryLevelUp()
     {
-        if (isPaused) return;
+        // While the card screen is open the level-up is deferred; OnOfferChosen
+        // re-checks, so a single huge kill can still cascade several levels.
+        if (isPaused || !running || AtMaxLevel) return;
 
-        // Calculate the target XP after adding
-        int startXP = currentXP;
-        currentXP += amount;
+        float t = Threshold;
+        if (xp < t) return;
 
-        // If we're about to hit or exceed the threshold, cap the XP at the threshold for animation
-        int targetXP = Mathf.Min(currentXP, currentThreshold);
+        xp -= t;                    // <- the overflow carries
+        level++;
+        xpDisplay = 0f;
 
-        // Stop any ongoing animation before starting a new one
-        if (xpAnimationCoroutine != null)
-        {
-            StopCoroutine(xpAnimationCoroutine);
-        }
-        // Start animating the slider from its current value to the target
-        xpAnimationCoroutine = StartCoroutine(AnimateXpBar(startXP, targetXP));
+        UpdateXpUI();
+        OnLevelUp?.Invoke(level);
 
-        // If we actually reached the threshold, schedule the LevelUp call to happen after the bar finishes animating
-        if (currentXP >= currentThreshold)
-        {
-            StartCoroutine(DelayedLevelUp());
-        }
+        OpenSkillSelection();
     }
 
-    // Coroutine that interpolates xpSlider.value from 'fromXP' to 'toXP' over xpIncreaseDuration
-    private IEnumerator AnimateXpBar(int fromXP, int toXP)
+    private void UpdateXpUI()
     {
-        float elapsed = 0f;
-        while (elapsed < xpIncreaseDuration)
+        if (levelCounterText != null) levelCounterText.text = level.ToString();
+    }
+
+    // ------------------------------------------------------------ card screen
+
+    private void OpenSkillSelection()
+    {
+        int slots = cardSlots != null ? cardSlots.Length : 0;
+        if (slots == 0)
         {
-            elapsed += Time.unscaledDeltaTime; // use unscaled time so pausing doesn't freeze animation
-            float t = elapsed / xpIncreaseDuration;
-            xpSlider.value = Mathf.Lerp(fromXP, toXP, t);
-            yield return null;
+            Debug.LogWarning("[RogueliteManager] Level-up with no card slots assigned.", this);
+            return;
         }
-        xpSlider.value = toXP; // ensure exact value at the end
-    }
 
-    // Coroutine that waits for the animation to finish before calling LevelUp
-    private IEnumerator DelayedLevelUp()
-    {
-        yield return new WaitForSecondsRealtime(xpIncreaseDuration);
-        LevelUp();
-    }
+        var offers = draw.Draw(slots);
+        if (offers.Count == 0) return;   // everything maxed - skip the screen entirely
 
-
-    /// <summary>
-    /// Handles leveling up: resets XP, increments threshold,
-    /// pauses gameplay, and triggers the skill selection UI.
-    /// Also refreshes the player list in case new characters have spawned.
-    /// </summary>
-    private void LevelUp()
-    {
-        currentXP = 0;
-        levelCounter++;
-        currentThreshold++;
-        xpSlider.maxValue = currentThreshold;
-        xpSlider.value = currentXP;
-        levelCounterText.text = levelCounter.ToString();
-
-        // Pause gameplay
         isPaused = true;
-        Time.timeScale = 0f;
+        GameplayPause.SetPaused(true);
 
         if (skillSelectPanel != null) skillSelectPanel.SetActive(true);
+        if (levelUpOverlay != null) levelUpOverlay.SetActive(true);
 
-
-        // Update players list in case new characters spawned
-        UpdateActivePlayers();
-
+        // Harmless in the battle phase (the board is already gone), but keeps the
+        // behaviour correct for any stage that still shows the board.
         var input = FindObjectOfType<BoardInputController>();
         if (input) input.enabled = false;
 
-        ShowSkillSelection();
+        for (int i = 0; i < slots; i++)
+        {
+            var slot = cardSlots[i];
+            if (slot == null) continue;
+
+            bool has = i < offers.Count;
+            slot.gameObject.SetActive(has);
+            if (has) slot.Init(offers[i], PortraitFor(offers[i]), OnOfferChosen);
+        }
     }
 
-    /// <summary>
-    /// Randomly picks three skills from the pool and populates the card slots.
-    /// </summary>
-    private void ShowSkillSelection()
+    private void OnOfferChosen(BuffOffer offer)
     {
-        List<SkillData> available = new List<SkillData>(skillPool);
-        for (int i = 0; i < cardSlots.Length; i++)
-        {
-            if (available.Count == 0) break;
-            int index = Random.Range(0, available.Count);
-            SkillData skill = available[index];
-            available.RemoveAt(index);
+        if (!offer.IsValid) return;
 
-            int timesSelected = skillPickCounts[skill];
-            cardSlots[i].Init(skill, timesSelected, OnSkillChosen);
-        }
+        draw.Commit(offer);
+        ApplyOffer(offer);
+        AddSkillToList(offer.skill);
 
+        CloseSkillSelection();
+
+        // A single elite kill can be worth more than one level.
+        TryLevelUp();
     }
 
-    /// <summary>
-    /// Called when a card is chosen. Applies the effect, updates UI, and resumes gameplay.
-    /// </summary>
-    private void OnSkillChosen(SkillData skill)
+    private void CloseSkillSelection()
     {
-        if (skillSelectPanel != null) skillSelectPanel.SetActive(false);
+        HideAllPanels();
 
-        // Update selection count and apply effect
-        skillPickCounts[skill]++;
-        ApplySkillEffect(skill, skillPickCounts[skill]);
-
-        // Show the skill’s icon in the appropriate list
-        AddSkillToList(skill);
-
-        // If we've just evolved this skill, remove it from the pool so it won't appear again
-        if (skillPickCounts[skill] >= evolveThreshold)
-        {
-            skillPool.Remove(skill);
-        }
-
-
-        // Resume gameplay
         isPaused = false;
-        Time.timeScale = 1f;
+        GameplayPause.SetPaused(false);
 
         var input = FindObjectOfType<BoardInputController>();
         if (input) input.enabled = true;
     }
 
-    /// <summary>
-    /// Adds the selected skill’s icon to the next empty slot in its category list.
-    /// Shows the evolved icon if picked 5+ times.
-    /// </summary>
-    private void AddSkillToList1(SkillData skill)
+    private void HideAllPanels()
     {
-        Image[] list = (skill.category == SkillCategory.Offensive) ? offensiveSlots : defensiveSlots;
-        for (int i = 0; i < list.Length; i++)
+        if (skillSelectPanel != null) skillSelectPanel.SetActive(false);
+        if (levelUpOverlay != null) levelUpOverlay.SetActive(false);
+    }
+
+    private Sprite PortraitFor(BuffOffer offer)
+    {
+        if (offer.isGlobal || unitsDatabase == null) return null;
+
+        var units = unitsDatabase.Units;
+        for (int i = 0; i < units.Count; i++)
         {
-            if (!list[i].gameObject.activeSelf)
-            {
-                list[i].sprite = skillPickCounts[skill] >= 5 ? skill.evolvedIcon : skill.normalIcon;
-                list[i].gameObject.SetActive(true);
-                break;
-            }
+            var u = units[i];
+            if (u != null && u.classType == offer.hero) return u.portrait;
+        }
+
+        return null;
+    }
+
+    // ------------------------------------------------------------- applying
+
+    private void ApplyOffer(BuffOffer offer)
+    {
+        float newMultiplier = 1f + offer.increment;
+
+        if (offer.isGlobal)
+        {
+            var roster = draw.Roster;
+            for (int i = 0; i < roster.Count; i++)
+                ApplyToHero(roster[i], offer.skill, newMultiplier);
+        }
+        else
+        {
+            ApplyToHero(offer.hero, offer.skill, newMultiplier);
         }
     }
+
+    private void ApplyToHero(FighterType hero, SkillData skill, float newMultiplier)
+    {
+        var skillKey = (hero, skill);
+        float oldMultiplier = skillMultiplier.TryGetValue(skillKey, out float m) ? m : 1f;
+
+        // Only the DELTA is applied, so taking the same buff again moves the stat
+        // from its old total to the new one instead of stacking multiplicatively.
+        float factor = oldMultiplier > 0f ? newMultiplier / oldMultiplier : newMultiplier;
+        skillMultiplier[skillKey] = newMultiplier;
+
+        var statKey = (hero, skill.effectType);
+        statMultiplier[statKey] =
+            (statMultiplier.TryGetValue(statKey, out float s) ? s : 1f) * factor;
+
+        for (int i = 0; i < activePlayers.Count; i++)
+        {
+            var p = activePlayers[i];
+            if (p == null || p.CurrentStats == null) continue;
+            if (p.CurrentStats.type != hero) continue;
+
+            ApplyFactor(p, skill.effectType, factor);
+        }
+    }
+
+    private void ApplyAccumulatedTo(PlayerStatsApplier player)
+    {
+        if (player == null || player.CurrentStats == null || statMultiplier.Count == 0) return;
+
+        var type = player.CurrentStats.type;
+
+        foreach (SkillEffectType stat in Enum.GetValues(typeof(SkillEffectType)))
+        {
+            if (!statMultiplier.TryGetValue((type, stat), out float f)) continue;
+            if (Mathf.Approximately(f, 1f)) continue;
+
+            ApplyFactor(player, stat, f);
+        }
+    }
+
+    private static void ApplyFactor(PlayerStatsApplier player, SkillEffectType stat, float factor)
+    {
+        var s = player.CurrentStats;
+        if (s == null || Mathf.Approximately(factor, 1f)) return;
+
+        switch (stat)
+        {
+            case SkillEffectType.AttackSpeed:
+                s.ApplyMultipliers(atkSpdMult: factor);
+                break;
+
+            case SkillEffectType.AttackDamage:
+                s.ApplyMultipliers(atkMult: factor);
+                break;
+
+            case SkillEffectType.Health:
+                s.ApplyMultipliers(hpMult: factor);
+                ScaleLiveHealth(player, factor);
+                break;
+
+            case SkillEffectType.Defense:
+                s.ApplyMultipliers(defMult: factor);
+                break;
+
+            case SkillEffectType.MoveSpeed:
+                s.ApplyMultipliers(moveMult: factor);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Raising maxHP on the runtime stats alone would do nothing visible - the
+    /// live health component holds its own copy, so it is scaled by the same
+    /// factor. Current HP rises too, which is the point of an in-battle HP buff.
+    /// </summary>
+    private static void ScaleLiveHealth(PlayerStatsApplier player, float factor)
+    {
+        var health = player.GetComponentInChildren<PlayerStats>();
+        if (health == null) return;
+
+        health.maxHealth *= factor;
+        health.currentHP = Mathf.Min(health.currentHP * factor, health.maxHealth);
+    }
+
+    // ------------------------------------------------------------- HUD icons
+
+    /// <summary>
+    /// Drops the picked buff's icon into its category row, or swaps it to the
+    /// evolved art once any hero has maxed it.
+    /// </summary>
     private void AddSkillToList(SkillData skill)
     {
-        Image[] list = (skill.category == SkillCategory.Offensive) ? offensiveSlots : defensiveSlots;
+        if (skill == null) return;
 
-        // If the skill is already in a list, just update its sprite for the new level (normal → evolved)
-        if (skillToSlot.TryGetValue(skill, out var existingSlot) && existingSlot != null)
+        bool maxed = draw.TotalPicks(skill) >= skill.MaxStars;
+        var art = maxed && skill.evolvedIcon != null ? skill.evolvedIcon : skill.normalIcon;
+
+        if (skillToSlot.TryGetValue(skill, out var existing) && existing != null)
         {
-            existingSlot.sprite = (skillPickCounts[skill] > 5 ? skill.evolvedIcon : skill.normalIcon);
+            existing.sprite = art;
             return;
         }
 
-        // Otherwise find the first empty slot and assign the skill
-        foreach (var slot in list)
+        var row = skill.category == SkillCategory.Offensive ? offensiveSlots : defensiveSlots;
+        if (row == null) return;
+
+        for (int i = 0; i < row.Length; i++)
         {
-            if (!slot.gameObject.activeSelf)
-            {
-                slot.sprite = (skillPickCounts[skill] > 5 ? skill.evolvedIcon : skill.normalIcon);
-                slot.gameObject.SetActive(true);
-                skillToSlot[skill] = slot;
-                break;
-            }
+            var slot = row[i];
+            if (slot == null || slot.gameObject.activeSelf) continue;
+
+            slot.sprite = art;
+            slot.gameObject.SetActive(true);
+            skillToSlot[skill] = slot;
+            return;
         }
     }
 
-
-    /// <summary>
-    /// Applies the selected skill’s effect across all active players, respecting allowed fighter types.
-    /// Tracks multipliers to avoid compounding errors on repeated picks.
-    /// </summary>
-    private void ApplySkillEffect(SkillData skill, int timesSelected)
+    private void ClearIconRows()
     {
-        // Determine the new total increment (e.g. +20% after 4 picks, +50% when evolved)
-        float totalIncrement = (timesSelected < 6)
-            ? Mathf.Min(timesSelected * skill.baseIncrement, skill.maxIncrement)
-            : skill.evolvedIncrement;
-        float newMultiplier = 1f + totalIncrement;
-
-        // Look up the previously applied multiplier (default 1.0)
-        float currentMultiplier = skillCurrentMultipliers[skill];
-        float factor = newMultiplier / currentMultiplier;
-
-        // Apply to all currently active players that are of allowed type
-        foreach (var applier in activePlayers)
-        {
-            UnitStatsRuntime stats = applier.CurrentStats;
-            if (stats == null) continue;
-
-            // Check allowed fighter types
-            if (skill.allowedTypes != null && skill.allowedTypes.Length > 0)
-            {
-                bool allowed = false;
-                foreach (var t in skill.allowedTypes)
-                {
-                    if (stats.type == t) { allowed = true; break; }
-                }
-                if (!allowed) continue;
-            }
-
-            // Apply the computed factor to the appropriate stat
-            switch (skill.effectType)
-            {
-                case SkillEffectType.AttackSpeed:
-                    stats.ApplyMultipliers(atkSpdMult: factor);
-                    break;
-                case SkillEffectType.AttackDamage:
-                    stats.ApplyMultipliers(atkMult: factor);
-                    break;
-                case SkillEffectType.Health:
-                    stats.ApplyMultipliers(hpMult: factor);
-                    break;
-            }
-        }
-
-        // Store the new multiplier for next time this skill is selected
-        skillCurrentMultipliers[skill] = newMultiplier;
+        skillToSlot.Clear();
+        SetRowInactive(offensiveSlots);
+        SetRowInactive(defensiveSlots);
     }
 
+    private static void SetRowInactive(Image[] row)
+    {
+        if (row == null) return;
+
+        for (int i = 0; i < row.Length; i++)
+            if (row[i] != null) row[i].gameObject.SetActive(false);
+    }
+
+    // ----------------------------------------------------------------- reset
+
     /// <summary>
-    /// Resets XP, thresholds, and clears skill selections at the start of a new stage.
-    /// Call this when advancing to the next level.
+    /// Wipes every per-stage buff. The Units-UI upgrade level is untouched - that
+    /// lives in PlayerStatsApplier / the save file, not here.
     /// </summary>
     public void ResetForNewStage()
     {
-        currentThreshold = initialThreshold;
-        currentXP = 0;
-        levelCounter = 0;
-        xpSlider.maxValue = currentThreshold;
-        xpSlider.value = currentXP;
-        levelCounterText.text = levelCounter.ToString();
+        ResetProgressionState();
 
-        foreach (var key in new List<SkillData>(skillPickCounts.Keys))
-        {
-            skillPickCounts[key] = 0;
-            skillCurrentMultipliers[key] = 1f;
-        }
+        if (running) ReconfigureDraw();
+        else draw.Reset();
 
-        foreach (var slot in offensiveSlots)
-        {
-            slot.gameObject.SetActive(false);
-        }
-        foreach (var slot in defensiveSlots)
-        {
-            slot.gameObject.SetActive(false);
-        }
+        UpdateXpUI();
+    }
 
-        // Optionally refresh player and enemy lists on new stage
-        UpdateActivePlayers();
-        UpdateActiveEnemies();
+    private void ResetProgressionState()
+    {
+        level = 1;
+        xp = 0f;
+        xpDisplay = 0f;
+
+        skillMultiplier.Clear();
+        statMultiplier.Clear();
+        ClearIconRows();
+
+        if (xpSlider != null) xpSlider.value = 0f;
+        UpdateXpUI();
     }
 }

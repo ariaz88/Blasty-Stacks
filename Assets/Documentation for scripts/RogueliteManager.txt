@@ -3,192 +3,157 @@
   Path : Assets/Scripts/Roguelite/RogueliteManager.cs
   Type : MonoBehaviour
   Layer: Roguelite
-  Scenes: all 7 gameplay stages
+  Scenes: all gameplay stages (Assets/Scenes/TestScenes/GamePlay Scenes/*)
 ================================================================================
 
 PURPOSE
 -------
-Runs the whole in-run roguelite loop: an XP bar that fills as enemies die, a
-level-up overlay that fully pauses gameplay, three randomly-drawn skill cards to
-choose from, and application of the chosen skill's stat multiplier across every
-currently active player unit.
+Runs the in-BATTLE roguelite loop: an XP bar fed by enemy deaths, a level-up that
+pauses the game and offers three buff cards, and application of the chosen buff's
+multiplier onto the matching players' UnitStatsRuntime.
+
+PHASE GATE (important, and new)
+  This layer only exists during the BATTLE phase. While the player is solving the
+  puzzle there is no XP, no level bar and no cards - the army is still being
+  assembled. It starts on BattleStartController.OnAnyBattleStarted.
+  Consequence: the hero roster is FINAL before the first card is ever drawn.
+
+TWO STAT LAYERS, kept strictly apart
+  PERMANENT  PlayerStatsApplier computes baseStats x growth(saved upgrade level)
+             into CurrentStats. Owned by the Units UI, written to the save file.
+  PER-STAGE  this class multiplies CurrentStats on top. Never saved. Wiped by
+             ResetForNewStage().
+  A buff never touches the saved upgrade level, and an upgrade never touches a buff.
 
 INSPECTOR FIELDS
 ----------------
   XP Progression
-    xpSlider           (Slider)
+    xpSlider           (Slider)   driven NORMALIZED: min 0, max 1, set in Start
     levelCounterText   (TextMeshProUGUI)
-    initialThreshold   (int, default 1)  XP needed for the FIRST level-up
-    xpIncreaseDuration (float, default 0.5)  seconds the bar animates over
+    initialThreshold   (int, default 1)  LEGACY fallback, used only when no
+                       config asset is assigned: threshold = initialThreshold +
+                       level - 1
+    xpIncreaseDuration (float, default 0.5)  seconds for the bar to cross its
+                       full width. PURELY COSMETIC - logical XP is never delayed
+
+  Config
+    config         (RogueliteConfigSO)  XP curve + card-draw tuning. Strongly
+                   recommended; without it the legacy linear threshold is used
+                   and the draw runs unweighted.
+    unitsDatabase  (UnitsDatabaseSO)  used ONLY to look up a hero portrait for a
+                   card, matched on UnitDefinitionSO.classType. Safe to leave
+                   empty - cards then fall back to the buff icon.
 
   Skill Pool
-    skillPool  (List<SkillData>)  every skill available to be offered. Skills
-               are REMOVED from this list once fully evolved (see OnSkillChosen)
-               so they stop being offered.
+    skillPool  (List<SkillData>)  ONE ASSET PER STAT, not per hero. The hero on
+               each card is chosen at draw time by BuffDraw, so 5 assets across a
+               4-hero roster already yields 20 distinct cards. Assets are NOT
+               removed from this list any more - exhaustion is tracked per
+               (hero, skill) inside BuffDraw.
 
   UI References
     levelUpOverlay, skillSelectPanel  (GameObject)
     cardSlots       (SkillCardUI[])  usually 3
-    offensiveSlots, defensiveSlots  (Image[])  the small icon rows showing
-                    every skill picked so far, grouped by category
+    offensiveSlots, defensiveSlots  (Image[])  small icon rows showing every buff
+                    picked so far, grouped by SkillData.category
+
+EVENTS
+------
+  OnXpGained (Action<float>)  fires on every XP gain with its share of the
+             current bar, e.g. 20f means "+20%". Intended for a floating popup.
+  OnLevelUp  (Action<int>)    fires after each level-up with the new level.
 
 RUNTIME STATE
 -------------
-  currentThreshold, currentXP, levelCounter  (int)
-  xpAnimationCoroutine  (Coroutine)  tracked so a new AddXP can cancel an
-                        in-flight bar animation cleanly
-  evolveThreshold = 6  (readonly int)  hard-coded pick count that triggers the
-                       evolved state
-  skillPickCounts        (Dictionary<SkillData, int>)  picks per skill
-  skillCurrentMultipliers (Dictionary<SkillData, float>)  the LAST multiplier
-                          applied for each skill, used to compute a
-                          re-normalizing factor on the next pick (see below)
-  skillToSlot  (Dictionary<SkillData, Image>)  remembers which sidebar icon
-               slot a skill occupies, so a re-pick UPDATES that slot's icon
-               instead of consuming a second empty slot
-  isPaused  (bool)  local pause flag, separate from GameplayPause
-  activePlayers  (List<PlayerStatsApplier>)
-  activeEnemies  (List<EnemyManager>)
+  draw            (BuffDraw)  owns the roster, the per-(hero,skill) star counts
+                  and the whole card-selection algorithm
+  level           (int, 1-based)
+  xp              (float)  LOGICAL xp toward the current threshold
+  xpDisplay       (float)  what the slider currently shows; chases xp in Update
+  isPaused        (bool)   a card screen is open
+  running         (bool)   the battle phase has begun
+  activePlayers   (List<PlayerStatsApplier>)
+  activeEnemies   (List<EnemyManager>)
+  skillMultiplier (Dictionary<(FighterType,SkillData), float>)  the multiplier
+                  ONE buff currently contributes to one hero
+  statMultiplier  (Dictionary<(FighterType,SkillEffectType), float>)  product of
+                  every buff on one (hero, stat); used to catch up late joiners
+  skillToSlot     (Dictionary<SkillData, Image>)  HUD icon row bookkeeping
 
-LIFECYCLE
----------
-  Start()
-      Initialises XP state and the slider/label, zeroes every skill's pick
-      count and multiplier, hides all overlays and sidebar icon slots, and
-      calls UpdateActivePlayers()/UpdateActiveEnemies() to do an initial scene
-      scan.
+FLOW
+----
+  Awake         builds the BuffDraw with the config asset.
+  OnEnable/OnDisable  subscribe/unsubscribe BattleStartController.OnAnyBattleStarted.
+  Start         hides the panels, resets state, normalizes the slider, and calls
+                BeginBattlePhase() immediately IF BattleStartController.BattleIsRunning
+                is already true. That flag DEFAULTS TO TRUE and is only cleared by
+                a stage that actually has a BattleStartController - so a scene
+                without one behaves exactly as it always did.
 
-TRACKING ACTIVE CHARACTERS
-------------------------------
-  UpdateActivePlayers() / UpdateActiveEnemies()
-      Each does a full FindObjectsOfType scan and REPLACES the tracked list.
-      The doc comments describe RegisterPlayer/RegisterEnemy as the intended
-      per-spawn registration path, with these scans as a periodic fallback -
-      but see NOTES: in the current code, the periodic scans are effectively
-      the ONLY thing keeping activePlayers correct.
+  BeginBattlePhase()
+                snapshots the players on the field, derives the distinct
+                FighterTypes from their CurrentStats.type, and hands that roster
+                plus skillPool to draw.Configure(). A card can therefore never
+                target a hero that is not in this fight.
 
-  RegisterPlayer(player) / RegisterEnemy(enemy)
-      Add-if-not-present helpers, intended to be called by spawners as units
-      appear, avoiding a full scene rescan.
+  AddXP(float)  credits the XP IMMEDIATELY and in full, raises OnXpGained, then
+                calls TryLevelUp. Update() catches the bar up separately, so kills
+                landing faster than the fill animation can never be dropped or
+                double-counted. (This was a real bug in the old coroutine version.)
 
-  NotifyEnemyKilled(enemy)
-      Intended to be called by an EnemyManager on death: awards 1 XP via
-      AddXP(1) and removes the enemy from activeEnemies.
+  TryLevelUp()  deferred while a card screen is open. Otherwise:
+                  xp -= Threshold      <- THE OVERFLOW CARRIES, never reset to 0
+                  level++
+                then opens the card screen. Re-checked after every pick, so one
+                elite kill can cascade several levels.
 
-XP AND LEVEL-UP
-------------------
-  AddXP(amount)  (the live version)
-      No-ops while isPaused. Computes the target XP (capped at currentThreshold
-      for animation purposes), cancels any in-flight bar animation, and starts
-      AnimateXpBar(startXP, targetXP). If the threshold was actually reached,
-      also starts DelayedLevelUp() so LevelUp() fires only once the bar finishes
-      animating, rather than instantly.
+  OpenSkillSelection()
+                asks draw.Draw(cardSlots.Length). If it returns nothing (all
+                buffs maxed) the screen is SKIPPED and the game never pauses.
+                Otherwise pauses via GameplayPause.SetPaused(true) and fills the
+                slots with Init(offer, portrait, callback).
 
-  AnimateXpBar(fromXP, toXP)  [coroutine]
-      Lerps xpSlider.value over xpIncreaseDuration using Time.unscaledDeltaTime
-      specifically so THIS animation still plays even while the game is
-      globally paused (relevant since LevelUp sets Time.timeScale = 0 as part
-      of the very sequence this animates into).
+  OnOfferChosen(BuffOffer)
+                draw.Commit -> ApplyOffer -> AddSkillToList -> close -> TryLevelUp.
 
-  DelayedLevelUp()  [coroutine]
-      WaitForSecondsRealtime(xpIncreaseDuration), then LevelUp() - realtime so
-      it is unaffected by the timeScale change LevelUp itself is about to make.
+  ApplyToHero() applies only the RATIO new/old of this buff's multiplier, so
+                taking the same card again moves the stat from its old total to
+                the new one instead of compounding. Records both the per-skill and
+                the per-stat product.
 
-  LevelUp()
-      Resets XP to 0, increments levelCounter, increments currentThreshold BY
-      ONE (a simple +1 curve - each level costs exactly one more kill than the
-      last, no exponential curve), updates the slider/label, sets isPaused =
-      true AND Time.timeScale = 0 (a HARD global pause, unlike
-      PlayerManager's per-unit HandleGateDestroyed), shows skillSelectPanel,
-      refreshes activePlayers (in case new units spawned), DISABLES
-      BoardInputController (found via FindObjectOfType) so the puzzle cannot be
-      touched during the level-up choice, and calls ShowSkillSelection().
-
-SKILL SELECTION
-------------------
-  ShowSkillSelection()
-      Copies skillPool into a working list, then for each of the (usually 3)
-      cardSlots picks a RANDOM skill from the remaining pool WITHOUT
-      replacement and calls cardSlots[i].Init(skill, currentPickCount,
-      OnSkillChosen). If the pool runs out (fewer skills left than slots), the
-      remaining slots are simply left un-initialised from this call - not
-      explicitly hidden, a possible loose end if the pool ever shrinks below 3.
-
-  OnSkillChosen(skill)
-      Hides skillSelectPanel, increments the pick count, calls
-      ApplySkillEffect, updates the sidebar via AddSkillToList, and if the pick
-      count has now reached evolveThreshold (6), REMOVES the skill from
-      skillPool entirely so it will never be offered again. Then resumes:
-      isPaused = false, Time.timeScale = 1, and re-enables BoardInputController.
-
-  AddSkillToList(skill)  (the live version)
-      If this skill already occupies a sidebar slot (tracked in skillToSlot),
-      just updates that slot's sprite (normal vs evolved icon, using a ">5"
-      pick-count comparison) - a re-pick does not consume a new slot. Otherwise
-      finds the first inactive slot in the matching category row, activates it,
-      sets its sprite, and remembers the mapping in skillToSlot.
-
-  ApplySkillEffect(skill, timesSelected)
-      Computes totalIncrement: while below evolveThreshold, it is
-      min(timesSelected * baseIncrement, maxIncrement) - i.e. LINEAR growth per
-      pick, capped; once at or past the threshold, it JUMPS to the flat
-      evolvedIncrement instead. newMultiplier = 1 + totalIncrement.
-      Reads the PREVIOUSLY applied multiplier from skillCurrentMultipliers
-      (default 1) and computes factor = newMultiplier / currentMultiplier - a
-      RE-NORMALIZING ratio, not the raw newMultiplier itself. This matters
-      because UnitStatsRuntime.ApplyMultipliers MULTIPLIES the stat in place
-      rather than setting it absolutely - dividing out the old multiplier before
-      applying the new one is what prevents each re-pick from compounding on
-      top of itself (e.g. picking a +10% skill twice yields +10% total-relative-
-      to-base for that skill, computed as the correct new absolute target,
-      rather than +10% then another +10% on the already-boosted number).
-      Then, for every unit in activePlayers whose stats.type is in
-      skill.allowedTypes (or ALL units if allowedTypes is empty), applies
-      'factor' to the ONE stat matching skill.effectType via
-      stats.ApplyMultipliers(atkSpdMult:/atkMult:/hpMult: factor).
-      Finally stores newMultiplier as the new "last applied" value for next time.
+  RegisterPlayer()
+                adds the player AND immediately applies every buff already taken
+                for its hero type (ApplyAccumulatedTo), so a unit that reaches the
+                field late is never under-buffed.
 
   ResetForNewStage()
-      Public method to reset the entire roguelite run for a new stage: zeroes
-      XP/threshold/level, resets every tracked skill's pick count and
-      multiplier to defaults, hides all sidebar icons, and refreshes the active
-      player/enemy lists.
+                clears level, xp, both multiplier tables and the HUD icon rows,
+                then reconfigures the draw. Does NOT touch the saved upgrade level.
 
 HOW IT CONNECTS
 ---------------
-  - SkillCardUI displays each offered card and reports the click back here.
-  - PlayerStatsApplier.CurrentStats is what ApplySkillEffect mutates via
-    ApplyMultipliers - a live UnitStatsRuntime shared by reference, so the
-    change is visible in combat immediately with no respawn needed.
-  - BoardInputController is disabled/enabled around the level-up choice.
+  EnemyManager.Update()  -> NotifyEnemyKilled(this) on death, guarded by xpGiven.
+                            Grants enemy.XpValue. THIS IS THE ONLY XP SOURCE.
+  PlayerWaveManager      -> RegisterPlayer for each spawned unit.
+  BattleStartController  -> OnAnyBattleStarted (static) starts the whole layer.
+  BuffDraw               -> decides which (hero, stat) cards appear.
+  SkillCardUI            -> renders one BuffOffer.
+  GameplayPause          -> the single pause authority (also sets Time.timeScale).
+  UnitStatsRuntime.ApplyMultipliers(atk, def, hp, move, atkSpd, range)
+                         -> where every buff ultimately lands.
+  PlayerStats            -> live health is scaled alongside a maxHP buff, or the
+                            buff would be invisible.
 
-NOTES / RISKS - IMPORTANT
---------------------------
-  !! THE XP SYSTEM APPEARS TO BE FULLY DISCONNECTED FROM GAMEPLAY. A project-
-  !! wide search found ZERO call sites for NotifyEnemyKilled() and ZERO call
-  !! sites for AddXP() outside this file's own internal AddXP1 (dead, unused
-  !! sibling). EnemyManager.Update contains only a COMMENTED-OUT call
-  !! (var manager = FindObjectOfType<RogueliteManager>();
-  !!  if (manager != null) manager.NotifyEnemyKilled(this);) at the point where
-  !! an enemy actually dies - it was never re-enabled after being disabled.
-  !! CONSEQUENCE: as currently wired, killing enemies never adds XP, so the XP
-  !! bar never fills, LevelUp() never fires from gameplay, and the skill-card
-  !! system - despite being fully implemented and functional once triggered -
-  !! is unreachable through normal play. This may be intentional
-  !! work-in-progress, or a regression from the commented-out line; either way
-  !! it is worth flagging to a developer, since the whole roguelite layer
-  !! currently only activates if something calls AddXP or NotifyEnemyKilled
-  !! manually (e.g. from a debug tool).
-  - The activePlayers tracking has the same partial gap: RegisterPlayer is only
-    called from the DEAD SpawnLockedWave1 sibling in PlayerWaveManager, never
-    from the live SpawnLockedWave. In practice this is masked because
-    UpdateActivePlayers() re-scans the whole scene every time LevelUp() runs,
-    so newly spawned units are still picked up BY THE TIME a level-up actually
-    happens - but only because of that periodic rescan, not because of the
-    registration path the code comments describe as the primary mechanism.
-  - Two dead numbered siblings remain as methods: AddXP1 and AddSkillToList1 -
-    earlier, simpler versions without the animation/re-slot-reuse logic.
-  - LevelUp's threshold growth (+1 per level, flat) means later levels arrive
-    faster relative to earlier ones in terms of "% more kills needed" even
-    though the absolute increment is constant - worth knowing when tuning pacing,
-    IF the XP hookup above is restored.
+NOTES
+-----
+  - Buffable stats are FIVE: AttackDamage, Defense, Health, AttackSpeed,
+    MoveSpeed. attackRange is deliberately excluded from the pool for now; the
+    multiplier plumbing for it still exists in UnitStatsRuntime.
+  - The old numbered dead siblings AddXP1() and AddSkillToList1() are GONE, as are
+    the AnimateXpBar / DelayedLevelUp coroutines they raced with.
+  - The old code set Time.timeScale directly while combat honoured
+    GameplayPause.IsPaused - two competing pause systems. Now only GameplayPause.
+  - Every serialized field name from the previous version is preserved, so the
+    21 stage scenes still deserialize. config and unitsDatabase are new and will
+    be null in scenes authored before this change: the legacy threshold is used
+    and cards simply have no portrait. Assign them per stage.

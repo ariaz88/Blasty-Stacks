@@ -3,64 +3,75 @@
   Path : Assets/Scripts/Roguelite/SkillCardUI.cs
   Type : MonoBehaviour
   Layer: Roguelite
-  Scenes: all 7 gameplay stages
+  Prefabs: Assets/PREFABS/UI/regulite/Regulite Crad.prefab
+           (also inside Canvas.prefab as CardTransform / CardTransform 2 / 3)
 ================================================================================
 
 PURPOSE
 -------
-Displays ONE skill card in the level-up selection overlay (three of these are
-shown at once) and reports back which card the player clicked.
+Renders ONE card on the level-up screen and reports the click back.
+
+A card is a (hero, stat) pair. The portrait says WHO gets the buff, the value says
+how much, and the star row PREVIEWS what that hero's stack will look like once the
+card is taken - so the player can see what the pick buys before taking it.
 
 INSPECTOR FIELDS
 ----------------
-  firstUI         (GameObject, optional)  extra UI shown only on a skill's very
-                  first appearance
-  iconImage       (Image)
-  nameText, descriptionText  (TextMeshProUGUI)
-  starsContainer  (Transform)  parent of the pip/star row showing pick count
-  starImages      (Image[])  individual star pips
-  newRibbon       (GameObject)  a "NEW" badge shown on first pick
+  firstUI         (GameObject)  shown only on a hero's FIRST star of this buff,
+                  alongside the NEW ribbon
+  iconImage       (Image)       the buff icon; swaps to evolvedIcon when maxed
+  portraitImage   (Image)       NEW. the hero this card buffs. Optional - hidden
+                  automatically on a global card, or when the manager has no
+                  UnitsDatabaseSO assigned
+  nameText        (TextMeshProUGUI)
+  descriptionText (TextMeshProUGUI)
+  valueText       (TextMeshProUGUI)  NEW. the big green "+50%". OPTIONAL - if the
+                  prefab has no such label the value is appended to the
+                  description instead, so the number is never invisible
+  starsContainer  (Transform)
+  starImages      (Image[])
+  newRibbon       (GameObject)
 
 RUNTIME STATE
 -------------
-  skillData   (SkillData)  which skill this card currently represents
-  onSelected  (Action<SkillData>)  callback invoked on click
+  offer      (BuffOffer)  the card currently displayed
+  onSelected (Action<BuffOffer>)  the manager's callback
 
-LIFECYCLE
----------
-  Awake()  finds a Button component on this object and wires OnClick to it.
+FLOW
+----
+  Awake                 wires the Button's onClick to OnClick().
 
-METHODS
--------
-  Init(SkillData data, int timesSelected, Action<SkillData> callback)
-      Stores the data and callback, then picks the icon: evolvedIcon once
-      timesSelected >= 5, else normalIcon. Sets name/description text. Then
-      branches by timesSelected:
-        0        -> show firstUI and the NEW ribbon, hide the star row entirely
-                    (first time this skill has ever been offered)
-        1..5     -> hide firstUI/ribbon, show the star row, and activate exactly
-                    timesSelected star images (a simple pip counter)
-        6+       -> hide everything except the (already-set) evolved icon - the
-                    "fully evolved" display state
+  Init(BuffOffer data, Sprite portrait, Action<BuffOffer> callback)
+        resultingStars = data.currentStars + 1
+        isMaxed        = resultingStars >= skill.MaxStars
 
-  OnClick()
-      Invokes onSelected(skillData) - the callback RogueliteManager supplied
-      when populating this slot.
+        portrait   assigned if non-null, otherwise portraitImage is hidden
+        icon       evolvedIcon when isMaxed, else normalIcon
+        value      "+{increment*100}%"  (increments are stored as fractions)
+
+        First star      -> firstUI ON, NEW ribbon ON, star row HIDDEN
+        Middle stars    -> star row shown with `resultingStars` stars lit
+        Maxed           -> firstUI OFF, ribbon OFF, star row HIDDEN (the evolved
+                           art carries the message instead)
+
+  OnClick()  invokes the callback with this card's BuffOffer. Public, so it can
+             also be wired from the prefab's OnClick list - but do NOT do both,
+             Awake already adds the listener.
 
 HOW IT CONNECTS
 ---------------
-  - RogueliteManager.ShowSkillSelection calls Init on each of the (usually 3)
-    cardSlots with a randomly chosen skill and the player's current pick count
-    for it.
-  - RogueliteManager.OnSkillChosen is the callback that fires when a card is
-    clicked.
+  RogueliteManager.OpenSkillSelection() -> Init(offer, portrait, OnOfferChosen)
+  BuffOffer / BuffDraw                  -> the data being rendered
+  UnitDefinitionSO.portrait             -> where the hero portrait comes from,
+                                           looked up by the manager on classType
 
 NOTES
 -----
-  - The evolved-icon threshold used HERE for the icon swap is ">= 5" (i.e. the
-    6th pick, since timesSelected is the count BEFORE this pick is applied),
-    while RogueliteManager's own AddSkillToList uses "> 5" for the SAME
-    decision when updating the sidebar icon after a pick. The two comparisons
-    are subtly different operators applied to values that are offset by one
-    call, but they are intended to agree on "evolved at the 6th pick" - worth
-    double-checking visually if the evolve threshold is ever changed.
+  - SIGNATURE CHANGED. The old Init(SkillData, int timesSelected, Action<SkillData>)
+    is gone; a card now carries a whole BuffOffer because it needs to know which
+    hero it targets.
+  - The old >= 5 / > 5 mismatch between this script and the manager's icon-row
+    code is fixed: both now compare against SkillData.MaxStars.
+  - portraitImage and valueText are new and will be NULL on prefabs authored
+    before this change. Both are null-guarded, so old prefabs still work - they
+    just show no portrait and fold the value into the description.

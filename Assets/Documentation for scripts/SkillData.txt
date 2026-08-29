@@ -1,54 +1,93 @@
 ================================================================================
   SkillData.cs
   Path : Assets/Scripts/Roguelite/SkillData.cs
-  Type : ScriptableObject   (menu: "Roguelite/Skill Data")
-         + 2 supporting enums in the same file
+  Type : ScriptableObject   (Create > Roguelite > Skill Data)
   Layer: Roguelite
-  Scenes: all 7 gameplay stages
+  Assets: Assets/Scripts/REGULITE/RogueliteScriptableObjects/
+          AtkDamage.asset, AtkSpeed.asset, HPSkills.asset
 ================================================================================
 
 PURPOSE
 -------
-The design-time definition of one roguelite skill card: its name, description,
-icons, how strong it gets per pick, and which fighter types it applies to. One
-asset per skill, picked at random into the level-up card selection.
+One buff DEFINITION - a stat, and how much it grants at each star.
 
-TYPES DEFINED IN THIS FILE
-----------------------------
-  enum SkillCategory   { Offensive, Defensive }
-      Which icon row (offensiveSlots / defensiveSlots in RogueliteManager) the
-      picked skill's icon appears in.
+It does NOT name a hero. The hero is chosen at draw time by BuffDraw, which is
+why a 4-hero roster x 5 of these assets produces 20 distinct cards from only 5
+authored assets.
 
-  enum SkillEffectType { AttackSpeed, AttackDamage, Health }
-      Which UnitStatsRuntime stat the skill multiplies.
+ENUMS
+-----
+  SkillCategory     { Offensive, Defensive }
+                    picks which HUD icon row a taken buff lands in.
+
+  SkillEffectType   { AttackSpeed, AttackDamage, Health, Defense, MoveSpeed }
+                    ORDER MATTERS. The first three are the original values and
+                    MUST keep their indices, or the three existing assets and the
+                    21 stage scenes referencing them would deserialize onto the
+                    wrong stat. Defense and MoveSpeed were APPENDED.
+                    attackRange is deliberately absent - not in the pool for now.
+                    Adding it later = append one more value here, nothing else.
+
+  SkillTargetMode   { SpecificUnit, AllUnits }
+                    SpecificUnit = the draw picks one hero, only that type is
+                    buffed. AllUnits = an army-wide card, offered rarely.
 
 FIELDS
 ------
-  skillName        (string)
-  description      (string)
-  category         (SkillCategory)
-  effectType       (SkillEffectType)
-  normalIcon       (Sprite)  shown on picks 1-5
-  evolvedIcon      (Sprite)  shown on the 6th ("evolved") pick and afterward
-  baseIncrement    (float)  bonus added PER PICK before evolving, e.g. 0.05 for
-                   a card that adds +5% per pick
-  maxIncrement     (float)  caps the pre-evolution bonus so repeated picks
-                   cannot compound indefinitely
-  evolvedIncrement (float)  the flat bonus applied once evolved, replacing the
-                   incremental math entirely
-  allowedTypes     (FighterType[])  if non-empty, restricts the effect to units
-                   whose stats.type is in this list; empty = applies to everyone
+  skillName, description        (string)
+  category                      (SkillCategory)
+  effectType                    (SkillEffectType)  which stat is multiplied
+  normalIcon, evolvedIcon       (Sprite)  evolved art shows once maxed
+  allowedTypes                  (FighterType[])  optional whitelist.
+                                EMPTY = offerable for ANY hero type.
+
+  Legacy increments (used ONLY when valuePerStar is empty)
+    baseIncrement, maxIncrement, evolvedIncrement  (float)
+
+  Targeting
+    targetMode  (SkillTargetMode, default SpecificUnit)
+
+  Value per star
+    valuePerStar (float[])  increment granted the 1st, 2nd, 3rd... time ONE hero
+                 takes this buff. 0.5, 0.6, 0.75 = +50%, +60%, +75% - the values
+                 GROW with the hero's star count, which is what rewards
+                 specialising in a single hero.
+    maxStars     (int, default 0)  how many times one hero may take it.
+                 0 = valuePerStar.Length, or 6 in legacy mode.
+
+PROPERTIES / METHODS
+--------------------
+  MaxStars                    star cap for one hero; never less than 1.
+                              maxStars, else valuePerStar.Length, else 6.
+
+  IncrementAtStars(starsAlreadyTaken)
+                              the TOTAL increment for a hero holding that many
+                              stars who is about to take one more. 0.5 = +50%,
+                              i.e. a x1.5 multiplier.
+                              Uses valuePerStar when authored; otherwise falls
+                              back to the ORIGINAL legacy curve:
+                                times < 6 -> min(times * baseIncrement, maxIncrement)
+                                times >= 6 -> evolvedIncrement
+
+  AppliesTo(FighterType)      true when this buff may be offered for that hero.
+                              Always true if allowedTypes is empty.
 
 HOW IT CONNECTS
 ---------------
-  - skillPool on RogueliteManager is a curated list of these assets.
-  - RogueliteManager.ApplySkillEffect reads baseIncrement/maxIncrement/
-    evolvedIncrement/allowedTypes/effectType to compute and apply the stat
-    multiplier.
-  - SkillCardUI.Init reads name/description/normalIcon/evolvedIcon for display.
+  BuffDraw          -> AppliesTo / MaxStars / IncrementAtStars decide what can be
+                       offered and for how much.
+  RogueliteManager  -> effectType selects which UnitStatsRuntime multiplier is
+                       applied; category selects the HUD icon row.
+  SkillCardUI       -> skillName, description, icons and the star row.
 
 NOTES
 -----
-  - The evolve threshold (6th pick) is NOT stored here - it is a hard-coded
-    constant (evolveThreshold = 6) in RogueliteManager, so changing it means
-    editing code, not this asset.
+  - BACKWARD COMPATIBLE by design. The three existing assets have no valuePerStar
+    and maxStars 0, so they take the legacy path and behave exactly as before.
+    targetMode defaults to 0 = SpecificUnit, which is what you want anyway.
+  - To author the new-style pool: one asset per stat (5 total), valuePerStar
+    filled in, targetMode SpecificUnit, allowedTypes empty. Add a few AllUnits
+    assets for the rare army-wide cards.
+  - Assets are NO LONGER removed from RogueliteManager.skillPool when maxed -
+    exhaustion is tracked per (hero, skill) inside BuffDraw, because the same
+    asset can be maxed on one hero and untouched on another.

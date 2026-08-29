@@ -1,0 +1,102 @@
+================================================================================
+  BuffDraw.cs
+  Path : Assets/Scripts/Roguelite/BuffDraw.cs
+  Type : plain C# class (NOT a MonoBehaviour) + BuffOffer struct
+  Layer: Roguelite
+  Scenes: none - instantiated by RogueliteManager in Awake
+================================================================================
+
+PURPOSE
+-------
+Decides WHICH cards go on a level-up screen.
+
+The screen always has 3 slots, but the roster is 1-4 heroes, so the draw has to
+satisfy three things at once:
+
+  ROTATION        every hero gets shown; one that sat out comes back.
+  SPECIALIZATION  a hero the player has been buffing shows up more often than one
+                  that has never been buffed.
+  VARIETY         no two cards on one screen buff the same stat.
+
+Rotation and specialization pull in OPPOSITE directions, so they are given
+different strengths: rotation is a HARD floor (forceAfterRounds guarantees a
+neglected hero returns), specialization is a SOFT nudge (it only tilts weights).
+No hero is ever starved, but the invested one trends up.
+
+BuffOffer (struct)
+------------------
+  skill        (SkillData)     the buff definition = the stat
+  hero         (FighterType)   who it buffs; meaningless when isGlobal
+  isGlobal     (bool)          army-wide card
+  currentStars (int)           stars held BEFORE this pick
+  increment    (float)         total increment if taken; 0.5 = +50%
+  IsValid                      skill != null
+
+STATE
+-----
+  roster           (List<FighterType>)  hero types actually on the field
+  heroPool /
+  globalPool       (List<SkillData>)    skillPool split by targetMode at Configure
+  roundsSinceShown (Dictionary<FighterType,int>)   drives PITY
+  heroTotalStars   (Dictionary<FighterType,int>)   drives INVESTMENT
+  heroStars        (Dictionary<(FighterType,SkillData),int>)  per hero per buff
+  globalStars      (Dictionary<SkillData,int>)
+  totalPicks       (Dictionary<SkillData,int>)     across all heroes; HUD icon rows
+  lastOffered      (HashSet<FighterType>)  who was on the LAST screen
+  lastPickedHero   + hasLastPicked         drives MOMENTUM
+
+THE WEIGHT
+----------
+  weight(h) = (1 + pityStep      * roundsSinceShown[h])
+            * (1 + investmentStep * totalStars[h])
+            * (h == lastPickedHero ? momentumBonus : 1)
+
+  Worked example - 4 heroes, round 2, after A was picked in round 1
+  (pityStep 1, investmentStep 0.5, momentumBonus 1.5):
+
+    A   shown, 1 star, last picked -> (1+0) * (1+0.5) * 1.5 = 2.25
+    D   never shown, 0 stars       -> (1+1) * (1+0)         = 2.00
+    B   shown, 0 stars             -> (1+0) * (1+0)         = 1.00
+    C   shown, 0 stars             -> (1+0) * (1+0)         = 1.00
+
+  A and D are the likely two; one of B/C fills the third slot. That is exactly the
+  requested behaviour - the buffed hero AND the neglected hero both come back -
+  and it falls out of the weights without any special-case rule.
+
+FLOW - Draw(slots)
+------------------
+  1. At most ONE global card (chance = config.globalCardChance), so there are
+     always at least two hero choices.
+  2. PickHeroes(statSlots): forced heroes first (roundsSinceShown >=
+     forceAfterRounds, most-neglected first), then weighted WITHOUT replacement.
+     If more slots are wanted than there are heroes, heroes repeat.
+  3. PickSkillFor(hero): a stat that hero has not maxed AND that is not already
+     used on this screen  <- this is what guarantees stat variety.
+  4. increment = skill.IncrementAtStars(currentStars)  - grows with the star count.
+  5. Backfill with a global, then with any legal hero card, if a hero came up dry.
+
+  Commit(chosen)  advances the star counts, sets the momentum target, and ages
+                  every hero that was NOT on the screen. That single line is what
+                  makes a neglected hero come back next round.
+
+ROSTER SIZES - all handled by the same code
+-------------------------------------------
+  4 heroes  3 distinct shown, 1 sits out (rotation matters most here)
+  3 heroes  all 3 shown every round; the choice becomes which STAT for which hero
+  2 heroes  one hero gets 2 cards with DIFFERENT stats, the other gets 1
+  1 hero    all 3 cards are that hero, 3 different stats
+
+HOW IT CONNECTS
+---------------
+  RogueliteManager  -> constructs it with the RogueliteConfigSO, calls Configure()
+                       at battle start, Draw() per level-up, Commit() per pick.
+  SkillData         -> AppliesTo(), MaxStars, IncrementAtStars() are all queried here.
+  RogueliteConfigSO -> every tunable in the weight formula.
+
+NOTES
+-----
+  - Plain C# on purpose: no Unity lifecycle, so the algorithm can be reasoned
+    about and stepped through on its own.
+  - IsExhausted does NOT run a draw (a draw mutates rotation state); it checks the
+    star counts directly.
+  - Uses UnityEngine.Random, so it follows Unity's seed.
