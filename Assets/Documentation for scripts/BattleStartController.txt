@@ -3,7 +3,9 @@
   Path : Assets/Scripts/Combat/Spawning/BattleStartController.cs
   Type : MonoBehaviour
   Layer: Combat / Spawning   (drives a UI button, starts the combat phase)
-  Scenes: Level_1_Stage_0 (the new puzzle-first stage)
+  Scenes: Level_1_Stage_1 (on the "Battle" object under the Canvas).
+          Verified 2026-08-31 by reading the saved .unity file - it is the ONLY
+          scene in the project containing this component.
 ================================================================================
 
 PURPOSE
@@ -43,6 +45,17 @@ INSPECTOR FIELDS
     hideButtonAfterBattleStarts  (bool, default ON) deactivates the button
                          GameObject once the battle begins
 
+  Match Gate   (added 2026-08-31)
+    requireMatchBeforeBattle (bool, default ON) the BATTLE button starts
+                         NON-INTERACTABLE and only unlocks once the player has
+                         actually cleared a match on the puzzle board. Stops a
+                         stage being started with zero heroes recruited. OFF
+                         restores the old behaviour - pressable from frame one.
+    matchesRequiredToUnlock (int, >=1, default 1) how many matches to clear
+                         before the button unlocks.
+    lockedHint           (GameObject) optional UI shown ONLY while the button is
+                         locked - a "make a match first" prompt. Null-safe.
+
   Testing
     doNotPersistAllowance (bool, default ON) TEST MODE. Pushed into
                          BattleEnergyService.SessionOnly in Awake. While ON the
@@ -54,11 +67,18 @@ RUNTIME STATE
 -------------
   BattleStarted   (bool, public get) true once this stage's battle phase has
                   been released. Latches - it is never reset by this component.
+  MatchGateOpen   (bool, public get) true once enough matches have been cleared
+                  for BATTLE to be pressable. ALWAYS TRUE when
+                  requireMatchBeforeBattle is off, so a stage authored before
+                  the gate existed behaves exactly as it always did.
+  matchesCleared  (int, private) running count of OnBlast callbacks received.
 
 EVENTS
 ------
-  OnBattleStarted  fired the moment the battle phase begins
-  OnBattleBlocked  fired when a press was refused (allowance spent, no energy)
+  OnBattleStarted    fired the moment the battle phase begins
+  OnBattleBlocked    fired when a press was refused - allowance spent, no
+                     energy, OR the match gate still closed
+  OnMatchGateOpened  fired when the gate opens, for a button-glow / tutorial cue
 
 FLOW
 ----
@@ -66,17 +86,38 @@ FLOW
       FIRST pushes doNotPersistAllowance into BattleEnergyService.SessionOnly,
       before anything can read the allowance, so the very first query already
       hits the in-memory store. Then resolves the two refs if they were left
-      empty and logs an error for each one it still could not find.
+      empty and logs an error for each one it still could not find. FINALLY seeds
+      MatchGateOpen from requireMatchBeforeBattle and calls ApplyGateToButton -
+      in AWAKE, before the first frame is drawn, so the button is never
+      interactable for even one frame at stage open.
 
   OnEnable()
       Adds OnBattleButtonPressed to battleButton.onClick IN CODE, subscribes to
-      BattleEnergyService.OnAllowanceChanged, and refreshes the labels.
+      BattleEnergyService.OnAllowanceChanged, subscribes OnBoardBlast to
+      MatchResolver.OnBlast (only while the gate is still shut), and refreshes
+      the labels.
 
   OnDisable()
-      Removes both subscriptions.
+      Removes all three subscriptions.
+
+  OnBoardBlast(groups)   [private]
+      Every cleared match on the puzzle board. Increments matchesCleared; once it
+      reaches matchesRequiredToUnlock it sets MatchGateOpen, UNSUBSCRIBES from
+      OnBlast (later matches are none of this component's business),
+      calls ApplyGateToButton and fires OnMatchGateOpened.
+
+  ApplyGateToButton()   [private]
+      Pushes MatchGateOpen onto battleButton.interactable and onto lockedHint's
+      active state. Returns early if BattleStarted, so nothing can re-enable a
+      button the battle has already consumed. Kept as one method so Awake and the
+      unlock share a single code path and cannot drift apart.
 
   OnBattleButtonPressed()   [public]
       1. Returns immediately if BattleStarted (guards double-clicks).
+      1b. Returns if the match gate is still shut, logging the
+         matchesCleared/matchesRequiredToUnlock count and firing OnBattleBlocked.
+         interactable=false already blocks the click; this guard exists because
+         the method is public and could be called from a debug key.
       2. BattleEnergyService.Consume(dailyBattleLimit, energyCostPerBattle).
       3. On BlockedNoEnergy: logs how long until the window resets, fires
          OnBattleBlocked, refreshes UI, and returns WITHOUT starting anything.
@@ -84,7 +125,10 @@ FLOW
       4. Otherwise calls StartBattle().
 
   StartBattle()   [public]
-      Sets BattleStarted, optionally hides the button, fires OnBattleStarted,
+      Sets BattleStarted, optionally hides the button, hides lockedHint, and
+      FORCES MatchGateOpen true + unsubscribes from OnBlast - this is also the
+      debug/revive entry point and bypasses the gate, so the flag is kept honest
+      rather than left stale. Then fires OnBattleStarted,
       refreshes UI, then hands off to the transition:
           transition.Play(ReleaseSpawner)
       so the camera pans to the battlefield FIRST and ReleaseSpawner - which is
@@ -107,7 +151,12 @@ HOW IT CONNECTS
     layer.
   - Calls BattleEnergyService.Consume / RemainingFree / TimeUntilReset and
     listens to its OnAllowanceChanged.
-  - Sits on the Canvas under Feature Panel/Battel in Level_1_Stage_0.
+  - Subscribes to MatchResolver.OnBlast (Assets/Scripts/Puzzle/Match/
+    MatchResolver.cs:11) for the match gate. That is a plain public static
+    Action<int>, NOT a C# event and never cleared by MatchResolver, so the
+    OnDisable unsubscribe is what stops a destroyed controller being invoked.
+    PlayerWaveManager listens to the same delegate for hero waves.
+  - Sits on the "Battle" GameObject under the Canvas in Level_1_Stage_1.
 
 NOTES
 -----
@@ -122,6 +171,13 @@ NOTES
     game, not per scene. NOTE this only holds ACROSS APP RESTARTS while
     doNotPersistAllowance is OFF; during the current test phase it is ON, so
     each Play session starts fresh.
+  - THE MATCH GATE USES interactable, NOT SetActive. The button stays visible but
+    greyed, so the player can see the goal. That means the Button's Disabled
+    colour in its Transition block is what sells the locked state - if the button
+    looks identical when locked, fix it THERE, not in this script.
+  - The gate counts MATCHES, not pieces. MatchResolver fires OnBlast(1) once per
+    cleared group, from two places - ClearGroup (MatchResolver.cs:330) and the
+    move-and-kill path (MatchResolver.cs:546).
   - There is a TODO in OnBattleButtonPressed where the "not enough energy"
     popup or rewarded-ad offer should be hooked once the energy economy is
     written.

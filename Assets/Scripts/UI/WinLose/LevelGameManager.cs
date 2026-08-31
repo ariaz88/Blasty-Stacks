@@ -22,6 +22,22 @@ public class LevelGameManager : MonoBehaviour
     [Tooltip("If true, only one successful revive is allowed per stage.")]
     [SerializeField] private bool allowSingleRevivePerStage = true;
 
+    [Header("Stalemate (mutual wipe)")]
+    [Tooltip("Ends the level as a DEFEAT when both armies wipe each other out and no " +
+             "gate ever falls. Without this the stage hangs in Playing forever: there " +
+             "is nothing left on the field to destroy either gate.")]
+    [SerializeField] private bool detectMutualWipe = true;
+
+    [Tooltip("The wipe must hold uninterrupted for this long before the level ends. " +
+             "This is the window a gem buy-back (LastStandOffer / HeroStatsPanel) has " +
+             "to land in - a hero arriving resets the timer.")]
+    [SerializeField, Min(0f)] private float stalemateGraceSeconds = 2.5f;
+
+    [Tooltip("Ignore the wipe check for this long after a revive. RevivePanel destroys " +
+             "every locked hero and restarts the wave loop, so the field is legitimately " +
+             "empty for a moment and would otherwise re-trigger the defeat instantly.")]
+    [SerializeField, Min(0f)] private float postReviveSettleSeconds = 5f;
+
     /// <summary>
     /// Fires whenever the level leaves or re-enters GameState.Playing.
     ///
@@ -58,6 +74,13 @@ public class LevelGameManager : MonoBehaviour
 
     private PlayerGateStats playerGate;
     private EnemyGateStats enemyGate;
+    private EnemySpawner enemySpawner;
+
+    // How long the mutual-wipe condition has held without a break.
+    private float stalemateTimer;
+
+    // Unscaled timestamp before which the wipe check is skipped entirely.
+    private float suppressStalemateUntil;
 
     private void Awake()
     {
@@ -85,6 +108,7 @@ public class LevelGameManager : MonoBehaviour
     {
         playerGate = FindObjectOfType<PlayerGateStats>();
         enemyGate = FindObjectOfType<EnemyGateStats>();
+        enemySpawner = FindObjectOfType<EnemySpawner>(true);
     }
 
     // ---------------------------------------------------------
@@ -138,6 +162,16 @@ public class LevelGameManager : MonoBehaviour
         if (CurrentState != GameState.Playing)
             return;
 
+        EnterDefeatFlow();
+    }
+
+    /// <summary>
+    /// The one defeat path, shared by the gate death above and the mutual-wipe check
+    /// below: pause, then offer the revive if the stage still has one, otherwise go
+    /// straight to Lose. Callers are responsible for the "are we still Playing?" guard.
+    /// </summary>
+    private void EnterDefeatFlow()
+    {
         // For Lose / Revive we DO pause gameplay.
         GameplayPause.SetPaused(true);
 
@@ -166,12 +200,97 @@ public class LevelGameManager : MonoBehaviour
     }
 
     // ---------------------------------------------------------
+    // MUTUAL WIPE  -> same defeat flow, no gate involved
+    // ---------------------------------------------------------
+
+    /// <summary>
+    /// The third way a level can end.
+    ///
+    /// Normally one surviving side always resolves the battle - leftover enemies march
+    /// on the player gate, leftover heroes march on the enemy gate. But if the LAST hero
+    /// and the LAST enemy kill each other, and the spawner has no waves left, both gates
+    /// are still standing and NOTHING can ever fire OnGateDestroyed again. The stage used
+    /// to hang in Playing forever. That state is a defeat.
+    ///
+    /// Deliberately gated behind a grace timer rather than reacting on the frame it
+    /// becomes true, so a hero mid-arrival (or one bought through LastStandOffer) gets a
+    /// chance to land and clear the condition.
+    /// </summary>
+    private void Update()
+    {
+        if (!detectMutualWipe || CurrentState != GameState.Playing)
+        {
+            stalemateTimer = 0f;
+            return;
+        }
+
+        if (Time.unscaledTime < suppressStalemateUntil || !IsMutualWipe())
+        {
+            stalemateTimer = 0f;
+            return;
+        }
+
+        stalemateTimer += Time.unscaledDeltaTime;
+        if (stalemateTimer < stalemateGraceSeconds)
+            return;
+
+        stalemateTimer = 0f;
+
+        Debug.Log("[LevelGameManager] Mutual wipe - no heroes, no enemies and no waves " +
+                  "left, with both gates standing. Treating the stage as a defeat.");
+
+        EnterDefeatFlow();
+    }
+
+    private bool IsMutualWipe()
+    {
+        // No spawner, or the puzzle-only phase: nothing has fought yet, so nothing can
+        // be wiped out. This single check is what keeps the whole thing inert before
+        // BATTLE is pressed.
+        if (enemySpawner == null) return false;
+        if (!enemySpawner.BattleStarted || !enemySpawner.HasSpawnedFirstEnemy) return false;
+
+        // More waves are still coming - the fight is not over, it is just between waves.
+        if (!enemySpawner.AllWavesDispatched) return false;
+
+        // A fallen gate is the gate events' business, not ours.
+        if (playerGate == null || playerGate.isPlayerGateDestroyed) return false;
+        if (enemyGate == null || enemyGate.isDestroyed) return false;
+
+        // Heroes actually released into the field. Reinforcements are flagged unlocked
+        // the moment they are bought, before their gate hold, so one on its way in keeps
+        // this above zero and the timer resets.
+        if (HeroRoster.TotalAlive() > 0) return false;
+
+        // Cheap counter first; the scene sweep only runs on the rare frames where both
+        // sides already read empty, and catches enemies hand-placed in the scene that
+        // the spawner never counted.
+        if (enemySpawner.AliveEnemyCount > 0) return false;
+
+        return !AnyLiveEnemyInScene();
+    }
+
+    private static bool AnyLiveEnemyInScene()
+    {
+        foreach (var e in FindObjectsOfType<EnemyStats>())
+            if (e != null && !e.enemyIsdead) return true;
+
+        return false;
+    }
+
+    // ---------------------------------------------------------
     // Called from RevivePanel when user actually revives
     // ---------------------------------------------------------
     public void NotifyReviveAccepted()
     {
         hasRevivedThisStage = true;
         CurrentState = GameState.Playing;
+
+        // RevivePanel.ReviveTheStage() wipes every locked hero and restarts the wave
+        // loop, so the field is genuinely empty for a moment. Without this the wipe
+        // check would fire again the instant the player paid to come back.
+        stalemateTimer = 0f;
+        suppressStalemateUntil = Time.unscaledTime + postReviveSettleSeconds;
 
         // RevivePanel itself should call GameplayPause.SetPaused(false)
         // after ReviveTheStage() so the level continues normally.
@@ -191,5 +310,7 @@ public class LevelGameManager : MonoBehaviour
     {
         CurrentState = GameState.Playing;
         hasRevivedThisStage = false;
+        stalemateTimer = 0f;
+        suppressStalemateUntil = 0f;
     }
 }

@@ -12,6 +12,9 @@ The stage-level game-flow state machine: Playing / Won / ReviveOffer / Lost.
 It is the single place that listens for BOTH gates being destroyed and decides
 what happens next - show the win panel, offer a revive, or go straight to lose.
 
+Since 2026-08-30 it also owns a THIRD end-of-level path that no gate can raise:
+the mutual-wipe check (see MUTUAL WIPE below).
+
 STATE ENUM
 ----------
   GameState { Playing, Won, ReviveOffer, Lost }
@@ -29,11 +32,25 @@ INSPECTOR FIELDS
   revivePanel   (RevivePanel)
   allowSingleRevivePerStage (bool, default true)
 
+  Stalemate (mutual wipe)  [2026-08-30]
+  detectMutualWipe        (bool, default true)  master switch for the third
+                          end-of-level path. OFF restores the old behaviour
+                          (and the old hang).
+  stalemateGraceSeconds   (float, default 2.5)  the wipe must hold this long
+                          uninterrupted before the level ends. This is the
+                          window a gem buy-back has to land in.
+  postReviveSettleSeconds (float, default 5)  the check is skipped for this
+                          long after a revive is accepted.
+
 RUNTIME STATE
 -------------
   hasRevivedThisStage (bool)
   playerGate  (PlayerGateStats, found in Start)
   enemyGate   (EnemyGateStats, found in Start)
+  enemySpawner (EnemySpawner, found in Start, includeInactive)
+  stalemateTimer (float)  how long the wipe condition has held unbroken
+  suppressStalemateUntil (float)  UNSCALED timestamp before which the wipe
+                          check is skipped entirely
 
 LIFECYCLE
 ---------
@@ -44,7 +61,10 @@ LIFECYCLE
       OnPlayerGateDestroyed - correctly paired.
   Start()   finds both gates via FindObjectOfType (not null-checked afterward,
             but only read inside OnEnemyGateDestroyed's HP% calculation, which
-            null-checks playerGate defensively)
+            null-checks playerGate defensively), plus the EnemySpawner used by
+            the mutual-wipe check
+  Update()  the mutual-wipe watchdog - see MUTUAL WIPE below. Does nothing at
+            all unless CurrentState is Playing.
 
 ENEMY GATE DESTROYED -> WIN
 -------------------------------
@@ -65,12 +85,55 @@ ENEMY GATE DESTROYED -> WIN
 PLAYER GATE DESTROYED -> REVIVE OR LOSE
 --------------------------------------------
   OnPlayerGateDestroyed()
-      Ignored if not Playing. UNLIKE the win path, this DOES call
-      GameplayPause.SetPaused(true) - losing/reviving is meant to fully freeze
-      the game.
+      Ignored if not Playing. Otherwise delegates straight to EnterDefeatFlow().
+
+  EnterDefeatFlow()   [2026-08-30 - extracted from the above]
+      THE one defeat path, shared by the gate death and the mutual wipe. Callers
+      own the "are we still Playing?" guard.
+      UNLIKE the win path, this DOES call GameplayPause.SetPaused(true) -
+      losing/reviving is meant to fully freeze the game.
       If allowSingleRevivePerStage AND hasRevivedThisStage is already true:
       goes straight to Lost and calls revivePanel.ShowLosePanel().
       Otherwise: goes to ReviveOffer and calls revivePanel.ShowRevivePanel().
+
+MUTUAL WIPE -> SAME DEFEAT FLOW, NO GATE INVOLVED   [2026-08-30]
+---------------------------------------------------------------
+  THE BUG THIS FIXES: normally one surviving side always resolves the battle -
+  leftover enemies march on the player gate, leftover heroes march on the enemy
+  gate. But if the LAST hero and the LAST enemy kill each other, and the spawner
+  has no waves left, both gates are still standing and NOTHING can ever raise
+  OnGateDestroyed again. The stage hung in Playing forever, with no panel. That
+  state is now a DEFEAT, routed through the exact same EnterDefeatFlow the
+  player gate uses (revive offer first, Lose if the revive was already spent).
+
+  Update()
+      Zeroes stalemateTimer and returns unless detectMutualWipe is on,
+      CurrentState is Playing, Time.unscaledTime has passed
+      suppressStalemateUntil, and IsMutualWipe() is true. Otherwise it
+      accumulates unscaled delta time and calls EnterDefeatFlow() (after one
+      Debug.Log) once stalemateGraceSeconds has elapsed.
+      The grace timer is what makes the gem buy-backs safe: a LastStandOffer /
+      HeroStatsPanel purchase landing inside the window pushes
+      HeroRoster.TotalAlive() above 0 and resets the timer. Past the window the
+      level ends regardless of gems held - that is the intended design.
+
+  IsMutualWipe()   ALL of these must hold:
+      - enemySpawner exists, BattleStarted AND HasSpawnedFirstEnemy. This single
+        check is what keeps everything inert through the puzzle-only phase.
+      - enemySpawner.AllWavesDispatched - otherwise the field being empty just
+        means we are BETWEEN waves.
+      - playerGate alive (!isPlayerGateDestroyed) and enemyGate alive
+        (!isDestroyed) - a fallen gate is the gate events' business, not ours.
+      - HeroRoster.TotalAlive() == 0. That counts only heroes actually RELEASED
+        into the field (isUnlocked), and PlayerWaveManager marks a bought
+        reinforcement unlocked before its gate hold, so a hero on its way in
+        correctly keeps this above zero.
+      - enemySpawner.AliveEnemyCount == 0 AND AnyLiveEnemyInScene() is false.
+        The cheap counter runs first; the FindObjectsOfType<EnemyStats> sweep
+        only executes on the rare frames where both sides already read empty,
+        and exists to catch enemies hand-placed in a scene that the spawner
+        never counted. EnemyGateStats derives from CharacterStats, not
+        EnemyStats, so the gate itself is never mistaken for a live enemy.
 
 REVIVE CALLBACKS  (called BY RevivePanel, not internally)
 --------------------------------------------------------------
@@ -79,13 +142,19 @@ REVIVE CALLBACKS  (called BY RevivePanel, not internally)
       comment, RevivePanel itself is responsible for calling
       GameplayPause.SetPaused(false) after actually reviving - this method only
       updates the state flag.
+      ALSO arms suppressStalemateUntil = unscaledTime + postReviveSettleSeconds
+      and zeroes the timer. REQUIRED: RevivePanel.ReviveTheStage() destroys
+      every locked hero and restarts PlayerWaveManager, so the field really is
+      empty for a second or two - without this the mutual-wipe check would
+      re-declare defeat the instant the player paid to come back.
 
   NotifyReviveDeclined()
       Sets CurrentState = Lost. Gameplay remains paused; the Lose panel (already
       shown by RevivePanel at this point) stays up.
 
   ResetForNewStage()
-      Resets CurrentState to Playing and clears hasRevivedThisStage - an
+      Resets CurrentState to Playing, clears hasRevivedThisStage and both
+      stalemate timers - an
       alternative to destroying/recreating this object if a stage is replayed
       without a full scene reload.
 
@@ -99,6 +168,9 @@ HOW IT CONNECTS
   - WinPanel.Show / RevivePanel.ShowRevivePanel / RevivePanel.ShowLosePanel are
     the three UI entry points this class drives.
   - RevivePanel calls back into NotifyReviveAccepted/NotifyReviveDeclined.
+  - EnemySpawner is POLLED read-only every frame (BattleStarted,
+    HasSpawnedFirstEnemy, AllWavesDispatched, AliveEnemyCount) for the
+    mutual-wipe check; HeroRoster.TotalAlive() supplies the hero half.
 
 NOTES
 -----

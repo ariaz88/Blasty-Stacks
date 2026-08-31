@@ -1677,6 +1677,7 @@ MonoBehaviour:
   stageLevel: 1
   cpWeights: {fileID: 0}
   cp: 0
+  xpValue: 1
   currentGateTarget: {fileID: 0}
   attackPlayerGate: 0
   enemyDamageCollider: {fileID: 0}
@@ -5904,7 +5905,12 @@ MonoBehaviour:
   board: {fileID: 208870210138756754}
   minGroupSize: 2
   preferMergeIfImmovablePresent: 1
+  requireGeometricTouch: 1
+  touchTolerance: 0.05
+  minTouchOverlapCells: 0.2
   killAnimTime: 0.1
+  collapseTimeScale: 0.75
+  collapseFloorScale: 0.2
   enableDebug: 1
 --- !u!114 &1011363207
 MonoBehaviour:
@@ -6745,6 +6751,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 1024192348}
     - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
+      propertyPath: unitsDatabase
+      value: 
+      objectReference: {fileID: 11400000, guid: 1eead485eb9802f4c8d136eaf6de630f, type: 2}
+    - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
       propertyPath: levelCounterText
       value: 
       objectReference: {fileID: 5808924128215253551}
@@ -6752,6 +6762,10 @@ PrefabInstance:
       propertyPath: skillSelectPanel
       value: 
       objectReference: {fileID: 2606406756752340232}
+    - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
+      propertyPath: skillPool.Array.size
+      value: 5
+      objectReference: {fileID: 0}
     - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
       propertyPath: 'cardSlots.Array.data[0]'
       value: 
@@ -6764,6 +6778,18 @@ PrefabInstance:
       propertyPath: 'cardSlots.Array.data[2]'
       value: 
       objectReference: {fileID: 2126778846}
+    - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
+      propertyPath: 'skillPool.Array.data[0]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 13d55cc2ec712e5428b0dc8b21b34b07, type: 2}
+    - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
+      propertyPath: 'skillPool.Array.data[1]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 683b3bb5232b8794f88ea79f897d4cc8, type: 2}
+    - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
+      propertyPath: 'skillPool.Array.data[2]'
+      value: 
+      objectReference: {fileID: 11400000, guid: c3e622f258556b1429043be5046fec55, type: 2}
     - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
       propertyPath: 'defensiveSlots.Array.data[0]'
       value: 

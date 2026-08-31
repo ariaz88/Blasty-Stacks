@@ -41,6 +41,11 @@ public class RogueliteConfigSO : ScriptableObject
              "the investment bonus - lets the player follow up immediately. 1 = no extra bias.")]
     [Min(0.01f)] public float momentumBonus = 1.5f;
 
+    [Tooltip("Weight added per star ALREADY held on a specific (hero, stat) card, so a card " +
+             "the player has been stacking keeps coming back to be stacked further.\n" +
+             "1 = a card taken twice is three times as likely as an untouched one. 0 = off.")]
+    [Min(0f)] public float cardInvestmentStep = 1f;
+
     [Header("Draw - global cards")]
     [Tooltip("Chance that ONE of the three slots is an army-wide card instead of a hero card. " +
              "Never more than one per screen, so there are always at least two hero choices.")]

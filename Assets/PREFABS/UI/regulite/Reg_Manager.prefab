@@ -47,10 +47,15 @@ MonoBehaviour:
   xpSlider: {fileID: 0}
   levelCounterText: {fileID: 0}
   initialThreshold: 1
+  xpIncreaseDuration: 0.5
+  config: {fileID: 11400000, guid: 77ca5612910a8dc41b2c6dbfa9717447, type: 2}
+  unitsDatabase: {fileID: 11400000, guid: 1eead485eb9802f4c8d136eaf6de630f, type: 2}
   skillPool:
   - {fileID: 11400000, guid: 13d55cc2ec712e5428b0dc8b21b34b07, type: 2}
   - {fileID: 11400000, guid: 683b3bb5232b8794f88ea79f897d4cc8, type: 2}
   - {fileID: 11400000, guid: c3e622f258556b1429043be5046fec55, type: 2}
+  - {fileID: 11400000, guid: 3e44ae71b9a439e40b5391ea2e781082, type: 2}
+  - {fileID: 11400000, guid: 6735f9c3d1440ca41be9827e930cd56e, type: 2}
   levelUpOverlay: {fileID: 0}
   skillSelectPanel: {fileID: 0}
   cardSlots:

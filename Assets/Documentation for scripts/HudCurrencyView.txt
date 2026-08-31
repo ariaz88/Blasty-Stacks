@@ -105,6 +105,14 @@ PANEL VISIBILITY / Z-ORDER
       blocksRaycasts) ONLY while the swap panel is open. Hides mainMenuPanelRoot
       while EITHER the swap panel OR the units detail view is open.
 
+      EDGE-TRIGGERED (fixed 2026-08-31): the HUD CanvasGroup is written ONLY when
+      swapOpen differs from swapOpenApplied, never every frame. See NOTES.
+
+  swapOpenApplied  (bool?, private)
+      The swapOpen value last actually written to hudCanvasGroup. Null until the
+      first pass, so the correct state is established once on frame one and then
+      only on a real change.
+
 HOW IT CONNECTS
 ---------------
   - CurrencyManager.OnCurrencyChanged drives the label text.
@@ -115,6 +123,15 @@ HOW IT CONNECTS
 
 NOTES
 -----
+  - HARD-WON BUG (2026-08-31): HandlePanelsVisibility used to write
+    hudCanvasGroup.alpha = swapOpen ? 0 : 1 UNCONDITIONALLY, every frame, from
+    LateUpdate. Since LateUpdate runs AFTER DOTween's update, that write stomped
+    any external fade of the same CanvasGroup straight back to 1 - so
+    BattlePhaseTransition's fadeOutAndReturn faded every other panel correctly
+    but the HUD never visibly changed at all. The tween WAS running; it was
+    being overwritten every frame.
+    ANY per-frame write to a shared CanvasGroup will do this. If another system
+    ever needs to fade the HUD, it must stay edge-triggered here.
   - Two dead numbered siblings, HandleSwapPanelVisibility1 and
     HandleSwapPanelVisibility2, remain - progressively earlier versions that
     handled fewer cases (1 only toggles the HUD; 2 adds MainMenu hiding but

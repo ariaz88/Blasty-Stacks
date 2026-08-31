@@ -35,14 +35,29 @@ INSPECTOR FIELDS
                      "Puzzle Board" and "Feature Panel".
     showWhenBattleStarts (GameObject[]) switched ON for the battle - the combat
                      HUD, when one exists. INSTANT, no fade.
+    hideOnPress      (GameObject[], added 2026-08-31) switched OFF the instant
+                     BATTLE is pressed - no fade, and NOT gated by
+                     hideAfterCameraArrives. "Top Shadow" belongs here. This is
+                     the list to use when an object must go NOW regardless of the
+                     hideAfterCameraArrives setting.
 
   Fades   (added 2026-08-22)
     fadeOutOnPress   (GameObject[]) UI that fades out QUICKLY the instant BATTLE
                      is pressed - the Feature Panel belongs HERE, not in
                      hideWhenBattleStarts, which only fires once the camera has
-                     already arrived.
+                     already arrived. GONE FOR GOOD - it is SetActive(false) at
+                     the end of the fade and never returns.
     pressFadeOutDuration (float, >=0, default 0.2) seconds for that fade. It runs
                      alongside the camera move, so keep it short.
+    fadeOutAndReturn (GameObject[], added 2026-08-31) UI that fades OUT on press
+                     and fades back IN once the camera has settled - the SAME
+                     objects both ways. This is the round-trip list: the
+                     permanent HUD that should not sit on screen during the pan
+                     but must come back afterwards. Leave these switched ON in
+                     the scene; anything already inactive on press is skipped and
+                     is NOT faded back in.
+    returnFadeOutDuration (float, >=0, default 0.2) seconds for that fade-out.
+                     The fade back in reuses arriveFadeInDuration.
     fadeInAfterMove  (GameObject[]) UI faded IN only after the camera has
                      finished its WHOLE move - the Heroes Stats panel. These are
                      activated by this script, so leave them switched OFF in the
@@ -60,6 +75,11 @@ RUNTIME STATE
   IsPlaying (bool, public get)  true while the camera move is running
   sequence  (DOTween Sequence)  killed in OnDestroy so a scene change mid-pan
                                 cannot tween a destroyed transform
+  returningAfterMove (List<GameObject>)  the fadeOutAndReturn entries that were
+                                actually ACTIVE when BATTLE was pressed. Filled
+                                by BeginReturnFadeOut, drained by Finish. It
+                                exists so the camera arriving cannot switch ON a
+                                panel the player had already closed.
 
 FLOW
 ----
@@ -69,6 +89,11 @@ FLOW
       2b. FadeOutAndDisable(fadeOutOnPress) - runs BEFORE the camera has moved a
          pixel, because the Feature Panel must be gone almost immediately rather
          than linger through the whole pan.
+      2c. SetActiveAll(hideOnPress, false) - no fade, no waiting. The Top Shadow
+         framed the puzzle phase and would read as a stray band across the
+         battlefield for the whole pan.
+      2d. BeginReturnFadeOut() - the permanent HUD steps aside for the pan and is
+         restored in Finish.
       3. If hideAfterCameraArrives is OFF, hides hideWhenBattleStarts now.
       4. WARNS if moveUpTargets is empty - a silent no-move was the exact
          failure mode that made this feature look broken once already.
@@ -83,7 +108,14 @@ FLOW
       Clears IsPlaying, hides hideWhenBattleStarts if it was deferred, runs
       FadeInAndEnable(fadeInAfterMove) - so the battle HUD arrives with the
       camera already settled, never mid-pan and never before the board is gone -
-      then invokes the callback.
+      then FadeInAndEnable(returningAfterMove) to bring back the HUD that only
+      stepped aside for the pan, clears that list, and invokes the callback.
+
+  BeginReturnFadeOut()
+      Clears returningAfterMove, then for each ACTIVE fadeOutAndReturn entry runs
+      FadeOut(disableWhenDone: false) and records it. Inactive entries are left
+      alone on purpose - fading them back in would switch on UI that was never
+      showing in the first place.
 
   EnsureCanvasGroup(go)   [static]
       GetComponent<CanvasGroup>, added on demand. Works on an INACTIVE
@@ -91,12 +123,20 @@ FLOW
       object is switched on.
 
   FadeOutAndDisable(objects, duration)   [static]
-      Skips already-inactive objects. Kills any running tween, drops
-      interactable + blocksRaycasts IMMEDIATELY (a half-faded BATTLE button is
-      still a live button otherwise), fades to 0 and SetActive(false) on
-      complete. duration <= 0 = instant.
+      Skips already-inactive objects, then defers to FadeOut with
+      disableWhenDone: true.
+
+  FadeOut(go, duration, disableWhenDone)   [static]
+      The single fade-out primitive. Kills any running tween, drops interactable
+      + blocksRaycasts IMMEDIATELY (a half-faded BATTLE button is still a live
+      button otherwise), fades alpha to 0. duration <= 0 = instant.
+      disableWhenDone separates the two callers: fadeOutOnPress is finished with
+      its object and SetActive(false)s it on complete, while fadeOutAndReturn
+      keeps it ACTIVE so Finish can fade it back in.
 
   FadeInAndEnable(objects, duration)   [static]
+      Takes IList<GameObject> rather than an array, so it serves both the
+      serialized arrays and the runtime returningAfterMove list.
       Kills any running tween, sets alpha 0, THEN SetActive(true) - that order
       is what stops a one-frame flash at full opacity - restores interactable +
       blocksRaycasts, then fades to 1. duration <= 0 = instant.
@@ -133,6 +173,21 @@ NOTES
     sky, while the gates and units - which do NOT move - slide into view. Adding
     a target to moveUpTargets is how you opt an object into that scroll; leaving
     it out is how you keep it in world space.
+  - THE FOUR OBJECT LISTS ARE EASY TO CONFUSE. Pick by lifetime, not by timing:
+        hideOnPress       off instantly, never returns, no fade
+        hideWhenBattleStarts  off (timing set by hideAfterCameraArrives), no fade
+        fadeOutOnPress    fades out on press, never returns
+        fadeOutAndReturn  fades out on press, fades back in after the pan
+        fadeInAfterMove   starts OFF, only ever appears
+    Putting the same object in more than one list means two tweens fighting over
+    one CanvasGroup - the later DOKill wins and the result looks random.
+  - fadeOutAndReturn objects get a CanvasGroup added automatically if they lack
+    one, same as the other fade lists. On a Screen Space - Overlay canvas they do
+    not move with the camera, so the fade is the only thing hiding them.
+  - If returnFadeOutDuration were ever set LONGER than duration, the fade-out
+    would still be running when Finish fires; FadeInAndEnable kills it and snaps
+    alpha to 0 before fading in, which would read as a pop. With the defaults
+    (0.2 vs 1.1) this cannot happen - keep the fade shorter than the pan.
   - An earlier version moved the camera to an absolute "Battle View Anchor"
     transform. That was replaced by the relative +6.75 offset and the anchor
     object was deleted from the scene.

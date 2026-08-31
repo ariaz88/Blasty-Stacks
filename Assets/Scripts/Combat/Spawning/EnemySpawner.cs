@@ -40,6 +40,24 @@ public class EnemySpawner : MonoBehaviour
     public bool BattleStarted => _battleStarted;
 
     /// <summary>
+    /// Enemies currently on the field, straight off the counter <see cref="SpawnOne"/>
+    /// raises and <see cref="WatchDeath"/> lowers. Exposed for the mutual-wipe check in
+    /// LevelGameManager - "no enemies left" is only half of a stalemate, the other half
+    /// is <see cref="AllWavesDispatched"/> below.
+    /// </summary>
+    public int AliveEnemyCount => _alive;
+
+    /// <summary>
+    /// True once the LAST wave of the level has been spawned, i.e. nothing further will
+    /// ever come out of this spawner.
+    ///
+    /// Set BEFORE that wave's "wait for clear", so it is already true while the final
+    /// enemies are still fighting - a reader must therefore pair it with
+    /// <see cref="AliveEnemyCount"/> rather than treat it as "the field is empty".
+    /// </summary>
+    public bool AllWavesDispatched { get; private set; }
+
+    /// <summary>
     /// True once at least one enemy actually exists. Player units wait for this
     /// before advancing, so heroes never march at an empty field.
     /// </summary>
@@ -192,6 +210,10 @@ public class EnemySpawner : MonoBehaviour
             ? LevelManager.CurrentStage
             : levelConfig.levelNumber;
 
+        // A level with no waves authored has, trivially, already sent everything it has.
+        if (levelConfig.waves.Count == 0)
+            AllWavesDispatched = true;
+
         // Initial delay before first wave (respects pause)
         yield return WaitForSecondsGameplay(levelConfig.startDelay);
 
@@ -213,6 +235,13 @@ public class EnemySpawner : MonoBehaviour
                     yield return SpawnTwoRows(wave, stageLevel);
                     break;
             }
+
+            // Flagged HERE rather than after the loop: the last iteration parks on the
+            // WaitUntil below and only falls through once the field is clear, so waiting
+            // for the loop to end would make this useless to anyone asking "can more
+            // enemies still arrive?" while the final wave is alive.
+            if (i == levelConfig.waves.Count - 1)
+                AllWavesDispatched = true;
 
             // Wait for wave clear (optional)
             yield return new WaitUntil(() => _alive == 0);

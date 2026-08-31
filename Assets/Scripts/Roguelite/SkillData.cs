@@ -39,8 +39,14 @@ public class SkillData : ScriptableObject
     public float maxIncrement;
     public float evolvedIncrement;
 
-    [Tooltip("Optional whitelist. Empty = this buff can be offered for ANY hero type.")]
+    [Tooltip("LEGACY and effectively unused: every UnitDefinitionSO in this project carries " +
+             "classType = Warrior, so FighterType cannot tell two heroes apart. Kept only so " +
+             "existing assets keep deserializing. Use Allowed Unit Ids instead.")]
     public FighterType[] allowedTypes;
+
+    [Tooltip("Optional whitelist BY UNIT ID (the id in UnitsDatabaseSO). " +
+             "Empty = this buff can be offered for ANY hero.")]
+    public int[] allowedUnitIds;
 
     [Header("Targeting")]
     [Tooltip("SpecificUnit = the draw picks one hero and only that hero type is buffed.\n" +
@@ -88,7 +94,21 @@ public class SkillData : ScriptableObject
             : evolvedIncrement;
     }
 
-    /// <summary>True when this buff may be offered for the given hero type.</summary>
+    /// <summary>True when this buff may be offered for the given hero, by unit id.</summary>
+    public bool AppliesToUnit(int unitId)
+    {
+        if (allowedUnitIds == null || allowedUnitIds.Length == 0) return true;
+
+        for (int i = 0; i < allowedUnitIds.Length; i++)
+            if (allowedUnitIds[i] == unitId) return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// LEGACY. Kept for any caller still thinking in FighterType, but it cannot
+    /// distinguish heroes in this project - see the note on allowedTypes.
+    /// </summary>
     public bool AppliesTo(FighterType type)
     {
         if (allowedTypes == null || allowedTypes.Length == 0) return true;

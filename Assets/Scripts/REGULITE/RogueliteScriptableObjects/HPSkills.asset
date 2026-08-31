@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 07d612326bf0b374b9dc85b0b3c96786, type: 3}
   m_Name: HPSkills
   m_EditorClassIdentifier: 
-  skillName: RedBull
-  description: 'This Item Increases the HP '
+  skillName: HP
+  description: Increases Max HP
   category: 1
   effectType: 2
   normalIcon: {fileID: -728488644960612398, guid: 0baf027a6bf9de841a5beffa9fd968b7, type: 3}
@@ -21,3 +21,14 @@ MonoBehaviour:
   baseIncrement: 0.05
   maxIncrement: 0.2
   evolvedIncrement: 0.5
+  allowedTypes: 
+  allowedUnitIds: 
+  targetMode: 0
+  valuePerStar:
+  - 0.5
+  - 0.6
+  - 0.75
+  - 1
+  - 1.2
+  - 1.5
+  maxStars: 6

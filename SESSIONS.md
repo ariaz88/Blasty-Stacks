@@ -55,6 +55,17 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-08-30] The mutual-wipe defeat has never run in Play mode.** It compiles clean but was
+  never played. To test, pick a stage whose `LevelConfig` has ONE small wave, press BATTLE, and let
+  the last hero and the last enemy trade fatal blows: after ~2.5s the console should print
+  `[LevelGameManager] Mutual wipe ...`, gameplay should pause, and the RevivePanel should appear.
+  Then accept the revive and confirm it does NOT immediately re-fire during the empty seconds that
+  follow (that is what `postReviveSettleSeconds` guards). Also confirm the three no-false-positive
+  cases: the puzzle phase before BATTLE, the gap between two waves where all spawned enemies are
+  dead but a wave remains, and the two normal win/lose paths. `stalemateGraceSeconds` (2.5) has not
+  been judged at a real frame rate — it doubles as the window a `LastStandOffer` purchase has to
+  land in.
+
 - **[2026-08-25] The shard-burst match VFX has had one tuning pass; the shape of the burst is still
   open.** Play-tested once — spawn pattern and density were called good, timing and colour were
   fixed in a follow-up (lifetime 0.80–0.95s, tint sampled off the sprite). Still unverified in play
@@ -274,6 +285,43 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-08-30 — Mutual wipe (both armies dead, neither gate destroyed) now ends the stage as a defeat
+
+- **Goal:** the user hit a state in play where every hero AND every enemy died at the same moment.
+  Neither gate was destroyed, so nothing ended the level — it should count as a loss.
+- **Status:** done (code + docs). NOT play-tested.
+- **The bug.** `LevelGameManager` ended a level on exactly two inputs:
+  `EnemyGateStats.OnGateDestroyed` (Won) and `PlayerGateStats.OnGateDestroyed` (Revive/Lost).
+  That is normally sufficient because a surviving side always marches on the opposite gate. It is
+  NOT sufficient when the last hero and the last enemy kill each other and the spawner has no waves
+  left: both gates stand, the puzzle board is hidden so `PlayerWaveManager` can never unlock another
+  wave, `EnemySpawner.RunLevel` exits, and the stage sits in `Playing` forever with no panel.
+- **Changed:** `Assets/Scripts/Combat/Spawning/EnemySpawner.cs` — exposed two things it already
+  tracked privately: `AliveEnemyCount` (read-only `_alive`) and `AllWavesDispatched`, set on the
+  LAST wave *after* the spawn and *before* its `WaitUntil(_alive == 0)` (so it means "no more are
+  coming", not "the field is empty" — always pair the two).
+- **Changed:** `Assets/Scripts/UI/WinLose/LevelGameManager.cs` — extracted the body of
+  `OnPlayerGateDestroyed` into `EnterDefeatFlow()` (no behaviour change on the gate path), then
+  added an `Update()` watchdog that calls the same `EnterDefeatFlow` once the wipe has held for
+  `stalemateGraceSeconds` (2.5). The condition needs ALL of: spawner exists + `BattleStarted` +
+  `HasSpawnedFirstEnemy` (this is what keeps it inert through the puzzle phase),
+  `AllWavesDispatched`, both gates alive, `HeroRoster.TotalAlive() == 0`, `AliveEnemyCount == 0`,
+  and a confirming `EnemyStats` scene sweep. New inspector fields `detectMutualWipe`,
+  `stalemateGraceSeconds`, `postReviveSettleSeconds`.
+- **Design decisions (user-chosen):** it routes through the SAME flow a destroyed player gate uses —
+  revive offer first, Lose panel if the revive was already spent — not straight to Lose. And the
+  gem buy-backs (`LastStandOffer` / `HeroStatsPanel`) do NOT block it: the grace window is the only
+  chance to spend, after which the level ends regardless of gems held.
+- **Scene/Prefab/SO edits:** none. Detection lives inside the existing `LevelGameManager`
+  specifically so no stage needs re-wiring; the new fields serialize to their defaults everywhere.
+- **Verified:** compiles clean in Unity (0 errors; the two new CS0618 `FindObjectOfType` warnings
+  match what the rest of this file and `RevivePanel` already do). Play mode NOT entered.
+- **Gotchas:** `NotifyReviveAccepted` now arms `postReviveSettleSeconds` (5s). This is REQUIRED, not
+  defensive — `RevivePanel.ReviveTheStage()` destroys every locked hero and restarts
+  `PlayerWaveManager`, so `TotalAlive()` is legitimately 0 for a second or two right after a revive
+  and the watchdog would otherwise re-declare defeat the instant the player paid.
+- **Next:** play-test it (see Open Threads).
 
 ### 2026-08-25 — Match-clear shatter VFX: found the effect was never firing on the merge path, then rebuilt it as mesh-particle shards
 

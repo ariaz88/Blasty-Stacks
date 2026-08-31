@@ -404,9 +404,23 @@ public class EnemyManager : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Realtime so the corpse still clears while the game runs at any timeScale - but
+    /// it now HOLDS while gameplay is paused.
+    ///
+    /// WaitForSecondsRealtime ignores pausing by definition, so an enemy that died as
+    /// the roguelite card screen opened went on to despawn underneath it. Nothing on
+    /// the battlefield may move once that screen is up.
+    /// </summary>
     IEnumerator DestroyAfterDelayRealtime(float seconds)
     {
-        yield return new WaitForSecondsRealtime(seconds);
+        float elapsed = 0f;
+        while (elapsed < seconds)
+        {
+            if (!GameplayPause.IsPaused) elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
         Destroy(gameObject);
     }
 

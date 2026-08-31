@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Decides WHICH stacks light up during a drag, and when they shake.
@@ -26,7 +27,7 @@ public class PieceHighlightDirector : MonoBehaviour
     [Tooltip("OFF by default. Turns on the white rim + brighten halo on the held piece and " +
              "on every stack it could match. The scale-up and the shake are NOT affected by " +
              "this - they always run.")]
-    [SerializeField] private bool enableHalo =true;
+    [SerializeField] private bool enableHalo =false;
 
     [Tooltip("Empty cells that may remain between the held piece and a match before that " +
              "match SHAKES. Measured along a row or a column only. The match only scales up " +
@@ -48,8 +49,16 @@ public class PieceHighlightDirector : MonoBehaviour
     private BoardGridXY _board;
 
     /// <summary>
-    /// Creates itself on scene load, so there is nothing to place by hand - same pattern
+    /// Creates itself once at start-up, so there is nothing to place by hand - same pattern
     /// as ShardBurst. Add the component to a scene only to tune the fields per level.
+    ///
+    /// !! DontDestroyOnLoad IS LOAD-BEARING, DO NOT REMOVE IT.
+    /// !! RuntimeInitializeOnLoadMethod fires EXACTLY ONCE per play session, after the FIRST
+    /// !! scene loads - it does NOT run again on later scene loads. Without the persistence
+    /// !! call this object dies with the first scene and is never rebuilt, so the pick-up
+    /// !! feedback works only in whichever scene happened to be open when Play was pressed
+    /// !! and is silently dead in every level entered afterwards. That was a real bug.
+    /// !! ShardBurst.AutoBootstrap has the same call for the same reason.
     /// </summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoBootstrap()
@@ -59,13 +68,40 @@ public class PieceHighlightDirector : MonoBehaviour
 
         var go = new GameObject("~PieceHighlightDirector");
         go.AddComponent<PieceHighlightDirector>();
+        DontDestroyOnLoad(go);
     }
 
     private void Awake()
     {
         if (Instance && Instance != this) { Destroy(this); return; }
         Instance = this;
+
+        // NOTE: with the director persisting, this runs ONCE for the whole session. A
+        // PieceHighlightDirector placed inside a level scene therefore loses to the
+        // persistent one (the guard above destroys it) and its enableHalo is ignored.
         PieceHighlight.HaloEnabled = enableHalo;
+    }
+
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    /// <summary>
+    /// Drops any drag state left over from the previous scene. Because the director now
+    /// outlives scenes, a level change mid-drag would otherwise leave _held pointing at a
+    /// destroyed piece - and OnDrag early-returns on `_held != held`, which would swallow
+    /// the proximity reaction for the whole of the next level.
+    /// </summary>
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        OnRelease();
+        _board = null;   // the old scene's board is gone; re-resolved on the next pickup
     }
 
     private void OnDestroy()

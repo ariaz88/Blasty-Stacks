@@ -1,13 +1,14 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>One card as offered to the player. Immutable once drawn.</summary>
+/// <summary>One card as offered to the player.</summary>
 public struct BuffOffer
 {
     public SkillData skill;
-    public FighterType hero;     // meaningless when isGlobal
+    public int unitId;           // which hero it buffs; meaningless when isGlobal
     public bool isGlobal;
-    public int currentStars;     // stars held BEFORE this pick
+    public int currentStars;     // stars on THIS (hero, stat) card - drives the value
+    public int heroStars;        // stars the HERO holds across every stat - drives the display
     public float increment;      // total increment if taken (0.5 = +50%)
 
     public bool IsValid => skill != null;
@@ -16,72 +17,78 @@ public struct BuffOffer
 /// <summary>
 /// Chooses which cards to put on a level-up screen.
 ///
-/// The screen always has 3 slots but the roster is 1-4 heroes, so the draw has
-/// to satisfy three things at once:
+/// Heroes are keyed by UNIT ID, not by FighterType. Every UnitDefinitionSO in this
+/// project carries classType = Warrior, so FighterType cannot tell two heroes
+/// apart - unitId is the only real identity, and it is what PlayerStatsApplier
+/// already uses to look a unit up in the database.
 ///
-///   ROTATION      every hero gets shown; one that sat out comes back.
-///   SPECIALIZATION the hero the player is investing in shows up more.
-///   VARIETY       no two cards on one screen buff the same stat.
+/// The screen always has 3 slots but the roster is 1-4 heroes, so the draw has to
+/// satisfy three things at once:
 ///
-/// Rotation and specialization pull in opposite directions, so they are given
+///   ROTATION        every hero gets shown; one that sat out comes back.
+///   SPECIALIZATION  a hero the player has been buffing shows up more often than
+///                   one that has never been buffed.
+///   VARIETY         no two cards on one screen buff the same stat.
+///
+/// Rotation and specialization pull in OPPOSITE directions, so they are given
 /// different strengths: rotation is a HARD floor (forceAfterRounds guarantees a
-/// neglected hero returns), specialization is a SOFT nudge (momentumBonus only
-/// tilts the weights). No hero is ever starved, but the invested one trends up.
+/// neglected hero returns), specialization is a SOFT nudge (it only tilts the
+/// weights). No hero is ever starved, but the invested one trends up.
 ///
-/// Plain C# - no MonoBehaviour, no Unity lifecycle - so the logic can be
-/// reasoned about and stepped through on its own.
+/// Plain C# - no MonoBehaviour, no Unity lifecycle - so the logic can be reasoned
+/// about and stepped through on its own.
 /// </summary>
 public class BuffDraw
 {
     private readonly RogueliteConfigSO cfg;
 
-    private readonly List<FighterType> roster = new List<FighterType>();
+    private readonly List<int> roster = new List<int>();
     private readonly List<SkillData> heroPool = new List<SkillData>();
     private readonly List<SkillData> globalPool = new List<SkillData>();
 
-    private readonly Dictionary<FighterType, int> roundsSinceShown = new Dictionary<FighterType, int>();
-    private readonly Dictionary<(FighterType, SkillData), int> heroStars = new Dictionary<(FighterType, SkillData), int>();
+    private readonly Dictionary<int, int> roundsSinceShown = new Dictionary<int, int>();
+    private readonly Dictionary<(int, SkillData), int> heroStars = new Dictionary<(int, SkillData), int>();
     private readonly Dictionary<SkillData, int> globalStars = new Dictionary<SkillData, int>();
     private readonly Dictionary<SkillData, int> totalPicks = new Dictionary<SkillData, int>();
 
     // Stars a hero holds across ALL buffs - drives the investment half of the
     // draw weight, and the star row under that hero in the HUD.
-    private readonly Dictionary<FighterType, int> heroTotalStars = new Dictionary<FighterType, int>();
+    private readonly Dictionary<int, int> heroTotalStars = new Dictionary<int, int>();
 
-    private readonly HashSet<FighterType> lastOffered = new HashSet<FighterType>();
+    private readonly HashSet<int> lastOffered = new HashSet<int>();
 
     private bool hasLastPicked;
-    private FighterType lastPickedHero;
+    private int lastPickedUnit;
 
     // Reused across draws. A level-up happens a handful of times per stage, so
     // this is for clarity rather than for performance.
-    private readonly List<FighterType> heroScratch = new List<FighterType>();
+    private readonly List<int> heroScratch = new List<int>();
     private readonly List<SkillData> skillScratch = new List<SkillData>();
-    private readonly List<FighterType> pickPool = new List<FighterType>();
+    private readonly List<int> pickPool = new List<int>();
 
     public BuffDraw(RogueliteConfigSO config)
     {
         cfg = config;
     }
 
-    public IReadOnlyList<FighterType> Roster => roster;
+    public IReadOnlyList<int> Roster => roster;
 
     /// <summary>
-    /// Called once, at battle start, with the hero types actually on the field
-    /// and the authored buff pool. The pool is split by target mode here so the
-    /// draw never has to test it again.
+    /// Called once, at battle start, with the unit ids actually on the field and
+    /// the authored buff pool. The pool is split by target mode here so the draw
+    /// never has to test it again.
     /// </summary>
-    public void Configure(IEnumerable<FighterType> heroes, IEnumerable<SkillData> pool)
+    public void Configure(IEnumerable<int> unitIds, IEnumerable<SkillData> pool)
     {
         Reset();
 
-        if (heroes != null)
+        if (unitIds != null)
         {
-            foreach (var h in heroes)
+            foreach (var id in unitIds)
             {
-                if (roster.Contains(h)) continue;
-                roster.Add(h);
-                roundsSinceShown[h] = 0;
+                if (roster.Contains(id)) continue;
+                roster.Add(id);
+                roundsSinceShown[id] = 0;
             }
         }
 
@@ -94,6 +101,31 @@ public class BuffDraw
                 if (s.targetMode == SkillTargetMode.AllUnits) globalPool.Add(s);
                 else heroPool.Add(s);
             }
+        }
+    }
+
+    /// <summary>
+    /// Replaces the roster WITHOUT touching progress.
+    ///
+    /// Called before every draw, because a hero whose last unit has died must stop
+    /// being offered - and may come back later if the player revives it. Configure()
+    /// cannot be used for that: it calls Reset() and would wipe every star the player
+    /// has earned this stage.
+    /// </summary>
+    public void UpdateRoster(IEnumerable<int> unitIds)
+    {
+        roster.Clear();
+        if (unitIds == null) return;
+
+        foreach (var id in unitIds)
+        {
+            if (roster.Contains(id)) continue;
+
+            roster.Add(id);
+
+            // A hero that was never in the roster starts un-neglected; one that is
+            // returning keeps the rotation age it had.
+            if (!roundsSinceShown.ContainsKey(id)) roundsSinceShown[id] = 0;
         }
     }
 
@@ -111,10 +143,10 @@ public class BuffDraw
         hasLastPicked = false;
     }
 
-    public int StarsFor(FighterType hero, SkillData skill)
+    public int StarsFor(int unitId, SkillData skill)
     {
         if (skill == null) return 0;
-        return heroStars.TryGetValue((hero, skill), out int n) ? n : 0;
+        return heroStars.TryGetValue((unitId, skill), out int n) ? n : 0;
     }
 
     public int StarsForGlobal(SkillData skill)
@@ -128,6 +160,12 @@ public class BuffDraw
     {
         if (skill == null) return 0;
         return totalPicks.TryGetValue(skill, out int n) ? n : 0;
+    }
+
+    /// <summary>Stars this hero holds across every buff. Public so the HUD can draw its star row.</summary>
+    public int TotalStars(int unitId)
+    {
+        return heroTotalStars.TryGetValue(unitId, out int n) ? n : 0;
     }
 
     /// <summary>
@@ -180,20 +218,21 @@ public class BuffDraw
         // --- Step 3: one stat per hero slot, never repeating a stat on this screen.
         for (int i = 0; i < heroScratch.Count; i++)
         {
-            var hero = heroScratch[i];
-            var skill = PickSkillFor(hero, usedStats);
+            int unitId = heroScratch[i];
+            var skill = PickSkillFor(unitId, usedStats);
             if (skill == null) continue;
 
             usedStats.Add(skill.effectType);
-            lastOffered.Add(hero);
+            lastOffered.Add(unitId);
 
-            int stars = StarsFor(hero, skill);
+            int stars = StarsFor(unitId, skill);
             offers.Add(new BuffOffer
             {
                 skill = skill,
-                hero = hero,
+                unitId = unitId,
                 isGlobal = false,
                 currentStars = stars,
+                heroStars = TotalStars(unitId),
                 increment = skill.IncrementAtStars(stars)
             });
         }
@@ -217,15 +256,15 @@ public class BuffDraw
 
             offers.Add(extra);
             usedStats.Add(extra.skill.effectType);
-            if (!extra.isGlobal) lastOffered.Add(extra.hero);
+            if (!extra.isGlobal) lastOffered.Add(extra.unitId);
         }
 
         return offers;
     }
 
     /// <summary>
-    /// Book-keeping after the player has chosen. Advances the star count, sets
-    /// the momentum target, and ages every hero that was NOT on the screen.
+    /// Book-keeping after the player has chosen. Advances the star count, sets the
+    /// momentum target, and ages every hero that was NOT on the screen.
     /// </summary>
     public void Commit(BuffOffer chosen)
     {
@@ -237,12 +276,12 @@ public class BuffDraw
         }
         else
         {
-            var key = (chosen.hero, chosen.skill);
-            heroStars[key] = StarsFor(chosen.hero, chosen.skill) + 1;
-            heroTotalStars[chosen.hero] = TotalStars(chosen.hero) + 1;
+            var key = (chosen.unitId, chosen.skill);
+            heroStars[key] = StarsFor(chosen.unitId, chosen.skill) + 1;
+            heroTotalStars[chosen.unitId] = TotalStars(chosen.unitId) + 1;
 
             hasLastPicked = true;
-            lastPickedHero = chosen.hero;
+            lastPickedUnit = chosen.unitId;
         }
 
         totalPicks[chosen.skill] = TotalPicks(chosen.skill) + 1;
@@ -251,32 +290,26 @@ public class BuffDraw
         // line is what makes the neglected hero come back next round.
         for (int i = 0; i < roster.Count; i++)
         {
-            var h = roster[i];
-            roundsSinceShown[h] = lastOffered.Contains(h) ? 0 : RoundsSinceShown(h) + 1;
+            int id = roster[i];
+            roundsSinceShown[id] = lastOffered.Contains(id) ? 0 : RoundsSinceShown(id) + 1;
         }
     }
 
     // --------------------------------------------------------------- internals
 
-    private int RoundsSinceShown(FighterType h)
+    private int RoundsSinceShown(int unitId)
     {
-        return roundsSinceShown.TryGetValue(h, out int n) ? n : 0;
-    }
-
-    /// <summary>Stars this hero holds across every buff. Public so the HUD can draw its star row.</summary>
-    public int TotalStars(FighterType h)
-    {
-        return heroTotalStars.TryGetValue(h, out int n) ? n : 0;
+        return roundsSinceShown.TryGetValue(unitId, out int n) ? n : 0;
     }
 
     /// <summary>
     /// Two independent pulls, multiplied together:
     ///
-    ///   PITY        rises the longer a hero has gone unshown, so a neglected
-    ///               hero comes back - this is the fairness half.
+    ///   PITY        rises the longer a hero has gone unshown, so a neglected hero
+    ///               comes back - the fairness half.
     ///   INVESTMENT  rises with the stars a hero already holds, so a hero the
     ///               player has been buffing keeps appearing more often than one
-    ///               that has never been buffed - this is the build half.
+    ///               that has never been buffed - the build half.
     ///
     /// momentumBonus then adds a small extra nudge for the hero picked on the
     /// previous screen, so an immediate follow-up feels responsive.
@@ -291,27 +324,27 @@ public class BuffDraw
     ///
     /// A and D are the likely two, and one of B/C fills the third slot.
     /// </summary>
-    private float Weight(FighterType h)
+    private float Weight(int unitId)
     {
         float w = 1f;
 
         if (cfg != null)
         {
-            w = (1f + cfg.pityStep * RoundsSinceShown(h))
-              * (1f + cfg.investmentStep * TotalStars(h));
+            w = (1f + cfg.pityStep * RoundsSinceShown(unitId))
+              * (1f + cfg.investmentStep * TotalStars(unitId));
 
-            if (hasLastPicked && h == lastPickedHero) w *= cfg.momentumBonus;
+            if (hasLastPicked && unitId == lastPickedUnit) w *= cfg.momentumBonus;
         }
 
         return Mathf.Max(0.0001f, w);
     }
 
     /// <summary>
-    /// Fills <paramref name="result"/> with the heroes to feature, forced ones
+    /// Fills <paramref name="result"/> with the heroes to feature: forced ones
     /// first, then weighted without replacement. If more slots are wanted than
     /// there are heroes, heroes repeat - Step 3 then gives them a different stat.
     /// </summary>
-    private void PickHeroes(int count, List<FighterType> result)
+    private void PickHeroes(int count, List<int> result)
     {
         result.Clear();
         if (count <= 0 || roster.Count == 0) return;
@@ -332,10 +365,10 @@ public class BuffDraw
 
             for (int i = pool.Count - 1; i >= 0 && result.Count < count; i--)
             {
-                var h = pool[i];
-                if (RoundsSinceShown(h) < cfg.forceAfterRounds) continue;
+                int id = pool[i];
+                if (RoundsSinceShown(id) < cfg.forceAfterRounds) continue;
 
-                result.Add(h);
+                result.Add(id);
                 pool.RemoveAt(i);
             }
         }
@@ -352,7 +385,7 @@ public class BuffDraw
         // by weight, allowing repeats. The stat filter keeps the cards different.
         if (result.Count < count)
         {
-            var refill = new List<FighterType>();
+            var refill = new List<int>();
             for (int i = 0; i < roster.Count; i++)
                 if (HasAnySkillLeft(roster[i])) refill.Add(roster[i]);
 
@@ -361,7 +394,7 @@ public class BuffDraw
         }
     }
 
-    private int WeightedIndex(List<FighterType> candidates)
+    private int WeightedIndex(List<int> candidates)
     {
         float total = 0f;
         for (int i = 0; i < candidates.Count; i++) total += Weight(candidates[i]);
@@ -376,33 +409,57 @@ public class BuffDraw
         return candidates.Count - 1;
     }
 
-    private bool HasAnySkillLeft(FighterType hero)
+    private bool HasAnySkillLeft(int unitId)
     {
         for (int i = 0; i < heroPool.Count; i++)
         {
             var s = heroPool[i];
-            if (s.AppliesTo(hero) && StarsFor(hero, s) < s.MaxStars) return true;
+            if (s.AppliesToUnit(unitId) && StarsFor(unitId, s) < s.MaxStars) return true;
         }
         return false;
     }
 
-    /// <summary>A stat this hero can still take, excluding stats already on this screen.</summary>
-    private SkillData PickSkillFor(FighterType hero, HashSet<SkillEffectType> usedStats)
+    /// <summary>
+    /// A stat this hero can still take, excluding stats already on this screen.
+    ///
+    /// The pick is WEIGHTED by how many stars this exact (hero, stat) card already
+    /// holds, so a card the player has been stacking keeps coming back to be stacked
+    /// further, instead of every stat being equally likely every time.
+    /// </summary>
+    private SkillData PickSkillFor(int unitId, HashSet<SkillEffectType> usedStats)
     {
         skillScratch.Clear();
 
         for (int i = 0; i < heroPool.Count; i++)
         {
             var s = heroPool[i];
-            if (!s.AppliesTo(hero)) continue;
-            if (StarsFor(hero, s) >= s.MaxStars) continue;
+            if (!s.AppliesToUnit(unitId)) continue;
+            if (StarsFor(unitId, s) >= s.MaxStars) continue;
             if (usedStats.Contains(s.effectType)) continue;
 
             skillScratch.Add(s);
         }
 
         if (skillScratch.Count == 0) return null;
-        return skillScratch[Random.Range(0, skillScratch.Count)];
+        if (skillScratch.Count == 1 || cfg == null) return skillScratch[0];
+
+        float total = 0f;
+        for (int i = 0; i < skillScratch.Count; i++) total += CardWeight(unitId, skillScratch[i]);
+
+        float roll = Random.value * total;
+        for (int i = 0; i < skillScratch.Count; i++)
+        {
+            roll -= CardWeight(unitId, skillScratch[i]);
+            if (roll <= 0f) return skillScratch[i];
+        }
+
+        return skillScratch[skillScratch.Count - 1];
+    }
+
+    private float CardWeight(int unitId, SkillData skill)
+    {
+        float w = 1f + cfg.cardInvestmentStep * StarsFor(unitId, skill);
+        return Mathf.Max(0.0001f, w);
     }
 
     private BuffOffer PickGlobal(HashSet<SkillEffectType> usedStats)
@@ -437,17 +494,18 @@ public class BuffDraw
     {
         for (int h = 0; h < roster.Count; h++)
         {
-            var hero = roster[h];
-            var skill = PickSkillFor(hero, usedStats);
+            int unitId = roster[h];
+            var skill = PickSkillFor(unitId, usedStats);
             if (skill == null) continue;
 
-            int stars = StarsFor(hero, skill);
+            int stars = StarsFor(unitId, skill);
             return new BuffOffer
             {
                 skill = skill,
-                hero = hero,
+                unitId = unitId,
                 isGlobal = false,
                 currentStars = stars,
+                heroStars = TotalStars(unitId),
                 increment = skill.IncrementAtStars(stars)
             };
         }

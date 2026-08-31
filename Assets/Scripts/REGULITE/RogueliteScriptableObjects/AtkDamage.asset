@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: AtkDamage
   m_EditorClassIdentifier: 
   skillName: Atk Power
-  description: 'This Item Increases the Atk Power '
+  description: Increases Attack Power
   category: 0
   effectType: 1
   normalIcon: {fileID: 21300000, guid: f85fd511de3ad96428c6918e32894b49, type: 3}
@@ -21,3 +21,14 @@ MonoBehaviour:
   baseIncrement: 0.05
   maxIncrement: 0.2
   evolvedIncrement: 0.5
+  allowedTypes: 
+  allowedUnitIds: 
+  targetMode: 0
+  valuePerStar:
+  - 0.5
+  - 0.6
+  - 0.75
+  - 1
+  - 1.2
+  - 1.5
+  maxStars: 6

@@ -46,6 +46,19 @@ public class BattleStartController : MonoBehaviour
     [Tooltip("Hide the BATTLE button once the battle has started.")]
     [SerializeField] private bool hideButtonAfterBattleStarts = true;
 
+    [Header("Match Gate")]
+    [Tooltip("ON = the BATTLE button starts NON-INTERACTABLE and only unlocks once " +
+             "the player has actually cleared a match on the puzzle board. Stops a " +
+             "stage being started with zero heroes recruited.")]
+    [SerializeField] private bool requireMatchBeforeBattle = true;
+
+    [Tooltip("How many matches must be cleared before BATTLE unlocks.")]
+    [SerializeField, Min(1)] private int matchesRequiredToUnlock = 1;
+
+    [Tooltip("Optional UI shown only while the button is still locked - a 'make a " +
+             "match first' hint. Safe to leave empty.")]
+    [SerializeField] private GameObject lockedHint;
+
     [Header("Testing")]
     [Tooltip("TEST MODE (ON while developing): the daily allowance is kept in memory " +
              "only and never written to the save file, so every Play session starts " +
@@ -55,6 +68,18 @@ public class BattleStartController : MonoBehaviour
 
     /// <summary>True once this stage's battle phase has been released.</summary>
     public bool BattleStarted { get; private set; }
+
+    /// <summary>
+    /// True once enough matches have been cleared for BATTLE to be pressable.
+    /// Always true when requireMatchBeforeBattle is off, so an old stage that
+    /// never had a match gate behaves exactly as it always did.
+    /// </summary>
+    public bool MatchGateOpen { get; private set; }
+
+    /// <summary>Raised when the match gate opens - for a button-glow / tutorial cue.</summary>
+    public event Action OnMatchGateOpened;
+
+    private int matchesCleared;
 
     /// <summary>
     /// Global "the fighting has begun" flag, for things spawned at runtime that
@@ -95,12 +120,21 @@ public class BattleStartController : MonoBehaviour
 
         if (!enemySpawner)
             Debug.LogError("[BattleStartController] No EnemySpawner found in the scene.", this);
+
+        // Locked in Awake, before the first frame is drawn, so the button is never
+        // pressable for even one frame at stage open.
+        MatchGateOpen = !requireMatchBeforeBattle;
+        ApplyGateToButton();
     }
 
     private void OnEnable()
     {
         if (battleButton) battleButton.onClick.AddListener(OnBattleButtonPressed);
         BattleEnergyService.OnAllowanceChanged += RefreshUI;
+
+        if (requireMatchBeforeBattle && !MatchGateOpen)
+            MatchResolver.OnBlast += OnBoardBlast;
+
         RefreshUI();
     }
 
@@ -108,6 +142,41 @@ public class BattleStartController : MonoBehaviour
     {
         if (battleButton) battleButton.onClick.RemoveListener(OnBattleButtonPressed);
         BattleEnergyService.OnAllowanceChanged -= RefreshUI;
+
+        // OnBlast is a plain static delegate, never cleared by MatchResolver, so an
+        // unsubscribe here is what stops a destroyed controller being called.
+        MatchResolver.OnBlast -= OnBoardBlast;
+    }
+
+    /// <summary>
+    /// Every cleared match on the puzzle board. The gate opens on the Nth one and
+    /// then unsubscribes - later matches are none of this component's business.
+    /// </summary>
+    private void OnBoardBlast(int groups)
+    {
+        if (MatchGateOpen) return;
+
+        matchesCleared++;
+        if (matchesCleared < matchesRequiredToUnlock) return;
+
+        MatchGateOpen = true;
+        MatchResolver.OnBlast -= OnBoardBlast;
+
+        ApplyGateToButton();
+        OnMatchGateOpened?.Invoke();
+    }
+
+    /// <summary>
+    /// Pushes MatchGateOpen onto the button and the hint. Kept separate so Awake
+    /// and the unlock share one code path and cannot drift apart.
+    /// </summary>
+    private void ApplyGateToButton()
+    {
+        // Never re-enable a button the battle has already consumed.
+        if (BattleStarted) return;
+
+        if (battleButton) battleButton.interactable = MatchGateOpen;
+        if (lockedHint) lockedHint.SetActive(!MatchGateOpen);
     }
 
     /// <summary>
@@ -117,6 +186,16 @@ public class BattleStartController : MonoBehaviour
     public void OnBattleButtonPressed()
     {
         if (BattleStarted) return;
+
+        // interactable=false already blocks the click, but this method is public and
+        // may also be wired from the button's OnClick list or a debug key.
+        if (!MatchGateOpen)
+        {
+            Debug.Log("[BattleStartController] Battle refused: no match cleared yet " +
+                      $"({matchesCleared}/{matchesRequiredToUnlock}).");
+            OnBattleBlocked?.Invoke();
+            return;
+        }
 
         var result = BattleEnergyService.Consume(dailyBattleLimit, energyCostPerBattle);
 
@@ -145,6 +224,13 @@ public class BattleStartController : MonoBehaviour
 
         if (hideButtonAfterBattleStarts && battleButton)
             battleButton.gameObject.SetActive(false);
+
+        if (lockedHint) lockedHint.SetActive(false);
+
+        // StartBattle is also the debug/revive entry point and bypasses the gate;
+        // keep the flag honest so nothing later re-locks the button.
+        MatchGateOpen = true;
+        MatchResolver.OnBlast -= OnBoardBlast;
 
         // Announce it globally BEFORE the transition, so unit health bars appear
         // as the fighting begins rather than after the camera settles.

@@ -51,6 +51,16 @@ RUNTIME STATE
   OnFirstEnemySpawned (event)  raised once, alongside the flag above.
   _battleStarted  (bool) latch so the wave loop can only ever be started once;
                   exposed read-only as BattleStarted
+  AliveEnemyCount (int, public get)  read-only view of _alive. Added 2026-08-30
+                  for LevelGameManager's mutual-wipe check - "are there any
+                  enemies left on the field?" without a scene sweep.
+  AllWavesDispatched (bool, public get)  TRUE once the LAST wave has been
+                  spawned, i.e. nothing further will ever come out of this
+                  spawner. Set BEFORE that wave's WaitUntil(_alive == 0), so it
+                  is already true while the final enemies are still fighting -
+                  it means "no more are coming", NOT "the field is empty".
+                  Pair it with AliveEnemyCount. Also set immediately when a
+                  LevelConfig has zero waves authored.
 
 LIFECYCLE
 ---------
@@ -87,6 +97,8 @@ MAIN LOOP
              wave.formation, passing the SAME stageLevel to every wave (a
              stage does not get harder wave-to-wave within itself, only
              stage-to-stage)
+           - on the LAST wave, sets AllWavesDispatched = true here - after the
+             spawn, BEFORE the wait below (see RUNTIME STATE)
            - yield return new WaitUntil(() => _alive == 0) - waits for every
              spawned enemy in the wave to die before the next wave begins.
       A trailing comment notes stage completion is currently handled by WinPanel
@@ -151,6 +163,9 @@ HOW IT CONNECTS
     and its BattleEnergyService check passes.
   - HudCurrencyView.SetGameplayPaused toggles this component's .enabled on
     pause; that only halts the coroutine, it never starts one.
+  - LevelGameManager.Update polls BattleStarted / HasSpawnedFirstEnemy /
+    AllWavesDispatched / AliveEnemyCount every frame for its mutual-wipe defeat
+    check. Read-only - it never drives this spawner.
 
 NOTES
 -----

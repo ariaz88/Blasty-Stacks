@@ -38,6 +38,12 @@ public class MenuLoader : MonoBehaviour
     [SerializeField] private TMP_Text loadingText;     // e.g. "45%"
 
     [Header("First-run tutorial")]
+    [Tooltip("OFF disables the first-run tutorial detour entirely - boot goes straight to " +
+             "targetSceneName. Turned OFF 2026-08-31 by request; flip it back on to restore " +
+             "the tutorial. Kept as a switch rather than clearing firstRunTutorial below, so " +
+             "the SO and scene-name wiring is not lost.")]
+    [SerializeField] private bool enableFirstRunTutorial = false;
+
     [Tooltip("The tutorial that must be seen before the menu. Leave empty to always go " +
              "straight to targetSceneName.")]
     [SerializeField] private TutorialSequenceSO firstRunTutorial;
@@ -54,7 +60,8 @@ public class MenuLoader : MonoBehaviour
         // 1b) First launch only: detour through the tutorial scene instead of the
         // menu. The flag lives in SaveSystem, so this happens exactly once per
         // save - clear it with Tools/Tutorial/Reset Tutorial Progress to test again.
-        if (firstRunTutorial && !string.IsNullOrEmpty(firstRunTutorialScene)
+        if (enableFirstRunTutorial
+            && firstRunTutorial && !string.IsNullOrEmpty(firstRunTutorialScene)
             && !TutorialManager.IsTutorialDone(firstRunTutorial.TutorialId))
         {
             Debug.Log($"[MenuLoader] First run: routing to tutorial scene '{firstRunTutorialScene}'.");

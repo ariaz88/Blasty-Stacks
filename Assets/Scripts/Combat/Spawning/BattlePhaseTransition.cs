@@ -1,5 +1,6 @@
 // BattlePhaseTransition.cs
 using System;
+using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
 
@@ -38,6 +39,11 @@ public class BattlePhaseTransition : MonoBehaviour
              "Instant. For anything that should FADE in, use fadeInAfterMove below.")]
     [SerializeField] private GameObject[] showWhenBattleStarts;
 
+    [Tooltip("Switched OFF the instant BATTLE is pressed, with no fade and no waiting " +
+             "for the camera - the Top Shadow. Use this rather than hideWhenBattleStarts " +
+             "when the object must go NOW regardless of hideAfterCameraArrives.")]
+    [SerializeField] private GameObject[] hideOnPress;
+
     [Header("Fades")]
     [Tooltip("UI that fades out QUICKLY the instant BATTLE is pressed - the Feature Panel. " +
              "Put it HERE instead of in hideWhenBattleStarts, which only fires once the " +
@@ -46,6 +52,16 @@ public class BattlePhaseTransition : MonoBehaviour
 
     [Tooltip("Seconds for that fade. It runs alongside the camera move, so keep it short.")]
     [SerializeField, Min(0f)] private float pressFadeOutDuration = 0.2f;
+
+    [Tooltip("UI that fades OUT while the camera pans and fades back IN once it has " +
+             "settled - the currency bar and the rest of the permanent HUD. The SAME " +
+             "objects both ways, unlike fadeOutOnPress (gone for good) and " +
+             "fadeInAfterMove (only ever appears). Leave them switched ON in the scene; " +
+             "anything already inactive on press is left alone and never faded back in.")]
+    [SerializeField] private GameObject[] fadeOutAndReturn;
+
+    [Tooltip("Seconds for that fade-out. The fade back in reuses arriveFadeInDuration.")]
+    [SerializeField, Min(0f)] private float returnFadeOutDuration = 0.2f;
 
     [Tooltip("UI that fades IN only after the camera has finished its whole move - the " +
              "Heroes Stats panel. These are activated by this script, so leave them " +
@@ -66,6 +82,13 @@ public class BattlePhaseTransition : MonoBehaviour
 
     private Sequence sequence;
 
+    /// <summary>
+    /// The fadeOutAndReturn entries that were actually live when BATTLE was pressed.
+    /// Only these are faded back in, so an object the player had already closed does
+    /// not get switched on by the camera arriving.
+    /// </summary>
+    private readonly List<GameObject> returningAfterMove = new List<GameObject>();
+
     private void OnDestroy()
     {
         sequence?.Kill();
@@ -85,6 +108,13 @@ public class BattlePhaseTransition : MonoBehaviour
         // Straight away, before the camera has moved a pixel: the Feature Panel
         // must be gone almost immediately, not linger for the whole pan.
         FadeOutAndDisable(fadeOutOnPress, pressFadeOutDuration);
+
+        // No fade, no waiting - the Top Shadow framed the puzzle phase and would
+        // read as a stray band across the battlefield for the whole pan.
+        SetActiveAll(hideOnPress, false);
+
+        // The permanent HUD steps aside for the pan and is restored in Finish.
+        BeginReturnFadeOut();
 
         if (!hideAfterCameraArrives)
             SetActiveAll(hideWhenBattleStarts, false);
@@ -148,6 +178,10 @@ public class BattlePhaseTransition : MonoBehaviour
         // battlefield - never mid-pan, and never before the board is gone.
         FadeInAndEnable(fadeInAfterMove, arriveFadeInDuration);
 
+        // The HUD that only stepped aside for the pan comes back with it.
+        FadeInAndEnable(returningAfterMove, arriveFadeInDuration);
+        returningAfterMove.Clear();
+
         onComplete?.Invoke();
     }
 
@@ -173,6 +207,25 @@ public class BattlePhaseTransition : MonoBehaviour
         return group;
     }
 
+    /// <summary>
+    /// Fades out every live fadeOutAndReturn entry and records it, so Finish knows
+    /// exactly which objects to bring back. Objects left OFF in the scene are not
+    /// touched - fading them back in would switch on UI that was never showing.
+    /// </summary>
+    private void BeginReturnFadeOut()
+    {
+        returningAfterMove.Clear();
+        if (fadeOutAndReturn == null) return;
+
+        foreach (var go in fadeOutAndReturn)
+        {
+            if (!go || !go.activeSelf) continue;
+
+            FadeOut(go, returnFadeOutDuration, disableWhenDone: false);
+            returningAfterMove.Add(go);
+        }
+    }
+
     private static void FadeOutAndDisable(GameObject[] objects, float duration)
     {
         if (objects == null) return;
@@ -180,30 +233,41 @@ public class BattlePhaseTransition : MonoBehaviour
         foreach (var go in objects)
         {
             if (!go || !go.activeSelf) continue;
-
-            var group = EnsureCanvasGroup(go);
-            group.DOKill();
-
-            // Stop taking clicks the moment the fade starts - a half-faded
-            // BATTLE button is still a live button otherwise.
-            group.interactable = false;
-            group.blocksRaycasts = false;
-
-            if (duration <= 0f)
-            {
-                group.alpha = 0f;
-                go.SetActive(false);
-                continue;
-            }
-
-            var target = go;
-            group.DOFade(0f, duration)
-                 .SetEase(Ease.Linear)
-                 .OnComplete(() => { if (target) target.SetActive(false); });
+            FadeOut(go, duration, disableWhenDone: true);
         }
     }
 
-    private static void FadeInAndEnable(GameObject[] objects, float duration)
+    /// <summary>
+    /// Fades one object to transparent. <paramref name="disableWhenDone"/> separates
+    /// the two callers: fadeOutOnPress is finished with its object and switches it
+    /// off, while fadeOutAndReturn keeps it active so Finish can fade it back.
+    /// </summary>
+    private static void FadeOut(GameObject go, float duration, bool disableWhenDone)
+    {
+        var group = EnsureCanvasGroup(go);
+        group.DOKill();
+
+        // Stop taking clicks the moment the fade starts - a half-faded
+        // BATTLE button is still a live button otherwise.
+        group.interactable = false;
+        group.blocksRaycasts = false;
+
+        if (duration <= 0f)
+        {
+            group.alpha = 0f;
+            if (disableWhenDone) go.SetActive(false);
+            return;
+        }
+
+        var tween = group.DOFade(0f, duration).SetEase(Ease.Linear);
+
+        if (!disableWhenDone) return;
+
+        var target = go;
+        tween.OnComplete(() => { if (target) target.SetActive(false); });
+    }
+
+    private static void FadeInAndEnable(IList<GameObject> objects, float duration)
     {
         if (objects == null) return;
 

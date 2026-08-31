@@ -16,6 +16,11 @@ public class HudCurrencyView : MonoBehaviour
     [SerializeField] private Canvas mainCanvas;       // root Canvas on the scene
     [SerializeField] private CanvasGroup hudCanvasGroup;
 
+    // The swapOpen value HandlePanelsVisibility last actually wrote to
+    // hudCanvasGroup. Null until the first pass, so the correct state is
+    // established once on frame one and then only on a real change.
+    private bool? swapOpenApplied;
+
     [Header("Panels that affect HUD")]
     [SerializeField] private GameObject bucketStatsPanelRoot;   // BucketStatsPanel root
     [SerializeField] private Canvas bucketStatsCanvas;          // Canvas sitting ON BucketStatsPanel
@@ -251,13 +256,21 @@ public class HudCurrencyView : MonoBehaviour
         bool swapOpen = swapPanelRoot != null && swapPanelRoot.activeInHierarchy;
         bool detailOpen = unitsDetailPanelRoot != null && unitsDetailPanelRoot.activeInHierarchy;
 
-        // HUD: only hide when SwapPanel is open
-        if (hudCanvasGroup != null)
+        // HUD: only hide when SwapPanel is open.
+        //
+        // Written ONLY ON A CHANGE of swapOpen, never every frame. This runs in
+        // LateUpdate, so an unconditional write here stomps any external fade of
+        // the same CanvasGroup back to 1 after DOTween has already set it -
+        // which is exactly why BattlePhaseTransition could not fade the HUD out
+        // while it faded every other panel fine.
+        if (hudCanvasGroup != null && swapOpenApplied != swapOpen)
         {
             hudCanvasGroup.alpha = swapOpen ? 0f : 1f;
             hudCanvasGroup.interactable = !swapOpen;
             hudCanvasGroup.blocksRaycasts = !swapOpen;
         }
+
+        swapOpenApplied = swapOpen;
 
         // MainMenu: hide when SwapPanel OR Units DetailView is open
         if (mainMenuPanelRoot != null)

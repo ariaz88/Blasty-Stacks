@@ -364,6 +364,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -890,6 +891,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -1026,6 +1028,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -1162,6 +1165,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -1331,6 +1335,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -9.2
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -1590,6 +1595,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -1742,6 +1748,7 @@ MonoBehaviour:
   stageLevel: 1
   cpWeights: {fileID: 0}
   cp: 0
+  xpValue: 1
   currentGateTarget: {fileID: 0}
   attackPlayerGate: 0
   enemyDamageCollider: {fileID: 0}
@@ -2320,6 +2327,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -2456,6 +2464,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -1.21
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -2839,6 +2848,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   levelConfig: {fileID: 11400000, guid: af42dd120e5940847a875e1508e5d55e, type: 2}
   cpWeights: {fileID: 11400000, guid: 92654a4e77e28b441ac7e4e8c23ab171, type: 2}
+  waitForBattleStart: 0
+  spawnRelativeToEnemyGate: 0
+  enemyGateAnchor: {fileID: 0}
+  gateRelativeMin: {x: -3, y: -4}
+  gateRelativeMax: {x: 3, y: -2}
 --- !u!4 &371421868
 Transform:
   m_ObjectHideFlags: 0
@@ -2902,6 +2916,13 @@ MonoBehaviour:
     m_Bits: 128
   occupyCheckRadius: 0.3
   jumpWaitTimeout: 0.5
+  jumpLanes: []
+  gapFiller: {fileID: 0}
+  reuseLastLane: 1
+  holdUntilFirstEnemySpawns: 0
+  enemySpawner: {fileID: 0}
+  reinforcementStagger: 0.12
+  reinforcementGateHold: 0.75
 --- !u!4 &373656806
 Transform:
   m_ObjectHideFlags: 0
@@ -3230,6 +3251,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -3305,6 +3327,7 @@ Transform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &496091193
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -3323,6 +3346,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -3344,9 +3369,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -3
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 5767449083037740046, guid: 4fe269fa75e14944491ef92e1c6b7f7b, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -3356,7 +3383,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!4 &504183026 stripped
 Transform:
@@ -3529,7 +3555,6 @@ MonoBehaviour:
   m_ScreenCoordScaleBias: {x: 0, y: 0, z: 0, w: 0}
   m_RequiresDepthTexture: 0
   m_RequiresColorTexture: 0
-  m_Version: 2
   m_TaaSettings:
     m_Quality: 3
     m_FrameInfluence: 0.1
@@ -3537,6 +3562,7 @@ MonoBehaviour:
     m_MipBias: 0
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
+  m_Version: 2
 --- !u!1 &525523087
 GameObject:
   m_ObjectHideFlags: 0
@@ -3707,6 +3733,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -4072,6 +4099,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -4265,6 +4293,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -4512,6 +4541,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -5005,6 +5035,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -5399,6 +5430,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -5615,6 +5647,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -5690,6 +5723,7 @@ Transform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &850483717
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -5708,6 +5742,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -5729,9 +5765,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -3
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 217763113299012259, guid: c81d1c53e06c9384eb28b20b4403644a, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -5741,7 +5779,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!1001 &937097320
 PrefabInstance:
@@ -5904,6 +5941,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -6040,6 +6078,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -6159,6 +6198,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -7.18
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -6252,7 +6292,12 @@ MonoBehaviour:
   board: {fileID: 208870210138756754}
   minGroupSize: 2
   preferMergeIfImmovablePresent: 1
+  requireGeometricTouch: 1
+  touchTolerance: 0.05
+  minTouchOverlapCells: 0.2
   killAnimTime: 0.1
+  collapseTimeScale: 0.75
+  collapseFloorScale: 0.2
   enableDebug: 1
 --- !u!114 &1011363207
 MonoBehaviour:
@@ -6268,6 +6313,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   board: {fileID: 208870210138756754}
   cam: {fileID: 519420031}
+  moveBudget: {fileID: 0}
   pieceLayer3D:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -6275,8 +6321,11 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   liftWhileDragging: -0.5
-  smoothTime: 0.08
-  maxSpeed: 100
+  maxSubStepCells: 0.25
+  maxSubStepsPerFrame: 64
+  restExactlyWhereReleased: 0
+  settleDuration: 0.1
+  gapAssistCells: 0.15
 --- !u!4 &1011363208
 Transform:
   m_ObjectHideFlags: 0
@@ -6387,6 +6436,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -6728,6 +6778,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -6965,6 +7016,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 1024192348}
     - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
+      propertyPath: unitsDatabase
+      value: 
+      objectReference: {fileID: 11400000, guid: 1eead485eb9802f4c8d136eaf6de630f, type: 2}
+    - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
       propertyPath: levelCounterText
       value: 
       objectReference: {fileID: 5808924128215253551}
@@ -6972,6 +7027,10 @@ PrefabInstance:
       propertyPath: skillSelectPanel
       value: 
       objectReference: {fileID: 2606406756752340232}
+    - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
+      propertyPath: skillPool.Array.size
+      value: 5
+      objectReference: {fileID: 0}
     - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
       propertyPath: 'cardSlots.Array.data[0]'
       value: 
@@ -6984,6 +7043,18 @@ PrefabInstance:
       propertyPath: 'cardSlots.Array.data[2]'
       value: 
       objectReference: {fileID: 2126778846}
+    - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
+      propertyPath: 'skillPool.Array.data[0]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 13d55cc2ec712e5428b0dc8b21b34b07, type: 2}
+    - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
+      propertyPath: 'skillPool.Array.data[1]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 683b3bb5232b8794f88ea79f897d4cc8, type: 2}
+    - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
+      propertyPath: 'skillPool.Array.data[2]'
+      value: 
+      objectReference: {fileID: 11400000, guid: c3e622f258556b1429043be5046fec55, type: 2}
     - target: {fileID: 2974061298826028992, guid: 19c1bfb072a7ff04b8a2f46f7fc63a8a, type: 3}
       propertyPath: 'defensiveSlots.Array.data[0]'
       value: 
@@ -7181,6 +7252,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -7506,6 +7578,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -7857,6 +7930,7 @@ GameObject:
   m_IsActive: 1
 --- !u!212 &1218370357
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -7875,6 +7949,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -7896,9 +7972,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -1
+  m_MaskInteraction: 0
   m_Sprite: {fileID: -9040681854486852157, guid: 72d31d6e78784654f86aa2f584c5533b, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -7908,7 +7986,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!4 &1218370358
 Transform:
@@ -8164,6 +8241,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -8432,6 +8510,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -8578,6 +8657,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -8842,6 +8922,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -7.18
+  m_characterHorizontalScale: 1
   m_wordSpacing: -19.9
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -9669,6 +9750,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -9873,6 +9955,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -10024,6 +10107,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -10293,6 +10377,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -10655,6 +10740,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -10969,6 +11055,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -11105,6 +11192,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -1.21
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -11241,6 +11329,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -11316,6 +11405,7 @@ Transform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &1711768132
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -11334,6 +11424,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -11355,9 +11447,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -3
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 1345286271779843197, guid: 2a69345ad5e40af498a9806366038f70, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -11367,7 +11461,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!1 &1719235608
 GameObject:
@@ -12001,6 +12094,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -12290,6 +12384,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -12715,6 +12810,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -12908,6 +13004,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -7.18
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -13429,6 +13526,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -13851,6 +13949,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -8.47
+  m_characterHorizontalScale: 1
   m_wordSpacing: -2.34
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -14484,6 +14583,7 @@ MonoBehaviour:
   ghostFillColor: {r: 0.7, g: 0.7, b: 0.7, a: 0.2}
 --- !u!212 &245265097147690327
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -14502,6 +14602,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -14523,9 +14625,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -10
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 6237755386677810506, guid: 4b0fcc6d8e79bf14697852969785203f, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -14535,7 +14639,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!1 &282843634457955280
 GameObject:
@@ -14572,6 +14675,7 @@ GameObject:
   m_IsActive: 1
 --- !u!212 &320086612420590502
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -14590,6 +14694,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -14611,9 +14717,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -3
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 1614704086904905017, guid: 3442f7c848fa56e459d6bdd6c0cd44be, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -14623,7 +14731,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!1 &400855275787900460
 GameObject:
@@ -14860,18 +14967,17 @@ MonoBehaviour:
   moveSpeed: 0.5
   canMove: 0
   isUnlocked: 0
+  isFormationStepping: 0
   faceCenterOnStart: 1
+  retargetHysteresis: 0.2
+  anchorSwitchHysteresis: 0.3
+  facingDeadZoneX: 0.12
   enemyIsInLeft: 0
   chosenEnemyOffset: {fileID: 0}
   attackPlayerGate: 0
   visualRoot: {fileID: 0}
-  separationRadius: 0.5
-  separationStrength: 1
-  friendlyLayerMask:
-    serializedVersion: 2
-    m_Bits: 0
-  minHorizontalSpacing: 0.35
-  spacingCheckRadius: 0.4
+  attackSlotAngleStep: 28
+  attackStandoffFactor: 0.8
 --- !u!1 &1305661377585804153
 GameObject:
   m_ObjectHideFlags: 0
@@ -14902,6 +15008,7 @@ SortingGroup:
   m_SortingLayer: 0
   m_SortingOrder: -5
   m_SortAtRoot: 0
+  m_Sort3DAs2D: 0
 --- !u!114 &1367771103925724150 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 1367771102005237229, guid: 706fa58028e0cd04d921033afe6243e6, type: 3}
@@ -14960,6 +15067,7 @@ MonoBehaviour:
   m_PixelsPerUnitMultiplier: 1
 --- !u!212 &1740290627220486750
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -14978,6 +15086,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -14999,9 +15109,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -3
+  m_MaskInteraction: 0
   m_Sprite: {fileID: -3637322332712301400, guid: 0fd819617e2b2ce44914aa87ea22accc, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -15011,7 +15123,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!4 &1890927818893266343
 Transform:
@@ -15903,6 +16014,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -16270,6 +16382,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -16371,6 +16484,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -16544,6 +16658,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -16682,6 +16797,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -16888,6 +17004,7 @@ MonoBehaviour:
   m_PixelsPerUnitMultiplier: 1
 --- !u!212 &3512093258639754573
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -16906,6 +17023,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -16927,9 +17046,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -5
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 8172869932245479659, guid: 9af2114656f3a124ebe9780df70df353, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -16939,7 +17060,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!1 &3558528042440402528
 GameObject:
@@ -17864,6 +17984,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -18082,6 +18203,7 @@ RectTransform:
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!212 &6123881325787250193
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -18100,6 +18222,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -18121,9 +18245,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -3
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 8754872728892036910, guid: dc252b40fbf3fab4ca3e79d52b6f986e, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -18133,7 +18259,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!224 &6133542041886516152
 RectTransform:
@@ -18238,6 +18363,7 @@ MonoBehaviour:
   m_PixelsPerUnitMultiplier: 1
 --- !u!212 &6551452509201575413
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -18256,6 +18382,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -18277,9 +18405,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -3
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 4383796167440827320, guid: cba44b7a93fcea04891666468d737ccf, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -18289,7 +18419,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!1 &6670213690687837555
 GameObject:
@@ -18395,6 +18524,7 @@ RectTransform:
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!212 &7239163079524848971
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -18413,6 +18543,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -18434,9 +18566,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -3
+  m_MaskInteraction: 0
   m_Sprite: {fileID: -3637322332712301400, guid: 0fd819617e2b2ce44914aa87ea22accc, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -18446,7 +18580,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!224 &7240013662839202944
 RectTransform:

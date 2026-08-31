@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 07d612326bf0b374b9dc85b0b3c96786, type: 3}
   m_Name: AtkSpeed
   m_EditorClassIdentifier: 
-  skillName: Bolt
-  description: 'This Item Increases the Atk Speed '
+  skillName: Attack Speed
+  description: Increases Attack Speed
   category: 0
   effectType: 0
   normalIcon: {fileID: 7950675361320768594, guid: 6f80ab735d1ed3f41b47d49d529de90f, type: 3}
@@ -21,3 +21,14 @@ MonoBehaviour:
   baseIncrement: 0.05
   maxIncrement: 0.2
   evolvedIncrement: 0.5
+  allowedTypes: 
+  allowedUnitIds: 
+  targetMode: 0
+  valuePerStar:
+  - 0.25
+  - 0.3
+  - 0.4
+  - 0.55
+  - 0.65
+  - 0.8
+  maxStars: 6

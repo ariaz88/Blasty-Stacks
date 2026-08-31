@@ -136,6 +136,12 @@ public class LastStandOffer : MonoBehaviour
         if (spent || offerCell) return;
         if (!offeredUnit || !cellTemplate) return;
 
+        // Second lock on the same teardown hole the disarm in HandleGameStateChanged
+        // closes, for the paths that never publish a state change - quitting play mode, or
+        // a scene unloaded from under us. scene.isLoaded goes false for every object in a
+        // scene that is being unloaded, which is exactly when the roster empties fastest.
+        if (!gameObject.scene.isLoaded) return;
+
         // Zero until SnapshotStartingCounts runs at battle start, which is what
         // keeps this inert through the whole puzzle phase - no explicit
         // "has the battle begun" check needed.
@@ -152,14 +158,29 @@ public class LastStandOffer : MonoBehaviour
 
     private void Show()
     {
-        if (!waveManager || !waveManager.CanSpawnReinforcements(offeredUnit.unitId))
+        // Checked BEFORE the offer is ever shown, so a stage with a broken
+        // UnitDefinitionSO simply stays quiet instead of taking gems and
+        // delivering nothing.
+        //
+        // The two failures are reported SEPARATELY on purpose. They used to share one
+        // message reading "no PlayerWaveManager, or no runtimePrefab", which sent a debug
+        // session hunting through the unit database for a missing prefab when the real
+        // cause was the wave manager being gone during teardown. Never merge them again.
+        if (!waveManager)
         {
-            // Checked BEFORE the offer is ever shown, so a stage with a broken
-            // UnitDefinitionSO simply stays quiet instead of taking gems and
-            // delivering nothing.
-            Debug.LogError($"[LastStandOffer] '{offeredUnit.displayName}' cannot be " +
-                           "spawned (no PlayerWaveManager, or no runtimePrefab) - " +
-                           "the offer stays hidden.", this);
+            Debug.LogError($"[LastStandOffer] '{offeredUnit.displayName}': no " +
+                           "PlayerWaveManager in this scene - the offer stays hidden.", this);
+            spent = true;
+            return;
+        }
+
+        if (!waveManager.CanSpawnReinforcements(offeredUnit.unitId))
+        {
+            Debug.LogError($"[LastStandOffer] '{offeredUnit.displayName}' " +
+                           $"(unitId={offeredUnit.unitId}) was refused by PlayerWaveManager " +
+                           "- the offer stays hidden. Check that the units database holds " +
+                           "that id, that its runtimePrefab is assigned, and that the wave " +
+                           "manager's gatePoints array is not empty.", this);
             spent = true;
             return;
         }
@@ -282,6 +303,20 @@ public class LastStandOffer : MonoBehaviour
     /// </summary>
     private void HandleGameStateChanged(LevelGameManager.GameState state)
     {
-        if (state != LevelGameManager.GameState.Playing) Hide();
+        if (state == LevelGameManager.GameState.Playing) return;
+
+        // DISARM, do not merely Hide.
+        //
+        // Hiding alone left `armed` true, and the roster keeps churning long after the
+        // battle is decided: winning a stage destroys every hero, and each
+        // PlayerManager.OnDestroy calls HeroRoster.Unregister -> Changed -> Evaluate. By
+        // then TotalAlive() is 0, so the "army is wiped out" test passes trivially and the
+        // offer tried to Show() during teardown - against a PlayerWaveManager that had
+        // already been destroyed. That is the
+        //     "'Minotaur_02' cannot be spawned (no PlayerWaveManager, or no runtimePrefab)"
+        // error seen on completing stage 1. The unit data was never at fault; the offer was
+        // simply still listening after the fight was over.
+        armed = false;
+        Hide();
     }
 }
