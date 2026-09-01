@@ -55,6 +55,15 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-09-01] Package Manager has not been re-checked in the Editor since NavMeshPlus was
+  removed.** `com.h8man.2d.navmeshplus` was dropped from `Packages/manifest.json` and
+  `packages-lock.json` (it was unused — zero GUID references anywhere in `Assets/`). Reopen Unity
+  and confirm Package Manager resolves with no errors. If GitHub still resets while fetching the two
+  remaining git packages (`com.google.ads.mobile`, `com.google.external-dependency-manager`),
+  the next escalation is embedding them as local packages under `Packages/` rather than fighting the
+  network. Also unresolved: the stray `using UnityEngine.AI;` at
+  `Assets/Scripts/Combat/Player/PlayerManager.cs:3` — dead import, harmless, not removed.
+
 - **[2026-08-30] The mutual-wipe defeat has never run in Play mode.** It compiles clean but was
   never played. To test, pick a stage whose `LevelConfig` has ONE small wave, press BATTLE, and let
   the last hero and the last enemy trade fatal blows: after ~2.5s the console should print
@@ -285,6 +294,43 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-09-01 — Package Manager resolve failure after a `Library/` wipe: removed the unused NavMeshPlus git package
+
+- **Goal:** the user deleted `Library/` to save space, reopened the project, and Package Manager
+  refused to resolve: `com.h8man.2d.navmeshplus: Error when executing git command. error: RPC failed;
+  curl 56 OpenSSL SSL_read: Connection was reset, errno 10054 ... fatal: early EOF`.
+- **Status:** done (not yet re-opened in the Editor by the user).
+- **Root cause:** the package was declared as a **bare git URL with no `#tag`/`#commit`**
+  (`Packages/manifest.json:5`). Unity cannot know which revision an unpinned URL points at, so it
+  must contact GitHub on *every* resolve — and a `Library/` wipe forces a full resolve. The project's
+  two other git packages (`com.google.ads.mobile#v11.2.0`,
+  `com.google.external-dependency-manager#v1.2.187`) are pinned, resolve from cache, and never
+  errored. The `curl 56` reset itself is a network-level failure reaching github.com, not a project
+  fault, and it is intermittent — `Library/PackageCache/com.h8man.2d.navmeshplus@3fdf1984803c` was
+  in fact fully downloaded at 11:03 with a hash matching the lock file.
+- **Changed:** `Packages/manifest.json` — removed the `com.h8man.2d.navmeshplus` dependency line.
+  `Packages/packages-lock.json` — removed the matching locked entry. Both re-validated as JSON.
+- **Scene/Prefab/SO edits:** none.
+- **Verified:** JSON parses; zero remaining `h8man` matches in either file. **Not** re-opened in
+  Unity — the user still has to let the Editor re-resolve and confirm Package Manager is clean.
+- **Gotchas:**
+  - **NavMeshPlus was completely unused.** All 33 script GUIDs from the cached package were
+    extracted and grepped across `Assets/` (scenes, prefabs, scripts) — zero references. The only
+    NavMesh-adjacent trace left is a stray `using UnityEngine.AI;` at
+    `Assets/Scripts/Combat/Player/PlayerManager.cs:3` with no `NavMeshAgent` usage in that file; it
+    still compiles because `com.unity.modules.ai` is a separate manifest entry. Left in place.
+  - **Deleting `Library/` does nothing for repo size** — it is gitignored at `.gitignore:6` and was
+    never committed. It only frees disk, at the cost of a full asset re-import plus this network
+    resolve. Worth telling the user before they do it again.
+  - Applied two **global** git settings on this machine (user-approved) to make GitHub fetches
+    survive a flaky connection: `http.version=HTTP/1.1` and `http.postBuffer=524288000`. These are
+    machine-wide, not repo-scoped, and also affect the two remaining git packages.
+  - `Packages/packages-lock.json` also shows an unrelated pre-existing diff from the re-resolve:
+    `com.unity.searcher` 4.9.5 → 4.9.4. Harmless, left alone.
+- **Next:** user reopens Unity and confirms Package Manager resolves clean. If a 2D NavMesh is ever
+  wanted later, re-add the package **pinned**:
+  `https://github.com/h8man/NavMeshPlus.git#3fdf1984803c4518eafea98fcb416c8a3aa09f26`.
 
 ### 2026-08-30 — Mutual wipe (both armies dead, neither gate destroyed) now ends the stage as a defeat
 

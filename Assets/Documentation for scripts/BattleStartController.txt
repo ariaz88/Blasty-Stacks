@@ -53,8 +53,13 @@ INSPECTOR FIELDS
                          restores the old behaviour - pressable from frame one.
     matchesRequiredToUnlock (int, >=1, default 1) how many matches to clear
                          before the button unlocks.
-    lockedHint           (GameObject) optional UI shown ONLY while the button is
-                         locked - a "make a match first" prompt. Null-safe.
+    lockedRoot           (GameObject) shown while the gate is SHUT - the Feature
+                         Panel prefab's "Battle_Diactive". Switched off the
+                         moment the first match lands. Null-safe.
+    unlockedRoot         (GameObject) shown once the gate OPENS - the prefab's
+                         "Battle_Active". Leave it switched OFF in the scene;
+                         this script turns it on. battleButton should be the
+                         Button that lives on THIS object. Null-safe.
 
   Testing
     doNotPersistAllowance (bool, default ON) TEST MODE. Pushed into
@@ -107,10 +112,13 @@ FLOW
       calls ApplyGateToButton and fires OnMatchGateOpened.
 
   ApplyGateToButton()   [private]
-      Pushes MatchGateOpen onto battleButton.interactable and onto lockedHint's
-      active state. Returns early if BattleStarted, so nothing can re-enable a
-      button the battle has already consumed. Kept as one method so Awake and the
-      unlock share a single code path and cannot drift apart.
+      Swaps the two authored states - lockedRoot off / unlockedRoot on, or the
+      reverse - so exactly one is ever visible; they occupy the same slot. ALSO
+      writes battleButton.interactable, which is redundant while both roots are
+      wired but is what keeps a scene using only a single always-visible button
+      behaving correctly. Returns early if BattleStarted, so nothing can
+      re-enable a button the battle has already consumed. Kept as one method so
+      Awake and the unlock share a single code path and cannot drift apart.
 
   OnBattleButtonPressed()   [public]
       1. Returns immediately if BattleStarted (guards double-clicks).
@@ -125,7 +133,7 @@ FLOW
       4. Otherwise calls StartBattle().
 
   StartBattle()   [public]
-      Sets BattleStarted, optionally hides the button, hides lockedHint, and
+      Sets BattleStarted, optionally hides the button, hides lockedRoot, and
       FORCES MatchGateOpen true + unsubscribes from OnBlast - this is also the
       debug/revive entry point and bypasses the gate, so the flag is kept honest
       rather than left stale. Then fires OnBattleStarted,

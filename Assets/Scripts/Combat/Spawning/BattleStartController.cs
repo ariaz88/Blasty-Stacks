@@ -55,9 +55,14 @@ public class BattleStartController : MonoBehaviour
     [Tooltip("How many matches must be cleared before BATTLE unlocks.")]
     [SerializeField, Min(1)] private int matchesRequiredToUnlock = 1;
 
-    [Tooltip("Optional UI shown only while the button is still locked - a 'make a " +
-             "match first' hint. Safe to leave empty.")]
-    [SerializeField] private GameObject lockedHint;
+    [Tooltip("Shown while the gate is SHUT - the prefab's 'Battle_Diactive'. " +
+             "Switched off the moment the first match lands.")]
+    [SerializeField] private GameObject lockedRoot;
+
+    [Tooltip("Shown once the gate OPENS - the prefab's 'Battle_Active'. Leave it " +
+             "switched OFF in the scene; this script turns it on. battleButton " +
+             "should be the Button that lives on THIS object.")]
+    [SerializeField] private GameObject unlockedRoot;
 
     [Header("Testing")]
     [Tooltip("TEST MODE (ON while developing): the daily allowance is kept in memory " +
@@ -175,8 +180,15 @@ public class BattleStartController : MonoBehaviour
         // Never re-enable a button the battle has already consumed.
         if (BattleStarted) return;
 
+        // Swap the two authored states. Exactly one is ever on - they occupy the
+        // same slot in the Feature Panel.
+        if (lockedRoot) lockedRoot.SetActive(!MatchGateOpen);
+        if (unlockedRoot) unlockedRoot.SetActive(MatchGateOpen);
+
+        // Belt and braces: the live button is inside unlockedRoot, so this is
+        // redundant while the roots are wired - but it is what keeps a scene that
+        // uses ONLY a single always-visible button behaving correctly.
         if (battleButton) battleButton.interactable = MatchGateOpen;
-        if (lockedHint) lockedHint.SetActive(!MatchGateOpen);
     }
 
     /// <summary>
@@ -225,7 +237,9 @@ public class BattleStartController : MonoBehaviour
         if (hideButtonAfterBattleStarts && battleButton)
             battleButton.gameObject.SetActive(false);
 
-        if (lockedHint) lockedHint.SetActive(false);
+        // The whole Battel slot is about to fade out with the Feature Panel, but
+        // leave the states consistent in case a stage keeps the panel on screen.
+        if (lockedRoot) lockedRoot.SetActive(false);
 
         // StartBattle is also the debug/revive entry point and bypasses the gate;
         // keep the flag honest so nothing later re-locks the button.

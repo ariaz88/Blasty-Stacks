@@ -1,0 +1,129 @@
+================================================================================
+  FeatureSlotUI.cs
+  Path : Assets/Scripts/UI/HUD/FeatureSlotUI.cs
+  Type : MonoBehaviour
+  Layer: UI / HUD   (one coin-gated slot in the Feature Panel)
+  Prefab: Assets/PREFABS/Feature Panel.prefab - one instance per slot, on the
+          "Posion", "Battery" and "Hammer" objects.
+  Added : 2026-09-01
+================================================================================
+
+PURPOSE
+-------
+Drives ONE coin-gated slot of the Feature Panel - Posion, Battery or Hammer.
+
+Each slot is TWO buttons that do the SAME thing (the picture on top and the bar
+underneath) plus TWO mutually exclusive bottom states:
+
+  ENOUGH COINS : "Potion Button" is on - a live button the player can press.
+  NOT ENOUGH   : "Deactive" is on instead - only the price Text (TMP) and the
+                 Coin icon. It has NO Button component at all, so it cannot be
+                 pressed even in principle.
+
+Exactly one of those two is active at any moment - they sit at the same position
+in the layout.
+
+THE PREFAB SHAPE THIS EXPECTS
+-----------------------------
+  Posion / Battery / Hammer          <- put FeatureSlotUI HERE
+    'BG '                            (note the TRAILING SPACE in the name)
+    Battery Btn        {Image, Button}   <- the icon button, ALL THREE slots use
+      Mask > Avatar                       this same name; it is not a typo to fix
+                                          casually, other things may match on it
+    Deactive                             <- lockedRoot
+      Text (TMP)       {TextMeshProUGUI} <- costText
+      Coin             {Image}
+    Potion Button      {Image, Button}   <- actionButton AND affordableRoot
+
+INSPECTOR FIELDS
+----------------
+  Identity
+    featureName     (string) log messages only - "Potion", "Battery", "Hammer"
+    coinCost        (int, >=0, default 600) coins needed to unlock this slot.
+                    ALSO written into costText, so the design value and the
+                    displayed number cannot drift apart.
+
+  Buttons - BOTH trigger the same action
+    iconButton      (Button) the picture button on top - "Battery Btn"
+    actionButton    (Button) the bar button underneath - "Potion Button"
+
+  The two bottom states - exactly one is ever on
+    affordableRoot  (GameObject) shown when affordable - "Potion Button".
+                    Usually the SAME object as actionButton.
+    lockedRoot      (GameObject) shown when not - "Deactive".
+
+  Price label
+    costText        (TMP_Text) the number inside "Deactive". Null-safe.
+
+  Action
+    onUse           (UnityEvent) fired when either button is pressed AND the
+                    player can afford it. Wire the real feature here once it
+                    exists.
+
+RUNTIME STATE
+-------------
+  CanAfford  (bool, public get) true while coins >= coinCost
+
+EVENTS
+------
+  OnUsed (Action<FeatureSlotUI>)  raised alongside onUse, for code that would
+                                  rather subscribe than use the UnityEvent
+
+FLOW
+----
+  OnEnable()
+      Adds OnPressed to BOTH buttons' onClick, subscribes to
+      CurrencyManager.OnCurrencyChanged if the singleton exists yet, Refresh().
+
+  Start()
+      Re-subscribes (remove-then-add, so it cannot double up) and refreshes
+      again. CurrencyManager is a DontDestroyOnLoad singleton that may not exist
+      when OnEnable runs on the first frame of a stage - this is the retry.
+
+  OnDisable()
+      Removes both click listeners and the currency subscription.
+
+  Refresh()   [public]
+      Reads CurrencyManager.Instance.Coins (0 if there is no manager), sets
+      CanAfford, then:
+        affordableRoot.SetActive(CanAfford)
+        lockedRoot.SetActive(!CanAfford)
+        iconButton.interactable  = CanAfford
+        actionButton.interactable = CanAfford
+        costText.text = coinCost
+      Public so a future feature can force a redraw after spending.
+
+  OnPressed()
+      Guards on CanAfford - reachable only if something re-enabled a button
+      behind our back - then fires onUse and OnUsed.
+
+HOW IT CONNECTS
+---------------
+  - Reads CurrencyManager.Instance.Coins and listens to its OnCurrencyChanged
+    (Action<string,int,int>; the handler ignores all three args and just
+    refreshes).
+  - The BATTLE slot of the same panel is NOT this component - it is
+    BattleStartController, which gates on a puzzle match rather than on coins
+    and swaps Battle_Diactive / Battle_Active the same way this swaps
+    Deactive / Potion Button.
+  - The whole Feature Panel is faded out on BATTLE by BattlePhaseTransition
+    (fadeOutOnPress), so these slots disappear for the combat phase.
+
+NOTES
+-----
+  - IT DOES NOT SPEND THE COINS. The Potion / Battery / Hammer features do not
+    exist yet; this component only handles the affordability STATE and routes
+    the press. Whoever builds the real effect calls
+    CurrencyManager.TrySpendCoins(coinCost) inside the onUse target and then
+    calls Refresh(). Do not add spending here - a slot that charges the player
+    for a feature that does nothing is worse than one that no-ops.
+  - THE ICON BUTTON IS NOT INSIDE EITHER ROOT. "Battery Btn" is a sibling of
+    Deactive / Potion Button, so swapping the roots does not disable it. That is
+    why Refresh writes interactable on BOTH buttons - without it the picture
+    would stay pressable while the slot reads as locked.
+  - ALL THREE SLOTS NAME THEIR ICON BUTTON "Battery Btn", including Posion and
+    Hammer, and their bottom button "Potion Button". Copy-paste leftovers from
+    whichever slot was authored first. Harmless as long as references are
+    assigned per-slot in the Inspector - but it makes Find-by-name dangerous
+    here, so never look these up by name at runtime.
+  - "'BG '" really does have a trailing space in the prefab.
