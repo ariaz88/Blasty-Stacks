@@ -43,7 +43,7 @@ public class LastStandOffer : MonoBehaviour
     [SerializeField] private RectTransform offerContainer;
 
     [Tooltip("The HeroStatCell to clone for the offer's look. Point this at the " +
-             "same authored 'Hero 1' template the Heroes Stats panel uses - the " +
+             "same authored 'Hero Card' template the Heroes Stats panel uses - the " +
              "clone is shown in OFFER mode (portrait in colour, no count).")]
     [SerializeField] private HeroStatCell cellTemplate;
 
@@ -83,7 +83,7 @@ public class LastStandOffer : MonoBehaviour
 
         if (!cellTemplate)
             Debug.LogError("[LastStandOffer] No cell template - assign the authored " +
-                           "'Hero 1' object (it needs a HeroStatCell component).", this);
+                           "'Hero Card' object (it needs a HeroStatCell component).", this);
 
         if (!offeredUnit)
             Debug.LogError("[LastStandOffer] No offeredUnit - this stage will never " +

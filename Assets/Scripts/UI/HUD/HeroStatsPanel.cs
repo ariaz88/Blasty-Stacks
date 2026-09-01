@@ -9,7 +9,7 @@ using UnityEngine.UI;
 /// is wiped out, a gem price to buy the whole squad back.
 ///
 /// The cells are BUILT AT RUNTIME. The scene holds a single authored cell
-/// ("Hero 1") which is used as a template and switched off - a stage that fields
+/// ("Hero Card") which is used as a template and switched off - a stage that fields
 /// two hero types gets two cells, one that fields four gets four. Nothing is
 /// hard-coded to a hero.
 ///
@@ -27,7 +27,7 @@ public class HeroStatsPanel : MonoBehaviour
              "Left empty = this GameObject.")]
     [SerializeField] private RectTransform cellContainer;
 
-    [Tooltip("The authored 'Hero 1' cell. Used as a template only - it is switched " +
+    [Tooltip("The authored 'Hero Card' cell. Used as a template only - it is switched " +
              "off at Awake and cloned once per hero type in the battle.")]
     [SerializeField] private HeroStatCell cellTemplate;
 
@@ -58,7 +58,7 @@ public class HeroStatsPanel : MonoBehaviour
         if (!cellTemplate)
         {
             Debug.LogError("[HeroStatsPanel] No cell template - assign the authored " +
-                           "'Hero 1' object (it needs a HeroStatCell component).", this);
+                           "'Hero Card' object (it needs a HeroStatCell component).", this);
             enabled = false;
             return;
         }

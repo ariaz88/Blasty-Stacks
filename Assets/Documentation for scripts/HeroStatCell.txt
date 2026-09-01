@@ -3,50 +3,64 @@
   Path : Assets/Scripts/UI/HUD/HeroStatCell.cs
   Type : MonoBehaviour
   Layer: UI / HUD   (one cell of the Heroes Stats panel - view only)
-  Scenes: Canvas/Heros Stats panel/Hero 1   (the authored TEMPLATE)
+  Scenes: Canvas/Heros Stats panel/Hero Card   (the authored TEMPLATE)
 ================================================================================
 
 PURPOSE
 -------
-ONE hero type in the battle HUD. It has exactly two looks:
+ONE hero type in the battle HUD. It has exactly two looks, and NEITHER of them
+tints anything - the ARTWORK carries the state:
 
-  ALIVE : portrait in colour, "alive/total" under it, buy button HIDDEN.
-  WIPED : portrait greyed out, count HIDDEN, buy button SHOWN with its price.
+  ALIVE : "Cell Active"   frame on (coloured), "card  Button" showing
+                          "alive/total", "Cost  Gem" off.
+  WIPED : "Cell DeActive" frame on (that sprite is ALREADY grey), the count
+                          off, "Cost  Gem" on with its gem price.
 
 It owns NO game logic - no currency, no spawning, no roster. HeroStatsPanel
 clones it once per hero type, feeds it numbers, and handles the purchase.
 
+REWRITTEN 2026-09-01 for the "Hero Card" model. See MIGRATION at the bottom for
+what changed from the old single-avatar "Hero 1" card and why.
+
+AUTHORED HIERARCHY (a contract - AutoWire looks these up by name)
+-----------------------------------------------------------------
+  Hero Card                  <- HeroStatCell lives HERE
+  |- BG                         card backdrop, never touched
+  |- Cell DeActive   OFF        Image (grey frame art)  -> Mask -> Avatar
+  |- Cell Active     ON         Image (blue frame art)  -> Mask -> Avatar
+  |- card  Button    ON         Image + a DISABLED Button  -> Text (TMP), "2/2"
+  |- Cost  Gem       OFF        Image + the LIVE Button    -> Text (TMP) + Gem
+
+  Note the DOUBLE SPACE in "card  Button" and "Cost  Gem". It is invisible in
+  the Hierarchy. AutoWire strips whitespace before comparing names precisely so
+  that trap cannot bite - do not "fix" the names expecting the lookup to break.
+
+  Which Button is live matters: "Cell Active", "Cell DeActive" and
+  "card  Button" all carry a Button component with m_Enabled: 0 (leftovers from
+  authoring). The ONLY enabled one is on "Cost  Gem", and that is the one this
+  script binds the purchase listener to.
+
 INSPECTOR FIELDS
 ----------------
-  Avatar
-    avatar        (Image) the "Hero avatar" object. Its sprite is overwritten at
-                  Bind time from UnitDefinitionSO.portrait.
-    deadOverlay   (GameObject) grey layer drawn ON TOP of the avatar while the
-                  type is wiped out - "Gray out Avatar" in Level_1_Stage_1.
-                  WHEN THIS IS ASSIGNED THE AVATAR'S OWN COLOUR IS NEVER TOUCHED.
-                  Left empty = the two tints below are used instead.
-    aliveTint     (Color, default white) FALLBACK ONLY: the avatar's colour while
-                  at least one hero of the type is alive.
-    deadTint      (Color, default 0.45 grey) FALLBACK ONLY: the avatar's colour
-                  once every hero of the type is dead.
+  All of them are optional. Anything left empty is filled by AutoWire() at
+  Awake from the authored names above; an explicit assignment always wins.
 
-    NOTE on the tints: aliveTint used to be CAPTURED from the avatar's authored
-    colour at Awake instead of being a field. That was a real bug on
-    2026-08-22 - "Hero avatar" was authored blue (0.325, 0.443, 0.627) for the
-    UISprite placeholder it originally held, so once Bind() swapped in the real
-    portrait, every LIVING hero rendered as a dark blue silhouette. An explicit
-    white default cannot inherit a stale authoring tint that way.
+  Avatar frames
+    activeRoot      (GameObject) "Cell Active" - shown while >= 1 alive.
+    deactiveRoot    (GameObject) "Cell DeActive" - shown once 0 alive.
+    activeAvatar    (Image) Cell Active/Mask/Avatar. Sprite overwritten at Bind
+                    from UnitDefinitionSO.portrait.
+    deactiveAvatar  (Image) Cell DeActive/Mask/Avatar. Gets the SAME sprite.
+                    ITS COLOUR IS NEVER TOUCHED - the frame art is already grey.
 
   Count
-    countText     (TMP_Text) the "Hero Count" label. Rendered as "2/3".
+    countRoot       (GameObject) "card  Button". SetActive(false) once wiped.
+    countText       (TMP_Text) the label inside it. Rendered as "2/3".
 
   Buy Back
-    buyRoot       (GameObject) the "Parent" object holding the gem icon + price.
-                  MUST start switched OFF in the scene. Left empty = taken from
-                  buyButton's GameObject.
-    buyButton     (Button) the Button component on "Parent". Left empty = taken
-                  from buyRoot.
-    gemCostText   (TMP_Text) the "gem Amount" label on that button.
+    costRoot        (GameObject) "Cost  Gem". MUST start switched OFF.
+    buyButton       (Button) the enabled Button ON "Cost  Gem".
+    gemCostText     (TMP_Text) the price label inside "Cost  Gem".
 
 PUBLIC STATE
 ------------
@@ -57,58 +71,92 @@ PUBLIC STATE
 METHODS
 -------
   Awake()
-      Fills in whichever of buyRoot / buyButton was left empty from the other.
-      Nothing else - it deliberately does NOT read the avatar's colour.
+      Calls AutoWire(). Nothing else.
+
+  AutoWire()                                            [private]
+      Step 1 - DropForeign every field, so a reference pointing at ANOTHER card
+      is cleared before step 2 rather than surviving as an explicit assignment.
+      Step 2 - fill the now-NULL fields by normalized name (case- and
+      whitespace-insensitive), searching inactive children too.
+        - The two Avatar lookups are SCOPED to their own frame. There are TWO
+          objects named "Avatar" under a card, one per frame; an unscoped
+          search would bind both fields to the same Image and the wiped state
+          would show a stale portrait.
+        - countText / gemCostText are found by TYPE inside their root, not by
+          name - there is exactly one TMP_Text under each, and "Text (TMP) (1)"
+          is a fragile thing to hard-code.
+        - Warns (does not disable itself) if either frame is missing.
+
+  DropForeign(ref field, fieldName)                     [private, 2 overloads]
+      Clears a field whose target is not this card or a descendant of it, and
+      warns. One overload for GameObject, one generic for Component (Image,
+      TMP_Text, Button).
+
+      This exists because of a REAL failure on 2026-09-01. "Hero Card" was set
+      up with Copy Component / Paste Component Values from the old "Hero 1"
+      card, which silently carried Hero 1's countText and gemCostText across.
+      Nothing looks wrong in the Inspector - the fields are populated, just with
+      the WRONG card's labels. At runtime that means every clone writes its
+      count into one shared label and they all fight over it. An empty field is
+      strictly better than a foreign one, because an empty field gets resolved
+      correctly by the name lookup; hence "drop, then resolve" rather than
+      "resolve only if empty".
+
+  FindChild(root, wanted) / Normalize(s)                [private static]
+      Depth-first recursive name lookup. Normalize strips ALL whitespace and
+      lowercases, which is what makes the double-space names findable.
 
   Bind(unitId, def, squadSize, gemCost, onBuy)   [called once, after cloning]
       unitId is passed SEPARATELY from def on purpose: a hero can be on the
       field with no matching entry in UnitsDatabaseSO, and the cell must still
       track the right HeroRoster bucket even when it has no portrait.
-      Stores the identity, writes the portrait and the price label, replaces the
-      button's listeners (RemoveAllListeners first, so a re-bind cannot stack
-      them), then calls SetAlive(squadSize) to paint the initial state.
+      Writes the portrait into BOTH avatars, writes the price label, replaces
+      the buy button's listeners (RemoveAllListeners first, so a re-bind cannot
+      stack them), then calls SetAlive(squadSize) to paint the initial state.
 
   SetAlive(int alive)
       Clamps alive into [0, SquadSize] - a purchase can briefly put more heroes
       on the field than the snapshot recorded, and the label must never read
-      "4/3". Then:
-        countText.enabled = alive > 0   and text = "alive/SquadSize"
-        deadOverlay.SetActive(wiped)    (or avatar.color = deadTint)
-        buyRoot.SetActive(wiped)
+      "4/3". Then, with wiped = alive <= 0:
+        activeRoot.SetActive(!wiped)   deactiveRoot.SetActive(wiped)
+        countText.text = "alive/SquadSize"
+        countRoot.SetActive(!wiped)
+        costRoot.SetActive(wiped)
+
+  ShowAsOffer()
+      The THIRD look, used only by LastStandOffer:
+        COLOURED frame on, count off, "Cost  Gem" on.
+      Deliberately not SetAlive(0): that is the "this type is wiped out" state
+      and it swaps in the GREY frame, which is the wrong sell for a prompt
+      inviting the player to buy a fresh hero. Everything else the offer needs
+      - the button, its listener, the price label - is already wired by Bind.
 
   SetAffordable(bool)
-      buyButton.interactable. Purely cosmetic - HeroStatsPanel re-checks the
-      balance for real before spending.
+      buyButton.interactable. Purely cosmetic - HeroStatsPanel and
+      LastStandOffer both re-check the balance for real before spending.
 
-  ShowAsOffer()   [added 2026-08-23]
-      The THIRD look, used only by LastStandOffer:
-        countText.enabled = false
-        deadOverlay.SetActive(false)   (or avatar.color = aliveTint)
-        buyRoot.SetActive(true)
-      i.e. portrait IN COLOUR, no count, buy button showing. Deliberately not
-      SetAlive(0): that is the "this type is wiped out" state and it GREYS the
-      portrait, which is the wrong sell for a prompt inviting the player to buy
-      a fresh hero. Everything else the offer needs - the button, its listener,
-      the price label - is already wired by Bind.
+  ShowFrame(bool wiped) / ShowCount(bool show)          [private]
+      The two toggles every public method routes through, so the three looks
+      cannot drift apart.
 
 MAGIC / CONTRACTS
 -----------------
-  - countText is hidden with .enabled = false, NOT SetActive(false). That is
-    deliberate: if "Parent" (the buy button) is authored as a CHILD of the
-    "Hero Count" label, switching the label's GameObject off would hide the buy
-    button along with it - the exact opposite of what the wiped state needs.
-    Toggling only the text component works either way.
-  - buyRoot must be INACTIVE in the authored template. Bind -> SetAlive turns it
-    on only at 0 alive, but a template saved with it on will flash it for one
-    frame on the clone.
+  - costRoot ("Cost  Gem") must be INACTIVE in the authored template. Bind ->
+    SetAlive turns it on only at 0 alive, but a template saved with it on will
+    flash it for one frame on every clone. Same for deactiveRoot.
+  - NO COLOUR IS EVER WRITTEN. If a future card needs a tint, add the tint to
+    the frame SPRITE, not to the avatar - the avatar is shared art and the
+    portrait must read identically in both frames.
+  - ShowCount switches the whole "card  Button" GameObject off. That is safe
+    ONLY because "Cost  Gem" is its SIBLING. See MIGRATION.
 
 HOW IT CONNECTS
 ---------------
-  - HeroStatsPanel is the only caller. It clones this, binds it, and is the
+  - HeroStatsPanel is the main caller. It clones this, binds it, and is the
     delegate behind the button.
   - UnitDefinitionSO supplies portrait and (optionally) respawnGemCost.
   - LastStandOffer CLONES this cell too, and shows it via ShowAsOffer() instead
-    of SetAlive() - see below.
+    of SetAlive().
   - It never touches HeroRoster, CurrencyManager or PlayerWaveManager directly.
 
 NOTES
@@ -116,4 +164,38 @@ NOTES
   - The authored instance in the scene is a TEMPLATE, not a live cell.
     HeroStatsPanel.Awake deactivates it; every visible cell is a clone.
   - There is no animation on the alive->wiped switch yet. If one is added, it
-    belongs here, not in the panel.
+    belongs here (in ShowFrame), not in the panel.
+
+MIGRATION - what the "Hero 1" card did and why it is gone (2026-09-01)
+----------------------------------------------------------------------
+  OLD MODEL: one avatar Image, greyed either by a "Gray out Avatar" overlay
+  object (deadOverlay) or, failing that, by writing deadTint/aliveTint onto
+  avatar.color. Fields: avatar, deadOverlay, aliveTint, deadTint, countText,
+  buyRoot, buyButton, gemCostText.
+
+  NEW MODEL: two complete frames whose ART is already coloured/greyed. Nothing
+  is tinted at runtime, so the whole aliveTint/deadTint pair is gone along with
+  the class of bug it existed to work around - aliveTint used to be CAPTURED
+  from the avatar's authored colour at Awake, and "Hero avatar" was authored
+  blue for a placeholder sprite, so every LIVING hero rendered as a dark blue
+  silhouette (2026-08-22). A model that never writes a colour cannot regress
+  that way at all.
+
+  The count used to be hidden with countText.enabled = false rather than
+  SetActive(false), because on the "Hero 1" card the buy button was authored as
+  a CHILD of the "Hero Count" label - switching the label off would have hidden
+  the buy button with it. On "Hero Card" the count and the cost are SIBLINGS,
+  so ShowCount can switch the GameObject off cleanly. The countText.enabled
+  fallback is kept for a card authored without a countRoot.
+
+  RE-WIRING REQUIRED IN THE SCENE (serialized field names all changed, so the
+  old references do not carry over):
+    1. Add HeroStatCell to "Hero Card"; AutoWire fills every field.
+    2. Point HeroStatsPanel.cellTemplate at "Hero Card" (it still pointed at
+       "Hero 1"). Auto-find would otherwise pick "Hero 1" - it comes FIRST in
+       the Hierarchy and GetComponentInChildren includes inactive objects.
+    3. Point LastStandOffer.cellTemplate at "Hero Card" too, and retire the
+       separate "OfferCell" object - ShowAsOffer() gives the offer look from
+       the same template, so a second authored card is no longer needed.
+    4. Remove the HeroStatCell component from "Hero 1" and "OfferCell" so no
+       half-wired card can win an auto-find.
