@@ -1,0 +1,122 @@
+================================================================================
+  BattleHudCounters.cs
+  Path : Assets/Scripts/UI/HUD/BattleHudCounters.cs
+  Type : MonoBehaviour
+  Layer: UI / HUD
+  Scenes: Level_1_Stage_1 as of 2026-09-03. NOT yet in the other stage scenes.
+================================================================================
+
+PURPOSE
+-------
+Drives the two small battle-phase readouts in the top HUD row:
+
+  Timer  Holder        -> elapsed battle time, MM : SS
+  Enemy Counter Holder -> how many enemies the player has killed this battle
+
+One component for both, because they share a lifetime exactly: both start on the
+same beat, both are meaningless before the battle, and both are zeroed by the
+same things. Two scripts would have duplicated the start detection and the pause
+handling for nothing.
+
+Added 2026-09-03. Nothing in the project counted kills or elapsed time before
+this - the labels existed in the scene but were never driven.
+
+
+INSPECTOR FIELDS
+----------------
+  Timer
+    timerText        (TextMeshProUGUI)  the label in Timer  Holder/Counter BG.
+    separator        (string, default " : ")  what sits between minutes and
+                     seconds. Both sides are ALWAYS padded to two digits, so 43s
+                     reads "00 : 43" and 85s reads "01 : 25". Change this one
+                     field to get "00:43" instead.
+    startOnFirstEnemy (bool, default TRUE)
+                     TRUE  = the clock starts when the first enemy actually
+                             APPEARS - what the player reads as the battle
+                             beginning, and the same moment the unit health bars
+                             decide they may show themselves.
+                     FALSE = starts the instant BATTLE is pressed, so the ~1.1s
+                             camera pan counts towards the time.
+
+  Kill Counter
+    killText  (TextMeshProUGUI)  the label in Enemy Counter Holder/Counter BG.
+    killIcon  (RectTransform)  OPTIONAL - the skull beside the number. Punched
+              alongside the text so the whole badge reacts. Empty = text only.
+
+  Kill Animation
+    punchScale    (float, default 0.35)  overshoot on a kill; 0.35 = 35% bigger
+                  at the peak.
+    punchDuration (float, default 0.35)  seconds for the punch to settle.
+    flashColor    (Color, default 1 / 0.85 / 0.25)  the number flashes to this
+                  and fades back to its AUTHORED colour over punchDuration.
+    punchVibrato  (int, default 8)  wobble count; 6-10 reads as a snappy pop.
+
+
+PUBLIC API
+----------
+  ElapsedSeconds (float, get)  seconds since the battle began.
+  Kills          (int,   get)  enemies killed this battle.
+  ResetCounters()  zeroes both and stops the clock. Called from OnEnable.
+  StopTimer()      freezes the clock. NOTHING CALLS THIS YET - hook it up on win
+                   or lose if the final time should hold rather than keep ticking.
+
+
+FLOW
+----
+  OnEnable   subscribes to EnemyManager.OnAnyEnemyKilled and
+             BattleStartController.OnAnyBattleStarted, then ResetCounters().
+  Update     while not running, POLLS BattleStartController.BattleIsRunning &&
+             EnemySpawner.EnemiesHaveAppeared (when startOnFirstEnemy). Once
+             running, accumulates Time.deltaTime unless GameplayPause.IsPaused,
+             and only writes the label when the whole second CHANGES - TMP
+             rebuilds its mesh on every assignment, so writing the same string 60
+             times a second is pure waste.
+  On a kill  increments, sets the text, kills any in-flight tweens, then runs a
+             DOPunchScale on the label (and the icon) plus a DOColor flash back
+             to the base colour.
+  OnDisable  unsubscribes and kills both tweens.
+
+
+HOW IT CONNECTS
+---------------
+  * EnemyManager.OnAnyEnemyKilled - STATIC event ADDED 2026-09-03, raised from
+    inside the xpGiven guard in EnemyManager.Update, right after the roguelite
+    call. Fired there rather than from RogueliteManager.NotifyEnemyKilled because
+    that call is SKIPPED ENTIRELY in scenes with no RogueliteManager (the old
+    test scenes have none), so a counter hung off it would silently read zero.
+  * BattleStartController.OnAnyBattleStarted - only used when startOnFirstEnemy
+    is OFF; otherwise the spawner flag decides.
+  * EnemySpawner.EnemiesHaveAppeared - static, and DEFAULTS TO TRUE for scenes
+    that never gate their spawns. That is why ResetCounters runs from OnEnable.
+  * GameplayPause.IsPaused - the project pauses with a FLAG, not timeScale, so
+    the timer has to check it explicitly. The kill tweens use SetUpdate(true) so
+    the punch still plays during a level-up card pick.
+  * BattlePhaseTransition.fadeInAfterMove - VISIBILITY IS NOT THIS SCRIPT'S JOB,
+    see below.
+
+
+NOTES
+-----
+  - WHERE THE COMPONENT LIVES MATTERS. It is on "Canvas /HUD", which is active
+    for the whole scene. It must NOT go on either counter holder: those are
+    switched OFF until the battle starts, and a component on an inactive object
+    gets no Update and would miss the start completely. The serialized text
+    fields point INTO those inactive holders, which resolves fine.
+  - VISIBILITY IS HANDLED BY BattlePhaseTransition, NOT HERE. Both holders were
+    put in its fadeInAfterMove list (which now holds 3 objects, on the
+    LevelGameManager object) and left INACTIVE in the scene, so they fade in on
+    the same beat as the Heroes Stats panel and the returning HUD. Deliberately
+    not duplicated in this script - two systems fighting over the same SetActive
+    is how the old bars got into trouble.
+  - ONLY WIRED IN Level_1_Stage_1. The other stage scenes still have undriven
+    labels. Whoever rolls this out has to, per scene: add the component to the
+    HUD object, wire the three references, set both holders inactive, and add
+    them to fadeInAfterMove. An editor script is the sane way to do 20 of them.
+  - Minutes are padded but NOT clamped: a very long battle rolls to "100 : 00"
+    rather than wrapping to 00 and lying about the time.
+  - Rapid kills are safe - the punch tween is Kill(true)'d and the scale reset to
+    one before each new punch, so two deaths in one frame cannot leave the label
+    stranded at a scale neither tween owns.
+  - NEVER RUN. Written and wired 2026-09-03 with the Editor in play mode for the
+    measuring pass only; the scene edits were made with play mode stopped and the
+    scene saved, but the counters have not been watched in an actual battle.

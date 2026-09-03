@@ -1,0 +1,184 @@
+================================================================================
+  ProgressBarGlow.cs
+  Path : Assets/Scripts/UI/Common/ProgressBarGlow.cs
+  Type : MonoBehaviour
+  Layer: UI / Common   (shared widget)
+  Scenes: Level_1_Stage_1 - on the "XP Glow" object under
+          Canvas/Roquelite UI/Slider/Fill Area/Fill
+  Added : 2026-09-01
+================================================================================
+
+PURPOSE
+-------
+The travelling glow at the leading tip of a progress bar. It shows ONLY while the
+bar is actually gaining, then fades out.
+
+Art: Assets/Arts/GamePlay Assets/GameplayARTS/GameplayArts/XP Progress Bar/
+     Gameplay_XP_Glow.png  (79 x 42)
+
+THE ONE THING TO UNDERSTAND
+---------------------------
+This script sets the ANCHORS once, then only fades alpha. It never runs
+per-frame position math.
+
+The gameplay XP bar is a UnityEngine.UI.Slider, and a Slider physically RESIZES
+its Fill Rect as the value changes. So a glow parented under Fill and anchored to
+Fill's right edge (anchorMin = anchorMax = 1, 0.5) already tracks the tip by
+itself, for free.
+
+REVISED 2026-09-02: those anchors used to be a MANUAL setup step. They were
+mis-set twice in a row, so ApplyTipAnchoring() now writes them from both Reset()
+and Awake(). Adding the component is the only step left.
+
+  WHY THE MANUAL STEP KEPT FAILING - the symptom does not look like an anchor
+  bug. A centred anchor (0.5, 0.5) leaves the glow parented to the MIDDLE of the
+  Fill rect, so it still moves, just at HALF speed: at 80% fill it sits at 40%,
+  creeping forward a little on each update. It reads as "the tracking maths is
+  wrong", which sends you into the script instead of the RectTransform.
+
+Contrast with the HOME screen bar, which is an Image with Type = Filled. A Filled
+Image's RectTransform never moves - only its fillAmount changes - so that one DOES
+need per-frame math, in HomeManager.PositionProgressGlow
+(Assets/Scripts/UI/Home/HomeManager.cs:861-894), using glowTrailingOffset /
+glowLeftPadding / glowRightPadding.
+
+DO NOT copy the HomeManager approach onto a Slider. Writing anchoredPosition on a
+child of a Fill Rect that the Slider is already resizing means two systems moving
+one object, and the result drifts.
+
+REQUIRED SCENE SETUP
+--------------------
+  Canvas
+  └── Roquelite UI
+      └── Slider                    <- xpSlider (RogueliteManager.cs:33)
+          ├── REG-Slider-BG (1)
+          ├── Fill Area
+          │   └── Fill              <- the Slider's m_FillRect
+          │       └── XP Glow       <- Image + THIS COMPONENT
+          └── Handle Slide Area     (inactive)
+
+  In the live scene the object is actually named "Glow effect", not "XP Glow".
+
+  XP Glow RectTransform:  SET BY THE SCRIPT - anchor min/max (1, 0.5), pivot
+                          (0.5, 0.5), anchoredPosition = tipOffset. Do not hand-
+                          author these; autoAnchorToTip overwrites them in Awake.
+                          Only the SIZE is yours to set (79 x 42 native).
+  XP Glow Image:          sprite Gameplay_XP_Glow, Raycast Target OFF
+
+  Verified 2026-09-01: there is NO Mask or RectMask2D on Slider, Fill Area or
+  Fill, so the glow is not clipped where it overhangs the tip.
+
+INSPECTOR FIELDS
+----------------
+  Bar
+    slider            (Slider) the bar to watch. Empty = GetComponentInParent.
+    glowGraphic       (Graphic) the graphic to fade. Empty = Graphic on self.
+
+  Placement   (added 2026-09-02)
+    autoAnchorToTip   (bool, default ON) force anchors to the Fill's right edge in
+                      Reset + Awake. Leave ON - see THE ONE THING TO UNDERSTAND.
+                      OFF only if some other system owns this rect's placement.
+    tipOffset         (Vector2, default 0,0) nudge from the leading edge in px.
+                      Negative x pulls the glow back INTO the bar so it overlaps
+                      the tip rather than hanging off the end.
+
+  Fade
+    fadeInDuration    (float, >=0, default 0.12) seconds to fade in on a gain.
+    holdAfterStop     (float, >=0, default 0.15) seconds held at full alpha after
+                      the bar stops. Stops a flicker when two kills land close
+                      together.
+    fadeOutDuration   (float, >=0, default 0.35) seconds to fade out after that.
+
+  Hide At Extremes
+    hideWhenEmpty     (bool, default ON) hide at 0% - otherwise the glow sits at
+                      the far left, half outside the frame.
+    hideWhenFull      (bool, default ON) hide at 100% - otherwise it spills past
+                      the frame's rounded right end.
+
+  Tuning
+    moveEpsilon       (float, default 0.0005) smallest per-frame change still
+                      counted as movement. Guards against float noise pinning the
+                      glow on forever.
+    useUnscaledTime   (bool, default ON) see NOTES - this must stay ON for the
+                      roguelite bar.
+
+RUNTIME STATE
+-------------
+  lastValue   (float) previous normalized value, for the gain test
+  alpha       (float) current fade level, 0..1
+  holdTimer   (float) remaining hold-at-full-alpha time
+
+FLOW
+----
+  Reset()        Editor-only, fires the moment the component is ADDED: pre-fills
+                 glowGraphic from this object and slider from the parent chain,
+                 then calls ApplyTipAnchoring so the rect is already correct
+                 before anyone presses Play.
+
+  Awake()        Resolves both refs if left empty, logs an error for each it still
+                 cannot find, calls ApplyTipAnchoring (authoritative - whatever
+                 got serialized, the run starts correctly anchored), then forces
+                 alpha to 0 - a bar that has not moved yet must not glow on frame
+                 one.
+
+  ApplyTipAnchoring()
+                 Writes anchorMin = anchorMax = (1, 0.5), pivot (0.5, 0.5) and
+                 anchoredPosition = tipOffset. No-ops when autoAnchorToTip is OFF.
+                 Errors if the object has no RectTransform.
+
+  OnEnable()     Re-seeds lastValue from the LIVE value and zeroes the fade. Without
+                 this, re-enabling the bar mid-stage would read the whole current
+                 fill as one huge gain and flash the glow.
+
+  Normalized     slider.value remapped to 0..1 against min/max, so the component
+                 does not assume a 0..1 slider.
+
+  Update()
+      1. Returns if either ref is missing.
+      2. gaining = value - lastValue > moveEpsilon.  INCREASES ONLY - see NOTES.
+      3. On a gain, holdTimer is refilled; otherwise it drains.
+      4. blockedAtExtreme from hideWhenEmpty / hideWhenFull.
+      5. wantVisible = (gaining || holdTimer > 0) && !blockedAtExtreme.
+      6. alpha MoveTowards the target, using fadeIn or fadeOut as the rate.
+      7. ApplyAlpha().
+
+  ApplyAlpha()   Writes alpha into the Graphic's colour, and toggles
+                 Graphic.enabled so a fully transparent quad is not submitted
+                 every frame while idle.
+
+HOW IT CONNECTS
+---------------
+  - Watches the Slider that RogueliteManager drives:
+    RogueliteManager.cs:33 (xpSlider field) and RogueliteManager.cs:187-199,
+    where Update() does
+        xpDisplay = Mathf.MoveTowards(xpDisplay, target,
+                                      Time.unscaledDeltaTime / xpIncreaseDuration);
+        xpSlider.value = xpDisplay;
+    This component only READS slider.value - it never writes it, and has no
+    reference to RogueliteManager at all. Any Slider works.
+  - XP is credited by RogueliteManager.AddXP (411-423), reached from
+    NotifyEnemyKilled (399) <- EnemyManager.cs:379 on a kill.
+
+NOTES
+-----
+  - GAINS ONLY, deliberately. RogueliteManager snaps xpDisplay to 0 on level-up
+    (RogueliteManager.cs:436). That drop is a reset, not progress - triggering the
+    glow on it would read as a reward for nothing. Hence
+    `value - lastValue > moveEpsilon` rather than Mathf.Abs.
+  - useUnscaledTime MUST stay ON for the roguelite bar. RogueliteManager fills it
+    with Time.unscaledDeltaTime so it keeps settling while the level-up card holds
+    timeScale at 0. On scaled time the glow would freeze mid-fade on that screen
+    while the bar underneath kept moving.
+  - The home bar was deliberately LEFT ALONE (decision 2026-09-01). It keeps its
+    always-on glow via HomeManager.PositionProgressGlow, so the two bars do not
+    behave identically: home shows its glow whenever fill > 0 and never hides at
+    100%. If they should ever match, retrofit the home bar onto this component -
+    but that means converting the Filled-Image math, not just swapping the script.
+  - HomeManager also carries a dead numbered sibling, PositionProgressGlow1
+    (HomeManager.cs:830-860), which is not called from anywhere. Left in place;
+    it is the older version without the glowTrailingOffset clamp.
+  - Gameplay_XP_Fill.png has spriteBorder {0,0,0,0} and the Fill Image is
+    Type = Simple, so the fill sprite is STRETCHED rather than 9-sliced as the bar
+    grows. Not a bug this component introduces, but it does mean the visual tip of
+    the fill is a squashed sprite edge - if the glow ever looks misaligned at low
+    values, that is why, and the fix is borders on the fill sprite.

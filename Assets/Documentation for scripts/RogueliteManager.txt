@@ -51,6 +51,44 @@ INSPECTOR FIELDS
                removed from this list any more - exhaustion is tracked per
                (hero, skill) inside BuffDraw.
 
+  XP Bar Placement  [2026-09-03]
+    THE BAR'S AUTHORED Y IS THROWN AWAY AT RUNTIME. PlaceXpBarUnderHud() runs from
+    ShowXpBar() when the battle phase starts and rewrites the bar root's
+    anchoredPosition, so moving the bar in the Canvas by hand does NOTHING - it
+    snaps back the moment you press play. These three fields are the only way to
+    move it.
+
+    xpBarRoot            (GameObject)  the object actually MOVED - "Roquelite UI",
+                         the parent of the slider, the XP badge and the count text,
+                         so all three travel together. Empty = falls back to
+                         xpSlider's parent.
+    xpBarTopMargin       (float, default 200)  gap from the TOP of the screen to the
+                         TOP EDGE of the slider, in canvas units. Smaller = higher.
+                         The placement is MEASURED, not nudged: the code reads the
+                         slider's real rendered bounds and corrects the difference,
+                         so this lands identically regardless of how each of the 21
+                         stage scenes authored the bar.
+    xpBarHorizontalOffset (float, default 0)  left/right nudge. Pre-existing.
+    xpBarVerticalOffset  (float, default 83.7)  ADDED 2026-09-03. Vertical nudge
+                         applied AFTER the measured placement; POSITIVE = UP. This
+                         is the field to drag when the bar just needs to sit higher
+                         or lower - xpBarTopMargin keeps its "under the HUD" meaning
+                         and this offsets from there.
+                         The 83.7 default is measured, not guessed: at the 1125x2436
+                         reference canvas the slider centred at Y 990.5 and the HUD
+                         gem at Y 1074.2, so 83.7 lines the XP row up centre-to-centre
+                         with the gem counter. That alignment holds on other aspect
+                         ratios because the gem is anchored 147 below the top edge and
+                         this placement is measured from the same top edge.
+                         Being a NEW serialized field, it defaults to 83.7 in every
+                         existing scene without any scene file being touched.
+
+    Reg_Manager IS A PLAIN SCENE OBJECT IN EVERY STAGE SCENE, NOT A PREFAB
+    INSTANCE. So any value typed into the Inspector fixes ONE scene only - there
+    are 29 scenes under Assets/Scenes. Anything that should apply everywhere has to
+    go in the field DEFAULT here in the script (as xpBarVerticalOffset does), or
+    Reg_Manager needs turning into a prefab first. Still open.
+
   UI References
     levelUpOverlay, skillSelectPanel  (GameObject)
     cardSlots       (SkillCardUI[])  usually 3

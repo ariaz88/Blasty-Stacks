@@ -241,6 +241,17 @@ HOW IT CONNECTS
     it was previously missing entirely, which left the whole level-up / buff-card
     loop dead.
   - PlayerGateStats.OnGateDestroyed drives HandleGateDestroyed.
+  - OnAnyEnemyKilled  [ADDED 2026-09-03]  a STATIC System.Action raised from the
+    same xpGiven-guarded block, immediately AFTER the NotifyEnemyKilled call, so
+    the XP bar and any listener can never disagree about a death. Fired here
+    rather than from inside RogueliteManager because that call is skipped
+    entirely when a scene has no RogueliteManager (the old test scenes do not) -
+    a kill counter hung off it would silently read zero. Static so a HUD listener
+    that outlives every individual enemy does not have to find them as they
+    spawn. Current subscriber: BattleHudCounters (the skull kill counter).
+    SUBSCRIBERS MUST UNSUBSCRIBE IN OnDisable - with domain reload disabled the
+    delegate survives a second entry into play mode and would otherwise leak a
+    dead listener per run.
 
 NOTES / RISKS
 -------------

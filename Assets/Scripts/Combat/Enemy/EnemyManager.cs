@@ -36,6 +36,21 @@ public class EnemyManager : MonoBehaviour
     /// <summary>XP granted on death. Read by RogueliteManager.NotifyEnemyKilled.</summary>
     public float XpValue => xpValue;
 
+    /// <summary>
+    /// Raised ONCE per enemy death, from the same guarded block that awards XP.
+    ///
+    /// Deliberately fired here rather than piggy-backing on
+    /// RogueliteManager.NotifyEnemyKilled: that call is skipped entirely when a
+    /// scene has no RogueliteManager (the old test scenes do not), so a kill
+    /// counter hung off it would silently read zero. This fires either way.
+    ///
+    /// STATIC because the listener - a HUD counter - outlives every individual
+    /// enemy and must not have to find them as they spawn. Subscribers MUST
+    /// unsubscribe in OnDisable: with domain reload disabled the delegate
+    /// survives entering play mode a second time and would otherwise leak.
+    /// </summary>
+    public static event System.Action OnAnyEnemyKilled;
+
     private RogueliteManager roguelite;
 
     // Guards the once-per-death work: awarding XP and starting the despawn.
@@ -377,6 +392,11 @@ public class EnemyManager : MonoBehaviour
                 // This is what fills the roguelite bar. Without it the whole
                 // level-up / buff-card loop never runs.
                 if (roguelite != null) roguelite.NotifyEnemyKilled(this);
+
+                // Inside the xpGiven guard, so it is exactly once per enemy, and
+                // AFTER the roguelite call so the XP bar and the kill counter
+                // never disagree about the same death.
+                OnAnyEnemyKilled?.Invoke();
 
                 StartCoroutine(DestroyAfterDelayRealtime(0.5f));
             }

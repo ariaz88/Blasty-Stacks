@@ -13,14 +13,75 @@ to current health, keeps itself readable when the parent character flips to face
 the other direction, forces itself above the character sprites while the battle
 runs (and gives that priority back when the battle ends so win/lose panels can
 cover it), and can stay hidden until the unit is actually IN the fight.
-Since 2026-08-24 it also draws a DAMAGE TRAIL: a yellow chunk left behind at the
-pre-hit health that drains away and fades, so a hit reads as a size rather than a
-teleport. The trail Image is built at runtime by cloning the main bar, so units,
-enemies and gates all get one with no prefab or scene re-authoring.
+Since 2026-08-24 it also draws a DAMAGE TRAIL: a chunk left behind at the pre-hit
+health that drains away and fades, so a hit reads as a size rather than a
+teleport.
+
+[2026-09-02] THE TRAIL IS NOW ART, NOT A TINT. It used to be a runtime CLONE of
+the fill Image force-coloured yellow (delayedColor). It is now an AUTHORED
+GameObject - PlayerHP_Hit, using Gameplay_PlayerHP_Hit.png - that sits in every
+player prefab. Nothing in this script writes an RGB colour any more; the only
+channel it touches is ALPHA, and only to fade the chunk out once it has caught
+up. See NOTES for what this cost the enemy bars.
+
+REQUIRED HIERARCHY  [2026-09-02, extended to enemies 2026-09-03]
+  PlayerProgressBarUI          Canvas (WorldSpace, order 1) + CanvasScaler
+                               + GraphicRaycaster + THIS COMPONENT
+                               RectTransform 0x0, anchoredPos.y is the only
+                               value that differs per character (1.26 - 1.57)
+    PlayerHP_frame             Image  Gameplay_PlayerHP_frame_0, Simple
+                               0.59 x 0.16 at (-0.02, -0.01)
+      PlayerHP_Mask            Image  Gameplay_PlayerHP_Mask_0, Simple, alpha
+                               0.004  +  Mask (showMaskGraphic ON)
+                               0.59 x 0.16
+        PlayerHP_Hit           Image  Gameplay_PlayerHP_Hit_0, Filled/Horizontal
+                               0.53 x 0.12          <- hitBar
+        PlayerHP_Fill          Image  Gameplay_PlayerHP_Fill_0, Filled/Horizontal
+                               0.56 x 0.14          <- healthBar
+
+  Hit is the EARLIER sibling on purpose: later siblings draw on top in uGUI, so
+  Fill covers Hit and only the sliver between the two fill amounts shows.
+
+  The mask graphic's alpha of 0.004 is deliberate and must stay ABOVE 0.001 -
+  that is the alpha-clip threshold in the UI stencil shader, and at or below it
+  the mask writes no stencil and clips nothing.
+
+  Applied to all 13 prefabs carrying PlayerManager on 2026-09-02: the 5 in
+  New Characters/Deployed Players, the 4 in New Characters/Undployed Players and
+  the 4 in Old Characters. That covers every Deployed / Undeployed / Unachieved
+  unit, because all three UI buckets draw their runtimePrefab from those two
+  New Characters folders.
+
+  [2026-09-03] The same tree is now on all 10 prefabs carrying EnemyManager -
+  the 6 in New Characters/Enemies and the 4 Enemy* in Old Characters - with two
+  differences, both taken from the bar authored on the scene's
+  Enemy_Reaper_Man_01:
+
+    1. PlayerHP_Fill uses Gameplay_Enemy-Base-HP-loader_0 instead of
+       Gameplay_PlayerHP_Fill_0. Frame, Mask and Hit are the SAME assets as the
+       players - the enemy variant is one sprite swap on the fill, nothing else.
+    2. MIRRORING. Every enemy root is authored at scale.x = -1 (they face left).
+       The bar cancels that on the BAR ROOT alone: localScale (-1, 1, 1) with
+       IDENTITY rotation, and every child below it stays identity.
+
+       This REPLACED the old four-inversion arrangement described under
+       KeepUnmirrored below - bar root rot Y180, then "BG (1)"/"Bar (1)" each
+       carrying BOTH scale.x = -1 AND another rot Y180. Same end result, but it
+       took four flips to get there and only read as correct by accident. One
+       sign on one transform is now the whole story, and KeepUnmirrored measures
+       positive and never writes.
+
+  Per-character values that are NOT normalised, on players and enemies alike:
+  the bar root's anchoredPosition (each character has its own bar height -
+  0.82 to 1.71 across the roster) and its Canvas sortingOrder. Only the art
+  below the bar root was replaced.
 
 FIELDS
 ------
-  healthBar           (Image) the filled bar; falls back to GetComponent<Image>
+  healthBar           (Image) the filled bar. Resolution order, in ResolveBars:
+                      the Inspector value, then a child named fillChildName
+                      ("PlayerHP_Fill"), then GetComponent<Image> on self.
+                      Logs an error if all three come back empty.
 
   Render Order
     forceOnTop        (bool, default true) push the owning world-space Canvas
@@ -39,22 +100,31 @@ FIELDS
                       OFF = always visible. Keep off for GATE bars, which are
                             meant to be readable during the puzzle phase.
 
-  Damage Trail  [2026-08-24]
-    delayedBar        (Image) the second fill Image drawn BEHIND the main bar.
-                      Holds the pre-hit health, then drains and fades. EMPTY +
-                      autoCreateTrail = built at runtime; assign by hand only to
-                      override the look.
-    autoCreateTrail   (bool, default true) clone the main bar at Awake to make
-                      the trail. This is why no prefab and no scene had to be
-                      re-authored, and why GATE bars get one too.
-    delayedColor      (Color, default 1.0/0.82/0.15) forced onto the trail in
-                      Awake so no prefab can drift off-palette.
+  Hit Bar (damage trail)  [2026-08-24, reworked 2026-09-02]
+    hitBar            (Image) the Filled Image that trails the fill after a hit -
+                      the PlayerHP_Hit art. EMPTY = resolved from a child named
+                      hitBarChildName. This REPLACED the old `delayedBar`.
+    hitBarChildName   (string, default "PlayerHP_Hit") child name used to
+                      auto-resolve hitBar. Name-based lookup is what let one
+                      batch edit rewire all 13 player prefabs at once.
+    fillChildName     (string, default "PlayerHP_Fill") same idea for healthBar.
+    autoCreateHitBar  (bool, default true) LAST-RESORT fallback: when no hitBar
+                      could be resolved, clone the fill Image and swap in
+                      hitSprite. Does NOTHING while hitSprite is empty.
+    hitSprite         (Sprite, default none) the sprite for that fallback clone.
+                      Left EMPTY everywhere today - the player prefabs author
+                      PlayerHP_Hit directly and never reach this path. It exists
+                      so a bar with its own hit art (an enemy set, a gate set)
+                      can be given one with zero code change.
     trailHoldSeconds  (float, default 0.18) how long the chunk sits STILL at the
                       old value before draining. This pause is the readability.
     trailDrainPerSecond (float, default 0.9) drain speed as a fraction of the
                       FULL bar per second - so a 20% chip takes ~0.22s, and a
                       big hit visibly takes longer than a small one.
-    trailFadeSeconds  (float, default 0.12) alpha fade once it has caught up.
+    trailFadeSeconds  (float, default 0.12) ALPHA-ONLY fade once it has caught
+                      up. RGB is never written - the fade multiplies the
+                      authored alpha and restores it exactly on hide. 0 = snap
+                      off with no fade.
 
   Runtime state
     ownerCanvas             (Canvas) the canvas shown/hidden. The COMPONENT is
@@ -67,8 +137,12 @@ FIELDS
                             what the prefab SHIPPED with, captured before
                             ApplyRenderOrder overwrites it.
     _baseLocalScaleX        (float) original absolute X scale, captured in Awake.
+    authoredHitColor        (Color) the colour the ARTIST put on the hit Image,
+                            cached in Awake. The fade multiplies this and
+                            HideHitBar restores it, so the script never has to
+                            invent a colour of its own.
     trailFill               (float) what the trail is CURRENTLY showing. This is
-                            the authority, NOT delayedBar.fillAmount, so the fade
+                            the authority, NOT hitBar.fillAmount, so the fade
                             cannot corrupt the drain maths.
     trailHoldTimer / trailFadeTimer / trailSeeded
                             hold-then-fade timers, and "the first
@@ -77,15 +151,21 @@ FIELDS
 LIFECYCLE
 ---------
   Awake()
-      Resolves the Image if unassigned, captures the authored sorting, applies
+      Calls ResolveBars() first, then captures the authored sorting, applies
       the render order and the battle gate, subscribes to
       LevelGameManager.OnGameStateChanged, and - if the battle is NOT running -
       immediately restores the authored sorting (a bar spawned into an already
-      finished battle never sees the event). Then FORCES the Image config:
+      finished battle never sees the event). Then FORCES the Image config, on
+      BOTH bars, via ConfigureAsHorizontalFill:
           type        = Image.Type.Filled
           fillMethod  = FillMethod.Horizontal
           fillOrigin  = OriginHorizontal.Left
       Doing this in code means a designer cannot mis-configure the prefab.
+      [2026-09-02] After that, if hitBar is still empty and both autoCreateHitBar
+      and hitSprite are set, BuildHitBar() runs. Then, when a hitBar exists, its
+      colour is cached into authoredHitColor and it is put in its resting state:
+      raycastTarget off, fillAmount 1, and Image.enabled FALSE - an undamaged
+      unit must not show a sliver under a full bar.
       Finally stores the absolute base X scale.
 
   LateUpdate()
@@ -122,12 +202,39 @@ LIFECYCLE
       positive and are never written to at all.
       NOT YET VERIFIED IN PLAY MODE.
 
+      [2026-09-03] THE FOUR-INVERSION LAYOUT ABOVE IS GONE. The enemy rebuild
+      replaced it with a single scale.x = -1 on the bar root and identity
+      everywhere below (see REQUIRED HIERARCHY). Every enemy prefab was measured
+      after the rebuild and the fill's +X comes out POSITIVE in root space, so
+      this method is now a no-op on enemies too and nothing in the project takes
+      its write branch any more. The history is kept because it explains why the
+      probe measures the FILL IMAGE rather than this transform - drop that and
+      the old layout would silently break again.
+
   OnDestroy()
       Unsubscribes from BOTH static events. Without this a hero destroyed before
       the first enemy appears keeps its subscription alive and throws later.
 
 METHODS
 -------
+  ResolveBars()   [private, first thing in Awake, added 2026-09-02]
+      Fills in whichever of healthBar / hitBar was left empty, by CHILD NAME
+      first (fillChildName / hitBarChildName, matched against
+      GetComponentsInChildren<Image>(true)) and, for the fill only, falling back
+      to an Image on this object. Name lookup is the point: it means a prefab
+      whose Inspector reference was lost still wires itself up, and it is why
+      the 2026-09-02 batch rebuild could rewire 13 prefabs mechanically.
+
+  FindImageInChildren(childName)   [private]
+      Linear name match over GetComponentsInChildren<Image>(true). Includes
+      inactive children on purpose - the bar canvas is often disabled at Awake
+      by the battle gate.
+
+  ConfigureAsHorizontalFill(img)   [private, static]
+      Forces Filled / Horizontal / OriginHorizontal.Left. A bar that is not
+      configured this way never drains, so this is forced rather than trusted to
+      the prefab. Null-safe; run on both healthBar and hitBar.
+
   SetCurrentHealth(currentHealth, maxHealth)
       Clamps currentHealth to >= 0 and maxHealth to >= 0.0001 to avoid a
       divide-by-zero, then sets fillAmount = current / max.
@@ -138,37 +245,44 @@ METHODS
           PlayerStats.Start are the calls this catches; without it every unit
           would flash a chunk on frame one.
         - target >= trailFill (healed, or unchanged): snap trailFill up and hide.
-          Otherwise a yellow chunk would be stranded ABOVE the real health.
+          Otherwise the chunk would be stranded ABOVE the real health.
         - target <  trailFill (damaged): trailFill still holds the PRE-HIT value,
           which IS the chunk, so just show it and re-arm trailHoldTimer. Re-arming
           on every hit makes a combo read as one continuous chunk, not a stutter.
 
   TickDamageTrail()   [private, called from LateUpdate]
-      Hold -> drain -> fade, one stage per frame:
+      Early-outs unless hitBar exists AND is enabled. Then hold -> drain ->
+      fade, one stage per frame:
         holdTimer > 0            : count down, draw nothing new.
         trailFill > fillAmount   : MoveTowards at trailDrainPerSecond, write
-                                   delayedBar.fillAmount; on arrival start the fade.
-        fadeTimer > 0            : scale delayedColor.a down to 0.
-        otherwise                : HideTrail().
+                                   hitBar.fillAmount; on arrival start the fade.
+        fadeTimer > 0            : multiply authoredHitColor.a down to 0 and
+                                   write it back. RGB is copied through
+                                   untouched.
+        otherwise                : HideHitBar().
       Uses SCALED Time.deltaTime on purpose - when the game is paused or a panel
       has frozen the level, the chunk should freeze with it rather than quietly
       finishing behind the pause menu.
 
-  BuildTrail()   [private, called from Awake when delayedBar is empty]
-      CLONES healthBar's GameObject into a sibling named "<name>_DamageTrail",
-      strips its children and any component that is not Transform/CanvasRenderer/
-      Image, and takes the main bar's sibling index - which pushes the main bar
-      one slot LATER, and later siblings draw ON TOP in uGUI. That ordering is
-      what makes the trail peek out only where health USED to be.
+  BuildHitBar()   [private, Awake fallback; nothing reaches it today]
+      Only runs when hitBar is empty AND autoCreateHitBar AND hitSprite is set.
+      CLONES healthBar's GameObject into a sibling named "<name>_Hit", strips its
+      children and any component that is not Transform/CanvasRenderer/Image,
+      swaps in hitSprite, and takes the main bar's sibling index - which pushes
+      the main bar one slot LATER, and later siblings draw ON TOP in uGUI. That
+      ordering is what makes the trail peek out only where health USED to be.
       Cloning rather than building from scratch is deliberate: it inherits the
-      sprite, the RectTransform AND the enemy prefabs' hand-authored mirroring
-      (180-degree Y rotation + scale.x = -1), so nothing has to re-derive that.
+      fill's RectTransform and whatever mirroring its ancestors carry, so nothing
+      has to re-derive that.
+      [2026-09-02] It is a SPRITE SWAP, not a tint. This is the whole reason the
+      path is gated on hitSprite: a bar with no hit art now gets NO trail rather
+      than a recoloured copy of its own fill.
       HARD STOP: if the fill Image shares its GameObject with a HealthBar (the
       GetComponent<Image>() fallback), cloning would clone THIS script and the
       clone's Awake would clone again, forever. It logs a warning and bails.
 
-  HideTrail()   [private]
-      Disables the trail Image, restores delayedColor (undoing any fade alpha)
+  HideHitBar()   [private, was HideTrail]
+      Disables the hit Image, restores authoredHitColor (undoing any fade alpha)
       and clears both timers.
 
   SetHiddenOnGate(hidden)   [public, added 2026-08-23]
@@ -215,6 +329,50 @@ HOW IT CONNECTS
 
 NOTES
 -----
+  - [2026-09-03] ENEMY CHARACTERS WERE CONVERTED and have their trail back. The
+    2026-09-02 note that they had lost it is obsolete - it was true only for the
+    one day between the two passes. The bars still WITHOUT a hit chunk, all of
+    them GATES or dead prefabs, are:
+      Assets/PREFABS/PlayerCastle.prefab                  gate, own base-HP art
+      Assets/PREFABS/Game Play Prefs/Game Play/EnemyCastle.prefab
+                                                          gate, own base-HP art
+                                                          (5.34 wide + a TMP
+                                                          label) - deliberately
+                                                          left alone, the unit
+                                                          bar does not fit it
+      Assets/Scripts/TowertDefenseScripts/Prefabs/Player.prefab
+      Assets/Scripts/TowertDefenseScripts/Prefabs/Player_Satyr.prefab
+      Assets/Scripts/TowertDefenseScripts/Prefabs/Enemy.prefab
+      Assets/Scripts/TowertDefenseScripts/Prefabs/Enemy_Golem.prefab
+                                                          dead leftovers under
+                                                          Scripts/ - nothing
+                                                          references them and
+                                                          their Bar Image has a
+                                                          NULL sprite
+    They fall through ResolveBars with hitBar null and simply have no damage
+    trail. Nothing errors; the bar just snaps. To give a gate one, add hit art
+    as a child named "PlayerHP_Hit", or put a sprite in hitSprite and let
+    BuildHitBar clone the fill.
+  - [2026-09-03] The scene Level_1_Stage_1 holds the two TEMPLATES this was all
+    copied from, and neither is a normal prefab instance:
+      Player_Valkyrie          a plain scene GameObject, no prefab link at all
+      Enemy_Reaper_Man_01      IS a prefab instance, but its bar is a LOOSE
+                               scene object parented under it - the prefab's own
+                               bar is deleted on that instance. So the bar shows
+                               partOfInstance=False and the Prefab apply/revert
+                               API refuses to touch it.
+    Neither was reconciled with its prefab, because both already look right and
+    reverting would have cost their hand-tuned offsets. Consequence: EDITING
+    THOSE TWO SCENE OBJECTS DOES NOT CHANGE THE PREFABS, and editing the
+    prefabs does not change them. If the bar ever needs another revision, change
+    the prefabs and re-copy, or delete the loose scene objects first.
+  - [2026-09-02] HIT AND FILL ARE DIFFERENT WIDTHS - 0.53 vs 0.56 - so equal
+    fillAmounts do NOT put their right edges at the same x. They agree at 50%
+    and diverge to ~0.015 world units (1.5 px at 100 PPU) at the extremes. That
+    is the authored art inset, not a bug, and the script does not compensate:
+    it writes the same normalized value to both. If the sliver ever looks
+    off-by-a-pixel at full or empty, this is why, and the fix is the rect sizes,
+    not the code.
   - [2026-08-24] NOT VERIFIED IN PLAY MODE. The Unity Editor was closed for this
     session, so nothing below has been seen running - not the trail, not the
     mirroring fix. Both are compile-checked by reading only.

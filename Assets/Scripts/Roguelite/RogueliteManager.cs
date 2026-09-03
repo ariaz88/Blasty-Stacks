@@ -73,6 +73,13 @@ public class RogueliteManager : MonoBehaviour
     [Tooltip("Horizontal nudge, if the bar needs shifting left or right.")]
     [SerializeField] private float xpBarHorizontalOffset = 0f;
 
+    [Tooltip("Vertical nudge applied AFTER the measured placement. Positive = up. " +
+             "This is the field to drag when the bar just needs to sit a bit higher " +
+             "or lower - xpBarTopMargin stays at the value that parks it under the HUD, " +
+             "and this offsets from there. 83.7 lines the row up centre-to-centre with " +
+             "the gem counter.")]
+    [SerializeField] private float xpBarVerticalOffset = 83.7f;
+
     [Tooltip("Seconds the whole card screen takes to fade away after a pick. " +
              "0 = disappear instantly.")]
     [SerializeField, Min(0f)] private float panelFadeDuration = 0.22f;
@@ -284,7 +291,8 @@ public class RogueliteManager : MonoBehaviour
         float currentTop = bounds.max.y;
         float desiredTop = canvasRT.rect.height * 0.5f - xpBarTopMargin;
 
-        barRT.anchoredPosition += new Vector2(xpBarHorizontalOffset, desiredTop - currentTop);
+        barRT.anchoredPosition += new Vector2(xpBarHorizontalOffset,
+                                              desiredTop - currentTop + xpBarVerticalOffset);
     }
 
     /// <summary>
