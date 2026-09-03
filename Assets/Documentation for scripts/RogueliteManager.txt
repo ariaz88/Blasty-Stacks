@@ -34,7 +34,16 @@ INSPECTOR FIELDS
                        config asset is assigned: threshold = initialThreshold +
                        level - 1
     xpIncreaseDuration (float, default 0.5)  seconds for the bar to cross its
-                       full width. PURELY COSMETIC - logical XP is never delayed
+                       full width. Logical XP is never delayed - but SINCE
+                       2026-09-03 THE LEVEL-UP ITSELF WAITS FOR THIS FILL, so it
+                       is no longer purely cosmetic. See "LEVEL-UP WAITS FOR THE
+                       BAR" under NOTES.
+    levelUpBarHoldSeconds (float, default 0.2)  ADDED 2026-09-03. Extra seconds
+                       the bar is held VISIBLY FULL after the fill arrives and
+                       before the card screen opens. Without it the bar reaches
+                       100% and is wiped in the same breath, which reads as a
+                       flicker rather than as "you filled it". 0 = fire the
+                       moment the fill lands.
 
   Config
     config         (RogueliteConfigSO)  XP curve + card-draw tuning. Strongly
@@ -184,6 +193,37 @@ HOW IT CONNECTS
 
 NOTES
 -----
+  - LEVEL-UP WAITS FOR THE BAR  [FIXED 2026-09-03]
+    THE BUG: TryLevelUp ran in the SAME FRAME as the kill and set xpDisplay = 0
+    while the fill animation was still travelling. At roguelite level 1 the
+    threshold is 2 kills, so each enemy is ~50%: the first kill filled the bar to
+    50%, and the second wiped it from 50% straight to 0 and opened the card
+    screen. The bar NEVER rendered anything between 50% and 100%. What the player
+    saw was a stuck half-full bar, cards appearing out of nowhere, and then the
+    ~2% overflow crawling up from zero seconds later. Worst on the FIRST level
+    because the threshold is smallest there, so each kill is the largest share of
+    the bar.
+
+    THE FIX: the level-up is gated on the DISPLAY, not the number.
+      * AddXP still credits logical XP immediately and in full - nothing about
+        the accounting changed, so no kill can be lost or double-counted by the
+        wait.
+      * TryLevelUp, on finding xp >= Threshold, checks xpDisplay. If the fill has
+        not arrived (or has not yet been held for levelUpBarHoldSeconds) it sets
+        pendingLevelUp and returns WITHOUT touching xp or level.
+      * Update() retries every frame while pendingLevelUp, advancing barFullTimer
+        only once xpDisplay is actually at full.
+      * ORDER INSIDE Update MATTERS: xpSlider.value is assigned BEFORE TryLevelUp
+        is called, because TryLevelUp may zero xpDisplay and the player has to see
+        the full bar for that frame.
+    New private state: pendingLevelUp, barFullTimer, const BarFullEpsilon (0.001).
+    Both are cleared in ResetProgressionState AND in ShowXpBar, so a restarted or
+    revived battle cannot inherit a stale pending level-up.
+    A CASCADE still works: after the card closes, xpDisplay is 0 and the overflow
+    has to fill the bar again before the next level fires - slower than before,
+    but it is now visible instead of instant.
+    xpIncreaseDuration = 0 bypasses the whole gate and fires immediately.
+    NOT PLAY-TESTED.
   - Buffable stats are FIVE: AttackDamage, Defense, Health, AttackSpeed,
     MoveSpeed. attackRange is deliberately excluded from the pool for now; the
     multiplier plumbing for it still exists in UnitStatsRuntime.

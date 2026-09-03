@@ -41,6 +41,12 @@ public class RogueliteManager : MonoBehaviour
              "XP is never delayed by it.")]
     [SerializeField] private float xpIncreaseDuration = 0.5f;
 
+    [Tooltip("Extra seconds the bar is held VISIBLY FULL before the level-up fires " +
+             "and the card screen opens. Without a small pause the bar hits 100% and " +
+             "is wiped in the same breath, which reads as a flicker rather than as " +
+             "'you filled it'. 0 = fire the moment the fill arrives.")]
+    [SerializeField, Min(0f)] private float levelUpBarHoldSeconds = 0.2f;
+
     [Header("Config")]
     [Tooltip("XP curve and card-draw tuning. Strongly recommended; without it the legacy " +
              "linear threshold above is used and the draw runs unweighted.")]
@@ -111,6 +117,23 @@ public class RogueliteManager : MonoBehaviour
     private float xpDisplay;
     private bool isPaused;
     private bool running;
+
+    /// <summary>
+    /// Logical XP has crossed the threshold but the BAR has not finished showing
+    /// it. Update() retries every frame until the fill arrives, then the level-up
+    /// is released. See TryLevelUp for why this exists.
+    /// </summary>
+    private bool pendingLevelUp;
+
+    /// <summary>Seconds the fill has been sitting at full, for levelUpBarHoldSeconds.</summary>
+    private float barFullTimer;
+
+    /// <summary>
+    /// How close to 1 counts as "the bar is full". MoveTowards lands exactly on
+    /// its target, but a float compare against 1f is still a coin toss, and being
+    /// one frame early here is invisible anyway.
+    /// </summary>
+    private const float BarFullEpsilon = 0.001f;
 
     // The ScreenSpaceOverlay canvas the card panel is moved onto, so no world
     // sprite or health bar can ever draw over it.
@@ -203,6 +226,17 @@ public class RogueliteManager : MonoBehaviour
             : Mathf.MoveTowards(xpDisplay, target, Time.unscaledDeltaTime / xpIncreaseDuration);
 
         xpSlider.value = xpDisplay;
+
+        if (!pendingLevelUp) return;
+
+        // The hold only starts counting once the fill has actually ARRIVED, so a
+        // slow bar cannot serve out its hold while still halfway up.
+        if (xpDisplay >= 1f - BarFullEpsilon) barFullTimer += Time.unscaledDeltaTime;
+        else barFullTimer = 0f;
+
+        // Assigning the slider BEFORE this call matters: TryLevelUp may zero
+        // xpDisplay, and the player has to see the full bar for this frame first.
+        TryLevelUp();
     }
 
     /// <summary>
@@ -437,7 +471,29 @@ public class RogueliteManager : MonoBehaviour
         if (isPaused || !running || AtMaxLevel) return;
 
         float t = Threshold;
-        if (xp < t) return;
+        if (xp < t) { pendingLevelUp = false; barFullTimer = 0f; return; }
+
+        // THE BAR HAS TO GET THERE FIRST.
+        //
+        // Logical XP crossed the threshold this frame, but the fill is a separate,
+        // slower animation. Levelling immediately blanked xpDisplay while it was
+        // still travelling, so at 2 kills per level the bar was wiped at ~50% and
+        // the ONLY thing the player ever saw was the overflow crawling up from
+        // zero a few seconds later. It never once rendered between 50% and 100%.
+        //
+        // So the level-up is now gated on the DISPLAY, not the number: hold here,
+        // let Update keep filling, and release once the bar has visibly reached
+        // full and sat there for levelUpBarHoldSeconds. The XP itself was already
+        // credited in AddXP, so nothing can be lost or double-counted by waiting.
+        if (xpIncreaseDuration > 0f &&
+            (xpDisplay < 1f - BarFullEpsilon || barFullTimer < levelUpBarHoldSeconds))
+        {
+            pendingLevelUp = true;
+            return;
+        }
+
+        pendingLevelUp = false;
+        barFullTimer = 0f;
 
         xp -= t;                    // <- the overflow carries
         level++;
@@ -753,6 +809,8 @@ public class RogueliteManager : MonoBehaviour
         }
 
         xpDisplay = 0f;
+        pendingLevelUp = false;
+        barFullTimer = 0f;
     }
 
     /// <summary>
@@ -885,6 +943,8 @@ public class RogueliteManager : MonoBehaviour
         level = 1;
         xp = 0f;
         xpDisplay = 0f;
+        pendingLevelUp = false;
+        barFullTimer = 0f;
 
         skillMultiplier.Clear();
         statMultiplier.Clear();

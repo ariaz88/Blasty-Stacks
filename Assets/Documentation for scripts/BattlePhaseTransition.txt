@@ -24,7 +24,21 @@ INSPECTOR FIELDS
   Move Up On Battle
     moveUpTargets    (Transform[]) the transforms that slide up. Currently
                      Main Camera and BackGroundImage. NOTHING else is touched.
-    moveUpDistance   (float, default 6.75) world units travelled upward.
+    moveUpDistance   (float, default 6.75) world units travelled upward. ALREADY
+                     SERIALIZED with a per-scene value in every stage scene, so
+                     changing this default in the script moves nothing.
+    extraMoveUpDistance (float, default 3)  ADDED 2026-09-03. Added on top of
+                     moveUpDistance; positive = the camera ends up HIGHER. THIS
+                     IS THE FIELD TO DRAG to re-frame the battlefield. It exists
+                     separately precisely because moveUpDistance is already
+                     serialized everywhere - being a NEW field, this one picks up
+                     its default in all 21 stage scenes without any scene being
+                     edited or re-saved.
+                     Read through the private TotalMoveUpDistance property, which
+                     is what the tween, the instant path AND the zero-check all
+                     use. Anything reading a distance MUST go through it, or the
+                     three disagree and a scene that authored moveUpDistance = 0
+                     would still move.
 
   Motion
     duration         (float, default 1.1) seconds for the move. 0 = snap.
@@ -142,7 +156,11 @@ FLOW
       blocksRaycasts, then fades to 1. duration <= 0 = instant.
 
   ApplyEndStateInstantly()
-      The no-tween path: adds Vector3.up * moveUpDistance to every target.
+      The no-tween path: adds Vector3.up * TotalMoveUpDistance to every target.
+
+  TotalMoveUpDistance  (private property)
+      moveUpDistance + extraMoveUpDistance. The single source of the travel
+      distance for all three call sites.
 
   CountValidTargets()
       Non-null count, used to decide between the tween and the instant path.

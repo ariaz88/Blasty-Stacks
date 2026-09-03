@@ -26,6 +26,21 @@ public class BattlePhaseTransition : MonoBehaviour
     [Tooltip("How far up they travel, in world units.")]
     [SerializeField] private float moveUpDistance = 6.75f;
 
+    [Tooltip("Added on top of moveUpDistance. Positive = the camera ends up HIGHER. " +
+             "This is the field to drag to re-frame the battlefield.\n\n" +
+             "It exists separately from moveUpDistance because that one is already " +
+             "serialized with a per-scene value in all 21 stage scenes, so changing " +
+             "its default in the script would not move a single one of them. This " +
+             "field is new, so every scene picks up its default without being edited.")]
+    [SerializeField] private float extraMoveUpDistance = 3f;
+
+    /// <summary>
+    /// What the camera actually travels. Everything that reads a distance must go
+    /// through here - the tween, the instant path AND the zero-check - or the three
+    /// disagree and a scene that authored moveUpDistance = 0 would still move.
+    /// </summary>
+    private float TotalMoveUpDistance => moveUpDistance + extraMoveUpDistance;
+
     [Header("Motion")]
     [Tooltip("Seconds for the move. 0 = snap instantly.")]
     [SerializeField, Min(0f)] private float duration = 1.1f;
@@ -126,7 +141,7 @@ public class BattlePhaseTransition : MonoBehaviour
                              "nothing will slide up.", this);
         }
 
-        if (moved == 0 || duration <= 0f || Mathf.Approximately(moveUpDistance, 0f))
+        if (moved == 0 || duration <= 0f || Mathf.Approximately(TotalMoveUpDistance, 0f))
         {
             ApplyEndStateInstantly();
             Finish(onComplete);
@@ -139,7 +154,7 @@ public class BattlePhaseTransition : MonoBehaviour
         foreach (var t in moveUpTargets)
         {
             if (!t) continue;
-            sequence.Join(t.DOMoveY(t.position.y + moveUpDistance, duration).SetEase(ease));
+            sequence.Join(t.DOMoveY(t.position.y + TotalMoveUpDistance, duration).SetEase(ease));
         }
 
         sequence.OnComplete(() => Finish(onComplete));
@@ -152,7 +167,7 @@ public class BattlePhaseTransition : MonoBehaviour
         foreach (var t in moveUpTargets)
         {
             if (!t) continue;
-            t.position += Vector3.up * moveUpDistance;
+            t.position += Vector3.up * TotalMoveUpDistance;
         }
     }
 
