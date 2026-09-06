@@ -72,6 +72,35 @@ changing its `STAGE` and `MOVES_ALLOWED` constants.)
   template and into all the others. Apply single properties deliberately, or edit the prefab.
 - `Canvas ` and `EnemyGateProgressBarUI ` have **trailing spaces** in their names. `Find()` calls
   must match them exactly.
-- The template still carries Stage 1's inactive leftovers (`PREVIEW`, `Player_Valkyrie`,
-  `Enemy_Reaper_Man_01`, `BoardImage (1)`, `Base Roof_Redundant`). They are disabled and harmless,
-  but they are now in every stage — delete them from the prefab if you want them gone everywhere.
+- The template still carries Stage 1's inactive leftovers (`PREVIEW`, `PREVIEW (1)`, `PREVIEW (2)`,
+  `BoardImage (1)`, `Base Roof_Redundant`, `PlayerGate`, `Regulite Show Panel`, `Revive Panel`,
+  `Lose Panel`, `Revive Level `). Level 1 keeps them; Stages 2+ strip them per instance — see below.
+  `Player_Valkyrie` and `Enemy_Reaper_Man_01` were deleted from the prefab outright on 2026-09-06,
+  so they are gone from every stage including Level 1.
+
+---
+
+## Per-stage cleanup (2026-09-06) — Level 1 keeps them, Stages 2+ do not
+
+Level 1 is the reference scene and keeps every authoring leftover. Every other stage removes
+them, as `m_RemovedGameObjects` overrides on its own instance:
+
+| Removed from Stages 2+ | Where |
+|---|---|
+| `PREVIEW (1)`, `PREVIEW (2)` | root |
+| `BoardImage (1)`, `Base Roof_Redundant` | `Puzzle Board` |
+| `Blocks (1)`, `Blocks (2)`, `Blocks (3)`, `RedundantBlocks` | `Puzzle Board/BoardBG` |
+| the three `boardsCover_*` the stage does not render | `Puzzle Board` |
+| `PlayerGate` | `PlayerCastle` |
+| `Regulite Show Panel`, `Revive Panel`, `Lose Panel`, `Revive Level ` | `Canvas ` |
+
+Note on the covers: the rule is **keep the one this stage actually renders, drop the other three**.
+For Stages 2 and 3 that means keeping `boardsCover_Stage1_2-10`. Deleting all of them by name
+would leave the stage with no board art.
+
+**Consequence of dropping `Regulite Show Panel`:** it is what `RogueliteManager.skillSelectPanel`
+and all three `cardSlots` on `Reg_Manager` point at. With it gone the field is null. Every use is
+null-guarded so nothing throws, but `ShowSkillSelection()` still calls `GameplayPause.SetPaused(true)`
+and `FreezeBattlefield(true)` *before* the guard — so if a roguelite level-up ever fires on Stages
+2+, the battle pauses with no card picker to dismiss it. If those stages are meant to have no
+roguelite at all, switch the `RogueliteManager` component off on `Reg_Manager` in those scenes.

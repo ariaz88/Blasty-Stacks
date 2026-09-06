@@ -55,6 +55,17 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-09-06] Stages 2+ have no `Regulite Show Panel`, so a roguelite level-up there pauses the
+  battle with nothing to dismiss it.** The panel was deleted from Stages 2-3 at the user's request;
+  it is what `RogueliteManager.skillSelectPanel` and all three `cardSlots` on `Reg_Manager` point
+  at, so those fields are now null. Every *use* is null-guarded — nothing throws — but
+  `ShowSkillSelection()` calls `GameplayPause.SetPaused(true)` and `FreezeBattlefield(true)` BEFORE
+  the guard, so the game freezes with no card picker. Two ways out, the user's call: switch the
+  `RogueliteManager` component OFF on `Reg_Manager` for those stages (if levels 2+ are meant to
+  have no roguelite), or move the early-return above the pause in
+  `Assets/Scripts/Roguelite/RogueliteManager.cs` so a missing panel simply skips the level-up.
+  Not reproduced in Play mode — derived from reading the wiring.
+
 - **[2026-09-06] Stages 4-20 are still the OLD, drifted scenes; Stages 1-3 have never been played
   since the rebuild.** `Assets/PREFABS/Level Template/LevelTemplate.prefab` is now the whole body
   of a stage scene and Stages 1, 2, 3 are instances of it. Two jobs remain.
@@ -375,10 +386,24 @@ _Newest first._
     they now have Stage 1's puzzle-then-BATTLE phase instead of spawning on load.
   - **Never press "Apply All" on a stage instance.** It would push that stage's board into the
     template and out to every other stage.
+- **Follow-up in the same session — two rounds of cleanup:**
+  1. `EnemySpawner` flag flip moved from `Start()` to `Awake()`. The first hero wave was showing
+     its HP bars for the whole puzzle phase: `HealthBar.Awake` reads the static
+     `EnemySpawner.EnemiesHaveAppeared`, which defaults to TRUE, and `PlayerWaveManager.Start` →
+     `WaveLoop` spawns that first wave synchronously before its first `yield`. Unordered Starts,
+     so whichever won decided it. Awake runs before every Start, so the gate is now deterministic.
+  2. Per-stage object stripping, at the user's request: Level 1 keeps every authoring leftover,
+     Stages 2+ remove them as `m_RemovedGameObjects` overrides — `PREVIEW (1)`/`(2)`,
+     `BoardImage (1)`, `Base Roof_Redundant`, `Blocks (1..3)`, `RedundantBlocks`, `PlayerGate`,
+     the three unused `boardsCover_*`, and four Canvas panels (`Regulite Show Panel`,
+     `Revive Panel`, `Lose Panel`, `Revive Level `). `Player_Valkyrie` and `Enemy_Reaper_Man_01`
+     came out of the **prefab** instead, so they are gone from Level 1 too (0 inbound refs,
+     checked first). Table + rationale in the Level Template README.
 - **Next:** play-test Stage 2 and Stage 3 end to end (BATTLE press → camera move → waves →
   win/lose), then run the same conversion on Stages 4-20. Tune `PuzzleMoveBudget.movesAllowed`
   per stage (currently 8 / 8 / 7) — that is the "board gets more restricted as you go" knob the
-  user asked for, and it is a plain Inspector int on `Input System`.
+  user asked for, and it is a plain Inspector int on `Input System`. **Decide the roguelite
+  question below.**
 
 ### 2026-09-06 — LastStandOffer gated behind the Heroes Stats buy-backs; one buy-back per card per level
 
