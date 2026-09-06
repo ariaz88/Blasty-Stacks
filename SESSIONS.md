@@ -55,6 +55,22 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-09-06] Stages 4-20 are still the OLD, drifted scenes; Stages 1-3 have never been played
+  since the rebuild.** `Assets/PREFABS/Level Template/LevelTemplate.prefab` is now the whole body
+  of a stage scene and Stages 1, 2, 3 are instances of it. Two jobs remain.
+  (a) **Play-test 2 and 3 first** — press BATTLE and watch the camera move, the waves spawn from
+  the enemy gate, heroes release from the deploy slots and march the `Jump positions` lanes, and
+  the win/lose panels fire. Nothing was play-tested; only edit-mode captures and a full
+  reference-resolution sweep were done. Watch especially for anything that used to be wired to a
+  scene object and now silently resolves to the prefab's copy.
+  (b) Then run the same conversion on Stages 4-20 — the recipe is in
+  `Assets/PREFABS/Level Template/README_LevelTemplate.md`; the editor script that did 2 and 3 only
+  needs its `STAGE` and `MOVES_ALLOWED` constants changed. Per stage, carry over ONLY: the
+  `BoardGridXY` size, the `BoardGhostMask` mask, the `Blocks`/`RedundantBlocks` groups, the active
+  `boardsCover_*`, and `EnemySpawner.levelConfig`. Everything else comes from the prefab.
+  **Do not press "Apply All" on a stage instance** — it would push that stage's board out to all
+  the others.
+
 - **[2026-09-06] The LastStandOffer buy-back gate and the one-purchase-per-card rule have never
   run in Play mode.** Both compile clean against the live Editor and neither needed a scene edit,
   but no purchase has actually been made. On `Level_1_Stage_1`: (a) wipe one hero type, buy it back,
@@ -176,10 +192,10 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   confirmed working in Play mode; the WIPED look (`Gray out Avatar` on, count hidden, `Parent `
   buy button shown) and the gem buy-back (`PlayerWaveManager.SpawnReinforcements` → spawn at the
   gates, jump to the REAR `jumpLanes` entry, march) have never run. Test both before trusting them.
-- **The Heroes Stats panel exists in `Level_1_Stage_1` ONLY.** Stages 2-20 have no such object,
-  so `HeroRoster` still tallies there (PlayerManager always registers) but nothing displays it.
-  Copying the panel means re-doing the `HeroStatCell` wiring and adding it to that stage's
-  `BattlePhaseTransition.fadeInAfterMove`.
+- **[2026-09-06 — partly closed] The Heroes Stats panel used to exist in `Level_1_Stage_1` ONLY.**
+  Stages 1-3 now all get it from `LevelTemplate.prefab`, already wired into
+  `BattlePhaseTransition.fadeInAfterMove`. **Stages 4-20 still have no such object** — they are
+  closed by converting them to the template (see the thread below), not by hand-copying the panel.
 - **Heroes still LOCKED on the castle gates when BATTLE is pressed are stranded permanently** —
   the board is hidden from that point, so no puzzle match can ever release them. They just stand
   on the gates for the rest of the stage. `HeroRoster` deliberately does not count them (see
@@ -304,12 +320,65 @@ _Durable choices with their reasons, so no session reopens them blindly._
 | 2026-08-20 | The conversion is done by a repeatable editor tool (`Assets/Scripts/Editor/TMPFontAssetStaticBaker.cs`), not by hand-editing the Inspector or patching the `.asset` YAML directly. | Hand-editing does not scale and is not reproducible for the next font added; direct YAML patching was considered and rejected because it cannot repopulate an atlas — only TMP's `TryAddCharacters` can, and it needs a loaded font face. The tool also re-runs safely on assets that are already correct. |
 | 2026-08-24 | **A "keep me upright" correction measures the WORLD AXIS of the thing it is correcting, never a parent's `lossyScale`.** `HealthBar.KeepUnmirrored` probes `healthBar.transform.localToWorldMatrix.MultiplyVector(Vector3.right).x`. | `lossyScale` is blind to a 180° rotation, and reading the PARENT ignores every flip authored below it. The enemy prefabs use both — a mirrored root, then three 180° Y rotations and two negative scales further down that cancel it — so a parent-sign correction was a fifth inversion on top of four, and the bar drained backwards in Play mode while looking correct in the Scene view. Probing the actual Image's world axis is self-correcting and needs no knowledge of how a prefab was authored. Corollary: the fix is prefab-agnostic, so the three-flip authoring was left in place rather than "cleaned up" — undoing it by hand across 6 prefabs would have been 6 chances to get it wrong for no gain. |
 | 2026-08-24 | **The damage-trail Image is CLONED from the main bar at runtime (`HealthBar.BuildTrail`), not authored per prefab.** `delayedBar` stays serialized so a hand-assigned override still wins. | Three reasons, in order of weight. (1) Cloning inherits the enemy prefabs' hand-authored mirroring for free; a from-scratch Image would have to re-derive it and would silently drift the next time someone re-authors a prefab. (2) The castle-gate bars live in the SCENES, not a prefab, so authored objects would have to be wired into all 20 stage scenes by hand — the clone reaches them automatically. (3) It made the feature deliverable with the Editor closed. Accepted cost: one extra GameObject per bar at spawn, and designers cannot restyle the trail per prefab without assigning `delayedBar` manually. |
+| 2026-09-06 | **A stage scene is ONE prefab instance (`LevelTemplate.prefab`) plus that stage's board pieces — not a folder of per-feature prefabs.** The board (`BoardGridXY` size, `BoardGhostMask.mask`, the `Blocks` groups) stays a per-instance override; everything else is shared. | A prefab cannot serialize a reference to a scene object, and this level's wiring crosses every boundary a "sensible" split would draw: `BattlePhaseTransition` alone reaches the camera, the Puzzle Board, `Top Shadow` and four Canvas panels; `PlayerWaveManager` reaches `BoardStages` under PlayerCastle, `Jump positions`, `EnemySpawner` and `MatchResolver`. Splitting into `LevelTemplate_UI` + `LevelTemplate_World` would have nulled those arrays silently — they would look fine in the Inspector of the prefab and be empty in the scene. The monolith is the only shape where "edit once, applies to all 20 levels" is actually true. Accepted cost: editing a stage means entering prefab mode or applying single properties, and **"Apply All" on an instance is destructive** (it publishes that stage's board to every other stage). |
+| 2026-09-06 | **Stages 2 and 3 adopted Stage 1's world layout wholesale — castle positions, camera framing, board world position — keeping only their own board *contents*.** | The user's rule was "everything except the table layout and the enemy progression comes from Level 1", and the base distance had just been retuned in Stage 1 (commit `b147e5e`). Stage 2's gates were 9.64 apart against Stage 1's 13.83, so keeping the old spacing would have meant Stage 1's camera move (`+7.12 +2`) framing the wrong thing. Piece positions are local to `BoardBG`, so moving the board to Stage 1's spot preserves which cell every piece occupies — the authored layout survives, only its placement on screen changed. Enemy difficulty needed no per-scene work at all: `EnemySpawner.RunLevel()` already reads `LevelManager.CurrentStage`. |
 
 ---
 
 ## Session Log
 
 _Newest first._
+
+### 2026-09-06 — Every stage is now one `LevelTemplate.prefab` instance; Stages 2 and 3 rebuilt from Stage 1
+
+- **Goal:** roll Level 1's design out to the other stages. Everything from `Level_1_Stage_1` —
+  gates, bases, camera framing, the BATTLE camera move, board behaviour, the bottom menus
+  (Feature panel, Heroes Stats, LastStandOffer, counters), all of it — becomes a prefab in a new
+  folder under the main `PREFABS`, so a later edit reaches all 20 levels. **Two things must NOT be
+  copied:** each stage's authored board layout, and the per-stage enemy progression. Asked for
+  Stages 2 and 3 only, for now.
+- **Status:** done for Stages 1-3. NOT play-tested (Editor only, edit mode).
+- **Changed:**
+  - `Assets/PREFABS/Level Template/LevelTemplate.prefab` — **new.** One root holding all 22 of
+    Stage 1's former scene roots. Created with `PrefabUtility.SaveAsPrefabAssetAndConnect`, so
+    Stage 1 itself became the first instance rather than a copy.
+  - `Assets/PREFABS/Level Template/README_LevelTemplate.md` — **new.** What is shared, what is
+    per-stage, and the 7-step recipe for converting the remaining stages.
+  - `Level_1_Stage_1/2/3.unity` — each is now a single root (`LevelTemplate`) plus that stage's
+    own block groups as prefab-instance additions. Stage 2 dropped 535 KB → ~40 KB.
+- **Scene/Prefab/SO edits (not visible in the diff as intent):** all of the above was done over
+  MCP `Unity_RunCommand`, not by hand, but the result IS a scene/prefab rewrite. Stages 2 and 3
+  had **14 roots each deleted** and replaced. What was carried across from the old scenes, and
+  nothing else: `BoardGridXY` size, `BoardGhostMask.mask`, the `Blocks`/`RedundantBlocks` groups,
+  `EnemySpawner.levelConfig` + `cpWeights`, and which `boardsCover_*` was active.
+  Two small fixes were folded into the template while it was being built: three extra board-cover
+  sprites (`boardsCover_Stage1_2-10 / _11-15 / _16-20`) were added under `Puzzle Board` so any
+  stage can pick its cover, and four references that had been relying on `FindObjectOfType` were
+  wired explicitly (`BattleStartController.enemySpawner` / `.transition`,
+  `LastStandOffer.waveManager` / `.heroStatsPanel`, plus `BoardInputController.moveBudget`).
+- **Verified:** all three scenes reopen with 0 console errors and 0 missing components; every
+  serialized reference in the prefab resolves *inside* the prefab (checked by walking every
+  `SerializedProperty` of the 13 key components); orthographic captures of all three stages show
+  the correct castles, environment, deploy slots and each stage's own pieces. **Play mode was
+  never entered.**
+- **Gotchas:**
+  - The whole level had to become **one** prefab, not a folder of small ones. `BattlePhaseTransition`
+    alone references the camera, the board, `Top Shadow`, and four Canvas panels; a prefab cannot
+    hold a reference to a scene object, so any split would have silently nulled those arrays.
+  - Stage 2/3's world layout was different from Stage 1 (PlayerCastle y = -2.04 vs 2.84, gates
+    9.64 apart vs 13.83). The template's Stage 1 layout won, by design — but that means the board
+    also moved to Stage 1's world position. Piece positions are **local to `BoardBG`**, so which
+    cell each piece sits in is unchanged; only the whole board's placement moved.
+  - Stage 2 had a second `BoardStages` under `BoardBG`, duplicating the one under
+    `PlayerCastle/Stage Holder`. It was deliberately NOT carried over.
+  - `EnemySpawner.waitForBattleStart` is now ON in Stages 2-3 (it was OFF). That is the point —
+    they now have Stage 1's puzzle-then-BATTLE phase instead of spawning on load.
+  - **Never press "Apply All" on a stage instance.** It would push that stage's board into the
+    template and out to every other stage.
+- **Next:** play-test Stage 2 and Stage 3 end to end (BATTLE press → camera move → waves →
+  win/lose), then run the same conversion on Stages 4-20. Tune `PuzzleMoveBudget.movesAllowed`
+  per stage (currently 8 / 8 / 7) — that is the "board gets more restricted as you go" knob the
+  user asked for, and it is a plain Inspector int on `Input System`.
 
 ### 2026-09-06 — LastStandOffer gated behind the Heroes Stats buy-backs; one buy-back per card per level
 
