@@ -1,0 +1,271 @@
+[
+  {
+    "name": "FlameCrest",
+    "file": "LavaKnight_FlameCrest",
+    "require": "flame",
+    "boxes": [
+      [
+        455,
+        0,
+        812,
+        252
+      ],
+      [
+        474,
+        252,
+        526,
+        488
+      ],
+      [
+        732,
+        252,
+        794,
+        488
+      ]
+    ],
+    "close": 6,
+    "fillHoles": true,
+    "islandKeep": 0.1
+  },
+  {
+    "name": "Helmet",
+    "file": "LavaKnight_Head",
+    "boxes": [
+      [
+        498,
+        190,
+        760,
+        505
+      ]
+    ],
+    "close": 8,
+    "fillHoles": true
+  },
+  {
+    "name": "HornL",
+    "file": "LavaKnight_Horn_L",
+    "boxes": [
+      [
+        335,
+        150,
+        480,
+        470
+      ]
+    ],
+    "dropRed": true,
+    "close": 12,
+    "fillHoles": true,
+    "islandKeep": 0.3
+  },
+  {
+    "name": "HornR",
+    "file": "LavaKnight_Horn_R",
+    "boxes": [
+      [
+        788,
+        150,
+        920,
+        470
+      ]
+    ],
+    "dropRed": true,
+    "close": 12,
+    "fillHoles": true,
+    "islandKeep": 0.3
+  },
+  {
+    "name": "Scarf",
+    "file": "LavaKnight_Scarf",
+    "boxes": [
+      [
+        485,
+        440,
+        780,
+        600
+      ]
+    ],
+    "close": 8,
+    "fillHoles": true
+  },
+  {
+    "name": "Tabard",
+    "file": "LavaKnight_Tabard",
+    "boxes": [
+      [
+        545,
+        685,
+        745,
+        995
+      ]
+    ],
+    "close": 10,
+    "fillHoles": true
+  },
+  {
+    "name": "Cape",
+    "file": "LavaKnight_Cape",
+    "require": "redcloth",
+    "boxes": [
+      [
+        130,
+        470,
+        540,
+        1105
+      ],
+      [
+        730,
+        470,
+        1150,
+        1105
+      ]
+    ],
+    "close": 34,
+    "fillHoles": true,
+    "islandKeep": 0.02,
+    "pixelMaterial": "capered",
+    "exclude": [
+      [
+        485,
+        440,
+        780,
+        600
+      ],
+      [
+        545,
+        685,
+        745,
+        995
+      ]
+    ]
+  },
+  {
+    "name": "PauldronL",
+    "file": "LavaKnight_Pauldron_L",
+    "boxes": [
+      [
+        305,
+        385,
+        525,
+        610
+      ]
+    ],
+    "close": 10,
+    "fillHoles": true,
+    "dropRed": true
+  },
+  {
+    "name": "PauldronR",
+    "file": "LavaKnight_Pauldron_R",
+    "boxes": [
+      [
+        730,
+        385,
+        955,
+        610
+      ]
+    ],
+    "close": 10,
+    "fillHoles": true,
+    "dropRed": true
+  },
+  {
+    "name": "ArmL",
+    "file": "LavaKnight_Arm_L",
+    "boxes": [
+      [
+        290,
+        555,
+        512,
+        918
+      ]
+    ],
+    "dropRed": true,
+    "close": 12,
+    "fillHoles": true
+  },
+  {
+    "name": "ArmR",
+    "file": "LavaKnight_Arm_R",
+    "boxes": [
+      [
+        750,
+        545,
+        988,
+        938
+      ]
+    ],
+    "dropRed": true,
+    "close": 12,
+    "fillHoles": true
+  },
+  {
+    "name": "Torso",
+    "file": "LavaKnight_Body",
+    "boxes": [
+      [
+        470,
+        445,
+        795,
+        725
+      ]
+    ],
+    "close": 10,
+    "fillHoles": true,
+    "dropRed": true
+  },
+  {
+    "name": "LegL",
+    "file": "LavaKnight_Leg_L",
+    "boxes": [
+      [
+        385,
+        790,
+        560,
+        1215
+      ]
+    ],
+    "close": 10,
+    "fillHoles": true,
+    "islandKeep": 0.15
+  },
+  {
+    "name": "LegR",
+    "file": "LavaKnight_Leg_R",
+    "boxes": [
+      [
+        700,
+        790,
+        900,
+        1215
+      ]
+    ],
+    "close": 10,
+    "fillHoles": true
+  },
+  {
+    "name": "Sword",
+    "file": "LavaKnight_Sword",
+    "boxes": [
+      [
+        85,
+        830,
+        380,
+        1010
+      ],
+      [
+        85,
+        1010,
+        345,
+        1170
+      ],
+      [
+        330,
+        745,
+        462,
+        842
+      ]
+    ],
+    "close": 8,
+    "fillHoles": true
+  }
+]

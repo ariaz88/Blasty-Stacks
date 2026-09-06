@@ -73,3 +73,10 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Visual reference intake for VFX work - see Reference/README.md.
+# The convention is tracked, the media never is. Note this ignores the CONTENTS
+# (/Reference/*) rather than the folder itself, which is what lets the negation
+# below work at all - git does not descend into an ignored directory.
+/[Rr]eference/*
+!/[Rr]eference/README.md
