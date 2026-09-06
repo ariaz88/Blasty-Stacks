@@ -74,19 +74,13 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   converted stages — but it is a landmine for anyone tidying "inactive" UI out of a stage. Worth
   moving the early-return above the pause in `Assets/Scripts/Roguelite/RogueliteManager.cs:540`.
 
-- **[2026-09-06] Stages 4-20 are still the OLD, drifted scenes; Stages 1-3 have never been played
-  since the rebuild.** `Assets/PREFABS/Level Template/LevelTemplate.prefab` is now the whole body
-  of a stage scene and Stages 1, 2, 3 are instances of it. Two jobs remain.
-  (a) **Play-test 2 and 3 first** — press BATTLE and watch the camera move, the waves spawn from
-  the enemy gate, heroes release from the deploy slots and march the `Jump positions` lanes, and
-  the win/lose panels fire. Nothing was play-tested; only edit-mode captures and a full
-  reference-resolution sweep were done. Watch especially for anything that used to be wired to a
-  scene object and now silently resolves to the prefab's copy.
-  (b) Then run the same conversion on Stages 4-20 — the recipe is in
-  `Assets/PREFABS/Level Template/README_LevelTemplate.md`; the editor script that did 2 and 3 only
-  needs its `STAGE` and `MOVES_ALLOWED` constants changed. Per stage, carry over ONLY: the
-  `BoardGridXY` size, the `BoardGhostMask` mask, the `Blocks`/`RedundantBlocks` groups, the active
-  `boardsCover_*`, and `EnemySpawner.levelConfig`. Everything else comes from the prefab.
+- **[2026-09-06] ALL 20 stages are now `LevelTemplate.prefab` instances, and NONE has been
+  played.** The conversion is finished and verified in edit mode only — every stage reports
+  `roots=1`, 0 missing components, 0 broken references, its own board, its own cover, its own
+  `Stage_NN` wave config. **Nothing has been in Play mode at any point.** Start with stage 3 (the
+  first with the new enemy mix): press BATTLE, watch the camera move, the two waves spawn from the
+  enemy gate, heroes release from the deploy slots and march the `Jump positions` lanes, and the
+  win/lose panels fire. Then spot-check 11 (first `_11-15` cover) and 20 (heaviest wave).
   **Do not press "Apply All" on a stage instance** — it would push that stage's board out to all
   the others.
 
@@ -347,6 +341,35 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-09-06 — Stages 4-20 converted to the template; level design finished to stage 20
+
+- **Goal:** carry the level design through to stage 20 with the new enemy roster, keeping each
+  stage's unique board and everything else already agreed.
+- **Status:** done for all 20. Verified in edit mode; **never played**.
+- **Changed:**
+  - `Level_1_Stage_4..20.unity` — each rebuilt as one `LevelTemplate` instance, exactly as 2 and 3.
+    Per stage the only things carried across were the `BoardGridXY` size, the `BoardGhostMask`
+    mask and the live `Blocks` group. Same leftover strip list as 2-3 (`Regulite Show Panel` kept).
+  - Move budget: 8 (1-2), 7 (3-6), 6 (7-11), 5 (12-20). Floored at 5 because the enemy curve
+    already ramps ~8%/stage and cutting hero waves on top of that compounds fast.
+  - Board covers assigned by band. **Stages 11-20 had NO active cover before this** — they were
+    rendering with no board frame at all. Fixed as part of the pass, not caused by it.
+- **Scene/Prefab/SO edits:** all 17 scenes rewritten over MCP. `RedundantBlocks` (inactive, 6
+  pieces, present in every stage) was dropped everywhere except stage 1, per the earlier rule.
+- **Verified:** a sweep over all 20 stages — `roots=1`, prefab instance confirmed, board pieces
+  present, mask preserved, cover active, `Stage_NN` config bound, 0 missing components, and 0 null
+  entries in `BattlePhaseTransition`'s four arrays / `PlayerWaveManager.gatePoints` + `jumpLanes` /
+  `RogueliteManager.skillSelectPanel`. Orthographic capture of stage 20 shows its own 16-piece
+  board with the `x10` blocks intact.
+- **Gotchas:**
+  - **An asset reference taken before `EditorSceneManager.OpenScene` does not survive the load.**
+    The managed wrapper comes back destroyed and assigns as `null` with no exception. Two runs
+    wrote `levelConfig = null` into 15 scenes before the `cfg=NULL` in the log was chased down;
+    a third pass loading the asset *after* the scene fixed all 18. Stage 3 had been silently
+    nulled by the earlier assignment pass too — only re-verifying caught it.
+  - Boards already had their own ramp (20 → 32 playable cells, 6 → 18 pieces). Left untouched.
+- **Next:** play-test. Nothing in the last four commits has run.
 
 ### 2026-09-06 — Every stage is now one `LevelTemplate.prefab` instance; Stages 2 and 3 rebuilt from Stage 1
 

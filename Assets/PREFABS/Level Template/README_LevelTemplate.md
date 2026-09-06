@@ -4,7 +4,30 @@
 pieces**. Every stage scene is now a single root: one instance of this prefab. Edit the prefab
 once and the change lands in every stage that has been converted.
 
-Built 2026-09-06 from `Level_1_Stage_1`. Converted so far: **Stage 1, 2, 3**.
+Built 2026-09-06 from `Level_1_Stage_1`. **All 20 stages are converted.** Every stage scene is a
+single root and shows `roots=1` in the hierarchy.
+
+## Per-stage settings at a glance
+
+| stage | board cover | moves allowed | wave config | pieces |
+|---|---|---|---|---|
+| 1 | `_1` | 8 | `Spawner2` | 30 (keeps all 5 authoring groups) |
+| 2 | `_2-10` | 8 | `Spawner2` | 6 |
+| 3-6 | `_2-10` | 7 | `Stage_03`…`Stage_06` | 8-12 |
+| 7-10 | `_2-10` | 6 | `Stage_07`…`Stage_10` | 12 |
+| 11 | `_11-15` | 6 | `Stage_11` | 12 |
+| 12-15 | `_11-15` | 5 | `Stage_12`…`Stage_15` | 14-16 |
+| 16-20 | `_16-20` | 5 | `Stage_16`…`Stage_20` | 14-18 |
+
+Move budget is the "board gets more restricted as you advance" knob: 8 → 7 → 6 → 5, floored at 5.
+It is a plain int on `Input System → PuzzleMoveBudget → Moves Allowed`; `0` means unlimited.
+
+Board covers follow their own names: stage 1 → `_1`, 2-10 → `_2-10`, 11-15 → `_11-15`,
+16-20 → `_16-20`. **Stages 11-20 previously had no active cover at all** — that was fixed during
+the conversion, not introduced by it.
+
+The boards themselves already ramped before any of this: playable cells go 20 → 24 → 28 → 32 and
+piece counts 6 → 18 as the stages advance. None of that was touched.
 
 ---
 
@@ -63,8 +86,13 @@ scale with the global stage index on their own. Nothing per scene needs to chang
 6. Drop the block groups back under `LevelTemplate/Puzzle Board/BoardBG`.
 7. Re-apply the four per-stage values listed above.
 
-(The 2026-09-06 session did steps 1-7 with an editor script; the same script is reusable by
-changing its `STAGE` and `MOVES_ALLOWED` constants.)
+(The 2026-09-06 session did steps 1-7 with an editor script over all 20 stages.)
+
+**Trap worth knowing if you script this again:** a `LevelConfig` (or any asset) reference taken
+*before* `EditorSceneManager.OpenScene` does **not** survive the load — the managed wrapper comes
+back destroyed and silently assigns as `null`. Two conversion runs wrote `levelConfig = null` into
+15 scenes this way, and the log said `cfg=NULL` rather than throwing. Load assets **after** the
+scene is open and use them immediately.
 
 ## Gotchas
 
