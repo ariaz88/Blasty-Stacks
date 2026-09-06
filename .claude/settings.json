@@ -1,4 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "PowerShell($s=\"C:\\\\Users\\\\Arash\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\f--Projects-unitypProjects-Stacky--Warriors--2D-Blasty-Stacks\\\\c21f3043-83e3-4612-9072-a7e9de6cda2b\\\\scratchpad\"; node \"$s\\\\scene.js\" comps \"Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_1.unity\" \"LevelGameManager\")",
+      "PowerShell($s=\"C:\\\\Users\\\\Arash\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\f--Projects-unitypProjects-Stacky--Warriors--2D-Blasty-Stacks\\\\c21f3043-83e3-4612-9072-a7e9de6cda2b\\\\scratchpad\"; $f=\"Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_1.unity\"; $all=@\\(\\); foreach\\($n in \"PlayerWaveManager\",\"EnemySpawner\",\"Input System\",\"BoardBG\",\"Main Camera\"\\){ $all += \\(node \"$s\\\\scene.js\" comps $f $n\\) }; $all | Out-File -Encoding utf8 \"$s\\\\c1_managers.txt\"; \\(Get-Content \"$s\\\\c1_managers.txt\"\\).Count)",
+      "PowerShell($s=\"C:\\\\Users\\\\Arash\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\f--Projects-unitypProjects-Stacky--Warriors--2D-Blasty-Stacks\\\\c21f3043-83e3-4612-9072-a7e9de6cda2b\\\\scratchpad\"; foreach\\($st in 2,3\\){ $f=\"Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_$st.unity\"; $all=@\\(\"=========== STAGE $st ===========\"\\); foreach\\($n in \"PlayerWaveManager\",\"EnemySpawner\",\"Input System\",\"BoardBG\",\"Main Camera\",\"LevelGameManager\",\"EnemyCastle\"\\){ $all += \\(node \"$s\\\\scene.js\" comps $f $n\\) }; $all | Out-File -Encoding utf8 \"$s\\\\c${st}_managers.txt\" }; \"done\")",
+      "Bash(grep -v -E \"m_ObjectHideFlags|m_CorrespondingSourceObject|m_PrefabInstance|m_PrefabAsset|m_EditorHideFlags|m_EditorClassIdentifier|^  m_Name: $|serializedVersion|m_ConstrainProportionsScale|m_LocalEulerAnglesHint|m_LocalRotation\" c2_managers.txt)",
+      "PowerShell(git -C \"F:\\\\Projects\\\\unitypProjects\\\\Stacky  Warriors  2D\\\\Blasty-Stacks\" stash list)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -6,8 +15,8 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/inject-sessions.js\"",
-            "statusMessage": "Loading cross-session log...",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "Loading cross-session log..."
           }
         ]
       }
@@ -19,8 +28,8 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/doc-reminder.js\"",
-            "statusMessage": "Checking script docs...",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "Checking script docs..."
           }
         ]
       }
