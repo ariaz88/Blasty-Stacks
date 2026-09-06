@@ -55,16 +55,12 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
-- **[2026-09-06] Stages 2+ have no `Regulite Show Panel`, so a roguelite level-up there pauses the
-  battle with nothing to dismiss it.** The panel was deleted from Stages 2-3 at the user's request;
-  it is what `RogueliteManager.skillSelectPanel` and all three `cardSlots` on `Reg_Manager` point
-  at, so those fields are now null. Every *use* is null-guarded — nothing throws — but
-  `ShowSkillSelection()` calls `GameplayPause.SetPaused(true)` and `FreezeBattlefield(true)` BEFORE
-  the guard, so the game freezes with no card picker. Two ways out, the user's call: switch the
-  `RogueliteManager` component OFF on `Reg_Manager` for those stages (if levels 2+ are meant to
-  have no roguelite), or move the early-return above the pause in
-  `Assets/Scripts/Roguelite/RogueliteManager.cs` so a missing panel simply skips the level-up.
-  Not reproduced in Play mode — derived from reading the wiring.
+- **[2026-09-06] `RogueliteManager.ShowSkillSelection()` pauses BEFORE it checks it has a panel.**
+  `GameplayPause.SetPaused(true)` and `FreezeBattlefield(true)` run above the
+  `if (skillSelectPanel != null)` guard, so any scene missing that panel freezes the battle with
+  nothing to dismiss it. Not currently biting — `Regulite Show Panel` is present in all three
+  converted stages — but it is a landmine for anyone tidying "inactive" UI out of a stage. Worth
+  moving the early-return above the pause in `Assets/Scripts/Roguelite/RogueliteManager.cs:540`.
 
 - **[2026-09-06] Stages 4-20 are still the OLD, drifted scenes; Stages 1-3 have never been played
   since the rebuild.** `Assets/PREFABS/Level Template/LevelTemplate.prefab` is now the whole body
@@ -395,10 +391,13 @@ _Newest first._
   2. Per-stage object stripping, at the user's request: Level 1 keeps every authoring leftover,
      Stages 2+ remove them as `m_RemovedGameObjects` overrides — `PREVIEW (1)`/`(2)`,
      `BoardImage (1)`, `Base Roof_Redundant`, `Blocks (1..3)`, `RedundantBlocks`, `PlayerGate`,
-     the three unused `boardsCover_*`, and four Canvas panels (`Regulite Show Panel`,
-     `Revive Panel`, `Lose Panel`, `Revive Level `). `Player_Valkyrie` and `Enemy_Reaper_Man_01`
-     came out of the **prefab** instead, so they are gone from Level 1 too (0 inbound refs,
-     checked first). Table + rationale in the Level Template README.
+     the three unused `boardsCover_*`, and three Canvas panels (`Revive Panel`, `Lose Panel`,
+     `Revive Level `). `Player_Valkyrie` and `Enemy_Reaper_Man_01` came out of the **prefab**
+     instead, so they are gone from Level 1 too (0 inbound refs, checked first).
+     `Regulite Show Panel` was in that list, was removed, and was **put straight back** on the
+     user's call once it turned out to hold `RogueliteManager.skillSelectPanel` and all three
+     `cardSlots` — see Open Threads. `PrefabUtility.RemovedGameObject.Revert` restored the
+     references by itself; nothing needed rewiring. Table + rationale in the Level Template README.
 - **Next:** play-test Stage 2 and Stage 3 end to end (BATTLE press → camera move → waves →
   win/lose), then run the same conversion on Stages 4-20. Tune `PuzzleMoveBudget.movesAllowed`
   per stage (currently 8 / 8 / 7) — that is the "board gets more restricted as you go" knob the
