@@ -38,8 +38,23 @@ public class SaveData
     // such key, and JsonUtility leaves the field initializer in place.
     public List<string> completedTutorials = new List<string>();
 
+    // --- The two gem-bought side deploy stages on the player castle.
+    // Same reasoning as completedTutorials above: adding this needed no version
+    // bump, because saves written before it simply have no such key and
+    // JsonUtility leaves the field initializer (both false) in place.
+    public DeployStageUnlocks deployStages = new DeployStageUnlocks();
+
     // --- Optional
     public string savedAtUtc;
+
+    [Serializable]
+    public class DeployStageUnlocks
+    {
+        // Bought once with gems, then open on every level for the rest of the
+        // game. See DeployStageUnlockService.
+        public bool left;
+        public bool right;
+    }
 
     [Serializable]
     public class UnitStateEntry

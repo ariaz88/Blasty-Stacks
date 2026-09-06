@@ -11,6 +11,30 @@ public class RevivePanel : MonoBehaviour
 {
     public static RevivePanel Instance { get; private set; }
 
+    // =====================================================================
+    // REVIVE DISABLED - 2026-09-06
+    //
+    // Revive was cut from the game: an enemy reaching and destroying the
+    // player base now goes STRAIGHT to the Lose panel, with no offer, no
+    // countdown and no gem payment.
+    //
+    // NOTHING below has been deleted. The countdown, the escalating gem
+    // pricing and the whole stage reset (ReviveTheStage - board wipe,
+    // RedundantBlocks swap, gate refill, wave restart) are all still here and
+    // still correct; they are simply never entered while this switch is false.
+    // Flip it to true - and OfferRevive in LevelGameManager - to bring the
+    // entire flow back exactly as it was.
+    //
+    // NOTE: this class is ALSO the Lose-panel presenter (ShowLosePanel below),
+    // which is why neither the script nor the "ReviveManager" object may be
+    // deleted or disabled - that would take the Lose screen with it.
+    //
+    // static readonly rather than [SerializeField] on purpose: no scene can
+    // carry a stale "true", and no accidental Inspector click can turn revive
+    // back on in one stage but not the others.
+    // =====================================================================
+    private static readonly bool ReviveEnabled = false;
+
     [Header("Fade (WinPanel-style)")]
     [SerializeField] private CanvasGroup reviveCanvasGroup;   // CanvasGroup on the Revive panel root
     [SerializeField] private CanvasGroup loseCanvasGroup;     // CanvasGroup on the Lose panel root
@@ -91,6 +115,12 @@ public class RevivePanel : MonoBehaviour
 
     private void Start()
     {
+        // Revive disabled: leave the buttons unwired. (The stage scenes ALSO carry
+        // persistent onClick entries pointing at ReviveLevel / NoThanksClick, but
+        // the panel is never shown, so neither can ever be clicked.)
+        if (!ReviveEnabled)
+            return;
+
         if (reviveButton != null)
             reviveButton.onClick.AddListener(ReviveLevel);
 
@@ -102,6 +132,10 @@ public class RevivePanel : MonoBehaviour
 
     private void Update()
     {
+        // Revive disabled: no countdown to run.
+        if (!ReviveEnabled)
+            return;
+
         if (!isReviveActive || isReviveButtonPressed)
             return;
 
@@ -165,6 +199,16 @@ public class RevivePanel : MonoBehaviour
     }
     public void ShowRevivePanel()
     {
+        // REVIVE DISABLED: the offer is skipped entirely and the player loses on
+        // the spot. LevelGameManager should not reach here at all (its own
+        // OfferRevive switch is off too) - this is the second line of defence for
+        // any other caller, including a UnityEvent left wired in a scene.
+        if (!ReviveEnabled)
+        {
+            ShowLosePanel();
+            return;
+        }
+
         if (revivePanel == null)
             return;
 
@@ -335,6 +379,10 @@ public class RevivePanel : MonoBehaviour
     }
     public void ReviveLevel()
     {
+        // REVIVE DISABLED - see the switch at the top of the class.
+        if (!ReviveEnabled)
+            return;
+
         if (!isReviveActive || isReviveButtonPressed)
             return;
 
@@ -417,6 +465,9 @@ public class RevivePanel : MonoBehaviour
 
     public void NoThanksClick()
     {
+        // REVIVE DISABLED - see the switch at the top of the class.
+        if (!ReviveEnabled) return;
+
         if (!isReviveActive) return;
 
         isReviveActive = false;

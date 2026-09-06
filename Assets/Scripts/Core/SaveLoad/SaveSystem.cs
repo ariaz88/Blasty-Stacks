@@ -164,6 +164,35 @@ public static class SaveSystem
         Debug.Log("[SaveSystem] Tutorial progress cleared.");
     }
 
+    // NEW: the two gem-bought side deploy stages on the player castle.
+    // Read/written through DeployStageUnlockService - go through that, not here,
+    // so the unlock event fires and the castle slot repaints.
+    public static SaveData.DeployStageUnlocks GetDeployStages()
+    {
+        // Old saves predate this section, so JsonUtility may leave it null.
+        Data.deployStages ??= new SaveData.DeployStageUnlocks();
+        return Data.deployStages;
+    }
+
+    public static bool IsDeployStageUnlocked(DeployStageSide side)
+    {
+        var d = GetDeployStages();
+        return side == DeployStageSide.Left ? d.left : d.right;
+    }
+
+    public static void SetDeployStageUnlocked(DeployStageSide side, bool unlocked)
+    {
+        var d = GetDeployStages();
+
+        bool current = side == DeployStageSide.Left ? d.left : d.right;
+        if (current == unlocked) return;              // nothing to write
+
+        if (side == DeployStageSide.Left) d.left = unlocked;
+        else d.right = unlocked;
+
+        Save();
+    }
+
     public static void SetBattleEnergy(string windowStartUtc, int battlesUsed, int energy)
     {
         var state = GetBattleEnergy();

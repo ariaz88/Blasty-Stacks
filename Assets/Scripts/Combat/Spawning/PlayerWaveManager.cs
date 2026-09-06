@@ -14,7 +14,10 @@ public class PlayerWaveManager : MonoBehaviour
     [SerializeField] private GameObject playerRootPrefab;
 
 
-    [SerializeField] private Transform[] gatePoints = new Transform[4]; // 4 spawn points
+    [Tooltip("Every deploy stage on the castle, INCLUDING the two purchasable side " +
+             "slots. A stage carrying a locked DeployStageSlot is skipped - do not " +
+             "remove it from this array, the lock is checked live on every wave.")]
+    [SerializeField] private Transform[] gatePoints = new Transform[4]; // spawn points
 
     [Header("Wave Settings")]
     [SerializeField, Min(0f)] private float nextWaveDelay = 0.75f;
@@ -662,7 +665,11 @@ public class PlayerWaveManager : MonoBehaviour
     public bool CanSpawnReinforcements(int unitId)
     {
         if (_unitsDb == null) return false;
-        if (gatePoints == null || gatePoints.Length == 0) return false;
+
+        // Counts only OPEN stages: with every side slot locked and the four
+        // permanent ones somehow unassigned there is nowhere to land, and the HUD
+        // must find that out before it charges the player.
+        if (GetUsableGates().Count == 0) return false;
 
         var def = _unitsDb.GetById(unitId);
         return def != null && def.runtimePrefab != null;
@@ -695,9 +702,18 @@ public class PlayerWaveManager : MonoBehaviour
         // never materialise in the middle of the fight.
         float? laneY = GetRearLaneY();
 
+        // Resolved ONCE for the whole batch: round-robin over the stages that are
+        // actually open, so an unbought side slot never eats a reinforcement.
+        var usableGates = GetUsableGates();
+        if (usableGates.Count == 0)
+        {
+            Debug.LogWarning("[PlayerWaveManager] No usable deploy stage for reinforcements.", this);
+            yield break;
+        }
+
         for (int i = 0; i < count; i++)
         {
-            var gate = gatePoints[i % gatePoints.Length];
+            var gate = usableGates[i % usableGates.Count];
             if (gate == null) continue;
 
             var pm = SpawnUnitAt(def, gate.position, gate.rotation);
@@ -1047,15 +1063,46 @@ public class PlayerWaveManager : MonoBehaviour
 
     private List<int> GetFreeGateIndices()
     {
-        var list = new List<int>(4);
+        var list = new List<int>(gatePoints.Length);
         for (int i = 0; i < gatePoints.Length; i++)
         {
-            if (!gatePoints[i]) continue;
+            if (!IsGateUsable(gatePoints[i])) continue;
 
             // If something sits there, skip it (prevents stacking)
             var c = Physics2D.OverlapCircle((Vector2)gatePoints[i].position, occupyCheckRadius, playerLayer);
             if (c == null) list.Add(i);
         }
+        return list;
+    }
+
+    /// <summary>
+    /// A stage is usable unless it is one of the two purchasable side slots and
+    /// has not been bought yet.
+    ///
+    /// Checked LIVE on every wave rather than cached at Awake, so a slot bought
+    /// mid-battle starts receiving heroes on the very next wave. A stage with no
+    /// DeployStageSlot component is one of the four permanent ones and is always
+    /// usable.
+    /// </summary>
+    private bool IsGateUsable(Transform gate)
+    {
+        if (!gate) return false;
+
+        var slot = gate.GetComponent<DeployStageSlot>();
+        return slot == null || slot.IsUnlocked;
+    }
+
+    /// <summary>
+    /// The stages that can take a hero right now, in array order. Used where a
+    /// COMPACT list is needed (reinforcements round-robin across it) rather than
+    /// indices into gatePoints.
+    /// </summary>
+    private List<Transform> GetUsableGates()
+    {
+        var list = new List<Transform>(gatePoints.Length);
+        foreach (var g in gatePoints)
+            if (IsGateUsable(g)) list.Add(g);
+
         return list;
     }
 

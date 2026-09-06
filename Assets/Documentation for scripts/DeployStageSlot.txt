@@ -1,0 +1,108 @@
+================================================================================
+  DeployStageSlot.cs
+  Path : Assets/Scripts/Combat/Spawning/DeployStageSlot.cs
+  Type : MonoBehaviour  [DisallowMultipleComponent]
+  Layer: Combat / Spawning
+  Scenes: Level_1_Stage_1 as of 2026-09-06 (on DestroyStageLeft and
+          DestroyStageRight). NOT yet in the other stage scenes.
+================================================================================
+
+PURPOSE
+-------
+One of the two PURCHASABLE side deploy stages on the player castle, under
+PlayerCastle/Stage Holder/BoardStages:
+
+  DestroyStageLeft   x -4.53   side = Left
+  DestroyStageRight  x +4.55   side = Right
+
+Two jobs only: show whether the slot is locked, and take the tap that buys it.
+
+It decides NOTHING about spawning. PlayerWaveManager and FormationGapFiller keep
+this stage in their arrays permanently and ask slot.IsUnlocked every time they
+build their usable-column list, so a purchase takes effect on the very next wave
+with nothing to re-wire.
+
+Added 2026-09-06.
+
+INSPECTOR FIELDS
+----------------
+  Identity
+    side      (DeployStageSide)  Left or Right. THE TWO SLOTS IN A SCENE MUST NOT
+              BOTH BE THE SAME SIDE - nothing enforces this, and two Lefts would
+              make one purchase silently open both platforms.
+
+  Price
+    gemCost   (int, default 400)  charged once, on first purchase of that side.
+
+  Visuals    (BOTH OPTIONAL - null is handled, see NOTES)
+    lockedVisual    (GameObject)  active while LOCKED - padlock, dimmed platform,
+                    price tag.
+    unlockedVisual  (GameObject)  active once OPEN - normal platform and flag.
+
+  Purchase
+    prompt    (DeployStagePurchasePrompt)  confirmation popup. LEAVE EMPTY to buy
+              immediately on tap with no confirmation - handy while testing.
+    tapToBuy  (bool, default true)  OFF = tapping does nothing, for scenes that
+              drive the purchase from elsewhere.
+
+PUBLIC API
+----------
+  Side       (DeployStageSide, get)
+  GemCost    (int, get)
+  IsUnlocked (bool, get)  -> DeployStageUnlockService.IsUnlocked(side).
+             Read LIVE by the spawner and the formation grid on every query and
+             never cached by them, which is what lets a mid-battle purchase open
+             the column immediately.
+  RequestPurchase()  opens the prompt, or Confirm()s directly when there is none.
+             Early-outs if already unlocked. Public so any other UI can sell the
+             slot without going through the tap.
+  Confirm()  -> bool. Charges and unlocks through the service. Returns false when
+             the player could not afford it (slot stays locked, no gems move).
+             Called by the prompt's confirm button.
+
+FLOW
+----
+  OnEnable   subscribes to DeployStageUnlockService.OnStageUnlocked, then
+             ApplyVisualState().
+  OnDisable  unsubscribes. REQUIRED - the event is static and would otherwise
+             leak across scene loads.
+  Tap        OnMouseUpAsButton -> RequestPurchase().
+  Unlock     HandleStageUnlocked filters on side, then repaints.
+
+HOW IT CONNECTS
+---------------
+  * DeployStageUnlockService - all state and all payment. This component holds no
+    unlock flag of its own.
+  * DeployStagePurchasePrompt - optional confirmation; the prompt reads GemCost
+    off this component and hands the decision straight back via Confirm().
+  * PlayerWaveManager.IsGateUsable(gate) does gate.GetComponent<DeployStageSlot>()
+    and treats "no component" as one of the four permanent stages.
+  * FormationGapFiller.RebuildActiveColumns() does exactly the same lookup on its
+    columnAnchors.
+
+NOTES
+-----
+  - THE STAGE OBJECT STAYS ACTIVE WHILE LOCKED. The spawner finds the slot with
+    GetComponent on the gate Transform, and deactivating the GameObject would
+    take its collider and visuals out of the scene as well. Locked is a LOOK
+    (lockedVisual / unlockedVisual), never SetActive on this object.
+  - NEITHER VISUAL IS WIRED YET (2026-09-06). Both fields are null in
+    Level_1_Stage_1, so a locked slot currently looks IDENTICAL to an open one -
+    the platform is visible and tappable but heroes never spawn on it. The
+    functional side is complete; the locked/open art is still to be authored and
+    assigned. leftFlag / RightFlag sit right above the two slots (x -4.54 /
+    +4.55) as siblings under Stage Holder and are the obvious unlockedVisual
+    candidates.
+  - THE COLLIDER IS WHAT MAKES THE TAP WORK. OnMouseUpAsButton needs a Collider2D
+    on this object; without one the slot is silently unclickable, which is why
+    OnValidate warns. A 1.12 x 1.04 BoxCollider2D (trigger) was added to both
+    slots on 2026-09-06, sized from the child renderer bounds.
+  - OnMouseUpAsButton works on a Collider2D with no EventSystem raycaster, and
+    keeps working while the game is "paused", because this project pauses with
+    the GameplayPause FLAG rather than timeScale.
+  - ONLY IN Level_1_Stage_1. Rolling out to the other 19 stage scenes means, per
+    scene: add this component to both side stages, set side/gemCost, add the
+    collider, and append both stages to PlayerWaveManager.gatePoints and
+    FormationGapFiller.columnAnchors. An editor script is the sane way to do 19.
+  - NEVER RUN. Written 2026-09-06 and compile-verified only; no purchase has been
+    made in play mode.

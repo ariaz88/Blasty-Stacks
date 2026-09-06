@@ -6,6 +6,38 @@
   Scenes: all 7 gameplay stages
 ================================================================================
 
+*** STATUS: REVIVE IS DISABLED  (2026-09-06) ***
+------------------------------------------------
+  private static readonly bool ReviveEnabled = false;   (top of the class)
+
+  Revive was cut from the game. An enemy reaching and destroying the player
+  base now goes STRAIGHT to the Lose panel - no offer, no 9-second countdown,
+  no gem payment, no stage reset.
+
+  NOTHING in this file was deleted. Every method described below still exists
+  and is still correct; the ones behind the switch are simply never entered.
+  Four places test it:
+      Start()             - returns early, so the Revive / No Thanks buttons
+                            are never wired
+      Update()            - returns early, so the countdown never runs
+      ShowRevivePanel()   - calls ShowLosePanel() and returns (the second line
+                            of defence: LevelGameManager.OfferRevive is off too,
+                            so it should never even be called)
+      ReviveLevel() / NoThanksClick() - return immediately
+
+  To bring revive back: set ReviveEnabled here AND OfferRevive in
+  LevelGameManager to true. Nothing else is needed.
+
+  THIS SCRIPT AND ITS "ReviveManager" GAMEOBJECT MUST NOT BE DELETED OR
+  DISABLED. It is also the LOSE-PANEL PRESENTER (ShowLosePanel), it owns the
+  losePanel / loseCanvasGroup / BGImage references in all ~20 stage scenes, and
+  LevelGameManager calls into it for every defeat. Switching the object off
+  removes the Lose screen from the game.
+
+  ALSO NOTE: the "Revive Level Panel" GameObject is still authored ACTIVE
+  (m_IsActive: 1) in the stage scenes. It is hidden purely by the
+  revivePanel.SetActive(false) line in Awake(), so that line must stay.
+
 PURPOSE
 -------
 The "pay gems to keep fighting" modal: a countdown timer, a Revive button
@@ -14,6 +46,9 @@ revives, this class does the heavy lifting of RESETTING THE STAGE - clearing
 the puzzle board, destroying leftover locked units, refilling the gate, and
 restarting the wave spawner - rather than reloading the whole scene. If the
 player declines or the timer runs out, it hands off to the Lose panel.
+
+Since 2026-09-06 only that last responsibility - SHOWING THE LOSE PANEL - is
+actually live. See STATUS above.
 
 SINGLETON
 ---------
@@ -181,8 +216,9 @@ ACTUAL STAGE RESET  (the substance of a revive)
 
 HOW IT CONNECTS
 ---------------
-  - LevelGameManager.OnPlayerGateDestroyed calls ShowRevivePanel() or
-    ShowLosePanel() directly.
+  - LevelGameManager.EnterDefeatFlow calls ShowLosePanel() directly. (It used to
+    choose between ShowRevivePanel() and ShowLosePanel(); with OfferRevive off it
+    only ever takes the Lose branch - see STATUS at the top.)
   - Notifies LevelGameManager.NotifyReviveAccepted/Declined so its own state
     machine (Playing/ReviveOffer/Lost) stays in sync.
   - Destroys and reconstructs Puzzle-layer state (BoardGridXY, PieceSimple) and
@@ -194,6 +230,20 @@ HOW IT CONNECTS
 
 NOTES / RISKS
 -------------
+  - DEAD-BUT-KEPT SURFACE (2026-09-06): with revive off, these are now
+    unreachable and should NOT be mistaken for live code -
+      here: ShowRevivePanel, ReviveLevel, NoThanksClick, RemoveGem,
+            RefreshGemCostUI, HideReviveAndShowLose, ReviveTheStage,
+            ActivateWaveSpawner, FadeIn/FadeOutRevivePanelRoutine, the whole
+            Update() countdown, and every "Revive Settings" Inspector field.
+      elsewhere: LevelGameManager.NotifyReviveAccepted / NotifyReviveDeclined,
+            EnemyManager.ResetAfterRevive, PlayerWaveManager.RestartAfterRevive
+            (all three had this class as their ONLY caller), and the
+            RedundantBlocks root in every stage scene, which is now never
+            swapped in.
+    The Revive / No Thanks buttons also still carry persistent onClick entries
+    to ReviveLevel / NoThanksClick in the scene files. They are harmless: the
+    panel is never shown, so they can never be clicked.
   - THE "REDUNDANT BLOCKS" DESIGN: rather than procedurally regenerating a
     fresh puzzle layout after a revive, the stage must be AUTHORED WITH TWO
     complete board setups (blocksRoot and redundantBlocksRoot) side by side in

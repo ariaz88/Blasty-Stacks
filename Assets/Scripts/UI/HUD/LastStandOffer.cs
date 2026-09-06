@@ -5,7 +5,9 @@ using UnityEngine;
 /// The "your army is collapsing - want one more hero?" prompt.
 ///
 /// Watches the WHOLE roster rather than one type: once <see cref="deadFraction"/>
-/// of everyone who started the battle is dead, it shows a single buy button for
+/// of everyone who started the battle is dead AND every per-type buy-back in the
+/// Heroes Stats panel has been used (<see cref="requireBuyBacksSpent"/>), it shows
+/// a single buy button for
 /// a designer-chosen hero. Paying spawns that hero through the EXACT same path a
 /// bought-back squad uses - PlayerWaveManager.SpawnReinforcements - so it lands
 /// on a castle gate, poses there with no HP bar, and jumps into the rear rank.
@@ -38,6 +40,14 @@ public class LastStandOffer : MonoBehaviour
              "appears. 0.8 = show once 80% have fallen (5 of 6, 4 of 5, ...).")]
     [SerializeField, Range(0.1f, 1f)] private float deadFraction = 0.8f;
 
+    [Tooltip("ALSO wait until every card in the Heroes Stats panel has had its " +
+             "one buy-back used. This is the last resort, so it must not compete " +
+             "with a squad the player can still buy back. Note the consequence: a " +
+             "hero type that is never wiped out never spends its card, so with " +
+             "this on the offer simply never appears in that battle. Turn OFF to " +
+             "go back to the plain 80%-dead trigger.")]
+    [SerializeField] private bool requireBuyBacksSpent = true;
+
     [Header("Presentation")]
     [Tooltip("Where the offer cell is parented. Left empty = this GameObject.")]
     [SerializeField] private RectTransform offerContainer;
@@ -58,6 +68,10 @@ public class LastStandOffer : MonoBehaviour
 
     [Header("Refs (left empty = found in the scene)")]
     [SerializeField] private PlayerWaveManager waveManager;
+
+    [Tooltip("The Heroes Stats panel whose buy-backs gate this offer. Only used " +
+             "when 'Require Buy Backs Spent' is on. Left empty = found in the scene.")]
+    [SerializeField] private HeroStatsPanel heroStatsPanel;
 
     private HeroStatCell offerCell;
     private Tween pulse;
@@ -81,6 +95,15 @@ public class LastStandOffer : MonoBehaviour
         if (!offerContainer) offerContainer = transform as RectTransform;
         if (!waveManager) waveManager = FindObjectOfType<PlayerWaveManager>(true);
 
+        // Inactive objects included: the Heroes Stats panel is commonly switched on
+        // by the battle transition, i.e. AFTER this Awake runs.
+        if (!heroStatsPanel) heroStatsPanel = FindObjectOfType<HeroStatsPanel>(true);
+
+        if (requireBuyBacksSpent && !heroStatsPanel)
+            Debug.LogWarning("[LastStandOffer] 'Require Buy Backs Spent' is on but there " +
+                             "is no HeroStatsPanel in this scene - the gate is skipped and " +
+                             "the offer falls back to the plain dead-fraction trigger.", this);
+
         if (!cellTemplate)
             Debug.LogError("[LastStandOffer] No cell template - assign the authored " +
                            "'Hero Card' object (it needs a HeroStatCell component).", this);
@@ -96,6 +119,10 @@ public class LastStandOffer : MonoBehaviour
         HeroRoster.OnRosterChanged += Evaluate;
         LevelGameManager.OnGameStateChanged += HandleGameStateChanged;
 
+        // Spending the LAST buy-back is the one thing that can open the gate without
+        // the roster moving, so it needs its own signal.
+        if (heroStatsPanel) heroStatsPanel.OnBuyBackSpent += Evaluate;
+
         if (CurrencyManager.Instance != null)
             CurrencyManager.Instance.OnCurrencyChanged += HandleCurrencyChanged;
 
@@ -107,6 +134,8 @@ public class LastStandOffer : MonoBehaviour
         BattleStartController.OnAnyBattleStarted -= HandleBattleStarted;
         HeroRoster.OnRosterChanged -= Evaluate;
         LevelGameManager.OnGameStateChanged -= HandleGameStateChanged;
+
+        if (heroStatsPanel) heroStatsPanel.OnBuyBackSpent -= Evaluate;
 
         if (CurrencyManager.Instance != null)
             CurrencyManager.Instance.OnCurrencyChanged -= HandleCurrencyChanged;
@@ -152,6 +181,20 @@ public class LastStandOffer : MonoBehaviour
         // stays honest when a reinforcement pushes TotalAlive above the
         // snapshot: 80% dead of 6 means 1 or fewer still standing.
         if (HeroRoster.TotalAlive() > starting * (1f - deadFraction)) return;
+
+        // LAST, in both senses. The dead-fraction is only half the trigger: this is
+        // the final purchase the stage offers, so every per-type buy-back in the
+        // Heroes Stats panel must already be used up. Three hero types on the field
+        // means all three cards have to have been bought before this appears.
+        //
+        // Not a one-way check - failing here leaves `spent` false, so the offer is
+        // merely postponed. Spending the last card raises OnBuyBackSpent, and the
+        // heroes it delivers dying raises OnRosterChanged; either brings us back.
+        //
+        // A missing panel skips the gate rather than blocking forever (warned about
+        // once in Awake). A panel that has not built its cells yet reports false,
+        // which is correct: its buy-backs are unspent, not absent.
+        if (requireBuyBacksSpent && heroStatsPanel && !heroStatsPanel.BuyBacksExhausted) return;
 
         Show();
     }

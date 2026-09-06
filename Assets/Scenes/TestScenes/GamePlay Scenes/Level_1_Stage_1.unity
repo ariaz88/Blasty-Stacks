@@ -3529,6 +3529,8 @@ MonoBehaviour:
   - {fileID: 1355674508}
   - {fileID: 1355674507}
   - {fileID: 1355674506}
+  - {fileID: 764123978}
+  - {fileID: 764123975}
   nextWaveDelay: 0.65
   minPerWave: 1
   maxPerWave: 3
@@ -3581,6 +3583,8 @@ MonoBehaviour:
   - {fileID: 1355674508}
   - {fileID: 1355674507}
   - {fileID: 1355674506}
+  - {fileID: 764123978}
+  - {fileID: 764123975}
   rowLanes:
   - {fileID: 1529540289}
   - {fileID: 1765837234}
@@ -5641,7 +5645,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 8.76001, y: -855.4}
+  m_AnchoredPosition: {x: 8.76001, y: -855.3999}
   m_SizeDelta: {x: -338.05, y: -2184}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &619313138
@@ -6818,7 +6822,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 1.6098633, y: -1078.2101}
+  m_AnchoredPosition: {x: 1.6098633, y: -1078.21}
   m_SizeDelta: {x: -287.11, y: -2302.38}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &726112504
@@ -7188,6 +7192,154 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 0fb003fb42dc8da41b31246bac9f805d, type: 3}
+--- !u!4 &764123975 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4521634787852129327, guid: 7669dd9abd8229f4f93eaeb1518b8a8e, type: 3}
+  m_PrefabInstance: {fileID: 1355674504}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &764123976 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 6278873099393442318, guid: 7669dd9abd8229f4f93eaeb1518b8a8e, type: 3}
+  m_PrefabInstance: {fileID: 1355674504}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &764123977 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7646492985928123808, guid: 7669dd9abd8229f4f93eaeb1518b8a8e, type: 3}
+  m_PrefabInstance: {fileID: 1355674504}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &764123978 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 354175566497712430, guid: 7669dd9abd8229f4f93eaeb1518b8a8e, type: 3}
+  m_PrefabInstance: {fileID: 1355674504}
+  m_PrefabAsset: {fileID: 0}
+--- !u!61 &764123979
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 764123976}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0.07700026}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 1.12, y: 0.89}
+    newSize: {x: 1.12, y: 0.89}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 1.1199999, y: 1.0440001}
+  m_EdgeRadius: 0
+--- !u!114 &764123980
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 764123976}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c819bf3d1b97afe44a9ba474ca1aaee5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeployStageSlot
+  side: 1
+  gemCost: 400
+  lockedVisual: {fileID: 0}
+  unlockedVisual: {fileID: 0}
+  prompt: {fileID: 0}
+  tapToBuy: 1
+--- !u!61 &764123981
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 764123977}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0.07700026}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 1.12, y: 0.89}
+    newSize: {x: 1.12, y: 0.89}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 1.1199999, y: 1.0440001}
+  m_EdgeRadius: 0
+--- !u!114 &764123982
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 764123977}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c819bf3d1b97afe44a9ba474ca1aaee5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeployStageSlot
+  side: 0
+  gemCost: 400
+  lockedVisual: {fileID: 0}
+  unlockedVisual: {fileID: 0}
+  prompt: {fileID: 0}
+  tapToBuy: 1
 --- !u!1001 &771202731
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -12857,7 +13009,19 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 7646492985928123808, guid: 7669dd9abd8229f4f93eaeb1518b8a8e, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 764123982}
+    - targetCorrespondingSourceObject: {fileID: 7646492985928123808, guid: 7669dd9abd8229f4f93eaeb1518b8a8e, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 764123981}
+    - targetCorrespondingSourceObject: {fileID: 6278873099393442318, guid: 7669dd9abd8229f4f93eaeb1518b8a8e, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 764123980}
+    - targetCorrespondingSourceObject: {fileID: 6278873099393442318, guid: 7669dd9abd8229f4f93eaeb1518b8a8e, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 764123979}
   m_SourcePrefab: {fileID: 100100000, guid: 7669dd9abd8229f4f93eaeb1518b8a8e, type: 3}
 --- !u!4 &1355674505 stripped
 Transform:
@@ -17876,11 +18040,13 @@ MonoBehaviour:
   gemCost: 200
   heroesPerPurchase: 1
   deadFraction: 0.8
+  requireBuyBacksSpent: 1
   offerContainer: {fileID: 1863599302}
   cellTemplate: {fileID: 253776559}
   pulseScale: 0.8
   pulseDuration: 0.75
   waveManager: {fileID: 0}
+  heroStatsPanel: {fileID: 0}
 --- !u!114 &1863599304
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -24793,29 +24959,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 09054f2af8c1a994a8cd27f6013c5856, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  reviveCanvasGroup: {fileID: 1842568089}
+  reviveCanvasGroup: {fileID: 0}
   loseCanvasGroup: {fileID: 1625552667}
   fadeDuration: 0.35
   fadeDurationrEVIVE: 0.85
-  reviveButton: {fileID: 360052196}
-  noThanksButton: {fileID: 1171482394}
+  reviveButton: {fileID: 0}
+  noThanksButton: {fileID: 0}
   revivePanel: {fileID: 1842568087}
   losePanel: {fileID: 1625552665}
   BGImage: {fileID: 7294408531483230845}
-  progressBar: {fileID: 7294408529803796145}
+  progressBar: {fileID: 0}
   whiteBar: {fileID: 0}
-  barText: {fileID: 547464673}
+  barText: {fileID: 0}
   gemCostText: {fileID: 0}
   countdownDuration: 9
-  baseReviveGemCost: 1
+  baseReviveGemCost: 15
   secondReviveFlatIncrement: 5
   laterReviveMultiplier: 1.3
   isReviveActive: 0
   isReviveButtonPressed: 0
   gameOver: 0
-  blocksRoot: {fileID: 819326447806077408}
-  redundantBlocksRoot: {fileID: 1641168283}
-  board: {fileID: 208870210138756754}
+  blocksRoot: {fileID: 0}
+  redundantBlocksRoot: {fileID: 0}
+  board: {fileID: 0}
 --- !u!4 &2919346981791575066
 Transform:
   m_ObjectHideFlags: 0

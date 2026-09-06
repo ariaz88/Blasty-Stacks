@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -7,6 +8,11 @@ using UnityEngine.UI;
 /// The battle HUD's "Heroes Stats panel": one cell per hero TYPE that is on the
 /// field when BATTLE is pressed, each showing "alive/total" and, once that type
 /// is wiped out, a gem price to buy the whole squad back.
+///
+/// A card's buy-back is good for ONE purchase per level. Once used it never comes
+/// back, even if that type is wiped out again - see HeroStatCell.IsSpent. When
+/// every card has been spent, <see cref="BuyBacksExhausted"/> opens the gate that
+/// lets LastStandOffer appear.
 ///
 /// The cells are BUILT AT RUNTIME. The scene holds a single authored cell
 /// ("Hero Card") which is used as a template and switched off - a stage that fields
@@ -47,6 +53,36 @@ public class HeroStatsPanel : MonoBehaviour
     private readonly List<HeroStatCell> cells = new();
     private UnitsDatabaseSO unitsDatabase;
     private bool built;
+
+    /// <summary>
+    /// Raised the moment a card's one-per-level buy-back is used up. LastStandOffer
+    /// listens so it can re-test its gate immediately, rather than waiting for the
+    /// next roster change to happen to poke it.
+    /// </summary>
+    public event Action OnBuyBackSpent;
+
+    /// <summary>
+    /// True once EVERY card in this panel has had its buy-back used. This is the
+    /// gate LastStandOffer waits on: the last-stand hero is the final resort, so it
+    /// must not be offered while the player still holds an unused squad buy-back.
+    ///
+    /// Requires <see cref="built"/>, so a panel that has not laid its cells out yet
+    /// reads as "not exhausted" instead of vacuously true. A battle that opened with
+    /// no heroes at all builds zero cells and does report true - there is genuinely
+    /// nothing left to spend.
+    /// </summary>
+    public bool BuyBacksExhausted
+    {
+        get
+        {
+            if (!built) return false;
+
+            foreach (var cell in cells)
+                if (cell && !cell.IsSpent) return false;
+
+            return true;
+        }
+    }
 
     private void Awake()
     {
@@ -206,6 +242,12 @@ public class HeroStatsPanel : MonoBehaviour
     {
         if (!cell) return;
 
+        // ONE buy-back per card per level. The button is hidden and disabled the
+        // instant a purchase lands, so this is belt-and-braces against a second
+        // click queued in the same frame - but it is also the authoritative rule,
+        // and it must sit ahead of the gem charge.
+        if (cell.IsSpent) return;
+
         // Nothing to buy back if the type is not actually wiped out.
         if (HeroRoster.AliveCount(cell.UnitId) > 0) return;
 
@@ -237,8 +279,17 @@ public class HeroStatsPanel : MonoBehaviour
 
         waveManager.SpawnReinforcements(cell.UnitId, cell.SquadSize);
 
+        // Burned BEFORE the Refresh below, so SetAlive sees the spent flag and puts
+        // the count back where the price was instead of re-offering it.
+        cell.MarkSpent();
+
         // The heroes register themselves in Start (next frame), which fires
         // OnRosterChanged - Refresh here only reacts to the gem spend.
         Refresh();
+
+        // Announced last, with the panel already in its final state, so a listener
+        // reading BuyBacksExhausted from inside the handler gets the truth.
+        try { OnBuyBackSpent?.Invoke(); }
+        catch (Exception e) { Debug.LogException(e); }
     }
 }

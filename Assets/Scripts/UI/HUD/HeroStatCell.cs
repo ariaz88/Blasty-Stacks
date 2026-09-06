@@ -6,12 +6,14 @@ using UnityEngine.UI;
 /// <summary>
 /// ONE hero type in the battle HUD's "Heroes Stats panel" - the "Hero Card" object.
 ///
-/// It has exactly two looks, and NEITHER of them tints anything. The artwork
-/// carries the state:
+/// It has three looks, and NONE of them tints anything. The artwork carries the
+/// state:
 ///   ALIVE : "Cell Active"   frame on (coloured), "card  Button" showing "alive/total",
 ///                           "Cost  Gem" off.
 ///   WIPED : "Cell DeActive" frame on (that sprite is ALREADY grey), the count off,
 ///                           "Cost  Gem" on with its gem price.
+///   SPENT : the buy-back has been used, so the price never comes back - a wiped
+///           SPENT card is the grey frame with the count still on it, reading "0/3".
 ///
 /// The avatar sprite is written into BOTH frames at Bind time and its colour is
 /// never touched - that is the whole point of the two-frame model, and it replaces
@@ -77,6 +79,19 @@ public class HeroStatCell : MonoBehaviour
 
     /// <summary>Gems charged to bring the whole squad back.</summary>
     public int GemCost { get; private set; }
+
+    /// <summary>
+    /// True once this card's ONE buy-back for the level has been used.
+    ///
+    /// The buy-back is deliberately not repeatable: a squad can be bought back
+    /// once per stage, and after that the card is a read-out only. Without this
+    /// the card re-armed every time the type was wiped out again, so a player
+    /// with gems could keep the same squad on the field indefinitely.
+    ///
+    /// Also the gate LastStandOffer waits on - it only appears once EVERY card
+    /// here is spent.
+    /// </summary>
+    public bool IsSpent { get; private set; }
 
     private Action<HeroStatCell> onBuyPressed;
 
@@ -217,6 +232,7 @@ public class HeroStatCell : MonoBehaviour
         SquadSize = Mathf.Max(0, squadSize);
         GemCost = Mathf.Max(0, gemCost);
         onBuyPressed = onBuy;
+        IsSpent = false;
 
         // The SAME sprite goes into both frames. The greyed-out look comes from the
         // "Cell DeActive" frame art, never from tinting the portrait.
@@ -247,10 +263,35 @@ public class HeroStatCell : MonoBehaviour
 
         ShowFrame(wiped);
 
-        if (countText) countText.text = $"{alive}/{SquadSize}";
-        ShowCount(!wiped);
+        // The price only takes the count's place while the buy-back is still
+        // available. A SPENT card that gets wiped out a second time keeps the grey
+        // frame but goes back to showing "0/3" - the squad is gone and there is
+        // nothing left to sell, which reads very differently from a price the
+        // player merely cannot afford.
+        bool canBuy = wiped && !IsSpent;
 
-        if (costRoot) costRoot.SetActive(wiped);
+        if (countText) countText.text = $"{alive}/{SquadSize}";
+        ShowCount(!canBuy);
+
+        if (costRoot) costRoot.SetActive(canBuy);
+    }
+
+    /// <summary>
+    /// Burns this card's single buy-back for the rest of the level. Called by
+    /// HeroStatsPanel the moment a purchase actually goes through - after the gems
+    /// are charged and the reinforcements are queued, never before.
+    ///
+    /// The button is switched off here as well as hidden, so the frame between this
+    /// call and the next SetAlive cannot register a second click.
+    /// </summary>
+    public void MarkSpent()
+    {
+        if (IsSpent) return;
+
+        IsSpent = true;
+
+        if (buyButton) buyButton.interactable = false;
+        if (costRoot) costRoot.SetActive(false);
     }
 
     /// <summary>
@@ -271,10 +312,14 @@ public class HeroStatCell : MonoBehaviour
         if (costRoot) costRoot.SetActive(true);
     }
 
-    /// <summary>Greys out the price while the player cannot afford it. Purely cosmetic.</summary>
+    /// <summary>
+    /// Greys out the price while the player cannot afford it. Purely cosmetic -
+    /// except that a SPENT card can never be re-enabled by it, however the gem
+    /// balance moves afterwards.
+    /// </summary>
     public void SetAffordable(bool affordable)
     {
-        if (buyButton) buyButton.interactable = affordable;
+        if (buyButton) buyButton.interactable = affordable && !IsSpent;
     }
 
     private void ShowFrame(bool wiped)

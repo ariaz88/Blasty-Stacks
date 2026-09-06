@@ -1,0 +1,67 @@
+================================================================================
+  DeployStagePurchasePrompt.cs
+  Path : Assets/Scripts/Combat/Spawning/DeployStagePurchasePrompt.cs
+  Type : MonoBehaviour
+  Layer: Combat / Spawning  (UI-facing)
+  Scenes: NOT IN ANY SCENE YET as of 2026-09-06 - see NOTES.
+================================================================================
+
+PURPOSE
+-------
+The "Unlock this deploy stage for N gems?" confirmation. ONE prompt per scene,
+shared by both side slots: whichever DeployStageSlot was tapped passes itself in
+and the prompt fills itself from that slot.
+
+Deliberately dumb. It holds no price and no unlock state of its own, and nothing
+in it can move gems or unlock anything - Confirm hands the decision straight back
+to the slot that opened it.
+
+Added 2026-09-06.
+
+INSPECTOR FIELDS
+----------------
+  Root
+    panelRoot  (GameObject)  the object switched on and off. LEFT EMPTY = this
+               GameObject (resolved in Awake).
+
+  UI
+    costText            (TMP_Text)  filled with slot.GemCost on Open.
+    confirmButton       (Button)    wired to OnConfirm in Awake.
+    cancelButton        (Button)    wired to Close in Awake.
+    notEnoughGemsHint   (GameObject, OPTIONAL)  shown INSTEAD of the confirm
+                        button when the player cannot afford the slot.
+
+RUNTIME STATE
+-------------
+  pending  (DeployStageSlot)  which slot opened us. Cleared by Close so a stale
+           confirm cannot fire against a slot the player already dismissed.
+
+FLOW
+----
+  Awake      resolves panelRoot, wires both buttons, hides the panel.
+  Open(slot) stores the slot, writes the cost, toggles confirm vs.
+             notEnoughGemsHint on affordability, shows the panel.
+  Close()    clears pending and hides the panel.
+  OnConfirm  captures pending into a local, Closes (which clears it), THEN calls
+             slot.Confirm(). The capture-before-close order matters.
+
+HOW IT CONNECTS
+---------------
+  * DeployStageSlot.RequestPurchase() calls Open(this) when its prompt field is
+    assigned; slot.Confirm() is the only thing this prompt can trigger.
+  * CurrencyManager.Instance.Gems - read ONLY to decide which button to show.
+
+NOTES
+-----
+  - THE AFFORDABILITY CHECK IN Open IS A HINT, NOT A GUARD. The real check is
+    CurrencyManager.TrySpendGems inside DeployStageUnlockService, which is the
+    only thing that can actually refuse. This one exists so the UI does not offer
+    a button that is guaranteed to fail. With no CurrencyManager it assumes
+    affordable and lets the service refuse.
+  - NOT IN ANY SCENE YET. The panel has to be authored (a small canvas panel with
+    a cost label and two buttons) and then assigned to the `prompt` field on both
+    DeployStageSlot components. UNTIL THEN THE SLOTS BUY INSTANTLY ON TAP with no
+    confirmation - that is the documented null-prompt behaviour in
+    DeployStageSlot.RequestPurchase, not a bug, but it means a mis-tap during
+    testing spends 400 gems.
+  - NEVER RUN.

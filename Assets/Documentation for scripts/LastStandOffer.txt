@@ -15,6 +15,11 @@ wiped out, this watches the WHOLE roster: when deadFraction (default 0.8) of
 everyone who started the battle has fallen, it shows a single buy button for a
 hero the DESIGNER PICKED FOR THE STAGE - wiped or not.
 
+It is the LAST resort in both senses. Since 2026-09-06 the dead-fraction is only
+half the trigger: every per-type buy-back in the Heroes Stats panel must ALREADY
+have been used (requireBuyBacksSpent, default ON). Three hero types on the field
+means all three of those cards must have been bought before this can appear.
+
 It owns no arrival logic. Paying calls PlayerWaveManager.SpawnReinforcements,
 the same entry point the per-type buy-back uses, so the hero lands on a castle
 gate, poses there for reinforcementGateHold with its HP bar hidden, then jumps
@@ -36,6 +41,10 @@ INSPECTOR FIELDS
   Trigger
     deadFraction      (float 0.1-1, default 0.8)  fraction of the STARTING army
                       that must be dead before the offer appears. 0.8 = 5 of 6.
+    requireBuyBacksSpent (bool, default ON)  ALSO wait until every card in the
+                      Heroes Stats panel has had its one buy-back used. Turn OFF
+                      to go back to the plain dead-fraction trigger. See NOTES
+                      for the consequence when a hero type never gets wiped out.
 
   Presentation
     offerContainer    (RectTransform)  where the offer cell is parented.
@@ -55,6 +64,11 @@ INSPECTOR FIELDS
 
   Refs (left empty = found in the scene)
     waveManager       (PlayerWaveManager)
+    heroStatsPanel    (HeroStatsPanel)  the panel whose buy-backs gate this
+                      offer. Only read when requireBuyBacksSpent is on. The
+                      auto-find includes INACTIVE objects, because that panel is
+                      commonly switched on by BattlePhaseTransition, i.e. after
+                      this Awake has run.
 
 RUNTIME STATE
 -------------
@@ -67,11 +81,16 @@ RUNTIME STATE
 FLOW
 ----
   Awake()
-      Defaults offerContainer to self, finds the PlayerWaveManager, and logs an
-      error for a missing cellTemplate or offeredUnit.
+      Defaults offerContainer to self, finds the PlayerWaveManager and the
+      HeroStatsPanel (inactive included), and logs an error for a missing
+      cellTemplate or offeredUnit. Warns once if requireBuyBacksSpent is on but
+      there is no HeroStatsPanel in the scene - the gate is then SKIPPED rather
+      than left permanently shut, so a missing panel cannot silently kill the
+      feature.
 
   OnEnable / OnDisable
       Subscribes/unsubscribes HeroRoster.OnRosterChanged -> Evaluate,
+      HeroStatsPanel.OnBuyBackSpent -> Evaluate,
       LevelGameManager.OnGameStateChanged -> HandleGameStateChanged, and
       CurrencyManager.OnCurrencyChanged -> HandleCurrencyChanged. Evaluates once
       on enable.
@@ -82,10 +101,17 @@ FLOW
 
   Evaluate()   [the trigger]
       Bails if not armed, if spent, if a cell is already up, or if the refs are
-      missing. Reads HeroRoster.TotalStarting(), then shows when
+      missing. Reads HeroRoster.TotalStarting(), then requires BOTH:
           TotalAlive() <= starting * (1 - deadFraction)
+          requireBuyBacksSpent -> heroStatsPanel.BuyBacksExhausted
       Called on every roster change, which covers BOTH halves of the ratio:
-      deaths drive it down, a landing purchase drives it back up.
+      deaths drive it down, a landing purchase drives it back up. Also called on
+      HeroStatsPanel.OnBuyBackSpent, because spending the LAST card is the only
+      thing that can open the gate without the roster moving.
+      Failing the gate is NOT a one-way trip: `spent` stays false, so the offer
+      is merely postponed until the next signal. A missing panel skips the gate;
+      a panel that has not built its cells yet blocks (its buy-backs are unspent,
+      not absent).
 
   Show()
       Calls waveManager.CanSpawnReinforcements FIRST - a stage with a broken
@@ -132,8 +158,11 @@ HOW IT CONNECTS
     the tick.
   - BattleStartController.OnAnyBattleStarted arms it. Nothing else does.
   - DOTween drives the attention pulse.
-  - HeroStatCell is CLONED for the look; ShowAsOffer() is the third look added
+  - HeroStatCell is CLONED for the look; ShowAsOffer() is the offer look added
     for this feature (portrait in colour, no count, buy button showing).
+  - HeroStatsPanel.BuyBacksExhausted / OnBuyBackSpent are the gate. This is the
+    only coupling between the two components, and it is one-way - the panel does
+    not know this exists.
   - PlayerWaveManager.CanSpawnReinforcements / SpawnReinforcements do the whole
     arrival - gate pose, hidden HP bar, hold, jump.
   - CurrencyManager.TrySpendGems / OnCurrencyChanged handle the money.
@@ -147,10 +176,22 @@ SETUP CHECKLIST (per stage)
   3. Assign cellTemplate to the same "Hero 1" object the Heroes Stats panel uses.
   4. Leave offerContainer empty to parent the cell to the component itself, or
      point it at a dedicated anchor.
-  5. waveManager can stay empty; it is found in the scene.
+  5. waveManager and heroStatsPanel can stay empty; both are found in the scene.
 
 NOTES / RISKS
 -------------
+  - [2026-09-06] THE BUY-BACK GATE. requireBuyBacksSpent (default ON) holds the
+    offer back until every card in the Heroes Stats panel has spent its
+    one-per-level buy-back. The reason is ordering, not fairness: this is the
+    stage's FINAL purchase, and offering it while the player still holds a
+    cheaper per-type buy-back puts the two in competition.
+    THE CONSEQUENCE TO KNOW: a card is only spendable once its type is WIPED
+    OUT, so a hero type that survives the battle never spends its card - and
+    with the gate on, the offer then never appears at all, however far the
+    dead-fraction has gone. That follows directly from the rule and is intended;
+    turn requireBuyBacksSpent off for a stage that wants the old behaviour.
+    Note it does NOT change the "once per battle" latch: `spent` is still only
+    set inside Show(), so a blocked evaluation costs nothing.
   - [2026-08-23] BUG, FIXED: THE OFFER APPEARED THE MOMENT A REPLAYED STAGE
     OPENED. The first version had no "armed" flag and leaned on an IMPLICIT
     guard: "TotalStarting() is 0 until the battle-start snapshot, so the ratio is

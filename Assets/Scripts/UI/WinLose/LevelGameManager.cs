@@ -18,8 +18,27 @@ public class LevelGameManager : MonoBehaviour
     [SerializeField] private WinPanel winPanel;
     [SerializeField] private RevivePanel revivePanel;
 
+    // =====================================================================
+    // REVIVE DISABLED - 2026-09-06
+    //
+    // The defeat flow used to fork: offer the gem revive first, fall through to
+    // Lose only once the stage's single revive had been spent. Revive was cut
+    // from the game, so EnterDefeatFlow now always goes straight to Lose.
+    //
+    // Nothing is deleted - the ReviveOffer state, both Notify* callbacks and the
+    // whole of RevivePanel's revive machinery are intact and unreachable. Set
+    // this (and ReviveEnabled in RevivePanel) to true to restore the old flow.
+    //
+    // static readonly rather than [SerializeField]: the scenes already carry a
+    // serialized allowSingleRevivePerStage = true, and a second Inspector toggle
+    // is exactly the kind of thing that gets flipped back on by accident in one
+    // stage out of twenty.
+    // =====================================================================
+    private static readonly bool OfferRevive = false;
+
     [Header("Revive rules")]
-    [Tooltip("If true, only one successful revive is allowed per stage.")]
+    [Tooltip("If true, only one successful revive is allowed per stage. " +
+             "Dormant while revive is disabled (see OfferRevive in this script).")]
     [SerializeField] private bool allowSingleRevivePerStage = true;
 
     [Header("Stalemate (mutual wipe)")]
@@ -169,15 +188,19 @@ public class LevelGameManager : MonoBehaviour
     /// The one defeat path, shared by the gate death above and the mutual-wipe check
     /// below: pause, then offer the revive if the stage still has one, otherwise go
     /// straight to Lose. Callers are responsible for the "are we still Playing?" guard.
+    ///
+    /// [2026-09-06] With OfferRevive off, the first branch is the ONLY one taken -
+    /// every defeat lands on the Lose panel immediately. The else-branch is kept for
+    /// the day revive comes back.
     /// </summary>
     private void EnterDefeatFlow()
     {
         // For Lose / Revive we DO pause gameplay.
         GameplayPause.SetPaused(true);
 
-        if (allowSingleRevivePerStage && hasRevivedThisStage)
+        if (!OfferRevive || (allowSingleRevivePerStage && hasRevivedThisStage))
         {
-            // No more revives: go straight to Lose
+            // Revive disabled (or already spent): go straight to Lose
             CurrentState = GameState.Lost;
 
             if (revivePanel != null)

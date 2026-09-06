@@ -22,7 +22,10 @@ using UnityEngine;
 public class FormationGapFiller : MonoBehaviour
 {
     [Header("Grid")]
-    [Tooltip("The gate stages. Only their X is used - these are the formation columns.")]
+    [Tooltip("The gate stages, INCLUDING the two purchasable side slots. Only their " +
+             "X is used - these are the formation columns. A stage carrying a locked " +
+             "DeployStageSlot is dropped from the grid for that pass; keep it in the " +
+             "array, the lock is re-checked on every compaction.")]
     [SerializeField] private Transform[] columnAnchors;
 
     [Tooltip("The jump lanes, FRONT FIRST (index 0 = closest to the enemy). Only Y is used.")]
@@ -52,6 +55,37 @@ public class FormationGapFiller : MonoBehaviour
     private readonly Dictionary<PlayerManager, Vector2Int> reserved = new();
 
     /// <summary>
+    /// The columns in play for the CURRENT compaction pass - columnAnchors minus
+    /// any side slot that has not been bought.
+    ///
+    /// Rebuilt at the top of every Compact() and read by SlotPosition /
+    /// TryFindNearestSlot, so a slot bought mid-battle widens the formation on the
+    /// next pass and a locked one never has heroes marched into it.
+    ///
+    /// Reservations survive across passes and are indexed by COLUMN NUMBER, which
+    /// is why a purchase can only ever APPEND (the two side slots sit at the ends
+    /// of the array): re-ordering the live columns would silently repoint every
+    /// reservation still in flight.
+    /// </summary>
+    private readonly List<Transform> activeColumns = new();
+
+    private void RebuildActiveColumns()
+    {
+        activeColumns.Clear();
+        if (columnAnchors == null) return;
+
+        foreach (var anchor in columnAnchors)
+        {
+            if (!anchor) continue;
+
+            var slot = anchor.GetComponent<DeployStageSlot>();
+            if (slot != null && !slot.IsUnlocked) continue;
+
+            activeColumns.Add(anchor);
+        }
+    }
+
+    /// <summary>
     /// Repacks the formation. Safe to call after every wave lands; heroes already
     /// walking are left alone.
     /// </summary>
@@ -64,8 +98,17 @@ public class FormationGapFiller : MonoBehaviour
             return;
         }
 
+        // Locked side slots are dropped here, so every (row, col) below is a real
+        // place a hero can stand.
+        RebuildActiveColumns();
+        if (activeColumns.Count == 0)
+        {
+            Debug.LogWarning("[FormationGapFiller] No unlocked columns - nothing to compact.", this);
+            return;
+        }
+
         int rows = rowLanes.Length;
-        int cols = columnAnchors.Length;
+        int cols = activeColumns.Count;
 
         // occupants[row, col] - null means a hole.
         var occupants = new PlayerManager[rows, cols];
@@ -220,7 +263,7 @@ public class FormationGapFiller : MonoBehaviour
             if (!rowLanes[r]) continue;
             for (int c = 0; c < cols; c++)
             {
-                if (!columnAnchors[c]) continue;
+                if (!activeColumns[c]) continue;
 
                 float d = ((Vector2)worldPos - (Vector2)SlotPosition(r, c)).sqrMagnitude;
                 if (d >= best) continue;
@@ -234,7 +277,7 @@ public class FormationGapFiller : MonoBehaviour
 
     private Vector3 SlotPosition(int row, int col)
     {
-        return new Vector3(columnAnchors[col].position.x, rowLanes[row].position.y, 0f);
+        return new Vector3(activeColumns[col].position.x, rowLanes[row].position.y, 0f);
     }
 
     private IEnumerator WalkTo(PlayerManager pm, Vector3 target, Vector2Int slot)

@@ -1,0 +1,82 @@
+================================================================================
+  DeployStageUnlockService.cs
+  Path : Assets/Scripts/Core/Progression/DeployStageUnlockService.cs
+  Type : static class (+ the DeployStageSide enum, declared in the same file)
+  Layer: Core / Progression
+  Scenes: none - static, nothing to wire
+================================================================================
+
+PURPOSE
+-------
+The single authority on whether the LEFT / RIGHT side deploy stages on the
+player castle have been bought.
+
+The castle carries SIX deploy stages: four permanent ones (Deploy Stage, and
+(1)(2)(3)) plus two purchasable side slots (DestroyStageLeft at x -4.53 and
+DestroyStageRight at x +4.55). The side slots start locked, cost 400 gems each,
+and once bought stay open on EVERY level for the rest of the game - so the flag
+belongs in SaveData, not in a scene.
+
+Static, deliberately, matching SaveSystem: no Inspector wiring, and a stage
+scene opened straight from the editor reads the correct state with no boot
+sequence.
+
+Added 2026-09-06.
+
+TYPES
+-----
+  enum DeployStageSide { Left, Right }
+      Declared at the top of this file rather than nested, because SaveSystem
+      takes it as a parameter and a nested enum would read as
+      DeployStageUnlockService.DeployStageSide everywhere.
+
+PUBLIC API
+----------
+  event Action<DeployStageSide> OnStageUnlocked
+      Raised right AFTER a side is unlocked. STATIC, so every subscriber must
+      unsubscribe in OnDisable/OnDestroy or it leaks across scene loads.
+      DeployStageSlot is the only listener today - it repaints itself. The
+      spawner and the formation grid do NOT listen: they re-read IsUnlocked on
+      every query instead, which is what makes a mid-battle purchase take effect
+      on the next wave with nothing to invalidate.
+
+  bool IsUnlocked(side)
+      Straight through to SaveSystem.IsDeployStageUnlocked.
+
+  bool TryPurchase(side, gemCost)
+      Charges via CurrencyManager.TrySpendGems, then Unlock(side).
+      Returns FALSE and changes nothing when the player cannot afford it, so the
+      caller can play a "not enough gems" beat.
+      Returns TRUE WITHOUT CHARGING when the side is already unlocked - a double
+      tap on the slot, or a stale prompt left open behind a purchase, must never
+      take a second payment. Note this path raises NO event, which is why
+      DeployStageSlot.Confirm repaints itself unconditionally afterwards.
+      With no CurrencyManager in the scene it refuses (returns false) rather than
+      unlocking for free. This is the OPPOSITE of RevivePanel.RemoveGem's
+      deliberate fail-OPEN, and for the opposite reason: a missing singleton must
+      not hand out a paid permanent upgrade.
+
+  void Unlock(side)          opens a side without charging. Debug / rewards.
+  void ResetAll()            re-locks both. Debug / testing only.
+
+HOW IT CONNECTS
+---------------
+  * SaveSystem.IsDeployStageUnlocked / SetDeployStageUnlocked - the persistence,
+    backed by SaveData.deployStages (see NOTES on the missing version bump).
+  * CurrencyManager.TrySpendGems - the payment, which persists gems itself.
+  * DeployStageSlot - the castle-side component: shows lock state, takes the tap,
+    and is the only OnStageUnlocked subscriber.
+  * PlayerWaveManager.IsGateUsable / GetUsableGates and
+    FormationGapFiller.RebuildActiveColumns both reach this through the slot
+    component (slot.IsUnlocked), never through the service directly.
+
+NOTES
+-----
+  - NO SAVE VERSION BUMP was needed for SaveData.deployStages, for the same
+    reason as completedTutorials: saves written before it simply have no such
+    key, and JsonUtility leaves the field initializer (both false) in place. An
+    existing player therefore starts with both sides locked, which is correct.
+  - PERMANENT AND ACCOUNT-WIDE was a deliberate call (2026-09-06) over
+    per-run: 400 gems is upgrade pricing, not consumable pricing.
+  - There is no "refund" or re-lock path in the game. ResetAll exists for
+    testing only and is not reachable from any UI.

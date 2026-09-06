@@ -6,11 +6,31 @@
   Scenes: all 7 gameplay stages
 ================================================================================
 
+*** STATUS: REVIVE IS DISABLED  (2026-09-06) ***
+------------------------------------------------
+  private static readonly bool OfferRevive = false;   (top of the class)
+
+  EnterDefeatFlow() now ALWAYS takes its Lose branch: a dead player gate, or a
+  mutual wipe, shows the Lose panel immediately. GameState.ReviveOffer is never
+  entered, and NotifyReviveAccepted / NotifyReviveDeclined are never called
+  (RevivePanel was their only caller and its own revive paths are switched off
+  too). Consequently hasRevivedThisStage stays false forever, and
+  suppressStalemateUntil / postReviveSettleSeconds are never armed.
+
+  Nothing was deleted. To restore the old flow, set OfferRevive here AND
+  ReviveEnabled in RevivePanel to true.
+
+  Deliberately static readonly, not [SerializeField]: the scenes already carry a
+  serialized allowSingleRevivePerStage = true, and a second Inspector toggle is
+  the kind of thing that gets flipped back on by accident in one stage out of
+  twenty.
+
 PURPOSE
 -------
-The stage-level game-flow state machine: Playing / Won / ReviveOffer / Lost.
-It is the single place that listens for BOTH gates being destroyed and decides
-what happens next - show the win panel, offer a revive, or go straight to lose.
+The stage-level game-flow state machine: Playing / Won / ReviveOffer / Lost
+(ReviveOffer now unreachable - see STATUS above). It is the single place that
+listens for BOTH gates being destroyed and decides what happens next - show the
+win panel or go straight to lose.
 
 Since 2026-08-30 it also owns a THIRD end-of-level path that no gate can raise:
 the mutual-wipe check (see MUTUAL WIPE below).
@@ -82,7 +102,7 @@ ENEMY GATE DESTROYED -> WIN
       hookup.
       Activates and calls winPanel.Show(hpPercent).
 
-PLAYER GATE DESTROYED -> REVIVE OR LOSE
+PLAYER GATE DESTROYED -> LOSE
 --------------------------------------------
   OnPlayerGateDestroyed()
       Ignored if not Playing. Otherwise delegates straight to EnterDefeatFlow().
@@ -91,10 +111,13 @@ PLAYER GATE DESTROYED -> REVIVE OR LOSE
       THE one defeat path, shared by the gate death and the mutual wipe. Callers
       own the "are we still Playing?" guard.
       UNLIKE the win path, this DOES call GameplayPause.SetPaused(true) -
-      losing/reviving is meant to fully freeze the game.
-      If allowSingleRevivePerStage AND hasRevivedThisStage is already true:
-      goes straight to Lost and calls revivePanel.ShowLosePanel().
-      Otherwise: goes to ReviveOffer and calls revivePanel.ShowRevivePanel().
+      losing is meant to fully freeze the game.
+      Condition: if (!OfferRevive || (allowSingleRevivePerStage &&
+      hasRevivedThisStage)) -> Lost + revivePanel.ShowLosePanel().
+      [2026-09-06] Since OfferRevive is false, the leading !OfferRevive makes
+      this branch UNCONDITIONAL - every defeat lands on the Lose panel at once.
+      The else-branch (ReviveOffer + revivePanel.ShowRevivePanel()) is kept
+      intact but unreachable.
 
 MUTUAL WIPE -> SAME DEFEAT FLOW, NO GATE INVOLVED   [2026-08-30]
 ---------------------------------------------------------------
@@ -104,7 +127,7 @@ MUTUAL WIPE -> SAME DEFEAT FLOW, NO GATE INVOLVED   [2026-08-30]
   has no waves left, both gates are still standing and NOTHING can ever raise
   OnGateDestroyed again. The stage hung in Playing forever, with no panel. That
   state is now a DEFEAT, routed through the exact same EnterDefeatFlow the
-  player gate uses (revive offer first, Lose if the revive was already spent).
+  player gate uses - i.e. straight to Lose since 2026-09-06.
 
   Update()
       Zeroes stalemateTimer and returns unless detectMutualWipe is on,
@@ -137,6 +160,9 @@ MUTUAL WIPE -> SAME DEFEAT FLOW, NO GATE INVOLVED   [2026-08-30]
 
 REVIVE CALLBACKS  (called BY RevivePanel, not internally)
 --------------------------------------------------------------
+  [2026-09-06] BOTH ARE NOW DEAD. RevivePanel was their only caller and its
+  revive paths are switched off, so neither ever fires. Kept, not deleted.
+
   NotifyReviveAccepted()
       Sets hasRevivedThisStage = true and CurrentState back to Playing. Per the
       comment, RevivePanel itself is responsible for calling

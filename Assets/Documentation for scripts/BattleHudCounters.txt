@@ -56,29 +56,60 @@ PUBLIC API
 ----------
   ElapsedSeconds (float, get)  seconds since the battle began.
   Kills          (int,   get)  enemies killed this battle.
-  ResetCounters()  zeroes both and stops the clock. Called from OnEnable.
-  StopTimer()      freezes the clock. NOTHING CALLS THIS YET - hook it up on win
-                   or lose if the final time should hold rather than keep ticking.
+  ResetCounters()  zeroes both, stops the clock and CLEARS THE `finished` LATCH.
+                   Called from OnEnable.
+  StopTimer()      freezes the clock on the time currently shown and LATCHES
+                   `finished`, so it cannot start again until ResetCounters runs.
+                   [2026-09-06] Now called automatically - see END OF BATTLE.
 
 
 FLOW
 ----
-  OnEnable   subscribes to EnemyManager.OnAnyEnemyKilled and
-             BattleStartController.OnAnyBattleStarted, then ResetCounters().
-  Update     while not running, POLLS BattleStartController.BattleIsRunning &&
-             EnemySpawner.EnemiesHaveAppeared (when startOnFirstEnemy). Once
-             running, accumulates Time.deltaTime unless GameplayPause.IsPaused,
-             and only writes the label when the whole second CHANGES - TMP
-             rebuilds its mesh on every assignment, so writing the same string 60
-             times a second is pure waste.
+  OnEnable   subscribes to EnemyManager.OnAnyEnemyKilled,
+             BattleStartController.OnAnyBattleStarted and
+             LevelGameManager.OnGameStateChanged, then ResetCounters().
+  Update     returns immediately once `finished` is latched. Otherwise, while not
+             running, POLLS BattleStartController.BattleIsRunning &&
+             EnemySpawner.EnemiesHaveAppeared && LevelGameManager.IsBattleRunning
+             (when startOnFirstEnemy). Once running, accumulates Time.deltaTime
+             unless GameplayPause.IsPaused, and only writes the label when the
+             whole second CHANGES - TMP rebuilds its mesh on every assignment, so
+             writing the same string 60 times a second is pure waste.
   On a kill  increments, sets the text, kills any in-flight tweens, then runs a
              DOPunchScale on the label (and the icon) plus a DOColor flash back
              to the base colour.
   OnDisable  unsubscribes and kills both tweens.
 
 
+END OF BATTLE - HOLDING THE FINAL TIME   [2026-09-06]
+-----------------------------------------------------
+  HandleGameStateChanged(state) calls StopTimer() for ANY state that is not
+  Playing - Won (enemy castle down) and Lost (player base down, or a mutual
+  wipe). The clock stops on the frame the level resolves.
+
+  THE BUG THIS FIXES: StopTimer existed from day one but nothing called it. On a
+  LOSS that went unnoticed, because LevelGameManager.EnterDefeatFlow calls
+  GameplayPause.SetPaused(true) and Update's IsPaused check froze the clock as a
+  side effect. On a WIN it did not: OnEnemyGateDestroyed deliberately does NOT
+  pause - the reward animations (coins/gems/XP) need Time.timeScale running - so
+  the timer kept counting underneath the win panel.
+
+  WHY A LATCH AND NOT JUST StopTimer(). Update's auto-start poll only tested
+  spawner state, and BOTH BattleStartController.BattleIsRunning and
+  EnemySpawner.EnemiesHaveAppeared REMAIN TRUE after a win. Clearing `running`
+  alone would have been undone on the very next frame. `finished` is the latch;
+  IsBattleRunning was added to the same poll so that even a HUD root toggled off
+  and back on after the level ends (which would run ResetCounters and clear the
+  latch) still cannot restart the clock.
+
+
 HOW IT CONNECTS
 ---------------
+  * LevelGameManager.OnGameStateChanged - STATIC, so it MUST be unsubscribed in
+    OnDisable or it leaks across scene loads. This is the project's documented
+    "is the battle still running?" signal; per the XML docs on that event,
+    anything that behaves differently under an end-of-battle panel is supposed to
+    listen here rather than invent its own notion of "over".
   * EnemyManager.OnAnyEnemyKilled - STATIC event ADDED 2026-09-03, raised from
     inside the xpGiven guard in EnemyManager.Update, right after the roguelite
     call. Fired there rather than from RogueliteManager.NotifyEnemyKilled because
@@ -119,4 +150,5 @@ NOTES
     stranded at a scale neither tween owns.
   - NEVER RUN. Written and wired 2026-09-03 with the Editor in play mode for the
     measuring pass only; the scene edits were made with play mode stopped and the
-    scene saved, but the counters have not been watched in an actual battle.
+    scene saved, but the counters have not been watched in an actual battle. The
+    2026-09-06 stop-on-win fix is likewise compile-verified only.

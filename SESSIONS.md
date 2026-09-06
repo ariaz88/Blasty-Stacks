@@ -55,6 +55,14 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-09-06] The LastStandOffer buy-back gate and the one-purchase-per-card rule have never
+  run in Play mode.** Both compile clean against the live Editor and neither needed a scene edit,
+  but no purchase has actually been made. On `Level_1_Stage_1`: (a) wipe one hero type, buy it back,
+  wipe it again — the price must NOT return, the card should sit grey showing `0/N`; (b) spend every
+  card, then let the army fall past 80% — the last-stand offer must appear only after the LAST card
+  is spent, and not before. Watch for the intended dead-end too: if one hero type survives, its card
+  is never spendable and the offer correctly never shows.
+
 - **[2026-09-01] Package Manager has not been re-checked in the Editor since NavMeshPlus was
   removed.** `com.h8man.2d.navmeshplus` was dropped from `Packages/manifest.json` and
   `packages-lock.json` (it was unused — zero GUID references anywhere in `Assets/`). Reopen Unity
@@ -64,16 +72,24 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   network. Also unresolved: the stray `using UnityEngine.AI;` at
   `Assets/Scripts/Combat/Player/PlayerManager.cs:3` — dead import, harmless, not removed.
 
+- **[2026-09-06] Revive is off; the "straight to Lose" path has not been play-tested.** Compiles
+  clean, never played. Break the player base with enemies and confirm the Lose panel fades in
+  directly — no orange revive window, no 9-second countdown. Then decide the optional tidy-up:
+  delete the (now permanently hidden) "Revive Level Panel" object and the unused RedundantBlocks
+  root from the 20 stage scenes, and/or rename `RevivePanel.cs`, which is now only the Lose
+  presenter. **Do not delete or disable the `ReviveManager` object itself — it IS the Lose panel's
+  presenter.**
+
 - **[2026-08-30] The mutual-wipe defeat has never run in Play mode.** It compiles clean but was
   never played. To test, pick a stage whose `LevelConfig` has ONE small wave, press BATTLE, and let
   the last hero and the last enemy trade fatal blows: after ~2.5s the console should print
-  `[LevelGameManager] Mutual wipe ...`, gameplay should pause, and the RevivePanel should appear.
-  Then accept the revive and confirm it does NOT immediately re-fire during the empty seconds that
-  follow (that is what `postReviveSettleSeconds` guards). Also confirm the three no-false-positive
-  cases: the puzzle phase before BATTLE, the gap between two waves where all spawned enemies are
-  dead but a wave remains, and the two normal win/lose paths. `stalemateGraceSeconds` (2.5) has not
-  been judged at a real frame rate — it doubles as the window a `LastStandOffer` purchase has to
-  land in.
+  `[LevelGameManager] Mutual wipe ...`, gameplay should pause, and — since 2026-09-06 — the LOSE
+  panel should appear directly (this test originally expected the revive offer; that path is gone,
+  and with it the `postReviveSettleSeconds` re-fire case, which can no longer happen because
+  nothing ever resumes the battle). Also confirm the three no-false-positive cases: the puzzle
+  phase before BATTLE, the gap between two waves where all spawned enemies are dead but a wave
+  remains, and the two normal win/lose paths. `stalemateGraceSeconds` (2.5) has not been judged at
+  a real frame rate — it doubles as the window a `LastStandOffer` purchase has to land in.
 
 - **[2026-08-25] The shard-burst match VFX has had one tuning pass; the shape of the burst is still
   open.** Play-tested once — spawn pattern and density were called good, timing and colour were
@@ -294,6 +310,132 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-09-06 — LastStandOffer gated behind the Heroes Stats buy-backs; one buy-back per card per level
+
+- **Goal:** two rules on the last-stand offer, from the user. (1) It must not appear while ANY card
+  in the Heroes Stats panel still has an unused buy-back — with three hero types on the field, all
+  three cards have to have been bought before the offer may show. (2) A card's buy button is good
+  for exactly ONE purchase per level; after that it stays off for the rest of the stage and never
+  re-arms.
+- **Status:** done (code + docs). Compile-verified against the live Editor; NOT play-tested.
+- **Changed:**
+  - `Assets/Scripts/UI/HUD/HeroStatCell.cs` — new `IsSpent` latch + `MarkSpent()`. `SetAlive` now
+    splits `wiped` (drives the FRAME) from `canBuy = wiped && !IsSpent` (drives the count/price
+    swap), so a spent card that is wiped a second time shows the grey frame with `0/3` on it rather
+    than re-offering the price. `SetAffordable` ANDs in `!IsSpent` — without that the panel's next
+    Refresh, fired by any gem change, would hand a spent card its button straight back. `Bind`
+    resets the latch so a fresh clone starts unspent.
+  - `Assets/Scripts/UI/HUD/HeroStatsPanel.cs` — `HandleBuyBack` bails on `cell.IsSpent` AHEAD of the
+    gem charge, and calls `cell.MarkSpent()` after the spawn but BEFORE `Refresh()`, so `SetAlive`
+    sees the flag. New `public bool BuyBacksExhausted` (requires `built`, then every cell spent) and
+    `public event Action OnBuyBackSpent`, raised last so a handler reading the property gets the
+    settled answer.
+  - `Assets/Scripts/UI/HUD/LastStandOffer.cs` — new `requireBuyBacksSpent` (default ON) and a
+    `heroStatsPanel` ref, auto-found with `FindObjectOfType<HeroStatsPanel>(true)` — inactive
+    INCLUDED, because that panel is switched on by `BattlePhaseTransition` and is inactive when this
+    Awake runs (confirmed live: `Heros Stats panel` is `activeInHierarchy=False` in
+    `Level_1_Stage_1`). `Evaluate()` gained the gate after the dead-fraction test; it also
+    subscribes to `OnBuyBackSpent`, since spending the last card is the only thing that can open the
+    gate without the roster moving.
+  - Docs updated for all three: `HeroStatCell.txt`, `HeroStatsPanel.txt`, `LastStandOffer.txt`.
+- **Scene/Prefab/SO edits:** **none, and none needed.** Both new serialized fields are ABSENT from
+  the scene YAML, so the C# initializers apply (`requireBuyBacksSpent = true`, `heroStatsPanel =
+  null` → auto-found). The stage works without anyone opening the Inspector.
+- **Verified:** compile-verified through the MCP `RunCommand` sandbox — a probe script referencing
+  `panel.BuyBacksExhausted`, `cell.IsSpent` and `cell.MarkSpent()` compiled and ran clean against
+  the live Assembly-CSharp, and the console holds 0 errors. The same probe confirmed exactly one
+  `LastStandOffer` and one `HeroStatsPanel`, both in `Level_1_Stage_1`. **Play mode was never
+  entered** — no purchase was actually made, so neither rule has been seen working.
+- **Gotchas:**
+  - **The gate has a real consequence, and it is intended:** a card is only spendable once its type
+    is WIPED OUT, so a hero type that survives never spends its card — and the last-stand offer then
+    never appears in that battle at all, however far past 80% the army is. If a stage wants the old
+    behaviour, turn `requireBuyBacksSpent` off on that stage's component.
+  - The gate deliberately does NOT latch: failing it leaves `spent` false, so the offer is postponed,
+    not cancelled. The `spent`-on-Show rule (a shown-and-ignored offer never returns) is untouched.
+  - A missing `HeroStatsPanel` SKIPS the gate (with a one-off warning in Awake) rather than blocking
+    forever — a panel-less scene must not silently kill the feature. But a panel that exists and has
+    not built its cells yet BLOCKS: its buy-backs are unspent, not absent.
+  - The spent look is grey-frame-plus-`0/3`, not a permanently greyed-out PRICE. A dead price button
+    reads as "you cannot afford this", which is the wrong message. One line in
+    `HeroStatCell.SetAlive` if that call needs revisiting.
+- **Next:** play-test on `Level_1_Stage_1`. Wipe one hero type, buy it back, and confirm the button
+  does not come back when that type is wiped again; then wipe every type, spend every card, and
+  confirm the last-stand offer only appears after the LAST card is spent.
+
+### 2026-09-06 — Revive removed; battle timer stops on level end; enemies could not damage the player base
+
+- **Goal:** (1) Stop offering the gem revive when an enemy reaches and destroys the player base — go
+  straight to the Lose panel — and take revive out of the game entirely. (2) Stop the HUD battle
+  timer the moment the enemy castle falls; it was still counting under the win panel. (3) Enemies
+  were hitting the player base with no HP loss at all.
+- **Status:** done (code + docs). Not play-tested — see Next.
+- **Changed:**
+  - `Assets/Scripts/Combat/Enemy/EnemyManager.cs:570` — **the base-damage bug.** Added the missing
+    `IsAttacking = true;` to the GATE branch of `HandleCurrentAction()`. `EnemyDamageCollider`'s
+    castle branch gates every hit on `enemyManager.IsAttacking`, so the swing animation played in
+    full, the animation events opened the weapon collider, the trigger fired on the castle — and the
+    hit was discarded one line before `ApplyDamageToPlayerGate`. `IsAttacking` is only ever raised
+    inside `AttackTarget()`, which the gate branch does not call (it can't: `AttackTarget()`
+    dereferences `enemyLocoMotion.currentTarget` and there is no hero target at the gate, so the
+    body was copied inline and the flag lost in the copy). Hero-vs-hero damage was never affected.
+  - `Assets/Scripts/UI/HUD/BattleHudCounters.cs` — **the timer fix.** `StopTimer()` had existed
+    since the script was written but *nothing ever called it*. Now subscribes to
+    `LevelGameManager.OnGameStateChanged` and calls it for any state != `Playing`. Added a
+    `finished` latch, because `StopTimer()` alone was not enough: the auto-start poll in `Update()`
+    only tested `BattleStartController.BattleIsRunning && EnemySpawner.EnemiesHaveAppeared`, and
+    **both stay true after a win**, so `running` would have flipped straight back on the next
+    frame. Also added `LevelGameManager.IsBattleRunning` to that poll so a HUD root toggled off/on
+    after the level ends (which runs `ResetCounters` and clears the latch) still can't restart it.
+  - `Assets/Scripts/UI/WinLose/LevelGameManager.cs` — added
+    `private static readonly bool OfferRevive = false;` and changed the defeat fork to
+    `if (!OfferRevive || (allowSingleRevivePerStage && hasRevivedThisStage))`. The Lose branch is
+    now unconditional; the `ReviveOffer` branch is intact but unreachable.
+  - `Assets/Scripts/UI/WinLose/RevivePanel.cs` — added
+    `private static readonly bool ReviveEnabled = false;` and guarded four entry points on it:
+    `Start()` (buttons never wired), `Update()` (countdown never runs), `ShowRevivePanel()` (falls
+    through to `ShowLosePanel()`), `ReviveLevel()` / `NoThanksClick()` (return immediately).
+  - Docs: `RevivePanel.txt` and `LevelGameManager.txt` each got a `*** STATUS: REVIVE IS
+    DISABLED ***` block at the top plus flow/NOTES corrections; `BattleHudCounters.txt` got an
+    `END OF BATTLE - HOLDING THE FINAL TIME` section.
+- **Scene/Prefab/SO edits:** none. Deliberately — see Gotchas.
+- **Verified:** compiles clean (forced `AssetDatabase.Refresh` + `RequestScriptCompilation` through
+  the Unity MCP server; console reports 0 errors). Play mode NOT entered.
+- **Gotchas:**
+  - **Why the timer only misbehaved on a WIN:** on a loss `EnterDefeatFlow` calls
+    `GameplayPause.SetPaused(true)` and `Update()`'s `IsPaused` check froze the clock as a side
+    effect. `OnEnemyGateDestroyed` deliberately does *not* pause (the coin/gem/XP reward animations
+    need `Time.timeScale` running), so nothing stopped it on a win.
+  - **`BattleHudCounters` is still only in `Level_1_Stage_1.unity`** (verified by GUID search) — the
+    other 19 stages have undriven timer/kill labels, so the fix is only observable in stage 1 until
+    the component is rolled out.
+  - **`ReviveManager` / `RevivePanel` must never be deleted or disabled.** That component is also
+    the LOSE-PANEL PRESENTER: `ShowLosePanel()` lives there and it owns the `losePanel`,
+    `loseCanvasGroup` and `BGImage` references in all ~20 stage scenes. Switching the object off
+    removes the Lose screen from the game. This is why revive was disabled in code rather than by
+    deactivating the GameObject.
+  - The **"Revive Level Panel" GameObject is still authored `m_IsActive: 1`** in every stage scene.
+    It is hidden only by `revivePanel.SetActive(false)` in `RevivePanel.Awake()` — that line must
+    stay, or the orange window shows from frame one.
+  - Both switches are `static readonly`, not `[SerializeField]`, on purpose: the scenes already
+    carry a serialized `allowSingleRevivePerStage = true`, and an Inspector toggle would eventually
+    get flipped back on in one stage out of twenty.
+  - Now-dead code kept, not deleted (user asked explicitly): `LevelGameManager.NotifyReviveAccepted`
+    / `NotifyReviveDeclined`, `EnemyManager.ResetAfterRevive`, `PlayerWaveManager.RestartAfterRevive`
+    — RevivePanel was the only caller of all three. `hasRevivedThisStage` stays false forever, so
+    `postReviveSettleSeconds` / `suppressStalemateUntil` never arm. The **RedundantBlocks root** in
+    every stage scene is now never swapped in.
+  - The Revive / No Thanks buttons still carry persistent `onClick` entries to
+    `ReviveLevel` / `NoThanksClick` in the scene YAML (they were double-wired: persistent call +
+    `AddListener`). Harmless — the panel is never shown.
+- **Next:** play `Level_1_Stage_1` and confirm both: (a) breaking the player base fades the Lose
+  panel in directly, with no revive window and no countdown; (b) destroying the enemy castle freezes
+  the timer on its final value while the win panel's reward animations still play. Optional tidy-up,
+  needs a decision: delete the
+  "Revive Level Panel" object (and the RedundantBlocks root) from the 20 stage scenes, and/or rename
+  `RevivePanel.cs` to something like `DefeatPanel.cs` (safe — same `.meta` GUID keeps all scene
+  references — but it is a 20-scene re-serialize).
 
 ### 2026-09-01 — Package Manager resolve failure after a `Library/` wipe: removed the unused NavMeshPlus git package
 

@@ -567,6 +567,14 @@ public class EnemyManager : MonoBehaviour
                     currentAttack = defaultAttack;
                 }
 
+                // REQUIRED, not decoration: EnemyDamageCollider gates every hit on
+                // IsAttacking, so without this the gate swing plays in full and the
+                // castle takes ZERO damage. This branch cannot just call
+                // AttackTarget() (which is where IsAttacking is normally raised)
+                // because that method dereferences enemyLocoMotion.currentTarget,
+                // and there is no hero target while attacking the gate.
+                IsAttacking = true;
+
                 isPerformingAction = true;
                 currentRecoveryTimer = currentAttack.recoveryTime;
 

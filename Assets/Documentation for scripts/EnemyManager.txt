@@ -162,10 +162,24 @@ ACTION DECISION
          neither it nor this enemy is dead: AttackTarget() + UpdateFacing(),
          then RETURN - player takes priority over the gate.
       2. Else, if attackPlayerGate is set and the gate is alive: on cooldown
-         expiry, sets isPerformingAction, resets currentRecoveryTimer from
-         currentAttack.recoveryTime (falling back to defaultAttack with a
-         warning if currentAttack was somehow null), stops the walk animation,
-         and plays the attack animation at unitStats.attackSpeed.
+         expiry, sets IsAttacking + isPerformingAction, resets
+         currentRecoveryTimer from currentAttack.recoveryTime (falling back to
+         defaultAttack with a warning if currentAttack was somehow null), stops
+         the walk animation, and plays the attack animation at
+         unitStats.attackSpeed.
+
+         THE IsAttacking LINE IS LOAD-BEARING [fixed 2026-09-06]. It was
+         missing, and the castle therefore took ZERO damage: the swing animation
+         played in full, the animation events opened the weapon collider and the
+         trigger fired on the castle, but EnemyDamageCollider's castle branch
+         gates every hit on enemyManager.IsAttacking and threw the hit away one
+         line before ApplyDamageToPlayerGate. Hero-vs-hero damage was unaffected
+         because branch 1 goes through AttackTarget(), which raises the flag.
+         This branch CANNOT simply call AttackTarget() instead: that method
+         dereferences enemyLocoMotion.currentTarget.playerIsdead with no null
+         check, and there is no hero target during a gate attack - which is
+         presumably why the body was copied inline here and the flag lost in the
+         copy. The dead sibling HandleCurrentAction1 still has the same omission.
 
 GATE CONTACT
 -------------

@@ -69,6 +69,16 @@ public class BattleHudCounters : MonoBehaviour
     public int Kills { get; private set; }
 
     private bool running;
+
+    /// <summary>
+    /// Latched the moment the battle ends, and cleared only by ResetCounters.
+    ///
+    /// StopTimer alone is NOT enough: the auto-start poll in Update only tests
+    /// spawner state, both halves of which stay true after a win, so it would
+    /// switch `running` straight back on the next frame.
+    /// </summary>
+    private bool finished;
+
     private int lastShownSecond = -1;
     private Color killBaseColor = Color.white;
     private Tween punchTween;
@@ -85,6 +95,7 @@ public class BattleHudCounters : MonoBehaviour
     {
         EnemyManager.OnAnyEnemyKilled += HandleEnemyKilled;
         BattleStartController.OnAnyBattleStarted += HandleBattleStarted;
+        LevelGameManager.OnGameStateChanged += HandleGameStateChanged;
 
         // A static event survives a domain-reload-free play-mode restart, and the
         // spawner's EnemiesHaveAppeared defaults to TRUE for scenes that never
@@ -97,6 +108,7 @@ public class BattleHudCounters : MonoBehaviour
     {
         EnemyManager.OnAnyEnemyKilled -= HandleEnemyKilled;
         BattleStartController.OnAnyBattleStarted -= HandleBattleStarted;
+        LevelGameManager.OnGameStateChanged -= HandleGameStateChanged;
 
         punchTween?.Kill();
         colorTween?.Kill();
@@ -104,14 +116,22 @@ public class BattleHudCounters : MonoBehaviour
 
     private void Update()
     {
+        // The battle is over and the final time is on screen - never tick again.
+        if (finished) return;
+
         if (!running)
         {
             // Polled rather than event-driven: "the first enemy is on screen" is a
             // spawner STATE, not a broadcast, and it is the same flag the unit
             // health bars use to decide they may appear. Reading it keeps the
             // timer honest with what the player can actually see.
+            //
+            // IsBattleRunning is in here as well because both spawner flags stay
+            // true after the level ends: without it, a HUD root switched off and
+            // back on after a win would clear `finished` and restart the clock.
             if (startOnFirstEnemy && BattleStartController.BattleIsRunning
-                                  && EnemySpawner.EnemiesHaveAppeared)
+                                  && EnemySpawner.EnemiesHaveAppeared
+                                  && LevelGameManager.IsBattleRunning)
                 running = true;
 
             if (!running) return;
@@ -131,10 +151,11 @@ public class BattleHudCounters : MonoBehaviour
         RenderTime(whole);
     }
 
-    /// <summary>Zeroes both readouts. Called on enable and by a revive/retry.</summary>
+    /// <summary>Zeroes both readouts. Called on enable and by a retry.</summary>
     public void ResetCounters()
     {
         running = false;
+        finished = false;
         ElapsedSeconds = 0f;
         lastShownSecond = -1;
         Kills = 0;
@@ -147,8 +168,31 @@ public class BattleHudCounters : MonoBehaviour
         }
     }
 
-    /// <summary>Freezes the clock - call it on win or lose to hold the final time.</summary>
-    public void StopTimer() => running = false;
+    /// <summary>
+    /// Freezes the clock on the time currently displayed. Latched: the timer
+    /// cannot start again until ResetCounters runs.
+    /// </summary>
+    public void StopTimer()
+    {
+        running = false;
+        finished = true;
+    }
+
+    /// <summary>
+    /// Stops the clock the instant the level resolves - the enemy castle falling
+    /// (Won) or the player base falling / a mutual wipe (Lost).
+    ///
+    /// This is what actually holds the final time on a WIN. The win path in
+    /// LevelGameManager deliberately does NOT call GameplayPause.SetPaused(true),
+    /// because the reward animations need Time.timeScale to keep running - so
+    /// Update's IsPaused check, which is all that froze the clock on a loss, never
+    /// fires and the timer used to keep counting under the win panel.
+    /// </summary>
+    private void HandleGameStateChanged(LevelGameManager.GameState state)
+    {
+        if (state != LevelGameManager.GameState.Playing)
+            StopTimer();
+    }
 
     private void HandleBattleStarted()
     {

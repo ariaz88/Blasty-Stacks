@@ -18,6 +18,11 @@ which is used as a TEMPLATE and switched off at Awake. A stage that fields two
 hero types gets two cells; one that fields four gets four. Nothing about the
 panel is hard-coded to a particular hero.
 
+A card's buy-back is good for ONE purchase PER LEVEL. Once used it never comes
+back, even if that type is wiped out a second time (HeroStatCell.IsSpent). When
+every card has been spent, BuyBacksExhausted goes true - and that is the gate
+LastStandOffer waits on before it may show its own offer.
+
 INSPECTOR FIELDS
 ----------------
   Cells
@@ -46,6 +51,22 @@ RUNTIME STATE
   unitsDatabase  UnitsDatabaseSO, cached from GameStartManager at Awake.
   built          latches true the first time the battle starts, so the cells are
                  never rebuilt mid-battle.
+
+PUBLIC API (added 2026-09-06 for the LastStandOffer gate)
+---------------------------------------------------------
+  event Action OnBuyBackSpent
+      Raised the moment a card's one-per-level buy-back is used up, AFTER the
+      panel has finished repainting - so a handler reading BuyBacksExhausted
+      from inside it gets the settled answer. LastStandOffer subscribes, because
+      spending the LAST card is the one thing that can open its gate without the
+      roster moving at all.
+
+  bool BuyBacksExhausted
+      True once every cell reports IsSpent. Requires `built`, so a panel that has
+      not laid its cells out yet reads FALSE rather than vacuously true - its
+      buy-backs are unspent, not absent. A battle that opened with no heroes
+      builds zero cells and does report true; there is genuinely nothing to
+      spend.
 
 FLOW
 ----
@@ -98,13 +119,21 @@ FLOW
       every gem change.
 
   HandleBuyBack(cell)
-      1. Bails if the type is not actually wiped out (AliveCount > 0).
-      2. Bails if there is no waveManager.
-      3. waveManager.CanSpawnReinforcements(unitId) is checked BEFORE the
+      1. Bails if cell.IsSpent - the one-per-level rule, checked AHEAD of the gem
+         charge. The button is already hidden and disabled by then, so this is
+         belt-and-braces against a second click queued in the same frame, but it
+         is also where the rule is authoritative.
+      2. Bails if the type is not actually wiped out (AliveCount > 0).
+      3. Bails if there is no waveManager.
+      4. waveManager.CanSpawnReinforcements(unitId) is checked BEFORE the
          charge - a missing runtimePrefab must never eat the player's gems.
-      4. CurrencyManager.TrySpendGems(cell.GemCost). Not enough -> log, refresh,
+      5. CurrencyManager.TrySpendGems(cell.GemCost). Not enough -> log, refresh,
          return. No CurrencyManager in the scene -> warn and give it free.
-      5. waveManager.SpawnReinforcements(unitId, cell.SquadSize).
+      6. waveManager.SpawnReinforcements(unitId, cell.SquadSize).
+      7. cell.MarkSpent() - BEFORE the Refresh, so SetAlive sees the flag and
+         puts the count back where the price was instead of re-offering it.
+      8. Refresh(), then OnBuyBackSpent (inside a try/catch, so one bad listener
+         cannot break the panel).
 
 HOW IT CONNECTS
 ---------------
@@ -114,6 +143,9 @@ HOW IT CONNECTS
   - CurrencyManager       : TrySpendGems + OnCurrencyChanged.
   - GameStartManager      : unitsDatabase (portraits, order, per-unit price).
   - HeroStatCell          : the cloned cell; this panel owns all its logic.
+  - LastStandOffer        : READS BuyBacksExhausted and listens to
+                            OnBuyBackSpent. It refuses to show while any card
+                            here still holds an unused buy-back.
 
 SCENE SETUP CHECKLIST
 ---------------------
@@ -126,6 +158,15 @@ SCENE SETUP CHECKLIST
 
 NOTES
 -----
+  - [2026-09-06] ONE BUY-BACK PER CARD PER LEVEL. Before this a card re-armed
+    every time its type was wiped out again, so gems alone could keep a squad on
+    the field for the whole stage. The latch is per-CELL (HeroStatCell.IsSpent),
+    not a set of unit ids held here, so it cannot drift out of sync with the card
+    it belongs to.
+  - A hero type that is NEVER wiped out never spends its card. That is not a bug,
+    but it has a visible consequence: with LastStandOffer.requireBuyBacksSpent on
+    (its default), a battle where one type survives will never show the
+    last-stand offer at all.
   - Heroes register with HeroRoster in their Start, i.e. the frame AFTER
     SpawnReinforcements instantiates them. The label therefore fills in one
     frame late; that is why HandleBuyBack does not try to set it itself.
