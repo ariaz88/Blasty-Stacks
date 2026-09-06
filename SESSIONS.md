@@ -55,6 +55,19 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-09-06] The hero roster is two stat profiles wearing eight costumes, and three heroes are
+  cross-wired to each other's stat assets.** Audited, documented, **not changed** — see
+  `Assets/Scripts/UI/UI-SOs/UnitDef-SOs/README_HeroRoster.md`. All 8 share hp 100 / def 25 /
+  move 3.5 / range 0.85; only atk+atkSpd vary, as 64@2.0 (128 DPS, ids 1/6/7) or 72@1.5 (108 DPS,
+  ids 2/3/4/5/8), so the "fast" three are strictly better with no trade-off. Live problems worth a
+  decision: `Valkir3` (id 1) and `PlayerFallen_Minotaur_01` (id 7) read the SAME asset
+  (`Player_Minotaur_01`), so tuning one retunes the other; `PlayerFallen_Angels_02` (id 6) reads
+  `PlayerValkir3`; `Golem_3` (id 5) has `displayName = "Minotaur_2"` and shows as a Minotaur in the
+  roster UI; `respawnGemCost` is 0 on all eight so buy-back is free; and
+  `PlayerWaveManager.playerPrefabs` only holds ids 5 and 8, so the three 128-DPS heroes never reach
+  the field. Giving heroes real roles (tank / bruiser / glass cannon) is the obvious follow-up now
+  that the enemies have tiers.
+
 - **[2026-09-06] The new enemy tiers and per-stage waves have never been played.** Stages 3-20 each
   got their own `Assets/Scriptable Objects/Spawner/Stage_NN.asset` (2 waves, mixed archetypes) and
   five of the six enemy `UnitStatsSO` assets were rewritten to actually differ from each other —
