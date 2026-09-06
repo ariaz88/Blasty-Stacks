@@ -112,6 +112,31 @@ public class EnemySpawner : MonoBehaviour
         return byName ? byName.transform : null;
     }
 
+    /// <summary>
+    /// Closes the "enemies are out" gate BEFORE any Start runs.
+    ///
+    /// This cannot wait for Start. PlayerWaveManager.Start calls BeginWaves, and
+    /// WaveLoop's first segment runs synchronously up to its first yield - which,
+    /// on a board that already has stacks, is AFTER it has spawned the first hero
+    /// wave. Unity does not order two Starts, so if that happens first, every hero
+    /// in that wave runs HealthBar.Awake while EnemiesHaveAppeared still holds its
+    /// static default of true: the bar skips the gate, never subscribes to
+    /// OnAnyFirstEnemySpawned, and sits visible on the deploy stage for the whole
+    /// puzzle phase. Later waves looked correct, which is what made it read as
+    /// "only the first heroes show their HP".
+    ///
+    /// Guarded on levelConfig so a stage with a broken spawner still behaves as it
+    /// did before - gate left open rather than closed forever with nothing to open it.
+    /// </summary>
+    void Awake()
+    {
+        if (waitForBattleStart && levelConfig)
+        {
+            EnemiesHaveAppeared = false;
+            HasSpawnedFirstEnemy = false;
+        }
+    }
+
     void Start()
     {
         if (!levelConfig)
@@ -121,14 +146,8 @@ public class EnemySpawner : MonoBehaviour
         }
 
         // Puzzle-only phase: hold every wave until the player presses BATTLE.
-        if (waitForBattleStart)
-        {
-            // Nothing has appeared yet, so unit health bars stay hidden until the
-            // first enemy actually shows up - not merely when BATTLE is pressed.
-            EnemiesHaveAppeared = false;
-            HasSpawnedFirstEnemy = false;
-            return;
-        }
+        // The health-bar gate itself was already closed in Awake, above.
+        if (waitForBattleStart) return;
 
         StartBattle();
     }

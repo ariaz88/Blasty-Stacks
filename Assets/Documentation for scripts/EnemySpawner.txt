@@ -3,7 +3,9 @@
   Path : Assets/Scripts/Combat/Spawning/EnemySpawner.cs
   Type : MonoBehaviour
   Layer: Combat / Spawning
-  Scenes: all 7 gameplay stages
+  Scenes: reached through Assets/PREFABS/Level Template/LevelTemplate.prefab,
+          which every converted stage scene instances (Stages 1-3 as of
+          2026-09-06). levelConfig is a per-stage instance override.
 ================================================================================
 
 PURPOSE
@@ -49,6 +51,20 @@ RUNTIME STATE
                   stage. PlayerWaveManager waits on this before letting heroes
                   advance, so they never march at an empty field.
   OnFirstEnemySpawned (event)  raised once, alongside the flag above.
+  EnemiesHaveAppeared (STATIC bool, public get)  the health-bar gate. Every
+                  HealthBar with hideUntilBattleStarts ON reads this in its
+                  Awake and, if it is still false, disables its canvas and waits
+                  on OnAnyFirstEnemySpawned. DEFAULTS TO TRUE so a stage that
+                  never gates anything behaves as it always did; Awake flips it
+                  to false only when this spawner is actually holding for the
+                  BATTLE button, and SpawnOne flips it back to true on the first
+                  enemy. Being static, it is NOT reset by a scene load - a stage
+                  with waitForBattleStart OFF inherits whatever the previous
+                  stage left behind. That is deliberate ("stage that never
+                  gates"), but it is the reason the flip has to happen in Awake.
+  OnAnyFirstEnemySpawned (STATIC event)  static counterpart of
+                  OnFirstEnemySpawned, for things spawned at runtime that cannot
+                  hold a reference to this spawner - unit health bars, mainly.
   _battleStarted  (bool) latch so the wave loop can only ever be started once;
                   exposed read-only as BattleStarted
   AliveEnemyCount (int, public get)  read-only view of _alive. Added 2026-08-30
@@ -64,10 +80,33 @@ RUNTIME STATE
 
 LIFECYCLE
 ---------
+  Awake()   [2026-09-06]
+      The ONLY thing it does: when waitForBattleStart is ON *and* levelConfig is
+      assigned, it closes the health-bar gate - EnemiesHaveAppeared = false,
+      HasSpawnedFirstEnemy = false.
+
+      WHY IN AWAKE AND NOT START. PlayerWaveManager.Start() calls BeginWaves(),
+      and WaveLoop's first segment runs synchronously up to its first yield -
+      which, on a board that already has stacks, is AFTER SpawnLockedWave has
+      put the first hero wave on the deploy stages. Unity imposes no order
+      between two Starts. If PlayerWaveManager won that race, every hero in that
+      first wave ran HealthBar.Awake() while EnemiesHaveAppeared still held its
+      static default of TRUE, so HealthBar.ApplyBattleGate() returned early: the
+      canvas was never disabled and the bar never subscribed to
+      OnAnyFirstEnemySpawned. Result: the first wave showed its HP bars on the
+      gate for the whole puzzle phase while every later wave behaved correctly.
+      Awake runs before ALL Starts, so the flag is now guaranteed correct no
+      matter which Start wins.
+
+      The levelConfig guard keeps the old behaviour for a broken spawner: with
+      no config nothing will ever set the flag back to true, so the gate is left
+      OPEN rather than closed forever with nothing to open it.
+
   Start()
       Warns and aborts if levelConfig is missing. Then, if waitForBattleStart
       is ON, it RETURNS without spawning anything - the stage stays in its
-      puzzle-only phase. Otherwise it calls StartBattle() immediately.
+      puzzle-only phase (the bar gate was already closed in Awake). Otherwise it
+      calls StartBattle() immediately.
 
   StartBattle()   [public]
       Idempotent entry point that actually launches RunLevel(). Re-entrant
