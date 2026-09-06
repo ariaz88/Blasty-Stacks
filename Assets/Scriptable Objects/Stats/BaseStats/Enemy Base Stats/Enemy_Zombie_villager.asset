@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8b8f6dff77911a54d91f9e51d405ecd2, type: 3}
   m_Name: Enemy_Zombie_villager
   m_EditorClassIdentifier: 
-  attack: 35
-  defense: 30
-  maxHP: 120
-  attackSpeed: 1
-  moveSpeed: 3.5
+  attack: 32
+  defense: 28
+  maxHP: 170
+  attackSpeed: 0.9
+  moveSpeed: 3
   attackRange: 0.83
   type: 0

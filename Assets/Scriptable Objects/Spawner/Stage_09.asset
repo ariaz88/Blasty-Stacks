@@ -1,0 +1,62 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89536873bacdfe04db882361d6892376, type: 3}
+  m_Name: Stage_09
+  m_EditorClassIdentifier: Assembly-CSharp::LevelConfig
+  levelNumber: 9
+  startDelay: 0.1
+  targetStageDuration: 90
+  waves:
+  - name: Wave 1
+    delayBeforeWave: 0.5
+    formation: 1
+    spawnMin: {x: -3, y: 4.25}
+    spawnMax: {x: 3, y: 6.25}
+    gridColumns: 4
+    minSlotSpacing: {x: 0.8, y: 0.5}
+    frontAnchor: 0
+    rowYOffset: 1.2
+    secondRowDelay: 0.35
+    entries:
+    - enemyPrefab: {fileID: 6411937674325925182, guid: 5bff2e5b095d3c842bd4db2fc620d638, type: 3}
+      statsBase: {fileID: 11400000, guid: c6cbf9fc280dc084d89b707c253af02a, type: 2}
+      count: 3
+      row: 0
+      unitLevel: 1
+    - enemyPrefab: {fileID: 3282131553736139674, guid: c992828f89e405d45933b4d93d1d6a1e, type: 3}
+      statsBase: {fileID: 11400000, guid: bb3ee3d2c63eebc449f29c631a1fbc49, type: 2}
+      count: 2
+      row: 1
+      unitLevel: 1
+    concurrencyCap: 0
+  - name: Wave 2
+    delayBeforeWave: 1.5
+    formation: 1
+    spawnMin: {x: -3, y: 4.25}
+    spawnMax: {x: 3, y: 6.25}
+    gridColumns: 4
+    minSlotSpacing: {x: 0.8, y: 0.5}
+    frontAnchor: 0
+    rowYOffset: 1.2
+    secondRowDelay: 0.35
+    entries:
+    - enemyPrefab: {fileID: 7945851428904739630, guid: 7c26e09b9df5d7c44a7f02efa947aacf, type: 3}
+      statsBase: {fileID: 11400000, guid: 64a1f022694d1694fb4534ffa2c291f5, type: 2}
+      count: 2
+      row: 0
+      unitLevel: 1
+    - enemyPrefab: {fileID: 3282131553736139674, guid: c992828f89e405d45933b4d93d1d6a1e, type: 3}
+      statsBase: {fileID: 11400000, guid: bb3ee3d2c63eebc449f29c631a1fbc49, type: 2}
+      count: 2
+      row: 1
+      unitLevel: 1
+    concurrencyCap: 0

@@ -2724,7 +2724,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a7b36f52eab9cdd4cb8c09b204c460f7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  levelConfig: {fileID: 11400000, guid: af42dd120e5940847a875e1508e5d55e, type: 2}
+  levelConfig: {fileID: 0}
   cpWeights: {fileID: 11400000, guid: 92654a4e77e28b441ac7e4e8c23ab171, type: 2}
   waitForBattleStart: 0
   spawnRelativeToEnemyGate: 0
@@ -10220,6 +10220,9 @@ MonoBehaviour:
   winPanel: {fileID: 723166649}
   revivePanel: {fileID: 2917378918004771022}
   allowSingleRevivePerStage: 1
+  detectMutualWipe: 1
+  stalemateGraceSeconds: 2.5
+  postReviveSettleSeconds: 5
 --- !u!4 &1666081599
 Transform:
   m_ObjectHideFlags: 0

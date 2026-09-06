@@ -55,6 +55,18 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-09-06] The new enemy tiers and per-stage waves have never been played.** Stages 3-20 each
+  got their own `Assets/Scriptable Objects/Spawner/Stage_NN.asset` (2 waves, mixed archetypes) and
+  five of the six enemy `UnitStatsSO` assets were rewritten to actually differ from each other —
+  they had all been identical (35/120/30/1/3.5). Nothing has been fought. Judge, in order:
+  whether tier 2-6 stat gaps feel right, whether 7-12 units per stage is too few or too many for
+  the gate-relative spawn box, and whether the slower archetypes (Golem at move 2.9) break the
+  pursuit/formation tuning, which was built around 3.5. Table in
+  `Assets/Scriptable Objects/Spawner/README_EnemyRoster.md`.
+- **[2026-09-06] Every enemy has `xpValue = 0`, so the roguelite XP bar may never fill.**
+  Spotted while auditing the enemy prefabs; not investigated and not touched. If level-ups never
+  fire in play, this is the first place to look.
+
 - **[2026-09-06] `RogueliteManager.ShowSkillSelection()` pauses BEFORE it checks it has a panel.**
   `GameplayPause.SetPaused(true)` and `FreezeBattlefield(true)` run above the
   `if (skillSelectPanel != null)` guard, so any scene missing that panel freezes the battle with
