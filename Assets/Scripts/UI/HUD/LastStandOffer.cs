@@ -92,6 +92,18 @@ public class LastStandOffer : MonoBehaviour
 
     private void Awake()
     {
+        // TEMPORARILY OFF for this version - see GameFeatureFlags.LastStandOfferEnabled.
+        // First thing in Awake, so the "no offeredUnit" / "no cell template" errors
+        // below are not logged for a feature that is deliberately switched off.
+        // Disabling here means OnEnable never runs, so nothing is subscribed and the
+        // offer cell is never instantiated. The component and its scene object stay
+        // exactly where they are.
+        if (!GameFeatureFlags.LastStandOfferEnabled)
+        {
+            enabled = false;
+            return;
+        }
+
         if (!offerContainer) offerContainer = transform as RectTransform;
         if (!waveManager) waveManager = FindObjectOfType<PlayerWaveManager>(true);
 

@@ -4,7 +4,16 @@
   Type : MonoBehaviour
   Layer: UI / HUD
   Added: 2026-08-23
+  STATUS: DISABLED for this version - see the top of NOTES / RISKS
 ================================================================================
+
+  >>> [2026-09-07] TEMPORARILY DISABLED via the flag
+  >>> GameFeatureFlags.LastStandOfferEnabled = false. Everything below still
+  >>> describes the feature accurately and NOTHING was deleted - the script, its
+  >>> scene object and its Inspector wiring are all untouched. Awake now returns
+  >>> straight away with `enabled = false`, which means OnEnable never runs, so
+  >>> the component subscribes to nothing and the offer cell is never created.
+  >>> Set the flag back to true to bring the whole feature back as documented.
 
 PURPOSE
 -------
@@ -180,6 +189,18 @@ SETUP CHECKLIST (per stage)
 
 NOTES / RISKS
 -------------
+  - [2026-09-07] DISABLED for this version - GameFeatureFlags.LastStandOfferEnabled.
+    The check is the FIRST thing in Awake, deliberately ahead of the "no
+    offeredUnit" and "no cell template" error logs, so a feature that is off on
+    purpose does not fill the console with errors about wiring it does not need.
+    Disabling a component from INSIDE Awake means Unity never calls OnEnable, so
+    there is no subscription to BattleStartController, HeroRoster or
+    LevelGameManager to leak, and Evaluate can never run.
+    Note it was disabled in the same pass as the Heroes Stats panel buy-back
+    (GameFeatureFlags.HeroBuyBackEnabled). Those two interact: this offer's
+    'requireBuyBacksSpent' gate waits on HeroStatsPanel.BuyBacksExhausted, which
+    can no longer ever become true while the buy-back is off. So if this offer is
+    re-enabled ALONE, turn 'requireBuyBacksSpent' off or it will never appear.
   - [2026-09-06] THE BUY-BACK GATE. requireBuyBacksSpent (default ON) holds the
     offer back until every card in the Heroes Stats panel has spent its
     one-per-level buy-back. The reason is ordering, not fairness: this is the

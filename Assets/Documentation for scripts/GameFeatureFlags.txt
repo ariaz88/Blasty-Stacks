@@ -1,0 +1,114 @@
+================================================================================
+  GameFeatureFlags.cs
+  Path : Assets/Scripts/Core/GameFeatureFlags.cs
+  Type : static class (NOT a MonoBehaviour, NOT a ScriptableObject)
+  Layer: Core
+  Scenes: none - it is compile-time data, it exists in no scene
+  Added: 2026-09-07
+================================================================================
+
+PURPOSE
+-------
+ONE switchboard for features that are TEMPORARILY off in the current version.
+
+Nothing here deletes anything. Every system these flags gate is still fully
+authored: its scripts, its scene objects and its ScriptableObject assets are all
+untouched. Flipping a flag back to true is the ONLY edit needed to bring a
+feature back - there is nothing else to undo, no scene to re-wire, no component
+to re-add.
+
+Created 2026-09-07 to switch three things off for this release without removing
+them. See the three flags below.
+
+WHY A STATIC CLASS OF CONSTS
+----------------------------
+The gated systems live in 20+ stage scenes.
+
+  - A serialized Inspector tick-box would have to be re-authored in EVERY stage
+    scene, and a scene that was missed would silently keep the feature ON. That
+    is the exact failure mode this file exists to avoid.
+  - A ScriptableObject config would need a reference wired in every scene too,
+    plus a null path for scenes that lack it.
+  - A static is the same answer in every scene and cannot be half-applied.
+
+`static readonly`, NOT `const`. A const false makes every guarded branch
+provably unreachable at compile time, and Unity's console then fills with CS0162
+"unreachable code detected" warnings on code that is perfectly correct. A
+readonly static is resolved at run time, so the guards compile clean. Do not
+"tidy" these into consts.
+
+The cost of a compile-time switch is that a change needs a recompile (and
+re-entering Play mode). That is the right trade for a release switch, which flips
+twice: off now, on for the next version.
+
+FIELDS
+------
+  RogueliteEnabled        static readonly bool - currently FALSE
+      The whole in-battle roguelite layer: XP gain, the level bar, the level-up
+      pause and the skill-card pick screen.
+      Read by: RogueliteManager.Awake.
+      OFF means RogueliteManager hides its own scene UI (XP bar root, card panel
+      / "Regulite Show Panel", level-up overlay) and then disables itself, so
+      OnEnable and Start never run - no battle-start subscription, no XP, no
+      card pop-up. Because a disabled component is invisible to
+      FindObjectOfType, the two outside callers (EnemyManager.cs:255 and
+      PlayerWaveManager.cs:307) become no-ops with no edits of their own.
+
+  LastStandOfferEnabled   const bool - currently FALSE
+      The "your army is collapsing - buy one more hero?" prompt.
+      Read by: LastStandOffer.Awake.
+      OFF means the component disables itself as the FIRST thing in Awake -
+      ahead of its own "no offeredUnit" / "no cell template" error logs, so a
+      feature that is off on purpose does not spam the console. OnEnable never
+      runs, so nothing is subscribed and the offer cell is never instantiated.
+
+  HeroBuyBackEnabled      const bool - currently FALSE
+      The GEM BUY-BACK on the battle HUD's Heroes Stats panel - and ONLY that.
+      Read by: HeroStatCell.Bind, HeroStatCell.SetAlive,
+               HeroStatCell.SetAffordable, HeroStatsPanel.HandleBuyBack.
+      This one gates a PURCHASE, not a panel. The Heroes Stats panel itself
+      stays completely live: one card per hero type, the "alive/total" count,
+      and the grey "Cell DeActive" frame the moment a type is wiped out.
+      OFF means a wiped card keeps showing its count ("0/3") where the gem price
+      used to appear, "Cost  Gem" is never switched on, and the buy listener is
+      never attached. The panel becomes a pure read-out of how much of each
+      squad is still standing.
+
+FLOW
+----
+There is none - no Awake, no Update, no state. Each flag is read at the point of
+use by the script that owns the feature, and every gate is placed as early as
+possible (Awake, or the top of the handler) so the disabled path costs nothing
+and logs nothing.
+
+HOW IT CONNECTS
+---------------
+  RogueliteManager.cs   Awake -> HideWhileDisabled() + enabled = false
+  LastStandOffer.cs     Awake -> enabled = false
+  HeroStatCell.cs       Bind (listener not attached), SetAlive (canBuy),
+                        SetAffordable (interactable)
+  HeroStatsPanel.cs     HandleBuyBack (early return - the lock that guarantees
+                        no gem is ever spent, whatever a scene authored)
+
+Nothing references this file in the other direction, and no scene or asset
+depends on it.
+
+NOTES
+-----
+  - The buy-back is gated in THREE places on purpose, and they are not
+    redundant: SetAlive stops the price from ever appearing, Bind stops a stray
+    button from doing anything, and HandleBuyBack stops a gem from being spent.
+    Each covers a different failure - a scene authoring "Cost  Gem" active, a
+    button wired by hand in the Inspector, a call arriving from anywhere else.
+  - THE TWO FLAGS THAT INTERACT: LastStandOffer's 'requireBuyBacksSpent' waits
+    on HeroStatsPanel.BuyBacksExhausted, which can never become true while
+    HeroBuyBackEnabled is false (no card can be spent). Both are off together
+    right now so it does not matter - but re-enabling LastStandOfferEnabled
+    ALONE would produce an offer that never appears. Turn its
+    'requireBuyBacksSpent' off in that case, or re-enable both.
+  - When the next version ships, set the flag(s) back to true. Each gated script
+    carries a dated NOTES entry in its own doc describing exactly what its OFF
+    state changes and confirming that nothing was deleted.
+  - Keep this file to release switches. It is not a place for tuning values,
+    difficulty settings or debug toggles - those have their own homes
+    (ScriptableObject configs, DebugStageManager).

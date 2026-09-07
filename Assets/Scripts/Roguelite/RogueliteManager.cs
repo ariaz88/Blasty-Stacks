@@ -172,7 +172,44 @@ public class RogueliteManager : MonoBehaviour
 
     private void Awake()
     {
+        // TEMPORARILY OFF for this version - see GameFeatureFlags.RogueliteEnabled.
+        // Handled here rather than by switching the object off in 20+ scenes, and
+        // BEFORE anything else runs: disabling the component inside Awake means
+        // OnEnable is never called, so the battle-start subscription is never made
+        // and Start never runs. Nothing is destroyed - flip the flag back and the
+        // whole layer returns exactly as it was.
+        if (!GameFeatureFlags.RogueliteEnabled)
+        {
+            HideWhileDisabled();
+            enabled = false;
+            return;
+        }
+
         draw = new BuffDraw(config);
+    }
+
+    /// <summary>
+    /// Switches off the roguelite's own UI while the feature is disabled.
+    ///
+    /// Needed because these objects are authored in the stage scenes, not created
+    /// here: the card panel and the level-up overlay start active in some stages,
+    /// and the XP bar root - though normally authored inactive - is resolved from
+    /// the slider's parent, so it is switched off explicitly rather than assumed.
+    /// SetActive only; no object is destroyed.
+    /// </summary>
+    private void HideWhileDisabled()
+    {
+        if (skillSelectPanel != null) skillSelectPanel.SetActive(false);
+        if (levelUpOverlay != null) levelUpOverlay.SetActive(false);
+
+        var bar = xpBarRoot;
+        if (bar == null && xpSlider != null)
+        {
+            var t = xpSlider.transform.parent;
+            bar = t != null ? t.gameObject : xpSlider.gameObject;
+        }
+
+        if (bar != null) bar.SetActive(false);
     }
 
     private void OnEnable()

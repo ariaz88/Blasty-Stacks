@@ -4,7 +4,18 @@
   Type : MonoBehaviour
   Layer: Roguelite
   Scenes: all gameplay stages (Assets/Scenes/TestScenes/GamePlay Scenes/*)
+  STATUS: DISABLED for this version - see the top of NOTES
 ================================================================================
+
+  >>> [2026-09-07] THE WHOLE ROGUELITE LAYER IS TEMPORARILY DISABLED via the
+  >>> flag GameFeatureFlags.RogueliteEnabled = false. Everything below still
+  >>> describes the feature accurately and NOTHING was deleted - this script,
+  >>> BuffDraw, SkillData, SkillCardUI, RogueliteConfigSO, the SkillData assets
+  >>> and every scene object (XP bar, "Regulite Show Panel", card slots) are all
+  >>> untouched. Awake now switches that UI off and returns with
+  >>> `enabled = false`, so OnEnable and Start never run: no XP is granted, the
+  >>> level bar never appears, and the card pop-up can never open mid-battle.
+  >>> Set the flag back to true to bring the whole layer back as documented.
 
 PURPOSE
 -------
@@ -193,6 +204,30 @@ HOW IT CONNECTS
 
 NOTES
 -----
+  - [2026-09-07] DISABLED for this version - GameFeatureFlags.RogueliteEnabled.
+    Awake calls HideWhileDisabled() and then sets `enabled = false`.
+    WHY THAT ORDER AND THAT MECHANISM:
+      * A component disabled from INSIDE Awake never receives OnEnable, so the
+        BattleStartController.OnAnyBattleStarted subscription is never made and
+        Start (HideAllPanels / ShowXpBar / BeginBattlePhase) never runs. No XP,
+        no bar, no card screen, and nothing to unsubscribe.
+      * A disabled component is also INVISIBLE to FindObjectOfType. That is what
+        silently neutralises the two outside callers with no edits of their own:
+        EnemyManager.cs:255 and PlayerWaveManager.cs:307 both look this up and
+        already null-check the result, so NotifyEnemyKilled and RegisterPlayer
+        simply never fire.
+      * HideWhileDisabled must run FIRST because the roguelite's UI is authored
+        in the STAGE SCENES, not created here: skillSelectPanel (the "Regulite
+        Show Panel") and levelUpOverlay start active in some stages, so they are
+        SetActive(false) explicitly. The XP bar root is resolved the same way
+        ShowXpBar resolves it (field, else the slider's parent) and switched off
+        rather than merely left alone - it is normally authored inactive, but
+        assuming that across 21 scenes is exactly how a bar leaks onto one.
+      * SetActive only. No object is destroyed, so the scene saves unchanged.
+    A code-level flag rather than an Inspector tick-box: the manager lives in 20+ stage
+    scenes, a serialized field would have to be re-authored in every one, and a
+    missed scene would silently keep the layer running.
+    To restore: set the flag to true. There is no other edit to undo.
   - LEVEL-UP WAITS FOR THE BAR  [FIXED 2026-09-03]
     THE BUG: TryLevelUp ran in the SAME FRAME as the kill and set xpDisplay = 0
     while the fill animation was still travelling. At roguelite level 1 the

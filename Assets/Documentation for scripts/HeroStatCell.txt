@@ -11,6 +11,12 @@ PURPOSE
 ONE hero type in the battle HUD. It has three looks, and NONE of them tints
 anything - the ARTWORK carries the state:
 
+  >>> READ THE FIRST ENTRY UNDER NOTES FIRST: as of 2026-09-07 the gem
+  >>> buy-back is TEMPORARILY OFF (GameFeatureFlags.HeroBuyBackEnabled), so the
+  >>> WIPED and SPENT looks below currently collapse into one - grey frame,
+  >>> count still reading "0/3", no price. Nothing was deleted; the flag is the
+  >>> only thing to flip back.
+
   ALIVE : "Cell Active"   frame on (coloured), "card  Button" showing
                           "alive/total", "Cost  Gem" off.
   WIPED : "Cell DeActive" frame on (that sprite is ALREADY grey), the count
@@ -121,11 +127,16 @@ METHODS
       Writes the portrait into BOTH avatars, writes the price label, replaces
       the buy button's listeners (RemoveAllListeners first, so a re-bind cannot
       stack them), then calls SetAlive(squadSize) to paint the initial state.
+      [2026-09-07] The listener is only ATTACHED when
+      GameFeatureFlags.HeroBuyBackEnabled is true; with the flag off the button
+      is left listener-less and non-interactable, so even a card authored with
+      "Cost  Gem" switched on cannot spend a gem.
 
   SetAlive(int alive)
       Clamps alive into [0, SquadSize] - a purchase can briefly put more heroes
       on the field than the snapshot recorded, and the label must never read
-      "4/3". Then, with wiped = alive <= 0 and canBuy = wiped && !IsSpent:
+      "4/3". Then, with wiped = alive <= 0 and
+      canBuy = wiped && !IsSpent && GameFeatureFlags.HeroBuyBackEnabled:
         activeRoot.SetActive(!wiped)   deactiveRoot.SetActive(wiped)
         countText.text = "alive/SquadSize"
         countRoot.SetActive(!canBuy)
@@ -151,7 +162,8 @@ METHODS
       - the button, its listener, the price label - is already wired by Bind.
 
   SetAffordable(bool)
-      buyButton.interactable = affordable && !IsSpent. Purely cosmetic -
+      buyButton.interactable = affordable && !IsSpent &&
+      GameFeatureFlags.HeroBuyBackEnabled. Purely cosmetic -
       HeroStatsPanel and LastStandOffer both re-check the balance for real
       before spending. The !IsSpent half is NOT cosmetic though: without it the
       panel's next Refresh (fired by any currency change) would hand a spent
@@ -183,6 +195,22 @@ HOW IT CONNECTS
 
 NOTES
 -----
+  - [2026-09-07] BUY-BACK TEMPORARILY DISABLED for this version, via the flag
+    GameFeatureFlags.HeroBuyBackEnabled = false. NOTHING was deleted: every
+    field, method and authored object above is still here, and setting the flag
+    back to true restores the behaviour documented on this page exactly.
+    What the panel looks like while it is off:
+      - the card, the portrait and the "alive/total" count are UNCHANGED;
+      - the alive -> wiped GREY FRAME swap is UNCHANGED (that is ShowFrame,
+        which follows `wiped`, never `canBuy`);
+      - a wiped card keeps showing its count - "0/3" - where the gem price used
+        to appear, because canBuy is now false in every state;
+      - "Cost  Gem" is never switched on and its button is never wired.
+    Net effect: the panel is a pure read-out of how much of each squad is still
+    standing, and no hero can be added to a battle for gems.
+    Three locks enforce it, deliberately: canBuy in SetAlive (the price never
+    appears), the un-attached listener in Bind (a stray button does nothing),
+    and HeroStatsPanel.HandleBuyBack's own early return (no gem is ever spent).
   - [2026-09-06] ONE BUY-BACK PER CARD PER LEVEL (IsSpent / MarkSpent). Before
     this the card simply re-armed every time its type was wiped out, so a player
     with gems could keep buying the same squad back for the whole stage. The

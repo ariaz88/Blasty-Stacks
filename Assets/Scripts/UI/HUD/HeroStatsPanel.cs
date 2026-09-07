@@ -242,6 +242,13 @@ public class HeroStatsPanel : MonoBehaviour
     {
         if (!cell) return;
 
+        // TEMPORARILY OFF for this version - see GameFeatureFlags.HeroBuyBackEnabled.
+        // The panel itself stays fully live; only the purchase is gated. HeroStatCell
+        // already refuses to wire the button while the flag is off, so this is the
+        // second lock rather than the first - but it is the one that guarantees no
+        // gem is ever spent, whatever a scene happens to have authored on the card.
+        if (!GameFeatureFlags.HeroBuyBackEnabled) return;
+
         // ONE buy-back per card per level. The button is hidden and disabled the
         // instant a purchase lands, so this is belt-and-braces against a second
         // click queued in the same frame - but it is also the authoritative rule,

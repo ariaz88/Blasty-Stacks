@@ -6,6 +6,14 @@
   Scenes: Canvas/Heros Stats panel  (gameplay stages)
 ================================================================================
 
+  >>> [2026-09-07] STILL FULLY LIVE, but its GEM BUY-BACK is TEMPORARILY OFF via
+  >>> the flag GameFeatureFlags.HeroBuyBackEnabled = false. The panel keeps
+  >>> building one card per hero type, keeps the "alive/total" count and keeps
+  >>> the grey-frame-on-wipe look; only the "pay N gems to bring the squad back"
+  >>> half is gated. HandleBuyBack returns immediately while the flag is off, so
+  >>> no gem can be spent and no reinforcement can be queued from this panel.
+  >>> Nothing was deleted - see NOTES.
+
 PURPOSE
 -------
 The row of hero cells shown during a battle. One cell per hero TYPE that is on
@@ -158,6 +166,26 @@ SCENE SETUP CHECKLIST
 
 NOTES
 -----
+  - [2026-09-07] BUY-BACK TEMPORARILY DISABLED for this version.
+    Flag: GameFeatureFlags.HeroBuyBackEnabled (a static readonly bool - the same answer
+    in all 21 stage scenes - a serialized tick-box would have to be re-authored
+    in every one of them and a missed scene would silently keep the feature on).
+    Changes, in full:
+      HeroStatsPanel.HandleBuyBack  early-returns before the IsSpent check, so
+                                    the charge and the SpawnReinforcements call
+                                    are both unreachable.
+      HeroStatCell.SetAlive         canBuy is false in every state, so "Cost
+                                    Gem" never replaces the count.
+      HeroStatCell.Bind             the buy listener is not attached at all.
+    NOT changed: BuildCells, the roster snapshot, Refresh, the count, the
+    alive/wiped frame swap, ResolveGemCost, or any Inspector field.
+    Consequence worth knowing: BuyBacksExhausted now stays FALSE for a whole
+    battle (no card can ever be spent). That would normally block LastStandOffer
+    forever - which is moot right now, because LastStandOffer is disabled by its
+    own flag in the same pass. If LastStandOffer is ever re-enabled while THIS
+    flag is still off, turn its 'requireBuyBacksSpent' off too or it will never
+    appear.
+    To restore: set the flag to true. There is no other edit to undo.
   - [2026-09-06] ONE BUY-BACK PER CARD PER LEVEL. Before this a card re-armed
     every time its type was wiped out again, so gems alone could keep a squad on
     the field for the whole stage. The latch is per-CELL (HeroStatCell.IsSpent),

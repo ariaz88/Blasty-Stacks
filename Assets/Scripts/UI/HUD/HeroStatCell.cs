@@ -244,10 +244,18 @@ public class HeroStatCell : MonoBehaviour
 
         if (gemCostText) gemCostText.text = GemCost.ToString();
 
+        // The listener is not even attached while the buy-back is off - see
+        // GameFeatureFlags.HeroBuyBackEnabled. Cheaper than trusting costRoot to
+        // stay hidden: with no listener, a button that somehow ends up on screen
+        // still cannot spend a gem.
         if (buyButton)
         {
             buyButton.onClick.RemoveAllListeners();
-            buyButton.onClick.AddListener(HandleBuyPressed);
+
+            if (GameFeatureFlags.HeroBuyBackEnabled)
+                buyButton.onClick.AddListener(HandleBuyPressed);
+            else
+                buyButton.interactable = false;
         }
 
         SetAlive(SquadSize);
@@ -268,7 +276,13 @@ public class HeroStatCell : MonoBehaviour
         // frame but goes back to showing "0/3" - the squad is gone and there is
         // nothing left to sell, which reads very differently from a price the
         // player merely cannot afford.
-        bool canBuy = wiped && !IsSpent;
+        //
+        // WITH THE BUY-BACK OFF (GameFeatureFlags.HeroBuyBackEnabled) this is the
+        // ONLY state a wiped card has: the grey frame stays - that logic is
+        // untouched - but the count simply keeps reading "0/3" where the price used
+        // to appear. The card becomes a pure read-out of how much of each squad is
+        // still standing, and no hero can be added to the battle.
+        bool canBuy = wiped && !IsSpent && GameFeatureFlags.HeroBuyBackEnabled;
 
         if (countText) countText.text = $"{alive}/{SquadSize}";
         ShowCount(!canBuy);
@@ -319,7 +333,8 @@ public class HeroStatCell : MonoBehaviour
     /// </summary>
     public void SetAffordable(bool affordable)
     {
-        if (buyButton) buyButton.interactable = affordable && !IsSpent;
+        if (buyButton)
+            buyButton.interactable = affordable && !IsSpent && GameFeatureFlags.HeroBuyBackEnabled;
     }
 
     private void ShowFrame(bool wiped)
