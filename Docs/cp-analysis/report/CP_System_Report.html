@@ -1,0 +1,2159 @@
+<title>Blasty-Stacks CP Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Vazirmatn:wght@400;500;700&display=swap">
+
+<style>
+/* ============================ tokens ============================ */
+:root{
+  color-scheme: light;
+  --ground:#f5f7f9;   --surface:#ffffff;   --surface-2:#eef1f5;  --surface-3:#e4e9ef;
+  --ink:#14161a;      --ink-2:#4a5058;     --ink-3:#767d87;
+  --rule:#dee3ea;     --rule-strong:#c6ccd6;
+  --accent:#2a78d6;   --accent-ink:#1c5cab; --accent-soft:#e9f0fb;
+  --crit:#d03b3b;     --crit-ink:#a82c2c;   --crit-soft:#fbeceb;
+  --warn-ink:#8a5a00; --warn-soft:#fdf3e0;
+  --good-ink:#006300; --good-soft:#e7f4e7;
+  /* dataviz series — validated light steps */
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300;
+  --c-grid:#e6eaef; --c-axis:#c6ccd6; --c-ref:#14161a;
+  --shadow:0 1px 2px rgba(20,22,26,.05), 0 4px 16px rgba(20,22,26,.05);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --fa:"Vazirmatn","IBM Plex Sans",Tahoma,system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#0d0f12; --surface:#16191e; --surface-2:#1c2027; --surface-3:#242a32;
+    --ink:#f1f3f6;    --ink-2:#b4bac4;   --ink-3:#848b95;
+    --rule:#282e36;   --rule-strong:#39414b;
+    --accent:#3987e5; --accent-ink:#7cb0ee; --accent-soft:#14243a;
+    --crit:#e66767;   --crit-ink:#f09a9a;   --crit-soft:#2e1a1a;
+    --warn-ink:#e0a53c; --warn-soft:#2b2213;
+    --good-ink:#3cbb3c; --good-soft:#152613;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
+    --c-grid:#242a32; --c-axis:#39414b; --c-ref:#f1f3f6;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0d0f12; --surface:#16191e; --surface-2:#1c2027; --surface-3:#242a32;
+  --ink:#f1f3f6;    --ink-2:#b4bac4;   --ink-3:#848b95;
+  --rule:#282e36;   --rule-strong:#39414b;
+  --accent:#3987e5; --accent-ink:#7cb0ee; --accent-soft:#14243a;
+  --crit:#e66767;   --crit-ink:#f09a9a;   --crit-soft:#2e1a1a;
+  --warn-ink:#e0a53c; --warn-soft:#2b2213;
+  --good-ink:#3cbb3c; --good-soft:#152613;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
+  --c-grid:#242a32; --c-axis:#39414b; --c-ref:#f1f3f6;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+}
+
+/* ============================ base ============================ */
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:16px; line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px 96px}
+p,li{color:var(--ink-2)}
+p{margin:0 0 1em}
+a{color:var(--accent-ink)}
+h1,h2,h3,h4{color:var(--ink);text-wrap:balance;margin:0;line-height:1.22;font-weight:600}
+h2{font-size:1.52rem;letter-spacing:-.018em}
+h3{font-size:1.08rem;letter-spacing:-.008em;margin-bottom:.35em}
+h4{font-size:.94rem;letter-spacing:-.004em}
+code,.mono{font-family:var(--mono);font-variant-ligatures:none}
+strong{color:var(--ink);font-weight:600}
+
+/* prose measure */
+.prose{max-width:68ch}
+.prose.wide{max-width:82ch}
+
+/* ============================ masthead ============================ */
+.mast{padding:56px 0 34px;border-bottom:1px solid var(--rule)}
+.eyebrow{
+  font-family:var(--mono);font-size:.7rem;font-weight:500;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-3);margin:0 0 14px
+}
+.mast h1{font-size:clamp(2rem,4.4vw,3rem);letter-spacing:-.032em;font-weight:600;max-width:20ch}
+.mast .dek{margin:16px 0 0;font-size:1.06rem;max-width:64ch;color:var(--ink-2)}
+.meta{
+  display:flex;flex-wrap:wrap;gap:8px 10px;margin-top:26px;
+  font-family:var(--mono);font-size:.74rem
+}
+.meta span{
+  border:1px solid var(--rule);border-radius:3px;padding:4px 9px;
+  color:var(--ink-2);background:var(--surface)
+}
+.meta span b{color:var(--ink);font-weight:600}
+
+/* language switch */
+.langbar{
+  position:sticky;top:0;z-index:40;background:var(--ground);
+  border-bottom:1px solid var(--rule);
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:9px 0;margin-bottom:0
+}
+.langbar .lb-in{max-width:1120px;margin:0 auto;padding:0 24px;width:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.langbar .lbl{font-family:var(--mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.jump{
+  font-family:var(--mono);font-size:.76rem;text-decoration:none;
+  border:1px solid var(--rule-strong);border-radius:3px;padding:4px 11px;
+  color:var(--ink);background:var(--surface)
+}
+.jump:hover{border-color:var(--accent);color:var(--accent-ink)}
+.jump[aria-current="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ============================ sections ============================ */
+section.sec{padding:46px 0;border-bottom:1px solid var(--rule)}
+.sec-head{display:flex;gap:16px;align-items:baseline;margin-bottom:22px}
+.sec-num{
+  font-family:var(--mono);font-size:.78rem;font-weight:600;color:var(--accent);
+  border:1px solid var(--accent);border-radius:3px;padding:2px 7px;flex:none;
+  line-height:1.5
+}
+.sec-head p{margin:6px 0 0;font-size:.95rem;max-width:70ch}
+
+/* ============================ answer list (exec summary) ============================ */
+.qa{display:grid;gap:0;margin:0;padding:0;list-style:none;border-top:1px solid var(--rule)}
+.qa li{
+  display:grid;grid-template-columns:minmax(0,1fr);gap:6px;
+  padding:18px 0;border-bottom:1px solid var(--rule)
+}
+@media(min-width:800px){ .qa li{grid-template-columns:minmax(0,26ch) minmax(0,1fr);gap:28px} }
+.qa .q{color:var(--ink);font-weight:600;font-size:.95rem}
+.qa .a{color:var(--ink-2);font-size:.95rem}
+.qa .a b{color:var(--ink)}
+
+/* ============================ formula block ============================ */
+.formula{
+  background:var(--surface);border:1px solid var(--rule);border-radius:6px;
+  padding:22px 24px;margin:0 0 22px;overflow-x:auto;box-shadow:var(--shadow)
+}
+.formula .fx{font-family:var(--mono);font-size:1rem;line-height:2;color:var(--ink);white-space:nowrap}
+.formula .fx .w{color:var(--accent-ink);font-weight:600}
+.formula .fx .st{color:var(--ink)}
+.formula .note{margin:14px 0 0;font-size:.84rem;color:var(--ink-3);white-space:normal}
+
+/* ============================ evidence / code ============================ */
+.ev{
+  background:var(--surface-2);border:1px solid var(--rule);border-left:2px solid var(--accent);
+  border-radius:0 4px 4px 0;padding:14px 16px;margin:0 0 18px;overflow-x:auto
+}
+.ev.bad{border-left-color:var(--crit)}
+.ev pre{margin:0;font-family:var(--mono);font-size:.78rem;line-height:1.65;color:var(--ink-2);white-space:pre}
+.ev .cap{
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 8px;white-space:normal
+}
+.src{
+  font-family:var(--mono);font-size:.74rem;color:var(--ink-3);
+  background:var(--surface-2);border:1px solid var(--rule);border-radius:3px;
+  padding:1px 6px;white-space:nowrap;display:inline-block
+}
+
+/* ============================ tables ============================ */
+.tw{overflow-x:auto;margin:0 0 20px;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.83rem;font-variant-numeric:tabular-nums}
+th,td{padding:8px 12px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:500;background:var(--surface-2);
+  position:sticky;top:0;border-bottom:1px solid var(--rule-strong)
+}
+tbody tr:last-child td{border-bottom:none}
+tbody td{color:var(--ink-2)}
+tbody td.k{color:var(--ink);font-weight:500}
+td.num{font-family:var(--mono)}
+tr.hl td{background:var(--accent-soft)}
+tr.bad td{background:var(--crit-soft)}
+caption{caption-side:bottom;text-align:left;padding:9px 12px;font-size:.78rem;color:var(--ink-3);border-top:1px solid var(--rule)}
+
+/* ============================ chart figure ============================ */
+figure.fig{
+  margin:0 0 26px;background:var(--surface);border:1px solid var(--rule);
+  border-radius:6px;padding:20px 20px 14px;box-shadow:var(--shadow)
+}
+figure.fig figcaption{margin:0 0 4px}
+.fig-t{font-size:.98rem;font-weight:600;color:var(--ink);letter-spacing:-.006em}
+.fig-s{font-size:.83rem;color:var(--ink-3);margin:3px 0 14px;max-width:76ch}
+.chart{width:100%;overflow-x:auto}
+.chart svg{display:block;width:100%;height:auto;min-width:520px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin:12px 0 0;font-size:.78rem;color:var(--ink-2)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.legend .dash{width:16px;height:0;border-top:2px dashed currentColor;border-radius:0;margin-right:6px;vertical-align:3px}
+details.tv{margin:12px 0 0;border-top:1px solid var(--rule);padding-top:10px}
+details.tv summary{
+  cursor:pointer;font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-3);list-style:none
+}
+details.tv summary::-webkit-details-marker{display:none}
+details.tv summary::before{content:"▸ ";color:var(--accent)}
+details.tv[open] summary::before{content:"▾ "}
+details.tv summary:hover{color:var(--accent-ink)}
+details.tv .tw{margin-top:10px;box-shadow:none}
+
+/* chart internals */
+.gridline{stroke:var(--c-grid);stroke-width:1}
+.axisline{stroke:var(--c-axis);stroke-width:1}
+.tick{fill:var(--ink-3);font-family:var(--mono);font-size:10px}
+.axlabel{fill:var(--ink-3);font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase}
+.dlabel{font-family:var(--mono);font-size:10.5px;font-weight:600}
+.serieslabel{font-family:var(--mono);font-size:10.5px;font-weight:600}
+
+/* tooltip */
+.tip{
+  position:fixed;z-index:90;pointer-events:none;opacity:0;transition:opacity .1s;
+  background:var(--surface);border:1px solid var(--rule-strong);border-radius:5px;
+  box-shadow:var(--shadow);padding:8px 11px;font-size:.78rem;color:var(--ink);
+  font-family:var(--mono);max-width:280px
+}
+.tip .tt{font-weight:600;margin-bottom:5px;color:var(--ink)}
+.tip .tr{display:flex;justify-content:space-between;gap:14px;color:var(--ink-2)}
+.tip .tr i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+/* ============================ defect register ============================ */
+.defects{display:grid;gap:0;border-top:1px solid var(--rule)}
+.defect{
+  display:grid;gap:4px 18px;padding:16px 0 16px 14px;border-bottom:1px solid var(--rule);
+  border-left:3px solid var(--rule-strong);padding-left:16px
+}
+.defect.sev-high{border-left-color:var(--crit)}
+.defect.sev-med{border-left-color:var(--s4)}
+.defect.sev-low{border-left-color:var(--ink-3)}
+@media(min-width:860px){
+  .defect{grid-template-columns:auto minmax(0,1fr) minmax(0,26ch);align-items:baseline}
+}
+.defect .dn{font-family:var(--mono);font-size:.8rem;font-weight:600;color:var(--ink-3)}
+.defect .dt{color:var(--ink);font-size:.93rem}
+.defect .dt em{color:var(--ink-2);font-style:normal;display:block;margin-top:3px;font-size:.87rem}
+.defect .dl{font-family:var(--mono);font-size:.72rem;color:var(--ink-3);word-break:break-all;white-space:normal}
+.sevkey{display:flex;gap:16px;flex-wrap:wrap;margin:0 0 18px;font-size:.78rem;color:var(--ink-2)}
+.sevkey span{display:flex;align-items:center;gap:7px}
+.sevkey i{width:3px;height:14px;border-radius:1px;display:inline-block}
+
+/* ============================ callout ============================ */
+.callout{
+  border:1px solid var(--rule);border-radius:6px;background:var(--surface);
+  padding:18px 20px;margin:0 0 22px;box-shadow:var(--shadow)
+}
+.callout.crit{border-color:var(--crit);background:var(--crit-soft)}
+.callout.crit .ct{color:var(--crit-ink)}
+.callout .ct{
+  font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent-ink);margin:0 0 8px;font-weight:600
+}
+.callout p:last-child{margin-bottom:0}
+.callout p{color:var(--ink-2)}
+
+/* verdict tiles */
+.tiles{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin:0 0 24px}
+.tile{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:16px 18px;box-shadow:var(--shadow)}
+.tile .tl{font-family:var(--mono);font-size:.68rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px}
+.tile .tv2{font-size:1.85rem;font-weight:600;color:var(--ink);line-height:1.1;letter-spacing:-.02em}
+.tile .tn{font-size:.8rem;color:var(--ink-3);margin:5px 0 0}
+.tile.crit .tv2{color:var(--crit-ink)}
+
+/* ============================ RTL / Persian ============================ */
+[dir="rtl"]{font-family:var(--fa)}
+[dir="rtl"] .prose{max-width:70ch}
+[dir="rtl"] p,[dir="rtl"] li{line-height:1.95}
+[dir="rtl"] .sec-head{flex-direction:row}
+[dir="rtl"] th,[dir="rtl"] td{text-align:left}
+[dir="rtl"] th:first-child,[dir="rtl"] td:first-child{text-align:right}
+[dir="rtl"] .defect{border-left:none;border-right:3px solid var(--rule-strong);padding-left:0;padding-right:16px}
+[dir="rtl"] .defect.sev-high{border-right-color:var(--crit)}
+[dir="rtl"] .defect.sev-med{border-right-color:var(--s4)}
+[dir="rtl"] .defect.sev-low{border-right-color:var(--ink-3)}
+[dir="rtl"] .ev{border-left:1px solid var(--rule);border-right:2px solid var(--accent);border-radius:4px 0 0 4px}
+[dir="rtl"] .ev.bad{border-right-color:var(--crit)}
+[dir="rtl"] .ev pre,[dir="rtl"] .formula .fx{direction:ltr;text-align:left}
+[dir="rtl"] code,[dir="rtl"] .src,[dir="rtl"] .mono{direction:ltr;unicode-bidi:embed}
+[dir="rtl"] .qa .q,[dir="rtl"] .qa .a{font-family:var(--fa)}
+[dir="rtl"] .legend,[dir="rtl"] .fig-s,[dir="rtl"] .fig-t{font-family:var(--fa)}
+[dir="rtl"] .lang-divider .eyebrow{letter-spacing:0}
+
+.lang-divider{padding:52px 0 0}
+.lang-divider .rule{height:1px;background:var(--rule-strong);margin:0 0 34px}
+
+/* ============================ footer ============================ */
+.foot{padding:38px 0 0;font-size:.83rem;color:var(--ink-3)}
+.foot p{color:var(--ink-3)}
+.foot ul{padding-left:20px;margin:8px 0 16px}
+[dir="rtl"] .foot ul{padding-left:0;padding-right:20px}
+
+/* ============================ a11y / motion ============================ */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ============================ print ============================ */
+@media print{
+  :root{
+    --ground:#fff;--surface:#fff;--surface-2:#f4f6f8;--surface-3:#eaeef2;
+    --ink:#000;--ink-2:#222;--ink-3:#555;--rule:#c8ced6;--rule-strong:#9aa2ac;
+    --shadow:none;
+  }
+  body{background:#fff;font-size:10.5pt}
+  .wrap{max-width:100%;padding:0}
+  .langbar{display:none}
+  figure.fig,.callout,.tw,.ev,.tile{break-inside:avoid;box-shadow:none}
+  section.sec{break-before:auto;padding:22px 0}
+  .defect{break-inside:avoid}
+  details.tv{display:none}          /* charts carry direct labels in print */
+  .chart svg{min-width:0}
+  .mast{padding-top:0}
+  a{color:#000;text-decoration:none}
+  h2,h3{break-after:avoid}
+}
+</style>
+
+<div class="langbar">
+  <div class="lb-in">
+    <span class="lbl">Blasty-Stacks · CP Audit</span>
+    <a class="jump" href="#en" aria-current="true">English</a>
+    <a class="jump" href="#fa">فارسی</a>
+    <a class="jump" href="#defects-en">Defects</a>
+    <a class="jump" href="#research-en">Formula research</a>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ═══════════════════════════════════════════ ENGLISH ═══════════════════════════════════════════ -->
+<div id="en">
+
+<header class="mast">
+  <p class="eyebrow">Combat Power · Data layer audit · 2026-09-07</p>
+  <h1>How Combat Power is actually calculated</h1>
+  <p class="dek">
+    A traced audit of every input to CP for both player heroes and enemies in Blasty-Stacks —
+    the formula, the authored curve data behind it, how the number grows, and whether it tracks
+    real combat strength. Every figure below was recomputed from the project's own
+    <code>.asset</code> files by reimplementing <code>ProgressionMath</code>,
+    <code>CPWeightMath</code> and <code>CPCalculator</code> outside Unity.
+  </p>
+  <div class="meta">
+    <span><b>10</b> scripts read</span>
+    <span><b>4</b> config assets parsed</span>
+    <span><b>8</b> heroes · <b>6</b> enemy archetypes</span>
+    <span><b>20</b> stages</span>
+    <span><b>9</b> defects found</span>
+    <span>Code changes: <b>none</b></span>
+  </div>
+</header>
+
+<!-- ── 1 exec summary ── -->
+<section class="sec" id="summary-en">
+  <div class="sec-head"><span class="sec-num">01</span><div>
+    <h2>The five answers</h2>
+    <p>Short forms of everything that follows. Each links to the section that proves it.</p>
+  </div></div>
+
+  <ul class="qa">
+    <li>
+      <div class="q">How is CP computed?</div>
+      <div class="a">A flat <b>weighted sum of six raw stats</b>, multiplied by a melee/ranged
+        flavour multiplier. The weights are not constants — each is an <code>AnimationCurve</code>
+        sampled at the unit's level, so the recipe itself drifts as the unit levels up.
+        <a href="#formula-en">§2</a></div>
+    </li>
+    <li>
+      <div class="q">If CP goes 100 → 120, does every stat rise 20%?</div>
+      <div class="a"><b>No — and not even close.</b> Two independent reasons. Each stat compounds a
+        <em>different</em> per-level curve, and CP weights the stats so unevenly that four of the six
+        are effectively invisible. In practice <b>CP ≈ ATK + 0.15·HP</b>.
+        <a href="#grow-en">§7</a></div>
+    </li>
+    <li>
+      <div class="q">Does it differ per hero? Per enemy?</div>
+      <div class="a"><b>The growth rates do not.</b> All 8 heroes share one progression config; all 6
+        enemy archetypes share another. Only the base stat sheet differs — and among heroes, only in
+        two of six stats. What differs for enemies is the <em>level</em>: an enemy's level
+        <b>is the stage number</b>. <a href="#player-en">§5</a>, <a href="#enemy-en">§6</a></div>
+    </li>
+    <li>
+      <div class="q">Can total CP be read at runtime?</div>
+      <div class="a"><b>Yes — and the code already exists but is unused.</b> Every enemy computes its
+        CP at spawn into a field nothing reads. Players compute no CP at all in battle.
+        <code>CPCalculator.SquadCP</code> exists for exactly this and has zero call sites.
+        <a href="#runtime-en">§8</a></div>
+    </li>
+    <li>
+      <div class="q">Is this the right formula?</div>
+      <div class="a"><b>It is the weakest of the standard options, and it currently ranks your roster
+        backwards.</b> The genuinely stronger hero profile displays the <em>lower</em> CP. Two
+        well-established alternatives fix it, and one of them is already written in your codebase as
+        dead code. <a href="#research-en">§10</a></div>
+    </li>
+  </ul>
+</section>
+
+<!-- ── 2 the formula ── -->
+<section class="sec" id="formula-en">
+  <div class="sec-head"><span class="sec-num">02</span><div>
+    <h2>The formula</h2>
+    <p>One function, thirty lines, used identically for heroes and enemies.</p>
+  </div></div>
+
+  <div class="formula">
+    <div class="fx">CP = round( ( <span class="w">w<sub>A</sub></span>·<span class="st">ATK</span>
+      + <span class="w">w<sub>H</sub></span>·<span class="st">HP</span>
+      + <span class="w">w<sub>Mv</sub></span>·<span class="st">MoveSpeed</span>
+      + <span class="w">w<sub>AS</sub></span>·<span class="st">AtkSpeed</span>
+      + <span class="w">w<sub>D</sub></span>·<span class="st">DEF</span>
+      + <span class="w">w<sub>R</sub></span>·<span class="st">Range</span> ) × <span class="w">typeMult</span> )</div>
+    <p class="note">Every <span class="w mono">w</span> is an <code>AnimationCurve</code> evaluated at the unit's
+      level and clamped to <code>wClamp</code> (−10…10), then scaled by <code>globalWeightScaleByLevel</code>.
+      <code>typeMult</code> is <code>rangedMult</code> for Archer/Mage and <code>meleeMult</code> for
+      Warrior/Horseman. <span class="src">CPCalculator.cs:10–30</span></p>
+  </div>
+
+  <div class="ev">
+    <p class="cap">Assets/Scripts/Data/CombatPower/CPCalculator.cs — the whole of it</p>
+<pre>float baseScore =
+      w.wA  * s.attack
+    + w.wH  * s.maxHP
+    + w.wMv * s.moveSpeed
+    + w.wAS * s.attackSpeed
+    + w.wD  * s.defense
+    + w.wR  * s.attackRange;
+
+bool isRanged = s.type == FighterType.Archer || s.type == FighterType.Mage;
+float typeMult = isRanged ? w.rangedMult : w.meleeMult;
+
+return Mathf.RoundToInt(baseScore * typeMult);</pre>
+  </div>
+
+  <p class="prose wide">Note what the formula reads: <code>s</code> is a live
+  <code>UnitStatsRuntime</code>, so the number reflects whatever the stat block currently holds —
+  base sheet, level growth, and any roguelite multipliers already applied. Note also what it
+  <em>doesn't</em> do: there is no interaction between terms. HP and defense do not combine into
+  survivability; attack and attack-speed do not combine into damage output. Every stat is priced
+  in isolation and the prices are added up. <a href="#research-en">§10</a> is about the consequences
+  of that choice.</p>
+
+  <h3>The authored weights</h3>
+  <p class="prose wide">Two weight assets exist — one for heroes, one for enemies — and their stat
+  weights are identical. Values below are read straight from the YAML and evaluated the way
+  <code>CPWeightMath</code> does.</p>
+
+  <div class="tw"><table>
+    <caption>Weights sampled at four levels, from <span class="src">Assets/Scriptable Objects/CP/Player CP.asset</span>. The pattern: attack is worth ~20× HP per point, and defense is worth literally nothing at level 1.</caption>
+    <thead><tr><th>Level</th><th>w<sub>A</sub> attack</th><th>w<sub>H</sub> HP</th><th>w<sub>Mv</sub> move</th><th>w<sub>AS</sub> atk spd</th><th>w<sub>D</sub> defense</th><th>w<sub>R</sub> range</th><th>typeMult</th></tr></thead>
+    <tbody>
+      <tr><td class="k">1</td><td class="num">1.000</td><td class="num">0.150</td><td class="num">0.250</td><td class="num">0.400</td><td class="num">0.000</td><td class="num">0.050</td><td class="num">1.00</td></tr>
+      <tr><td class="k">10</td><td class="num">0.982</td><td class="num">0.144</td><td class="num">0.241</td><td class="num">0.409</td><td class="num">0.009</td><td class="num">0.048</td><td class="num">1.00</td></tr>
+      <tr><td class="k">20</td><td class="num">0.961</td><td class="num">0.138</td><td class="num">0.231</td><td class="num">0.419</td><td class="num">0.019</td><td class="num">0.046</td><td class="num">1.00</td></tr>
+      <tr><td class="k">50</td><td class="num">0.900</td><td class="num">0.120</td><td class="num">0.200</td><td class="num">0.450</td><td class="num">0.050</td><td class="num">0.040</td><td class="num">1.00</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout crit">
+    <p class="ct">⚠ typeMult is 1.00 everywhere — and that is an accident</p>
+    <p>The rightmost column should not be a flat 1.00. Two separate faults conspire. First,
+    <code>CPWeightMath</code> never reads <code>meleeMultByLevel</code> at all — the line is missing
+    and <code>rangedMult</code> is assigned twice on consecutive lines, so <code>meleeMult</code>
+    keeps its hard-coded <code>1f</code>. Second, both flavour curves in
+    <code>Player CP.asset</code> were dragged off the graph and are authored at negative time
+    (t ≈ −389 and t ≈ −730), where they evaluate to <b>0.060</b> and <b>0.026</b>. Ranged is only
+    rescued to 1.0 by the <code>Mathf.Clamp(…, 1, 5f)</code> floor. Since all 8 heroes are
+    <code>Warrior</code> anyway, no unit in the game has ever received a flavour multiplier.</p>
+  </div>
+
+  <div class="ev bad">
+    <p class="cap">CPWeightMath.cs:41–42 — the melee line is missing, ranged is assigned twice</p>
+<pre>w.rangedMult = Mathf.Clamp(cfg.rangedMultByLevel.Evaluate(L), 1, 5f);
+w.rangedMult = Mathf.Clamp(cfg.rangedMultByLevel.Evaluate(L), 1, 5f);   // ← should be meleeMult</pre>
+  </div>
+</section>
+
+<!-- ── 3 stat pipeline ── -->
+<section class="sec" id="pipeline-en">
+  <div class="sec-head"><span class="sec-num">03</span><div>
+    <h2>Where the stats come from</h2>
+    <p>CP is only as meaningful as the stat block it reads. That block is built in four stages —
+      and the menu and the battlefield build it differently.</p>
+  </div></div>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">The stat pipeline, and where it forks</div>
+      <p class="fig-s">Design data flows left to right. The fork after level growth is the problem:
+      the menus apply four of six growth multipliers, combat applies all six.</p>
+    </figcaption>
+    <div class="chart" id="flow-en"></div>
+  </figure>
+
+  <p class="prose wide">Growth is compounded, not applied once.
+  <code>ProgressionMath.GetGrowthMultipliers</code> walks every level from 2 to L and multiplies
+  <code>(1 + pct(l))</code> for each stat, where <code>pct</code> is that stat's own curve. Six
+  stats, six independent curves — which is the first reason the stats cannot possibly rise
+  together.</p>
+
+  <div class="ev">
+    <p class="cap">ProgressionMath.cs:20–45 — compound growth</p>
+<pre>for (int l = 2; l &lt;= L; l++)
+{
+    g.gA  *= (1f + ClampPct(cfg.atkPctByLevel.Evaluate(l),     cfg.pctClamp));
+    g.gH  *= (1f + ClampPct(cfg.hpPctByLevel.Evaluate(l),      cfg.pctClamp));
+    g.gMv *= (1f + ClampPct(cfg.movePctByLevel.Evaluate(l),    cfg.pctClamp));
+    g.gAS *= (1f + ClampPct(cfg.atkSpdPctByLevel.Evaluate(l),  cfg.pctClamp));
+    g.gD  *= (1f + ClampPct(cfg.defPctByLevel.Evaluate(l),     cfg.pctClamp));
+    g.gR  *= (1f + ClampPct(cfg.rangePctByLevel.Evaluate(l),   cfg.pctClamp));
+}</pre>
+  </div>
+
+  <div class="callout crit">
+    <p class="ct">⚠ Two of those six curves are broken in the same way as the flavour curves</p>
+    <p>In <code>PlayerProgressionConfig.asset</code>, <code>defPctByLevel</code> has its keyframes at
+    t ≈ −9.0 and <code>rangePctByLevel</code> at t ≈ −1.1 — both entirely off the level axis. Because
+    the curves clamp past their last key, <code>Evaluate(l)</code> returns the same value at
+    <em>every</em> level: a flat <b>+6.25% defense</b> and <b>+6.75% range per level</b>, compounding,
+    for all 50 levels. At level 20 that is a <b>×3.17 defense multiplier</b> that no designer chose.
+    The <code>pctClamp</code> safety net (−0.25…0.50) does not catch it, because the values are
+    inside the allowed window — they are plausible numbers applied at the wrong place.</p>
+  </div>
+
+  <div class="ev bad">
+    <p class="cap">PlayerProgressionConfig.asset:111–134 — keyframes at negative time</p>
+<pre>defPctByLevel:
+  m_Curve:
+  - time: -9.015022      value: 0.31859463
+  - time: -8.90097       value: 0.06251526    ← every Evaluate(level ≥ 1) returns this
+  m_PostInfinity: 2      # 2 = Clamp</pre>
+  </div>
+</section>
+
+<!-- ── 4 growth ── -->
+<section class="sec" id="grow-en">
+  <div class="sec-head"><span class="sec-num">04</span><div>
+    <h2>Does everything grow at the same rate?</h2>
+    <p>The central question, answered twice: once about the stats, once about CP itself.</p>
+  </div></div>
+
+  <h3>Reason one — the stats diverge</h3>
+  <p class="prose wide">Attack grows +8%/level early tapering to +3%; HP grows +10% tapering to +4%;
+  move and attack speed grow +2% tapering to +1%. Compounded over 20 levels those small differences
+  become large ones. Note that <code>gMv</code> and <code>gAS</code> are driven by curves with
+  identical keys, so they are always exactly equal — plotted as one line below.</p>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">Compound growth multiplier by hero level</div>
+      <p class="fig-s">Each line is what the base stat gets multiplied by at that level. If stats grew
+      "together" these would be one line. HP outruns attack; move and attack speed barely move; the
+      two red dashed lines are the off-axis curves from §3 and were never intentionally authored.</p>
+    </figcaption>
+    <div class="chart" id="c-growth-en"></div>
+    <div class="legend" id="c-growth-en-lg"></div>
+    <details class="tv"><summary>Table view</summary><div class="tw" id="c-growth-en-tb"></div></details>
+  </figure>
+
+  <div class="tiles">
+    <div class="tile"><p class="tl">Attack at L20</p><div class="tv2">×3.60</div><p class="tn">+8% → +3% per level</p></div>
+    <div class="tile"><p class="tl">Max HP at L20</p><div class="tv2">×4.94</div><p class="tn">+10% → +4% per level</p></div>
+    <div class="tile"><p class="tl">Attack speed at L20</p><div class="tv2">×1.40</div><p class="tn">+2% → +1% per level</p></div>
+    <div class="tile crit"><p class="tl">Defense at L20</p><div class="tv2">×3.17</div><p class="tn">from a broken curve</p></div>
+  </div>
+
+  <h3>Reason two — CP prices the stats unevenly</h3>
+  <p class="prose wide">Even if the stats <em>did</em> grow together, CP would not move with them,
+  because the weighted sum is dominated by one term. At level 1 a hero's CP of 81 is 79.3% attack and
+  18.6% HP; the remaining four stats contribute <b>2.1% between them</b>, and defense contributes
+  <b>exactly zero</b>. Defense never rises above 0.17% of CP at any level.</p>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">What CP is actually made of</div>
+      <p class="fig-s">Share of the weighted sum by term, for the ATK 64 / AtkSpd 2.0 hero profile.
+      Move speed, attack speed, defense and range are grouped as "other four" because individually
+      none of them reaches 1.1% at any level — the table view has each one separately.</p>
+    </figcaption>
+    <div class="chart" id="c-comp-en"></div>
+    <div class="legend" id="c-comp-en-lg"></div>
+    <details class="tv"><summary>Table view — all six terms</summary><div class="tw" id="c-comp-en-tb"></div></details>
+  </figure>
+
+  <div class="callout">
+    <p class="ct">The direct answer to your question</p>
+    <p>If a hero's CP goes from 100 to 120 — a +20% move — that is very close to a <b>+20% increase in
+    attack and nothing else</b>. It is <em>not</em> +20% on every stat. Concretely, taking a hero from
+    level 1 to level 10 raises CP by ×1.91, while attack rises ×1.92, HP rises ×2.24, attack speed
+    rises only ×1.18, and defense — depending on which code path you ask — rises either ×1.00 (what the
+    menu shows you) or ×1.73 (what actually fights).</p>
+  </div>
+</section>
+
+<!-- ── 5 player ── -->
+<section class="sec" id="player-en">
+  <div class="sec-head"><span class="sec-num">05</span><div>
+    <h2>Player CP, hero by hero</h2>
+    <p>All 8 registered heroes, their real base sheets, and the CP the units screen displays.</p>
+  </div></div>
+
+  <p class="prose wide">The roster has eight entries but only <b>two distinct stat profiles</b>. HP
+  (100), defense (25), move speed (3.5) and attack range (0.85) are identical on all eight; only
+  attack and attack speed vary, and they vary <em>inversely</em>. All eight are
+  <code>FighterType.Warrior</code>.</p>
+
+  <div class="tw"><table>
+    <caption>Base sheets from <span class="src">Assets/Scriptable Objects/Stats/BaseStats/New ChratersSTats/</span>, resolved through each hero's <code>UnitDefinitionSO</code>. CP columns are the units-screen values. Rows shaded blue are the higher-DPS profile — note they display the <em>lower</em> CP.</caption>
+    <thead><tr><th>id</th><th>Hero</th><th>ATK</th><th>Atk spd</th><th>HP</th><th>DEF</th><th>True DPS</th><th>CP L1</th><th>CP L10</th><th>CP L20</th></tr></thead>
+    <tbody id="roster-en"></tbody>
+  </table></div>
+
+  <h3>The ranking is inverted</h3>
+  <p class="prose wide">The "fast" profile deals 128 damage per second; the "slow" profile deals 108 —
+  19% less. Yet the units screen shows the fast profile at CP 81 and the slow one at CP 89. The cause
+  is arithmetic, not opinion: <code>w<sub>A</sub>·ATK</code> contributes 64 points while
+  <code>w<sub>AS</sub>·AtkSpd</code> contributes 0.8. Attack speed is priced at roughly 1/80th of what
+  it is worth in combat, so the formula rewards the stat that is displayed rather than the stat that
+  wins fights.</p>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">Rank inversion: true damage output vs displayed CP</div>
+      <p class="fig-s">Both measures indexed so the weaker profile = 100. A correct power metric would
+      keep the two lines parallel; these cross.</p>
+    </figcaption>
+    <div class="chart" id="c-slope-en"></div>
+    <div class="legend" id="c-slope-en-lg"></div>
+  </figure>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">CP by hero level, both profiles</div>
+      <p class="fig-s">The gap never closes — the higher-DPS profile stays below the lower-DPS one at
+      every level from 1 to 50, because both profiles share every growth curve.</p>
+    </figcaption>
+    <div class="chart" id="c-prof-en"></div>
+    <div class="legend" id="c-prof-en-lg"></div>
+    <details class="tv"><summary>Table view</summary><div class="tw" id="c-prof-en-tb"></div></details>
+  </figure>
+</section>
+
+<!-- ── 6 enemy ── -->
+<section class="sec" id="enemy-en">
+  <div class="sec-head"><span class="sec-num">06</span><div>
+    <h2>Enemy CP, stage by stage</h2>
+    <p>Enemies use the same formula, but their level is supplied differently — and that is the
+      entire difficulty system.</p>
+  </div></div>
+
+  <p class="prose wide">There is no separate difficulty multiplier anywhere in the project. No
+  <code>stageMultiplier</code>, no <code>hpMult</code>, no per-stage scaling asset. Instead, the
+  spawner hands the stage number to the enemy and the enemy uses it as its progression level:</p>
+
+  <div class="ev">
+    <p class="cap">EnemyManager.cs:90–99 — the stage number <em>is</em> the enemy's level</p>
+<pre>public void Initialize(int stageLevelFromSpawner)
+{
+    stageLevel = stageLevelFromSpawner;
+
+    // IMPORTANT: use the stage as this enemy's "unit level" for progression.
+    // This is what makes stats grow as you go to higher stages.
+    unitLevel = stageLevelFromSpawner;
+
+    RebuildFromBase();
+}</pre>
+  </div>
+
+  <p class="prose wide">So a Golem at stage 20 runs the level-20 growth multipliers: ×3.60 attack and
+  ×4.94 HP on its base sheet. Its <b>defense does not grow at all</b> — <code>RebuildFromBase</code>
+  applies only four of the six multipliers, with a comment acknowledging the gap. Defense is the one
+  axis where the six archetypes have real spread (28 → 78), and it stays flat across all twenty
+  stages while attack and HP quadruple.</p>
+
+  <div class="tw"><table>
+    <caption>The six enemy archetypes. Base sheets from <span class="src">Assets/Scriptable Objects/Stats/BaseStats/Enemy Base Stats/</span>; CP columns computed with <code>EnemyCP.asset</code> weights at level = stage.</caption>
+    <thead><tr><th>Archetype</th><th>ATK</th><th>DEF</th><th>HP</th><th>Atk spd</th><th>CP @S1</th><th>CP @S5</th><th>CP @S10</th><th>CP @S20</th></tr></thead>
+    <tbody id="enemyroster-en"></tbody>
+  </table></div>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">Enemy CP by stage, all six archetypes</div>
+      <p class="fig-s">Each archetype's CP as the stage number drives its growth. The lines never
+      cross because every archetype shares one growth curve — the tier ordering set by the base
+      sheets is preserved exactly.</p>
+    </figcaption>
+    <div class="chart" id="c-enemy-en"></div>
+    <div class="legend" id="c-enemy-en-lg"></div>
+    <details class="tv"><summary>Table view</summary><div class="tw" id="c-enemy-en-tb"></div></details>
+  </figure>
+
+  <h3>Total CP fielded per stage</h3>
+  <p class="prose wide">Summing every enemy each stage spawns — parsed from the eighteen
+  <code>Stage_NN.asset</code> wave configs plus <code>Spawner2.asset</code> for stages 1–2 — gives the
+  actual difficulty curve the player meets. It runs from 216 to 4,757, but not smoothly.</p>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">Total enemy CP fielded, stages 1–20</div>
+      <p class="fig-s">Sum of per-enemy CP across both waves. Labelled bars are the four stages where
+      the step from the previous stage is an outlier — two near-flat stages that will read as filler,
+      and two spikes that will read as walls.</p>
+    </figcaption>
+    <div class="chart" id="c-stage-en"></div>
+    <details class="tv"><summary>Table view — composition and step change</summary><div class="tw" id="c-stage-en-tb"></div></details>
+  </figure>
+
+  <div class="callout">
+    <p class="ct">A balance observation, offered as data not as a change</p>
+    <p>The stage-to-stage step is uneven: <b>+91.9%</b> into stage 3 and <b>+29.9%</b> into stage 19,
+    against <b>+3.6%</b> into stage 6 and <b>+3.8%</b> into stage 15. Stages 6 and 15 add almost no
+    threat over the stage before them. Worth knowing: the enemy castle's HP is a flat 350 at every
+    stage from 1 to 20, so the win condition itself never gets harder even as the defending army
+    grows 22×.</p>
+  </div>
+</section>
+
+<!-- ── 7 runtime ── -->
+<section class="sec" id="runtime-en">
+  <div class="sec-head"><span class="sec-num">07</span><div>
+    <h2>Can total CP be obtained at runtime?</h2>
+    <p>Asked precisely: during play, can we read a squad total for the player and a wave total for
+      the enemy?</p>
+  </div></div>
+
+  <p class="prose wide"><b>Yes for both, and most of the work is already done.</b> The situation
+  differs between the two sides:</p>
+
+  <div class="tiles">
+    <div class="tile"><p class="tl">Enemy side</p><div class="tv2">Computed</div><p class="tn">…into a debug field that nothing reads</p></div>
+    <div class="tile"><p class="tl">Player side</p><div class="tv2">Not computed</div><p class="tn">…but every input exists</p></div>
+    <div class="tile"><p class="tl">Squad summation</p><div class="tv2">Written</div><p class="tn"><code>SquadCP</code>, zero call sites</p></div>
+  </div>
+
+  <p class="prose wide"><b>Enemies already carry a CP number.</b> <code>EnemyManager.RebuildFromBase</code>
+  assigns <code>cp</code> on every spawn. It is declared as a plain
+  <code>[Header("Debug")] public int cp;</code> and is never read by any UI, any balancing code, or any
+  wave logic — it exists purely as an Inspector readout. Summing it across live enemies would be a
+  loop over the already-tracked enemy list.</p>
+
+  <p class="prose wide"><b>Players compute no CP during a battle at all.</b> The only CP call sites in
+  the entire project are six calls inside <code>UnitsPanelController</code>, which is menu code. The
+  battle HUD (<code>HeroStatsPanel</code>, <code>HeroStatCell</code>) shows only an alive/total count
+  and a gem price — the player is never shown a power number, an attack value, or an HP value during
+  a fight. The inputs are all present though: <code>PlayerStatsApplier.CurrentStats</code> is the live
+  <code>UnitStatsRuntime</code>, and <code>HeroRoster</code> already tracks which units are alive.</p>
+
+  <div class="ev">
+    <p class="cap">CPCalculator.cs:32–48 — written for exactly this purpose, never called</p>
+<pre>public static int SquadCP(UnitStatsRuntime[] squad, int level, CPWeightsConfigSO cfg)
+public static int SquadCP(UnitStatsRuntime[] squad, int[] levels, CPWeightsConfigSO cfg)</pre>
+  </div>
+
+  <div class="callout crit">
+    <p class="ct">⚠ The "TOTAL CP" already on your menu screen is not real</p>
+    <p>Two labels in <code>MenuScene.unity</code> read <code>3460</code> and <code>32660</code> under a
+    <code>TOTAL CP:</code> caption. Their TextMeshPro components are referenced by no script — they are
+    static art left in the scene, not a computed value.</p>
+  </div>
+
+  <p class="prose wide">One caveat if a runtime total is ever wired up: <code>EnemyManager</code>
+  contains a <em>second</em>, divergent CP formula used as a fallback when <code>cpWeights</code> is
+  null. It omits the range term entirely and classifies Mage as melee, so it does not agree with
+  <code>CPCalculator</code> even given identical weights. And <code>EnemySpawner.cs:410</code>
+  overwrites each enemy prefab's <code>cpWeights</code> with the spawner's own field — so a spawner
+  with an empty slot silently downgrades every enemy in the stage to that fallback.</p>
+</section>
+
+<!-- ── 8 defects ── -->
+<section class="sec" id="defects-en">
+  <div class="sec-head"><span class="sec-num">08</span><div>
+    <h2>Defect register</h2>
+    <p>Nine issues found while tracing. Recorded only — nothing here has been changed.</p>
+  </div></div>
+
+  <div class="sevkey">
+    <span><i style="background:var(--crit)"></i> Affects displayed or actual numbers</span>
+    <span><i style="background:var(--s4)"></i> Dead or divergent code paths</span>
+    <span><i style="background:var(--ink-3)"></i> Hygiene / documentation</span>
+  </div>
+
+  <div class="defects">
+    <div class="defect sev-high"><div class="dn">01</div>
+      <div class="dt">Off-axis growth curves silently inflate defense and range
+        <em>Keyframes authored at negative time clamp to a flat +6.25%/level defense and +6.75%/level range for all 50 levels. A level-20 hero has ×3.17 the intended defense.</em></div>
+      <div class="dl">PlayerProgressionConfig.asset:111–158</div></div>
+
+    <div class="defect sev-high"><div class="dn">02</div>
+      <div class="dt">The menu and the battlefield compute different stats
+        <em>Five UI call sites apply only <code>gA/gH/gMv/gAS</code>; <code>PlayerStatsApplier</code> applies all six. A level-10 hero fights with defense 43.1 while every menu — and the CP built on it — says 25.</em></div>
+      <div class="dl">UnitsPanelController.cs:517, 579, 881, 962 · NewCharacterStats.cs:235 vs PlayerStatsApplier.cs:135–142</div></div>
+
+    <div class="defect sev-high"><div class="dn">03</div>
+      <div class="dt"><code>meleeMult</code> is never read from the config
+        <em>The line that should sample <code>meleeMultByLevel</code> is missing; <code>rangedMult</code> is assigned twice on consecutive lines. Every melee unit uses the hard-coded fallback of 1.0 regardless of what a designer authors.</em></div>
+      <div class="dl">CPWeightMath.cs:41–42</div></div>
+
+    <div class="defect sev-high"><div class="dn">04</div>
+      <div class="dt">Both flavour curves are also authored off-axis
+        <em><code>meleeMultByLevel</code> sits at t ≈ −389 and <code>rangedMultByLevel</code> at t ≈ −730, evaluating to 0.060 and 0.026. Ranged is rescued to 1.0 only by the clamp floor, so no unit ever receives a type bonus.</em></div>
+      <div class="dl">Player CP.asset:159–206</div></div>
+
+    <div class="defect sev-med"><div class="dn">05</div>
+      <div class="dt">A second, divergent CP formula lives in <code>EnemyManager</code>
+        <em>Used whenever <code>cpWeights</code> is null. It has no range term and treats Mage as melee, so it disagrees with <code>CPCalculator</code> even with identical weights. <code>EnemySpawner</code> overwrites the prefab's config at spawn, making the fallback reachable by leaving one Inspector slot empty.</em></div>
+      <div class="dl">EnemyManager.cs:146–161 · EnemySpawner.cs:410</div></div>
+
+    <div class="defect sev-med"><div class="dn">06</div>
+      <div class="dt">Enemy defense never grows
+        <em><code>RebuildFromBase</code> applies four of six growth multipliers. Defense — the only axis where the six archetypes meaningfully differ, 28 to 78 — stays flat across all twenty stages while attack ×3.6 and HP ×4.9.</em></div>
+      <div class="dl">EnemyManager.cs:113–118</div></div>
+
+    <div class="defect sev-med"><div class="dn">07</div>
+      <div class="dt">CP prices two stats that do nothing in gameplay
+        <em><code>moveSpeed</code> and <code>attackRange</code> are both read by the formula, but players move at <code>PlayerManager.moveSpeed</code> (0.5) and enemies at <code>EnemyLocoMotion.moveSpeed</code> (0.2) — separate Inspector fields never fed from the stat block. The <code>UnitStatsSO</code> value of 3.5 is inert.</em></div>
+      <div class="dl">PlayerManager.cs:60, 64 · EnemyLocoMotion.cs:20</div></div>
+
+    <div class="defect sev-low"><div class="dn">08</div>
+      <div class="dt">The menu's "TOTAL CP" figures are hard-coded art
+        <em><code>3460</code> and <code>32660</code> are literal strings on TextMeshPro components bound to no script.</em></div>
+      <div class="dl">MenuScene.unity:24724, 36403</div></div>
+
+    <div class="defect sev-low"><div class="dn">09</div>
+      <div class="dt">Three per-script docs describe code that no longer exists
+        <em><code>CPCalculator.txt</code> names <code>UnitCardView</code> / <code>BucketStatsPanel</code> as callers — neither calls it. <code>UnitStatsRuntime.txt</code> and <code>ProgressionMath.txt</code> both state that <code>ApplyLevelGrowth</code> runs at spawn time; it has zero call sites anywhere in the project.</em></div>
+      <div class="dl">Assets/Documentation for scripts/</div></div>
+  </div>
+</section>
+
+<!-- ── 9 research ── -->
+<section class="sec" id="research-en">
+  <div class="sec-head"><span class="sec-num">09</span><div>
+    <h2>Is a weighted sum the right shape?</h2>
+    <p>Research only — nothing here is a change request, and nothing was implemented.</p>
+  </div></div>
+
+  <p class="prose wide">The current design is a <b>linear weighted sum</b>: price each stat, add up
+  the prices. It is the most common shape in shipped games and the one with the best-documented
+  failure mode. Two properties are worth naming, because your project exhibits both.</p>
+
+  <p class="prose wide"><b>A weighted sum lets one term swallow the others.</b> When one stat's weight
+  is ~20× another's, the score becomes a proxy for that single stat. Yours is at 79% attack.
+  <b>And a weighted sum has no notion of balance.</b> A unit with enormous attack and no survivability
+  scores the same as a balanced unit with the same total — which is why the number stops predicting
+  who wins a fight.</p>
+
+  <p class="prose wide">Shop Titans is the closest published analogue: same weighted-sum shape, and
+  its own community's analysis of the formula concludes the metric "is a lie" for evaluating actual
+  hero performance, because the coefficients make ten points of defense worth more than ten points of
+  attack regardless of what the combat model does with them. That is structurally the same failure as
+  the inversion in <a href="#player-en">§5</a>.</p>
+
+  <h3>The two standard alternatives</h3>
+
+  <p class="prose wide"><b>B — a product with dampened terms.</b> Pokémon GO's CP is
+  <code>floor(ATK × √DEF × √STA × CPM² / 10)</code>. Multiplying rather than adding means a unit that
+  is good at only one thing cannot post a high score; the square roots deliberately stop defense and
+  HP from dominating while still letting them matter. The shape is well-tested at scale.</p>
+
+  <p class="prose wide"><b>C — DPS × Effective HP.</b> The analytical option:
+  offense × survivability, where <code>EffectiveHP = HP × (100 + DEF)/100</code>. It is not a
+  heuristic — it is the closed form of "how long does this unit live times how fast does it kill",
+  derived from the damage formula the game actually runs. <b>Your project already contains it.</b>
+  <code>CPCalculator.EffectiveHP</code> mirrors <code>CombatMath</code>'s real damage equation exactly,
+  and it is dead code with zero call sites.</p>
+
+  <div class="ev">
+    <p class="cap">CPCalculator.cs:50–54 — already written, never called</p>
+<pre>public static float EffectiveHP(UnitStatsRuntime s)
+{
+    float dmgFrac = 100f / (100f + Mathf.Max(0f, s.defense));
+    return s.maxHP / dmgFrac;
+}</pre>
+  </div>
+
+  <h3>How the three score your actual roster</h3>
+  <p class="prose wide">Two tests. First, does the formula preserve the correct ordering between the
+  two hero profiles? Second, does it reflect the real size of the gap between enemy tiers?</p>
+
+  <div class="tw"><table>
+    <caption>Hero test. The true power ratio between the two profiles is 1.19 — the fast profile is 19% stronger. A formula that scores below 1.00 has ranked the roster backwards.</caption>
+    <thead><tr><th>Formula</th><th>Fast profile</th><th>Slow profile</th><th>Ratio</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td class="k">True DPS (reference)</td><td class="num">128</td><td class="num">108</td><td class="num">1.19</td><td>—</td></tr>
+      <tr class="bad"><td class="k">A — current weighted sum</td><td class="num">81</td><td class="num">89</td><td class="num">0.91</td><td>Inverted</td></tr>
+      <tr><td class="k">B — product with √ damping</td><td class="num">640</td><td class="num">540</td><td class="num">1.19</td><td>Correct</td></tr>
+      <tr><td class="k">C — DPS × Effective HP</td><td class="num">160</td><td class="num">135</td><td class="num">1.19</td><td>Correct</td></tr>
+    </tbody>
+  </table></div>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">Enemy tier spread under each formula</div>
+      <p class="fig-s">Every archetype indexed to the weakest (Reaper Man = 100). The black reference
+      line is true combat power — DPS × effective HP. The current formula compresses a 6.5× real gap
+      into a 2.3× displayed gap, so a Golem_02 looks about twice as dangerous as a Reaper when it is
+      really six times.</p>
+    </figcaption>
+    <div class="chart" id="c-cand-en"></div>
+    <div class="legend" id="c-cand-en-lg"></div>
+    <details class="tv"><summary>Table view — raw scores</summary><div class="tw" id="c-cand-en-tb"></div></details>
+  </figure>
+
+  <div class="callout">
+    <p class="ct">Where this lands</p>
+    <p>The weighted sum is not wrong in principle — it is transparent, cheap, and easy for a designer
+    to reason about, which is why it is everywhere. It fails here for two fixable reasons: the
+    coefficients are far from the combat model's actual sensitivities, and the two multiplicative
+    stats (attack × attack-speed, HP × defense) are being added instead of multiplied. Shapes B and C
+    both fix the ordering without any change to the underlying stat data. <b>No change has been made;
+    this section is research, as requested.</b></p>
+  </div>
+
+  <h4 style="margin-top:26px">Sources</h4>
+  <ul style="font-size:.85rem;color:var(--ink-2);padding-left:20px">
+    <li><a href="https://pokemongohub.net/post/wiki/cp-mechanics/">Pokémon GO Combat Power mechanics</a> — the product-with-square-roots formula and why attack is left undamped.</li>
+    <li><a href="https://st-central.net/calculating-the-power-rating-of-a-hero/">Calculating the Power Rating of a Hero — Shop Titans Central</a> — a shipped weighted-sum power rating, and its author's argument that the metric misrepresents real performance.</li>
+    <li><a href="https://epic-seven.fandom.com/wiki/Combat_Power">Epic Seven — Combat Power</a> — a weighted-sum CP with separately weighted offense and defense sub-scores.</li>
+    <li><a href="https://gamedev.net/forums/topic/660352-formulas-math-and-theories-for-rpg-combatleveling-systems/">GameDev.net — RPG combat & levelling formulas</a> — additive vs multiplicative stat models and how each constrains the growth curve.</li>
+    <li><a href="https://missionszanx.com/guides/how-multipliers-stack-in-idle-rpgs">How multipliers stack in idle RPGs</a> — why additive stacking within a category flattens perceived gains.</li>
+  </ul>
+</section>
+
+</div><!-- /#en -->
+
+<!-- ═══════════════════════════════════════════ PERSIAN ═══════════════════════════════════════════ -->
+<div id="fa" dir="rtl" lang="fa">
+
+<div class="lang-divider"><div class="rule"></div></div>
+
+<header class="mast">
+  <p class="eyebrow">قدرت نبرد · بررسی لایه‌ی داده · ۲۰۲۶-۰۹-۰۷</p>
+  <h1>محاسبه‌ی Combat Power چطور انجام می‌شود؟</h1>
+  <p class="dek">
+    بررسی کامل و ردیابی‌شده‌ی همه‌ی ورودی‌های CP برای هر دو طرف — قهرمان‌های بازیکن و دشمن‌ها — در
+    Blasty-Stacks: خودِ فرمول، داده‌ی منحنی‌هایی که پشتش نشسته، اینکه این عدد چطور رشد می‌کند، و
+    اینکه آیا اصلاً قدرت واقعی نبرد را دنبال می‌کند یا نه. همه‌ی اعداد این گزارش دوباره از روی فایل‌های
+    <code>.asset</code> خودِ پروژه محاسبه شده‌اند؛ برای این کار <code>ProgressionMath</code> و
+    <code>CPWeightMath</code> و <code>CPCalculator</code> بیرون از Unity بازنویسی شدند.
+  </p>
+  <div class="meta">
+    <span><b>۱۰</b> اسکریپت خوانده‌شده</span>
+    <span><b>۴</b> فایل کانفیگ پارس‌شده</span>
+    <span><b>۸</b> قهرمان · <b>۶</b> کهن‌الگوی دشمن</span>
+    <span><b>۲۰</b> استیج</span>
+    <span><b>۹</b> ایراد پیداشده</span>
+    <span>تغییر کد: <b>هیچ</b></span>
+  </div>
+</header>
+
+<!-- ── 1 ── -->
+<section class="sec" id="summary-fa">
+  <div class="sec-head"><span class="sec-num">۰۱</span><div>
+    <h2>پنج پاسخ</h2>
+    <p>خلاصه‌ی هرچه در ادامه می‌آید. هر پاسخ به بخشی که آن را اثبات می‌کند لینک دارد.</p>
+  </div></div>
+
+  <ul class="qa">
+    <li>
+      <div class="q">CP چطور محاسبه می‌شود؟</div>
+      <div class="a">یک <b>مجموع وزن‌دار ساده از شش استت خام</b>، ضرب در یک ضریب سبک مبارزه
+        (نزدیک‌زن / دوربرد). وزن‌ها ثابت نیستند — هرکدام یک <code>AnimationCurve</code> هستند که در
+        لِوِل همان واحد نمونه‌برداری می‌شوند، پس خودِ دستورِ محاسبه هم با بالا رفتن لِوِل تغییر می‌کند.
+        <a href="#formula-fa">§۲</a></div>
+    </li>
+    <li>
+      <div class="q">اگر CP از ۱۰۰ به ۱۲۰ برسد، آیا همه‌ی استت‌ها ۲۰٪ زیاد می‌شوند؟</div>
+      <div class="a"><b>نه — و اصلاً هم نزدیک نیست.</b> دو دلیل مستقل دارد. هر استت یک منحنی
+        <em>متفاوت</em> برای هر لِوِل دارد، و از آن مهم‌تر CP وزن‌ها را چنان نابرابر پخش کرده که چهار
+        استت از شش‌تا عملاً نامرئی‌اند. در عمل <b>CP ≈ ATK + 0.15·HP</b> است.
+        <a href="#grow-fa">§۴</a></div>
+    </li>
+    <li>
+      <div class="q">آیا برای قهرمان‌های مختلف فرق دارد؟ برای دشمن‌ها چطور؟</div>
+      <div class="a"><b>نرخ رشد فرقی نمی‌کند.</b> هر ۸ قهرمان یک کانفیگ پیشرفت مشترک دارند و هر ۶
+        کهن‌الگوی دشمن یکی دیگر. فقط برگه‌ی استت پایه فرق دارد — و بین قهرمان‌ها، فقط در دو استت از
+        شش‌تا. چیزی که برای دشمن‌ها فرق می‌کند <em>لِوِل</em> است: لِوِل هر دشمن
+        <b>دقیقاً همان شماره‌ی استیج</b> است. <a href="#player-fa">§۵</a>، <a href="#enemy-fa">§۶</a></div>
+    </li>
+    <li>
+      <div class="q">آیا می‌شود total CP را در ران‌تایم گرفت؟</div>
+      <div class="a"><b>بله — و کدش از قبل نوشته شده ولی استفاده نمی‌شود.</b> هر دشمن موقع اسپاون
+        CP خودش را حساب می‌کند و در فیلدی می‌ریزد که هیچ‌کس نمی‌خواندش. برای بازیکن در طول نبرد
+        اصلاً CP محاسبه نمی‌شود. <code>CPCalculator.SquadCP</code> دقیقاً برای همین نوشته شده و
+        صفر جای فراخوانی دارد. <a href="#runtime-fa">§۷</a></div>
+    </li>
+    <li>
+      <div class="q">آیا این فرمول مناسب‌ترین است؟</div>
+      <div class="a"><b>ضعیف‌ترین گزینه از میان شکل‌های استاندارد است، و همین حالا روستر شما را
+        وارونه رتبه‌بندی می‌کند.</b> پروفایلی که واقعاً قوی‌تر است، CP <em>کمتری</em> نشان می‌دهد. دو
+        جایگزینِ جاافتاده این را درست می‌کنند، و یکی از آن دو همین حالا به‌صورت کد مرده داخل پروژه‌ی
+        شما نوشته شده است. <a href="#research-fa">§۹</a></div>
+    </li>
+  </ul>
+</section>
+
+<!-- ── 2 ── -->
+<section class="sec" id="formula-fa">
+  <div class="sec-head"><span class="sec-num">۰۲</span><div>
+    <h2>فرمول</h2>
+    <p>یک تابع، سی خط، که برای قهرمان و دشمن کاملاً یکسان استفاده می‌شود.</p>
+  </div></div>
+
+  <div class="formula">
+    <div class="fx">CP = round( ( <span class="w">w<sub>A</sub></span>·<span class="st">ATK</span>
+      + <span class="w">w<sub>H</sub></span>·<span class="st">HP</span>
+      + <span class="w">w<sub>Mv</sub></span>·<span class="st">MoveSpeed</span>
+      + <span class="w">w<sub>AS</sub></span>·<span class="st">AtkSpeed</span>
+      + <span class="w">w<sub>D</sub></span>·<span class="st">DEF</span>
+      + <span class="w">w<sub>R</sub></span>·<span class="st">Range</span> ) × <span class="w">typeMult</span> )</div>
+    <p class="note">هر <span class="w mono">w</span> یک <code>AnimationCurve</code> است که در لِوِل واحد ارزیابی
+      و با <code>wClamp</code> (بازه‌ی −۱۰ تا ۱۰) محدود می‌شود، بعد در
+      <code>globalWeightScaleByLevel</code> ضرب می‌شود. <code>typeMult</code> برای Archer و Mage
+      برابر <code>rangedMult</code> و برای Warrior و Horseman برابر <code>meleeMult</code> است.
+      <span class="src">CPCalculator.cs:10–30</span></p>
+  </div>
+
+  <div class="ev">
+    <p class="cap">Assets/Scripts/Data/CombatPower/CPCalculator.cs — تمامِ آن</p>
+<pre>float baseScore =
+      w.wA  * s.attack
+    + w.wH  * s.maxHP
+    + w.wMv * s.moveSpeed
+    + w.wAS * s.attackSpeed
+    + w.wD  * s.defense
+    + w.wR  * s.attackRange;
+
+bool isRanged = s.type == FighterType.Archer || s.type == FighterType.Mage;
+float typeMult = isRanged ? w.rangedMult : w.meleeMult;
+
+return Mathf.RoundToInt(baseScore * typeMult);</pre>
+  </div>
+
+  <p class="prose wide">دقت کنید فرمول چه چیزی را می‌خواند: <code>s</code> یک
+  <code>UnitStatsRuntime</code> زنده است، پس عدد خروجی هرچه در آن لحظه داخل بلوک استت باشد را
+  بازتاب می‌دهد — برگه‌ی پایه، رشد لِوِل، و هر ضریب روگ‌لایتی که قبلاً اعمال شده. حالا دقت کنید چه
+  کاری را <em>انجام نمی‌دهد</em>: هیچ تعاملی بین جمله‌ها وجود ندارد. HP و DEF با هم ترکیب نمی‌شوند تا
+  «بقا» بسازند؛ ATK و AtkSpeed با هم ترکیب نمی‌شوند تا «خروجی آسیب» بسازند. هر استت جدا قیمت‌گذاری
+  می‌شود و قیمت‌ها با هم جمع می‌شوند. <a href="#research-fa">§۹</a> درباره‌ی پیامدهای همین انتخاب است.</p>
+
+  <h3>وزن‌های نوشته‌شده در فایل‌ها</h3>
+  <p class="prose wide">دو فایل وزن وجود دارد — یکی برای قهرمان‌ها و یکی برای دشمن‌ها — و وزن‌های
+  استت‌شان یکسان است. مقادیر زیر مستقیم از YAML خوانده و دقیقاً به روش <code>CPWeightMath</code>
+  ارزیابی شده‌اند.</p>
+
+  <div class="tw"><table>
+    <caption>وزن‌ها در چهار لِوِل، از <span class="src">Assets/Scriptable Objects/CP/Player CP.asset</span>. الگو روشن است: هر واحد ATK حدود ۲۰ برابر هر واحد HP می‌ارزد، و DEF در لِوِل ۱ به‌معنای واقعی کلمه هیچ ارزشی ندارد.</caption>
+    <thead><tr><th>لِوِل</th><th>w<sub>A</sub> حمله</th><th>w<sub>H</sub> جان</th><th>w<sub>Mv</sub> حرکت</th><th>w<sub>AS</sub> سرعت حمله</th><th>w<sub>D</sub> دفاع</th><th>w<sub>R</sub> برد</th><th>typeMult</th></tr></thead>
+    <tbody>
+      <tr><td class="k">۱</td><td class="num">1.000</td><td class="num">0.150</td><td class="num">0.250</td><td class="num">0.400</td><td class="num">0.000</td><td class="num">0.050</td><td class="num">1.00</td></tr>
+      <tr><td class="k">۱۰</td><td class="num">0.982</td><td class="num">0.144</td><td class="num">0.241</td><td class="num">0.409</td><td class="num">0.009</td><td class="num">0.048</td><td class="num">1.00</td></tr>
+      <tr><td class="k">۲۰</td><td class="num">0.961</td><td class="num">0.138</td><td class="num">0.231</td><td class="num">0.419</td><td class="num">0.019</td><td class="num">0.046</td><td class="num">1.00</td></tr>
+      <tr><td class="k">۵۰</td><td class="num">0.900</td><td class="num">0.120</td><td class="num">0.200</td><td class="num">0.450</td><td class="num">0.050</td><td class="num">0.040</td><td class="num">1.00</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout crit">
+    <p class="ct">⚠ ستون typeMult همه‌جا ۱٫۰۰ است — و این یک اتفاق است، نه طراحی</p>
+    <p>ستون آخر نباید صافِ ۱٫۰۰ باشد. دو ایراد جدا دست‌به‌دست هم داده‌اند. اول اینکه
+    <code>CPWeightMath</code> اصلاً <code>meleeMultByLevel</code> را نمی‌خواند — آن خط جا افتاده و
+    به‌جایش <code>rangedMult</code> دو بار پشت سر هم مقداردهی شده، پس <code>meleeMult</code> همان
+    مقدار هاردکد <code>1f</code> باقی می‌ماند. دوم اینکه هر دو منحنی سبک در
+    <code>Player CP.asset</code> از روی نمودار کشیده شده و بیرون افتاده‌اند: کلیدهایشان روی زمانِ منفی
+    نشسته‌اند (t ≈ −۳۸۹ و t ≈ −۷۳۰) و آنجا مقدارشان <b>۰٫۰۶۰</b> و <b>۰٫۰۲۶</b> است.
+    <code>rangedMult</code> فقط به‌خاطر کفِ <code>Mathf.Clamp(…, 1, 5f)</code> به ۱٫۰ نجات پیدا
+    می‌کند. از آنجا که هر ۸ قهرمان هم <code>Warrior</code> هستند، عملاً هیچ واحدی در بازی تا امروز
+    ضریب سبک نگرفته است.</p>
+  </div>
+
+  <div class="ev bad">
+    <p class="cap">CPWeightMath.cs:41–42 — خط melee جا افتاده، ranged دو بار نوشته شده</p>
+<pre>w.rangedMult = Mathf.Clamp(cfg.rangedMultByLevel.Evaluate(L), 1, 5f);
+w.rangedMult = Mathf.Clamp(cfg.rangedMultByLevel.Evaluate(L), 1, 5f);   // ← باید meleeMult باشد</pre>
+  </div>
+</section>
+
+<!-- ── 3 ── -->
+<section class="sec" id="pipeline-fa">
+  <div class="sec-head"><span class="sec-num">۰۳</span><div>
+    <h2>استت‌ها از کجا می‌آیند</h2>
+    <p>CP دقیقاً به‌اندازه‌ی بلوک استتی که می‌خواند معنا دارد. آن بلوک در چهار مرحله ساخته می‌شود — و
+      منو و میدان نبرد آن را متفاوت می‌سازند.</p>
+  </div></div>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">مسیر ساخت استت‌ها، و جایی که دو شاخه می‌شود</div>
+      <p class="fig-s">داده‌ی طراحی از چپ به راست جریان دارد. شاخه‌شدن بعد از مرحله‌ی رشد لِوِل همان
+      مشکل است: منوها چهار ضریب از شش‌تا را اعمال می‌کنند، نبرد هر شش‌تا را.</p>
+    </figcaption>
+    <div class="chart" id="flow-fa"></div>
+  </figure>
+
+  <p class="prose wide">رشد به‌صورت مرکب اعمال می‌شود، نه یک‌باره.
+  <code>ProgressionMath.GetGrowthMultipliers</code> از لِوِل ۲ تا L حرکت می‌کند و برای هر استت
+  <code>(1 + pct(l))</code> را در هم ضرب می‌کند، که در آن <code>pct</code> منحنی مخصوص همان استت
+  است. شش استت، شش منحنی مستقل — و این اولین دلیلی است که استت‌ها اصلاً نمی‌توانند با هم بالا بروند.</p>
+
+  <div class="ev">
+    <p class="cap">ProgressionMath.cs:20–45 — رشد مرکب</p>
+<pre>for (int l = 2; l &lt;= L; l++)
+{
+    g.gA  *= (1f + ClampPct(cfg.atkPctByLevel.Evaluate(l),     cfg.pctClamp));
+    g.gH  *= (1f + ClampPct(cfg.hpPctByLevel.Evaluate(l),      cfg.pctClamp));
+    g.gMv *= (1f + ClampPct(cfg.movePctByLevel.Evaluate(l),    cfg.pctClamp));
+    g.gAS *= (1f + ClampPct(cfg.atkSpdPctByLevel.Evaluate(l),  cfg.pctClamp));
+    g.gD  *= (1f + ClampPct(cfg.defPctByLevel.Evaluate(l),     cfg.pctClamp));
+    g.gR  *= (1f + ClampPct(cfg.rangePctByLevel.Evaluate(l),   cfg.pctClamp));
+}</pre>
+  </div>
+
+  <div class="callout crit">
+    <p class="ct">⚠ دوتا از این شش منحنی دقیقاً همان ایراد منحنی‌های سبک را دارند</p>
+    <p>در <code>PlayerProgressionConfig.asset</code> کلیدهای <code>defPctByLevel</code> روی t ≈ −۹٫۰ و
+    کلیدهای <code>rangePctByLevel</code> روی t ≈ −۱٫۱ نشسته‌اند — هر دو کاملاً بیرون از محور لِوِل.
+    چون منحنی بعد از آخرین کلید clamp می‌شود، <code>Evaluate(l)</code> در <em>هر</em> لِوِل یک مقدار
+    ثابت برمی‌گرداند: <b>۶٫۲۵٪+ دفاع</b> و <b>۶٫۷۵٪+ برد به‌ازای هر لِوِل</b>، به‌صورت مرکب، برای
+    هر ۵۰ لِوِل. در لِوِل ۲۰ یعنی ضریب <b>×۳٫۱۷ روی دفاع</b> که هیچ طراحی آن را انتخاب نکرده. تورِ
+    ایمنی <code>pctClamp</code> (بازه‌ی −۰٫۲۵ تا ۰٫۵۰) هم جلویش را نمی‌گیرد، چون این مقادیر داخل بازه‌ی
+    مجازند — عددهایی منطقی که در جای اشتباه اعمال می‌شوند.</p>
+  </div>
+
+  <div class="ev bad">
+    <p class="cap">PlayerProgressionConfig.asset:111–134 — کلیدها روی زمان منفی</p>
+<pre>defPctByLevel:
+  m_Curve:
+  - time: -9.015022      value: 0.31859463
+  - time: -8.90097       value: 0.06251526    ← هر Evaluate(level ≥ 1) همین را برمی‌گرداند
+  m_PostInfinity: 2      # 2 = Clamp</pre>
+  </div>
+</section>
+
+<!-- ── 4 ── -->
+<section class="sec" id="grow-fa">
+  <div class="sec-head"><span class="sec-num">۰۴</span><div>
+    <h2>آیا همه‌چیز با یک شیب بالا می‌رود؟</h2>
+    <p>پرسش اصلی شما، که دو بار پاسخ داده می‌شود: یک بار درباره‌ی استت‌ها، یک بار درباره‌ی خودِ CP.</p>
+  </div></div>
+
+  <h3>دلیل اول — استت‌ها از هم واگرا می‌شوند</h3>
+  <p class="prose wide">حمله در ابتدا ۸٪ در هر لِوِل رشد می‌کند و تا ۳٪ کم می‌شود؛ جان از ۱۰٪ شروع
+  می‌شود و تا ۴٪ می‌رسد؛ سرعت حرکت و سرعت حمله از ۲٪ تا ۱٪. همین تفاوت‌های کوچک وقتی روی ۲۰ لِوِل
+  مرکب شوند، بزرگ می‌شوند. توجه کنید که <code>gMv</code> و <code>gAS</code> از منحنی‌هایی با کلیدهای
+  یکسان می‌آیند، پس همیشه دقیقاً برابرند — در نمودار زیر یک خط کشیده شده‌اند.</p>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">ضریب رشد مرکب بر حسب لِوِل قهرمان</div>
+      <p class="fig-s">هر خط نشان می‌دهد استت پایه در آن لِوِل در چه عددی ضرب می‌شود. اگر استت‌ها «با
+      هم» رشد می‌کردند، این‌ها یک خط بودند. جان از حمله جلو می‌زند؛ حرکت و سرعت حمله تقریباً تکان
+      نمی‌خورند؛ و دو خط‌چین قرمز همان منحنی‌های خراب §۳ هستند که هیچ‌وقت عمداً نوشته نشدند.</p>
+    </figcaption>
+    <div class="chart" id="c-growth-fa"></div>
+    <div class="legend" id="c-growth-fa-lg"></div>
+    <details class="tv"><summary>نمای جدولی</summary><div class="tw" id="c-growth-fa-tb"></div></details>
+  </figure>
+
+  <div class="tiles">
+    <div class="tile"><p class="tl">حمله در لِوِل ۲۰</p><div class="tv2">×3.60</div><p class="tn">۸٪ ← ۳٪ در هر لِوِل</p></div>
+    <div class="tile"><p class="tl">جان در لِوِل ۲۰</p><div class="tv2">×4.94</div><p class="tn">۱۰٪ ← ۴٪ در هر لِوِل</p></div>
+    <div class="tile"><p class="tl">سرعت حمله در لِوِل ۲۰</p><div class="tv2">×1.40</div><p class="tn">۲٪ ← ۱٪ در هر لِوِل</p></div>
+    <div class="tile crit"><p class="tl">دفاع در لِوِل ۲۰</p><div class="tv2">×3.17</div><p class="tn">از یک منحنی خراب</p></div>
+  </div>
+
+  <h3>دلیل دوم — CP استت‌ها را نابرابر قیمت‌گذاری می‌کند</h3>
+  <p class="prose wide">حتی اگر استت‌ها <em>واقعاً</em> با هم رشد می‌کردند، باز هم CP همراهشان حرکت
+  نمی‌کرد، چون یک جمله بر کل مجموع وزن‌دار مسلط است. در لِوِل ۱، عددِ CP برابر ۸۱ از ۷۹٫۳٪ حمله و
+  ۱۸٫۶٪ جان تشکیل شده؛ چهار استت باقی‌مانده <b>روی‌هم ۲٫۱٪</b> سهم دارند، و دفاع سهمش
+  <b>دقیقاً صفر</b> است. سهم دفاع در هیچ لِوِلی از ۰٫۱۷٪ فراتر نمی‌رود.</p>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">CP واقعاً از چه ساخته شده است</div>
+      <p class="fig-s">سهم هر جمله از مجموع وزن‌دار، برای پروفایل ATK 64 / AtkSpd 2.0. سرعت حرکت،
+      سرعت حمله، دفاع و برد با هم به‌عنوان «چهارتای دیگر» گروه شده‌اند چون هیچ‌کدام به‌تنهایی در هیچ
+      لِوِلی به ۱٫۱٪ هم نمی‌رسند — نمای جدولی هر شش‌تا را جدا دارد.</p>
+    </figcaption>
+    <div class="chart" id="c-comp-fa"></div>
+    <div class="legend" id="c-comp-fa-lg"></div>
+    <details class="tv"><summary>نمای جدولی — هر شش جمله</summary><div class="tw" id="c-comp-fa-tb"></div></details>
+  </figure>
+
+  <div class="callout">
+    <p class="ct">پاسخ مستقیم به سؤال شما</p>
+    <p>اگر CP یک قهرمان از ۱۰۰ به ۱۲۰ برود — یعنی ۲۰٪+ — این تقریباً دقیقاً یعنی <b>۲۰٪ افزایش در
+    حمله و تقریباً هیچ چیز دیگر</b>. یعنی <em>نه</em> ۲۰٪ روی همه‌ی استت‌ها. مشخص‌تر بگویم: بردن یک
+    قهرمان از لِوِل ۱ به لِوِل ۱۰، CP را ×۱٫۹۱ می‌کند، در حالی که حمله ×۱٫۹۲، جان ×۲٫۲۴، سرعت حمله فقط
+    ×۱٫۱۸، و دفاع — بسته به اینکه کدام مسیر کد را بپرسید — یا ×۱٫۰۰ (آنچه منو نشانتان می‌دهد) یا
+    ×۱٫۷۳ (آنچه واقعاً می‌جنگد) می‌شود.</p>
+  </div>
+</section>
+
+<!-- ── 5 ── -->
+<section class="sec" id="player-fa">
+  <div class="sec-head"><span class="sec-num">۰۵</span><div>
+    <h2>CP بازیکن، قهرمان به قهرمان</h2>
+    <p>هر ۸ قهرمان ثبت‌شده، برگه‌ی استت واقعی‌شان، و CP‌ای که صفحه‌ی یونیت‌ها نمایش می‌دهد.</p>
+  </div></div>
+
+  <p class="prose wide">روستر هشت ورودی دارد اما فقط <b>دو پروفایل استتی متمایز</b>. جان (۱۰۰)، دفاع
+  (۲۵)، سرعت حرکت (۳٫۵) و برد حمله (۰٫۸۵) روی هر هشت‌تا یکسان است؛ فقط حمله و سرعت حمله فرق دارند، و
+  آن‌ها هم <em>معکوس</em> هم تغییر می‌کنند. هر هشت قهرمان <code>FighterType.Warrior</code> هستند.</p>
+
+  <div class="tw"><table>
+    <caption>برگه‌های پایه از <span class="src">Assets/Scriptable Objects/Stats/BaseStats/New ChratersSTats/</span>، از طریق <code>UnitDefinitionSO</code> هر قهرمان یافت شده‌اند. ستون‌های CP همان مقادیر صفحه‌ی یونیت‌ها هستند. ردیف‌های آبی پروفایل با DPS بالاتر هستند — دقت کنید CP <em>کمتری</em> نشان می‌دهند.</caption>
+    <thead><tr><th>id</th><th>قهرمان</th><th>ATK</th><th>سرعت حمله</th><th>HP</th><th>DEF</th><th>DPS واقعی</th><th>CP L1</th><th>CP L10</th><th>CP L20</th></tr></thead>
+    <tbody id="roster-fa"></tbody>
+  </table></div>
+
+  <h3>رتبه‌بندی وارونه است</h3>
+  <p class="prose wide">پروفایل «سریع» ۱۲۸ آسیب در ثانیه می‌زند؛ پروفایل «کند» ۱۰۸ — یعنی ۱۹٪ کمتر.
+  با این حال صفحه‌ی یونیت‌ها پروفایل سریع را با CP ۸۱ و پروفایل کند را با CP ۸۹ نشان می‌دهد. علتش
+  حساب است، نه سلیقه: <code>w<sub>A</sub>·ATK</code> عدد ۶۴ به مجموع اضافه می‌کند در حالی که
+  <code>w<sub>AS</sub>·AtkSpd</code> فقط ۰٫۸ اضافه می‌کند. سرعت حمله تقریباً یک‌هشتادمِ ارزش واقعی‌اش
+  در نبرد قیمت خورده، پس فرمول به استتی پاداش می‌دهد که نمایش داده می‌شود، نه استتی که نبرد را می‌برد.</p>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">وارونگی رتبه: خروجی آسیب واقعی در برابر CP نمایشی</div>
+      <p class="fig-s">هر دو معیار طوری شاخص‌سازی شده‌اند که پروفایل ضعیف‌تر = ۱۰۰ باشد. یک معیار
+      قدرتِ درست، این دو خط را موازی نگه می‌داشت؛ این‌ها همدیگر را قطع می‌کنند.</p>
+    </figcaption>
+    <div class="chart" id="c-slope-fa"></div>
+    <div class="legend" id="c-slope-fa-lg"></div>
+  </figure>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">CP بر حسب لِوِل قهرمان، هر دو پروفایل</div>
+      <p class="fig-s">فاصله هیچ‌وقت بسته نمی‌شود — پروفایل با DPS بالاتر در تمام لِوِل‌های ۱ تا ۵۰
+      زیر پروفایل با DPS پایین‌تر می‌ماند، چون هر دو پروفایل تمام منحنی‌های رشد را مشترکاً دارند.</p>
+    </figcaption>
+    <div class="chart" id="c-prof-fa"></div>
+    <div class="legend" id="c-prof-fa-lg"></div>
+    <details class="tv"><summary>نمای جدولی</summary><div class="tw" id="c-prof-fa-tb"></div></details>
+  </figure>
+</section>
+
+<!-- ── 6 ── -->
+<section class="sec" id="enemy-fa">
+  <div class="sec-head"><span class="sec-num">۰۶</span><div>
+    <h2>CP دشمن، استیج به استیج</h2>
+    <p>دشمن‌ها از همان فرمول استفاده می‌کنند، اما لِوِلشان جور دیگری تأمین می‌شود — و همین کل سیستم
+      سختی بازی است.</p>
+  </div></div>
+
+  <p class="prose wide">هیچ ضریب سختی جداگانه‌ای در کل پروژه وجود ندارد. نه <code>stageMultiplier</code>،
+  نه <code>hpMult</code>، نه فایل مقیاس‌دهی به‌ازای استیج. در عوض، اسپاونر شماره‌ی استیج را به دشمن
+  می‌دهد و دشمن آن را به‌عنوان لِوِل پیشرفت خودش به کار می‌برد:</p>
+
+  <div class="ev">
+    <p class="cap">EnemyManager.cs:90–99 — شماره‌ی استیج <em>همان</em> لِوِل دشمن است</p>
+<pre>public void Initialize(int stageLevelFromSpawner)
+{
+    stageLevel = stageLevelFromSpawner;
+
+    // IMPORTANT: use the stage as this enemy's "unit level" for progression.
+    // This is what makes stats grow as you go to higher stages.
+    unitLevel = stageLevelFromSpawner;
+
+    RebuildFromBase();
+}</pre>
+  </div>
+
+  <p class="prose wide">پس یک Golem در استیج ۲۰ ضریب‌های رشد لِوِل ۲۰ را می‌گیرد: ×۳٫۶۰ روی حمله و
+  ×۴٫۹۴ روی جان، نسبت به برگه‌ی پایه‌ی خودش. اما <b>دفاعش اصلاً رشد نمی‌کند</b> —
+  <code>RebuildFromBase</code> فقط چهار ضریب از شش‌تا را اعمال می‌کند و در کامنت هم به این کمبود
+  اعتراف شده. دفاع تنها محوری است که شش کهن‌الگو در آن تفاوت واقعی دارند (۲۸ تا ۷۸)، و همان صاف
+  می‌ماند در حالی که حمله و جان تا چهار برابر بالا می‌روند.</p>
+
+  <div class="tw"><table>
+    <caption>شش کهن‌الگوی دشمن. برگه‌های پایه از <span class="src">Assets/Scriptable Objects/Stats/BaseStats/Enemy Base Stats/</span>؛ ستون‌های CP با وزن‌های <code>EnemyCP.asset</code> و لِوِل = استیج محاسبه شده‌اند.</caption>
+    <thead><tr><th>کهن‌الگو</th><th>ATK</th><th>DEF</th><th>HP</th><th>سرعت حمله</th><th>CP@S1</th><th>CP@S5</th><th>CP@S10</th><th>CP@S20</th></tr></thead>
+    <tbody id="enemyroster-fa"></tbody>
+  </table></div>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">CP دشمن بر حسب استیج، هر شش کهن‌الگو</div>
+      <p class="fig-s">CP هر کهن‌الگو در حالی که شماره‌ی استیج رشدش را می‌راند. خط‌ها هیچ‌وقت همدیگر
+      را قطع نمی‌کنند چون همه‌ی کهن‌الگوها یک منحنی رشد مشترک دارند — ترتیب تیرها که با برگه‌های پایه
+      تعیین شده دقیقاً حفظ می‌شود.</p>
+    </figcaption>
+    <div class="chart" id="c-enemy-fa"></div>
+    <div class="legend" id="c-enemy-fa-lg"></div>
+    <details class="tv"><summary>نمای جدولی</summary><div class="tw" id="c-enemy-fa-tb"></div></details>
+  </figure>
+
+  <h3>مجموع CP میدان‌شده در هر استیج</h3>
+  <p class="prose wide">با جمع‌زدن CP همه‌ی دشمن‌هایی که هر استیج اسپاون می‌کند — که از هجده فایل
+  <code>Stage_NN.asset</code> به‌علاوه‌ی <code>Spawner2.asset</code> برای استیج‌های ۱ و ۲ پارس شده —
+  منحنی سختی واقعی‌ای که بازیکن با آن روبه‌رو می‌شود به دست می‌آید. از ۲۱۶ تا ۴٬۷۵۷ می‌رود، اما نه
+  یکنواخت.</p>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">مجموع CP دشمن میدان‌شده، استیج‌های ۱ تا ۲۰</div>
+      <p class="fig-s">جمع CP تک‌تک دشمن‌ها در هر دو ویو. میله‌های برچسب‌دار چهار استیجی هستند که
+      پرش‌شان نسبت به استیج قبل پرت است — دو استیج تقریباً صاف که مثل پرکننده حس می‌شوند، و دو جهش که
+      مثل دیوار حس می‌شوند.</p>
+    </figcaption>
+    <div class="chart" id="c-stage-fa"></div>
+    <details class="tv"><summary>نمای جدولی — ترکیب و درصد تغییر</summary><div class="tw" id="c-stage-fa-tb"></div></details>
+  </figure>
+
+  <div class="callout">
+    <p class="ct">یک مشاهده‌ی بالانسی، به‌عنوان داده و نه پیشنهاد تغییر</p>
+    <p>پرش بین استیج‌ها ناهموار است: <b>۹۱٫۹٪+</b> به استیج ۳ و <b>۲۹٫۹٪+</b> به استیج ۱۹، در برابر
+    <b>۳٫۶٪+</b> به استیج ۶ و <b>۳٫۸٪+</b> به استیج ۱۵. استیج‌های ۶ و ۱۵ تقریباً هیچ تهدید تازه‌ای
+    نسبت به استیج قبلشان اضافه نمی‌کنند. یک نکته‌ی مهم دیگر: جان قلعه‌ی دشمن در تمام استیج‌های ۱ تا ۲۰
+    صافِ ۳۵۰ است، پس خودِ شرط برد هیچ‌وقت سخت‌تر نمی‌شود، حتی وقتی ارتش مدافع ۲۲ برابر می‌شود.</p>
+  </div>
+</section>
+
+<!-- ── 7 ── -->
+<section class="sec" id="runtime-fa">
+  <div class="sec-head"><span class="sec-num">۰۷</span><div>
+    <h2>آیا می‌شود total CP را در ران‌تایم گرفت؟</h2>
+    <p>پرسش دقیق: در حین بازی، می‌شود مجموع اسکواد بازیکن و مجموع ویو دشمن را خواند؟</p>
+  </div></div>
+
+  <p class="prose wide"><b>برای هر دو بله، و بیشتر کارش هم از قبل انجام شده.</b> اما وضعیت دو طرف
+  فرق دارد:</p>
+
+  <div class="tiles">
+    <div class="tile"><p class="tl">سمت دشمن</p><div class="tv2">محاسبه می‌شود</div><p class="tn">…در فیلد دیباگی که کسی نمی‌خواند</p></div>
+    <div class="tile"><p class="tl">سمت بازیکن</p><div class="tv2">محاسبه نمی‌شود</div><p class="tn">…ولی همه‌ی ورودی‌ها موجودند</p></div>
+    <div class="tile"><p class="tl">جمع اسکواد</p><div class="tv2">نوشته شده</div><p class="tn"><code>SquadCP</code>، صفر فراخوانی</p></div>
+  </div>
+
+  <p class="prose wide"><b>دشمن‌ها همین حالا یک عدد CP حمل می‌کنند.</b>
+  <code>EnemyManager.RebuildFromBase</code> در هر اسپاون به <code>cp</code> مقدار می‌دهد. این فیلد
+  به‌صورت <code>[Header("Debug")] public int cp;</code> تعریف شده و هیچ UI، هیچ کد بالانسی و هیچ منطق
+  ویوی آن را نمی‌خواند — فقط یک نمایش در Inspector است. جمع‌زدنش روی دشمن‌های زنده صرفاً یک حلقه روی
+  لیستی است که از قبل نگه‌داشته می‌شود.</p>
+
+  <p class="prose wide"><b>برای بازیکن در طول نبرد اصلاً CP محاسبه نمی‌شود.</b> تنها جاهایی که در کل
+  پروژه CP فراخوانی می‌شود، شش فراخوانی داخل <code>UnitsPanelController</code> است که کد منو است.
+  HUD نبرد (<code>HeroStatsPanel</code> و <code>HeroStatCell</code>) فقط شمارش زنده/کل و قیمت جم را
+  نشان می‌دهد — در طول یک نبرد هیچ عدد قدرتی، هیچ مقدار حمله‌ای و هیچ مقدار جانی به بازیکن نمایش داده
+  نمی‌شود. با این حال همه‌ی ورودی‌ها حاضرند:
+  <code>PlayerStatsApplier.CurrentStats</code> همان <code>UnitStatsRuntime</code> زنده است، و
+  <code>HeroRoster</code> از قبل رد می‌گیرد که کدام واحدها زنده‌اند.</p>
+
+  <div class="ev">
+    <p class="cap">CPCalculator.cs:32–48 — دقیقاً برای همین نوشته شده، هیچ‌وقت فراخوانی نشده</p>
+<pre>public static int SquadCP(UnitStatsRuntime[] squad, int level, CPWeightsConfigSO cfg)
+public static int SquadCP(UnitStatsRuntime[] squad, int[] levels, CPWeightsConfigSO cfg)</pre>
+  </div>
+
+  <div class="callout crit">
+    <p class="ct">⚠ همان «TOTAL CP» که الان روی صفحه‌ی منوی شماست واقعی نیست</p>
+    <p>دو لیبل در <code>MenuScene.unity</code> اعداد <code>3460</code> و <code>32660</code> را زیر
+    عنوان <code>TOTAL CP:</code> نشان می‌دهند. کامپوننت‌های TextMeshPro آن‌ها توسط هیچ اسکریپتی
+    ارجاع داده نشده‌اند — این‌ها آرت ثابتِ جامانده در صحنه‌اند، نه یک مقدار محاسبه‌شده.</p>
+  </div>
+
+  <p class="prose wide">یک هشدار اگر روزی مجموع ران‌تایم را سیم‌کشی کردید:
+  <code>EnemyManager</code> یک فرمول CP <em>دوم</em> و واگرا دارد که وقتی <code>cpWeights</code>
+  خالی باشد به‌عنوان fallback استفاده می‌شود. آن فرمول جمله‌ی برد را کاملاً ندارد و Mage را
+  نزدیک‌زن حساب می‌کند، پس حتی با وزن‌های یکسان هم با <code>CPCalculator</code> هم‌خوانی ندارد. ضمناً
+  <code>EnemySpawner.cs:410</code> مقدار <code>cpWeights</code> هر پریفب دشمن را با فیلد خود اسپاونر
+  بازنویسی می‌کند — یعنی یک اسپاونر با اسلات خالی، بی‌سروصدا تمام دشمن‌های آن استیج را به همان
+  fallback تنزل می‌دهد.</p>
+</section>
+
+<!-- ── 8 ── -->
+<section class="sec" id="defects-fa">
+  <div class="sec-head"><span class="sec-num">۰۸</span><div>
+    <h2>فهرست ایرادها</h2>
+    <p>نُه مورد که حین ردیابی پیدا شدند. فقط ثبت شده‌اند — هیچ‌کدام تغییر داده نشده است.</p>
+  </div></div>
+
+  <div class="sevkey">
+    <span><i style="background:var(--crit)"></i> روی اعداد نمایشی یا واقعی اثر دارد</span>
+    <span><i style="background:var(--s4)"></i> مسیرهای کد مرده یا واگرا</span>
+    <span><i style="background:var(--ink-3)"></i> نظافت کد / مستندات</span>
+  </div>
+
+  <div class="defects">
+    <div class="defect sev-high"><div class="dn">۰۱</div>
+      <div class="dt">منحنی‌های رشدِ بیرون‌محور، بی‌سروصدا دفاع و برد را باد می‌کنند
+        <em>کلیدهایی که روی زمان منفی نوشته شده‌اند به یک مقدار ثابت clamp می‌شوند: ۶٫۲۵٪+ دفاع و ۶٫۷۵٪+ برد در هر لِوِل، برای هر ۵۰ لِوِل. یک قهرمان لِوِل ۲۰ ×۳٫۱۷ دفاعِ موردنظر را دارد.</em></div>
+      <div class="dl">PlayerProgressionConfig.asset:111–158</div></div>
+
+    <div class="defect sev-high"><div class="dn">۰۲</div>
+      <div class="dt">منو و میدان نبرد استت‌های متفاوتی محاسبه می‌کنند
+        <em>پنج فراخوانی UI فقط <code>gA/gH/gMv/gAS</code> را اعمال می‌کنند؛ <code>PlayerStatsApplier</code> هر شش‌تا را. یک قهرمان لِوِل ۱۰ با دفاع ۴۳٫۱ می‌جنگد در حالی که همه‌ی منوها — و CP ساخته‌شده روی آن‌ها — عدد ۲۵ را می‌گویند.</em></div>
+      <div class="dl">UnitsPanelController.cs:517, 579, 881, 962 · NewCharacterStats.cs:235 vs PlayerStatsApplier.cs:135–142</div></div>
+
+    <div class="defect sev-high"><div class="dn">۰۳</div>
+      <div class="dt"><code>meleeMult</code> هیچ‌وقت از کانفیگ خوانده نمی‌شود
+        <em>خطی که باید <code>meleeMultByLevel</code> را نمونه‌برداری کند وجود ندارد؛ <code>rangedMult</code> دو بار پشت سر هم مقداردهی شده. هر واحد نزدیک‌زن از مقدار هاردکد ۱٫۰ استفاده می‌کند، فارغ از اینکه طراح چه بنویسد.</em></div>
+      <div class="dl">CPWeightMath.cs:41–42</div></div>
+
+    <div class="defect sev-high"><div class="dn">۰۴</div>
+      <div class="dt">هر دو منحنی سبک هم بیرون‌محور نوشته شده‌اند
+        <em><code>meleeMultByLevel</code> روی t ≈ −۳۸۹ و <code>rangedMultByLevel</code> روی t ≈ −۷۳۰ نشسته و مقدارشان ۰٫۰۶۰ و ۰٫۰۲۶ ارزیابی می‌شود. ranged فقط با کفِ clamp به ۱٫۰ نجات پیدا می‌کند، پس هیچ واحدی هیچ‌وقت بونوس سبک نمی‌گیرد.</em></div>
+      <div class="dl">Player CP.asset:159–206</div></div>
+
+    <div class="defect sev-med"><div class="dn">۰۵</div>
+      <div class="dt">یک فرمول CP دوم و واگرا داخل <code>EnemyManager</code> زندگی می‌کند
+        <em>هر وقت <code>cpWeights</code> خالی باشد استفاده می‌شود. جمله‌ی برد ندارد و Mage را نزدیک‌زن حساب می‌کند، پس حتی با وزن‌های یکسان با <code>CPCalculator</code> هم‌خوانی ندارد. <code>EnemySpawner</code> کانفیگ پریفب را موقع اسپاون بازنویسی می‌کند، پس با خالی‌گذاشتن یک اسلات Inspector می‌شود به این fallback رسید.</em></div>
+      <div class="dl">EnemyManager.cs:146–161 · EnemySpawner.cs:410</div></div>
+
+    <div class="defect sev-med"><div class="dn">۰۶</div>
+      <div class="dt">دفاع دشمن هیچ‌وقت رشد نمی‌کند
+        <em><code>RebuildFromBase</code> چهار ضریب از شش‌تا را اعمال می‌کند. دفاع — تنها محوری که شش کهن‌الگو در آن تفاوت معنادار دارند، ۲۸ تا ۷۸ — در تمام بیست استیج صاف می‌ماند در حالی که حمله ×۳٫۶ و جان ×۴٫۹ می‌شود.</em></div>
+      <div class="dl">EnemyManager.cs:113–118</div></div>
+
+    <div class="defect sev-med"><div class="dn">۰۷</div>
+      <div class="dt">CP برای دو استتی قیمت می‌گذارد که در گیم‌پلی هیچ کاری نمی‌کنند
+        <em><code>moveSpeed</code> و <code>attackRange</code> هر دو در فرمول خوانده می‌شوند، اما بازیکن‌ها با <code>PlayerManager.moveSpeed</code> (۰٫۵) و دشمن‌ها با <code>EnemyLocoMotion.moveSpeed</code> (۰٫۲) حرکت می‌کنند — فیلدهای جدای Inspector که هیچ‌وقت از بلوک استت تغذیه نمی‌شوند. مقدار ۳٫۵ در <code>UnitStatsSO</code> بی‌اثر است.</em></div>
+      <div class="dl">PlayerManager.cs:60, 64 · EnemyLocoMotion.cs:20</div></div>
+
+    <div class="defect sev-low"><div class="dn">۰۸</div>
+      <div class="dt">اعداد «TOTAL CP» در منو، آرت هاردکد شده‌اند
+        <em><code>3460</code> و <code>32660</code> رشته‌های ثابت روی کامپوننت‌های TextMeshPro هستند که به هیچ اسکریپتی وصل نیستند.</em></div>
+      <div class="dl">MenuScene.unity:24724, 36403</div></div>
+
+    <div class="defect sev-low"><div class="dn">۰۹</div>
+      <div class="dt">سه فایل مستندات، کدی را توصیف می‌کنند که دیگر وجود ندارد
+        <em><code>CPCalculator.txt</code> نام <code>UnitCardView</code> و <code>BucketStatsPanel</code> را به‌عنوان فراخوان می‌آورد — هیچ‌کدام آن را صدا نمی‌زنند. <code>UnitStatsRuntime.txt</code> و <code>ProgressionMath.txt</code> هر دو می‌گویند <code>ApplyLevelGrowth</code> موقع اسپاون اجرا می‌شود؛ این متد در کل پروژه صفر جای فراخوانی دارد.</em></div>
+      <div class="dl">Assets/Documentation for scripts/</div></div>
+  </div>
+</section>
+
+<!-- ── 9 ── -->
+<section class="sec" id="research-fa">
+  <div class="sec-head"><span class="sec-num">۰۹</span><div>
+    <h2>آیا مجموع وزن‌دار شکل درستی است؟</h2>
+    <p>فقط تحقیق — هیچ‌چیز اینجا درخواست تغییر نیست و هیچ‌چیز پیاده‌سازی نشده است.</p>
+  </div></div>
+
+  <p class="prose wide">طراحی فعلی یک <b>مجموع وزن‌دار خطی</b> است: به هر استت قیمت بده، قیمت‌ها را جمع
+  کن. این رایج‌ترین شکل در بازی‌های منتشرشده است و در عین حال شکلی است که حالت شکستش از همه بهتر
+  مستند شده. دو ویژگی‌اش ارزش نام‌بردن دارند، چون پروژه‌ی شما هر دو را نشان می‌دهد.</p>
+
+  <p class="prose wide"><b>در مجموع وزن‌دار، یک جمله می‌تواند بقیه را ببلعد.</b> وقتی وزن یک استت حدود
+  ۲۰ برابر دیگری باشد، آن امتیاز عملاً نماینده‌ی همان یک استت می‌شود. مالِ شما روی ۷۹٪ حمله ایستاده.
+  <b>و مجموع وزن‌دار هیچ درکی از تعادل ندارد.</b> واحدی با حمله‌ی نجومی و بقای صفر همان امتیازی را
+  می‌گیرد که یک واحد متعادل با همان مجموع می‌گیرد — و دقیقاً به همین دلیل است که این عدد دیگر
+  پیش‌بینی نمی‌کند چه کسی نبرد را می‌برد.</p>
+
+  <p class="prose wide">نزدیک‌ترین نمونه‌ی منتشرشده Shop Titans است: همان شکل مجموع وزن‌دار، و تحلیل
+  خودِ جامعه‌اش از فرمول به این نتیجه می‌رسد که این معیار برای سنجش عملکرد واقعی قهرمان «یک دروغ»
+  است، چون ضرایب باعث می‌شوند ده واحد دفاع بیشتر از ده واحد حمله بیارزد، فارغ از اینکه مدل نبرد با
+  آن‌ها چه می‌کند. این ساختاراً همان شکستی است که در <a href="#player-fa">§۵</a> دیدیم.</p>
+
+  <h3>دو جایگزین استاندارد</h3>
+
+  <p class="prose wide"><b>B — ضرب با جمله‌های میرا شده.</b> فرمول CP در Pokémon GO این است:
+  <code>floor(ATK × √DEF × √STA × CPM² / 10)</code>. ضرب‌کردن به‌جای جمع‌کردن یعنی واحدی که فقط در یک
+  چیز خوب است نمی‌تواند امتیاز بالا بگیرد؛ و جذرها عمداً جلوی مسلط‌شدن دفاع و جان را می‌گیرند بدون
+  اینکه بی‌اثرشان کنند. این شکل در مقیاس بزرگ آزموده شده است.</p>
+
+  <p class="prose wide"><b>C — DPS × جانِ مؤثر.</b> گزینه‌ی تحلیلی: حمله × بقا، که در آن
+  <code>EffectiveHP = HP × (100 + DEF)/100</code>. این یک حدس مهندسی نیست — فرم بسته‌ی «چقدر زنده
+  می‌ماند ضربدر چقدر سریع می‌کشد» است، که مستقیماً از همان فرمول آسیبی که بازی واقعاً اجرا می‌کند
+  مشتق شده. <b>و پروژه‌ی شما همین حالا آن را دارد.</b> <code>CPCalculator.EffectiveHP</code> دقیقاً
+  معادله‌ی آسیب واقعی <code>CombatMath</code> را بازتاب می‌دهد، و کد مرده است با صفر فراخوانی.</p>
+
+  <div class="ev">
+    <p class="cap">CPCalculator.cs:50–54 — از قبل نوشته شده، هیچ‌وقت صدا زده نشده</p>
+<pre>public static float EffectiveHP(UnitStatsRuntime s)
+{
+    float dmgFrac = 100f / (100f + Mathf.Max(0f, s.defense));
+    return s.maxHP / dmgFrac;
+}</pre>
+  </div>
+
+  <h3>این سه فرمول روی روستر واقعی شما چه امتیازی می‌دهند</h3>
+  <p class="prose wide">دو آزمون. اول، آیا فرمول ترتیب درست بین دو پروفایل قهرمان را حفظ می‌کند؟ دوم،
+  آیا اندازه‌ی واقعی فاصله‌ی بین تیرهای دشمن را بازتاب می‌دهد؟</p>
+
+  <div class="tw"><table>
+    <caption>آزمون قهرمان‌ها. نسبت قدرت واقعی بین دو پروفایل ۱٫۱۹ است — پروفایل سریع ۱۹٪ قوی‌تر است. هر فرمولی که زیر ۱٫۰۰ امتیاز بدهد، روستر را وارونه رتبه‌بندی کرده.</caption>
+    <thead><tr><th>فرمول</th><th>پروفایل سریع</th><th>پروفایل کند</th><th>نسبت</th><th>حکم</th></tr></thead>
+    <tbody>
+      <tr><td class="k">DPS واقعی (مرجع)</td><td class="num">128</td><td class="num">108</td><td class="num">1.19</td><td>—</td></tr>
+      <tr class="bad"><td class="k">A — مجموع وزن‌دار فعلی</td><td class="num">81</td><td class="num">89</td><td class="num">0.91</td><td>وارونه</td></tr>
+      <tr><td class="k">B — ضرب با میرایی جذری</td><td class="num">640</td><td class="num">540</td><td class="num">1.19</td><td>درست</td></tr>
+      <tr><td class="k">C — DPS × جان مؤثر</td><td class="num">160</td><td class="num">135</td><td class="num">1.19</td><td>درست</td></tr>
+    </tbody>
+  </table></div>
+
+  <figure class="fig">
+    <figcaption>
+      <div class="fig-t">گستره‌ی تیرهای دشمن زیر هر فرمول</div>
+      <p class="fig-s">هر کهن‌الگو نسبت به ضعیف‌ترین (Reaper Man = ۱۰۰) شاخص‌سازی شده. خط مرجع مشکی
+      قدرت نبرد واقعی است — DPS × جان مؤثر. فرمول فعلی یک فاصله‌ی واقعی ۶٫۵ برابری را به یک فاصله‌ی
+      نمایشی ۲٫۳ برابری فشرده می‌کند، پس Golem_02 حدوداً دو برابر خطرناک‌تر از Reaper به نظر می‌رسد
+      در حالی که واقعاً شش برابر است.</p>
+    </figcaption>
+    <div class="chart" id="c-cand-fa"></div>
+    <div class="legend" id="c-cand-fa-lg"></div>
+    <details class="tv"><summary>نمای جدولی — امتیازهای خام</summary><div class="tw" id="c-cand-fa-tb"></div></details>
+  </figure>
+
+  <div class="callout">
+    <p class="ct">جمع‌بندی</p>
+    <p>مجموع وزن‌دار در اصل غلط نیست — شفاف است، ارزان است و برای طراح راحت می‌شود درباره‌اش فکر کرد،
+    و دقیقاً به همین دلیل همه‌جا هست. اینجا به دو دلیلِ قابل‌رفع شکست می‌خورد: ضرایب از حساسیت‌های
+    واقعی مدل نبرد خیلی دورند، و دو جفت استت که ذاتاً ضربی‌اند (حمله × سرعت حمله، جان × دفاع) دارند
+    جمع می‌شوند به‌جای اینکه ضرب شوند. هر دو شکل B و C ترتیب را بدون هیچ تغییری در داده‌ی استت‌ها
+    درست می‌کنند. <b>هیچ تغییری اعمال نشده؛ این بخش طبق درخواست شما فقط تحقیق است.</b></p>
+  </div>
+
+  <h4 style="margin-top:26px">منابع</h4>
+  <ul style="font-size:.85rem;color:var(--ink-2);padding-right:20px">
+    <li><a href="https://pokemongohub.net/post/wiki/cp-mechanics/">مکانیک Combat Power در Pokémon GO</a> — فرمول ضرب‌با‌جذر و دلیل میرا نشدن حمله.</li>
+    <li><a href="https://st-central.net/calculating-the-power-rating-of-a-hero/">محاسبه‌ی Power Rating یک قهرمان — Shop Titans Central</a> — یک امتیاز قدرتِ مجموع‌وزن‌دار در بازی منتشرشده، و استدلال نویسنده‌اش که این معیار عملکرد واقعی را بد نشان می‌دهد.</li>
+    <li><a href="https://epic-seven.fandom.com/wiki/Combat_Power">Epic Seven — Combat Power</a> — یک CP مجموع‌وزن‌دار با زیرامتیازهای جداگانه برای حمله و دفاع.</li>
+    <li><a href="https://gamedev.net/forums/topic/660352-formulas-math-and-theories-for-rpg-combatleveling-systems/">GameDev.net — فرمول‌های نبرد و لِوِلینگ در RPG</a> — مدل‌های جمعی در برابر ضربی و اینکه هرکدام منحنی رشد را چطور محدود می‌کنند.</li>
+    <li><a href="https://missionszanx.com/guides/how-multipliers-stack-in-idle-rpgs">نحوه‌ی روی‌هم‌رفتن ضرایب در Idle RPGها</a> — چرا جمع‌شدن درون یک دسته، حسِ رشد را صاف می‌کند.</li>
+  </ul>
+</section>
+
+<footer class="foot">
+  <p><b>روش کار:</b> هر عدد این گزارش با پارس‌کردن YAML خامِ فایل‌های <code>.asset</code> و بازپیاده‌سازی
+  <code>AnimationCurve.Evaluate</code> (به‌همراه رفتار clamp در PreInfinity/PostInfinity)،
+  <code>ProgressionMath</code>، <code>CPWeightMath</code> و <code>CPCalculator</code> بیرون از Unity
+  تولید شده — نه با رونویسی دستی. هفت مقدار مرجع به‌صورت دستی هم حساب و با خروجی اسکریپت مطابقت داده
+  شدند. هیچ فایلی از پروژه تغییر نکرده است.</p>
+</footer>
+
+</div><!-- /#fa -->
+
+</div><!-- /.wrap -->
+
+<div class="tip" id="tip" role="status" aria-live="polite"></div>
+
+<script>window.CPDATA = {"growthPlayer":[{"L":1,"gA":1,"gH":1,"gMv":1,"gAS":1,"gD":1,"gR":1},{"L":2,"gA":1.079,"gH":1.0988,"gMv":1.0198,"gAS":1.0198,"gD":1.0625,"gR":1.0675},{"L":3,"gA":1.1631,"gH":1.206,"gMv":1.0398,"gAS":1.0398,"gD":1.1289,"gR":1.1395},{"L":4,"gA":1.2526,"gH":1.3221,"gMv":1.0599,"gAS":1.0599,"gD":1.1995,"gR":1.2163},{"L":5,"gA":1.3477,"gH":1.4479,"gMv":1.0803,"gAS":1.0803,"gD":1.2745,"gR":1.2984},{"L":6,"gA":1.4486,"gH":1.5838,"gMv":1.1008,"gAS":1.1008,"gD":1.3542,"gR":1.386},{"L":7,"gA":1.5556,"gH":1.7305,"gMv":1.1214,"gAS":1.1214,"gD":1.4388,"gR":1.4795},{"L":8,"gA":1.669,"gH":1.8888,"gMv":1.1423,"gAS":1.1423,"gD":1.5288,"gR":1.5793},{"L":9,"gA":1.7889,"gH":2.0591,"gMv":1.1632,"gAS":1.1632,"gD":1.6244,"gR":1.6858},{"L":10,"gA":1.9155,"gH":2.2423,"gMv":1.1844,"gAS":1.1844,"gD":1.7259,"gR":1.7996},{"L":11,"gA":2.0492,"gH":2.4391,"gMv":1.2056,"gAS":1.2056,"gD":1.8338,"gR":1.921},{"L":12,"gA":2.1902,"gH":2.6502,"gMv":1.2271,"gAS":1.2271,"gD":1.9484,"gR":2.0505},{"L":13,"gA":2.3386,"gH":2.8763,"gMv":1.2486,"gAS":1.2486,"gD":2.0702,"gR":2.1889},{"L":14,"gA":2.4946,"gH":3.1181,"gMv":1.2702,"gAS":1.2702,"gD":2.1997,"gR":2.3365},{"L":15,"gA":2.6586,"gH":3.3765,"gMv":1.292,"gAS":1.292,"gD":2.3372,"gR":2.4942},{"L":16,"gA":2.8306,"gH":3.6521,"gMv":1.3139,"gAS":1.3139,"gD":2.4833,"gR":2.6624},{"L":17,"gA":3.0108,"gH":3.9457,"gMv":1.3359,"gAS":1.3359,"gD":2.6385,"gR":2.842},{"L":18,"gA":3.1994,"gH":4.2582,"gMv":1.358,"gAS":1.358,"gD":2.8035,"gR":3.0337},{"L":19,"gA":3.3966,"gH":4.5901,"gMv":1.3801,"gAS":1.3801,"gD":2.9787,"gR":3.2384},{"L":20,"gA":3.6025,"gH":4.9424,"gMv":1.4024,"gAS":1.4024,"gD":3.165,"gR":3.4569},{"L":21,"gA":3.8172,"gH":5.3156,"gMv":1.4247,"gAS":1.4247,"gD":3.3628,"gR":3.6901},{"L":22,"gA":4.0408,"gH":5.7104,"gMv":1.4471,"gAS":1.4471,"gD":3.573,"gR":3.939},{"L":23,"gA":4.2733,"gH":6.1276,"gMv":1.4696,"gAS":1.4696,"gD":3.7964,"gR":4.2047},{"L":24,"gA":4.5149,"gH":6.5678,"gMv":1.4921,"gAS":1.4921,"gD":4.0338,"gR":4.4884},{"L":25,"gA":4.7655,"gH":7.0316,"gMv":1.5146,"gAS":1.5146,"gD":4.2859,"gR":4.7912},{"L":26,"gA":5.0252,"gH":7.5195,"gMv":1.5371,"gAS":1.5371,"gD":4.5539,"gR":5.1144},{"L":27,"gA":5.2939,"gH":8.0321,"gMv":1.5597,"gAS":1.5597,"gD":4.8385,"gR":5.4594},{"L":28,"gA":5.5715,"gH":8.5697,"gMv":1.5823,"gAS":1.5823,"gD":5.141,"gR":5.8277},{"L":29,"gA":5.8581,"gH":9.1329,"gMv":1.6049,"gAS":1.6049,"gD":5.4624,"gR":6.2208},{"L":30,"gA":6.1534,"gH":9.7218,"gMv":1.6275,"gAS":1.6275,"gD":5.8039,"gR":6.6405},{"L":31,"gA":6.4573,"gH":10.3369,"gMv":1.6501,"gAS":1.6501,"gD":6.1667,"gR":7.0885},{"L":32,"gA":6.7696,"gH":10.9782,"gMv":1.6727,"gAS":1.6727,"gD":6.5523,"gR":7.5667},{"L":33,"gA":7.0901,"gH":11.6459,"gMv":1.6952,"gAS":1.6952,"gD":6.9619,"gR":8.0771},{"L":34,"gA":7.4186,"gH":12.3399,"gMv":1.7177,"gAS":1.7177,"gD":7.3971,"gR":8.622},{"L":35,"gA":7.7547,"gH":13.0601,"gMv":1.7401,"gAS":1.7401,"gD":7.8595,"gR":9.2036},{"L":36,"gA":8.0981,"gH":13.8064,"gMv":1.7625,"gAS":1.7625,"gD":8.3509,"gR":9.8245},{"L":37,"gA":8.4485,"gH":14.5784,"gMv":1.7848,"gAS":1.7848,"gD":8.8729,"gR":10.4873},{"L":38,"gA":8.8054,"gH":15.3758,"gMv":1.807,"gAS":1.807,"gD":9.4276,"gR":11.1948},{"L":39,"gA":9.1684,"gH":16.1979,"gMv":1.8292,"gAS":1.8292,"gD":10.017,"gR":11.95},{"L":40,"gA":9.537,"gH":17.0442,"gMv":1.8512,"gAS":1.8512,"gD":10.6432,"gR":12.7561},{"L":41,"gA":9.9107,"gH":17.9138,"gMv":1.8731,"gAS":1.8731,"gD":11.3086,"gR":13.6166},{"L":42,"gA":10.2889,"gH":18.8058,"gMv":1.8949,"gAS":1.8949,"gD":12.0155,"gR":14.5352},{"L":43,"gA":10.6711,"gH":19.7192,"gMv":1.9165,"gAS":1.9165,"gD":12.7667,"gR":15.5158},{"L":44,"gA":11.0565,"gH":20.6529,"gMv":1.9381,"gAS":1.9381,"gD":13.5648,"gR":16.5625},{"L":45,"gA":11.4446,"gH":21.6055,"gMv":1.9594,"gAS":1.9594,"gD":14.4128,"gR":17.6798},{"L":46,"gA":11.8347,"gH":22.5755,"gMv":1.9806,"gAS":1.9806,"gD":15.3138,"gR":18.8725},{"L":47,"gA":12.2259,"gH":23.5614,"gMv":2.0016,"gAS":2.0016,"gD":16.2711,"gR":20.1456},{"L":48,"gA":12.6177,"gH":24.5616,"gMv":2.0225,"gAS":2.0225,"gD":17.2883,"gR":21.5046},{"L":49,"gA":13.0091,"gH":25.5741,"gMv":2.0431,"gAS":2.0431,"gD":18.3691,"gR":22.9553},{"L":50,"gA":13.3993,"gH":26.5971,"gMv":2.0635,"gAS":2.0635,"gD":19.5175,"gR":24.5039}],"profileCurves":[{"L":1,"cpFast":81,"cpSlow":89,"dpsFast":128,"dpsSlow":108},{"L":2,"cpFast":87,"cpSlow":96,"dpsFast":140.8,"dpsSlow":118.8},{"L":3,"cpFast":94,"cpSlow":103,"dpsFast":154.8,"dpsSlow":130.6},{"L":4,"cpFast":101,"cpSlow":111,"dpsFast":169.9,"dpsSlow":143.4},{"L":5,"cpFast":109,"cpSlow":119,"dpsFast":186.3,"dpsSlow":157.2},{"L":6,"cpFast":117,"cpSlow":128,"dpsFast":204.1,"dpsSlow":172.2},{"L":7,"cpFast":126,"cpSlow":138,"dpsFast":223.3,"dpsSlow":188.4},{"L":8,"cpFast":135,"cpSlow":148,"dpsFast":244,"dpsSlow":205.9},{"L":9,"cpFast":145,"cpSlow":159,"dpsFast":266.4,"dpsSlow":224.7},{"L":10,"cpFast":155,"cpSlow":170,"dpsFast":290.4,"dpsSlow":245},{"L":11,"cpFast":166,"cpSlow":182,"dpsFast":316.2,"dpsSlow":266.8},{"L":12,"cpFast":177,"cpSlow":194,"dpsFast":344,"dpsSlow":290.2},{"L":13,"cpFast":189,"cpSlow":207,"dpsFast":373.7,"dpsSlow":315.4},{"L":14,"cpFast":202,"cpSlow":221,"dpsFast":405.6,"dpsSlow":342.2},{"L":15,"cpFast":216,"cpSlow":236,"dpsFast":439.7,"dpsSlow":371},{"L":16,"cpFast":230,"cpSlow":251,"dpsFast":476,"dpsSlow":401.7},{"L":17,"cpFast":244,"cpSlow":267,"dpsFast":514.8,"dpsSlow":434.4},{"L":18,"cpFast":260,"cpSlow":284,"dpsFast":556.1,"dpsSlow":469.2},{"L":19,"cpFast":276,"cpSlow":302,"dpsFast":600,"dpsSlow":506.3},{"L":20,"cpFast":293,"cpSlow":320,"dpsFast":646.7,"dpsSlow":545.6},{"L":21,"cpFast":310,"cpSlow":339,"dpsFast":696.1,"dpsSlow":587.4},{"L":22,"cpFast":329,"cpSlow":359,"dpsFast":748.5,"dpsSlow":631.5},{"L":23,"cpFast":348,"cpSlow":380,"dpsFast":803.8,"dpsSlow":678.2},{"L":24,"cpFast":368,"cpSlow":402,"dpsFast":862.3,"dpsSlow":727.5},{"L":25,"cpFast":388,"cpSlow":424,"dpsFast":923.9,"dpsSlow":779.5},{"L":26,"cpFast":410,"cpSlow":448,"dpsFast":988.7,"dpsSlow":834.2},{"L":27,"cpFast":432,"cpSlow":472,"dpsFast":1056.9,"dpsSlow":891.8},{"L":28,"cpFast":455,"cpSlow":496,"dpsFast":1128.5,"dpsSlow":952.1},{"L":29,"cpFast":478,"cpSlow":522,"dpsFast":1203.4,"dpsSlow":1015.4},{"L":30,"cpFast":503,"cpSlow":548,"dpsFast":1281.9,"dpsSlow":1081.6},{"L":31,"cpFast":528,"cpSlow":576,"dpsFast":1363.9,"dpsSlow":1150.8},{"L":32,"cpFast":553,"cpSlow":604,"dpsFast":1449.4,"dpsSlow":1222.9},{"L":33,"cpFast":580,"cpSlow":632,"dpsFast":1538.5,"dpsSlow":1298.1},{"L":34,"cpFast":607,"cpSlow":662,"dpsFast":1631.1,"dpsSlow":1376.2},{"L":35,"cpFast":634,"cpSlow":692,"dpsFast":1727.3,"dpsSlow":1457.4},{"L":36,"cpFast":663,"cpSlow":722,"dpsFast":1826.9,"dpsSlow":1541.5},{"L":37,"cpFast":691,"cpSlow":754,"dpsFast":1930.1,"dpsSlow":1628.5},{"L":38,"cpFast":721,"cpSlow":785,"dpsFast":2036.7,"dpsSlow":1718.5},{"L":39,"cpFast":751,"cpSlow":818,"dpsFast":2146.6,"dpsSlow":1811.2},{"L":40,"cpFast":781,"cpSlow":851,"dpsFast":2259.8,"dpsSlow":1906.7},{"L":41,"cpFast":811,"cpSlow":884,"dpsFast":2376.1,"dpsSlow":2004.9},{"L":42,"cpFast":842,"cpSlow":917,"dpsFast":2495.5,"dpsSlow":2105.6},{"L":43,"cpFast":874,"cpSlow":951,"dpsFast":2617.8,"dpsSlow":2208.8},{"L":44,"cpFast":905,"cpSlow":985,"dpsFast":2742.8,"dpsSlow":2314.2},{"L":45,"cpFast":937,"cpSlow":1020,"dpsFast":2870.4,"dpsSlow":2421.9},{"L":46,"cpFast":969,"cpSlow":1054,"dpsFast":3000.3,"dpsSlow":2531.5},{"L":47,"cpFast":1000,"cpSlow":1089,"dpsFast":3132.4,"dpsSlow":2643},{"L":48,"cpFast":1032,"cpSlow":1123,"dpsFast":3266.4,"dpsSlow":2756},{"L":49,"cpFast":1064,"cpSlow":1157,"dpsFast":3402.1,"dpsSlow":2870.5},{"L":50,"cpFast":1096,"cpSlow":1192,"dpsFast":3539.2,"dpsSlow":2986.2}],"compositionFast":[{"L":1,"cp":81,"share":{"attack":79.289,"maxHP":18.583,"moveSpeed":1.084,"attackSpeed":0.991,"defense":0,"attackRange":0.053}},{"L":5,"cp":109,"share":{"attack":78.587,"maxHP":19.625,"moveSpeed":0.854,"attackSpeed":0.802,"defense":0.094,"attackRange":0.038}},{"L":10,"cp":155,"share":{"attack":77.65,"maxHP":20.906,"moveSpeed":0.644,"attackSpeed":0.625,"defense":0.148,"attackRange":0.026}},{"L":20,"cp":293,"share":{"attack":75.68,"maxHP":23.353,"moveSpeed":0.387,"attackSpeed":0.402,"defense":0.166,"attackRange":0.013}},{"L":50,"cp":1096,"share":{"attack":70.449,"maxHP":29.133,"moveSpeed":0.132,"attackSpeed":0.17,"defense":0.114,"attackRange":0.003}}],"heroes":[{"id":1,"name":"Valkir3","base":{"attack":64,"defense":25,"maxHP":100,"attackSpeed":2,"moveSpeed":3.5,"attackRange":0.85,"type":0},"rows":[{"L":1,"cpUI":81,"trueDPS":128},{"L":2,"cpUI":87,"trueDPS":140.84},{"L":3,"cpUI":94,"trueDPS":154.8},{"L":5,"cpUI":109,"trueDPS":186.35},{"L":10,"cpUI":155,"trueDPS":290.4},{"L":15,"cpUI":216,"trueDPS":439.67},{"L":20,"cpUI":293,"trueDPS":646.68},{"L":30,"cpUI":503,"trueDPS":1281.9},{"L":50,"cpUI":1096,"trueDPS":3539.19}]},{"id":2,"name":"Dark_Oracle_1","base":{"attack":72,"defense":25,"maxHP":100,"attackSpeed":1.5,"moveSpeed":3.5,"attackRange":0.85,"type":0},"rows":[{"L":1,"cpUI":89,"trueDPS":108},{"L":2,"cpUI":96,"trueDPS":118.84},{"L":3,"cpUI":103,"trueDPS":130.61},{"L":5,"cpUI":119,"trueDPS":157.23},{"L":10,"cpUI":170,"trueDPS":245.02},{"L":15,"cpUI":236,"trueDPS":370.97},{"L":20,"cpUI":320,"trueDPS":545.63},{"L":30,"cpUI":548,"trueDPS":1081.6},{"L":50,"cpUI":1192,"trueDPS":2986.19}]},{"id":3,"name":"Minotaur_02","base":{"attack":72,"defense":25,"maxHP":100,"attackSpeed":1.5,"moveSpeed":3.5,"attackRange":0.85,"type":0},"rows":[{"L":1,"cpUI":89,"trueDPS":108},{"L":2,"cpUI":96,"trueDPS":118.84},{"L":3,"cpUI":103,"trueDPS":130.61},{"L":5,"cpUI":119,"trueDPS":157.23},{"L":10,"cpUI":170,"trueDPS":245.02},{"L":15,"cpUI":236,"trueDPS":370.97},{"L":20,"cpUI":320,"trueDPS":545.63},{"L":30,"cpUI":548,"trueDPS":1081.6},{"L":50,"cpUI":1192,"trueDPS":2986.19}]},{"id":4,"name":"Minotaur_2","base":{"attack":72,"defense":25,"maxHP":100,"attackSpeed":1.5,"moveSpeed":3.5,"attackRange":0.85,"type":0},"rows":[{"L":1,"cpUI":89,"trueDPS":108},{"L":2,"cpUI":96,"trueDPS":118.84},{"L":3,"cpUI":103,"trueDPS":130.61},{"L":5,"cpUI":119,"trueDPS":157.23},{"L":10,"cpUI":170,"trueDPS":245.02},{"L":15,"cpUI":236,"trueDPS":370.97},{"L":20,"cpUI":320,"trueDPS":545.63},{"L":30,"cpUI":548,"trueDPS":1081.6},{"L":50,"cpUI":1192,"trueDPS":2986.19}]},{"id":5,"name":"Golem_3","base":{"attack":72,"defense":25,"maxHP":100,"attackSpeed":1.5,"moveSpeed":3.5,"attackRange":0.85,"type":0},"rows":[{"L":1,"cpUI":89,"trueDPS":108},{"L":2,"cpUI":96,"trueDPS":118.84},{"L":3,"cpUI":103,"trueDPS":130.61},{"L":5,"cpUI":119,"trueDPS":157.23},{"L":10,"cpUI":170,"trueDPS":245.02},{"L":15,"cpUI":236,"trueDPS":370.97},{"L":20,"cpUI":320,"trueDPS":545.63},{"L":30,"cpUI":548,"trueDPS":1081.6},{"L":50,"cpUI":1192,"trueDPS":2986.19}]},{"id":6,"name":"Fallen_Angels_02","base":{"attack":64,"defense":25,"maxHP":100,"attackSpeed":2,"moveSpeed":3.5,"attackRange":0.85,"type":0},"rows":[{"L":1,"cpUI":81,"trueDPS":128},{"L":2,"cpUI":87,"trueDPS":140.84},{"L":3,"cpUI":94,"trueDPS":154.8},{"L":5,"cpUI":109,"trueDPS":186.35},{"L":10,"cpUI":155,"trueDPS":290.4},{"L":15,"cpUI":216,"trueDPS":439.67},{"L":20,"cpUI":293,"trueDPS":646.68},{"L":30,"cpUI":503,"trueDPS":1281.9},{"L":50,"cpUI":1096,"trueDPS":3539.19}]},{"id":7,"name":"Fallen_Minotaur_01","base":{"attack":64,"defense":25,"maxHP":100,"attackSpeed":2,"moveSpeed":3.5,"attackRange":0.85,"type":0},"rows":[{"L":1,"cpUI":81,"trueDPS":128},{"L":2,"cpUI":87,"trueDPS":140.84},{"L":3,"cpUI":94,"trueDPS":154.8},{"L":5,"cpUI":109,"trueDPS":186.35},{"L":10,"cpUI":155,"trueDPS":290.4},{"L":15,"cpUI":216,"trueDPS":439.67},{"L":20,"cpUI":293,"trueDPS":646.68},{"L":30,"cpUI":503,"trueDPS":1281.9},{"L":50,"cpUI":1096,"trueDPS":3539.19}]},{"id":8,"name":"Dark_Oracle_3","base":{"attack":72,"defense":25,"maxHP":100,"attackSpeed":1.5,"moveSpeed":3.5,"attackRange":0.85,"type":0},"rows":[{"L":1,"cpUI":89,"trueDPS":108},{"L":2,"cpUI":96,"trueDPS":118.84},{"L":3,"cpUI":103,"trueDPS":130.61},{"L":5,"cpUI":119,"trueDPS":157.23},{"L":10,"cpUI":170,"trueDPS":245.02},{"L":15,"cpUI":236,"trueDPS":370.97},{"L":20,"cpUI":320,"trueDPS":545.63},{"L":30,"cpUI":548,"trueDPS":1081.6},{"L":50,"cpUI":1192,"trueDPS":2986.19}]}],"enemies":[{"name":"Enemy_Reaper_Man_01","base":{"attack":35,"defense":30,"maxHP":120,"attackSpeed":1,"moveSpeed":3.5},"rows":[{"S":1,"cp":54},{"S":2,"cp":59},{"S":3,"cp":63},{"S":4,"cp":69},{"S":5,"cp":74},{"S":6,"cp":80},{"S":7,"cp":86},{"S":8,"cp":92},{"S":9,"cp":99},{"S":10,"cp":106},{"S":11,"cp":114},{"S":12,"cp":122},{"S":13,"cp":131},{"S":14,"cp":140},{"S":15,"cp":150},{"S":16,"cp":160},{"S":17,"cp":170},{"S":18,"cp":182},{"S":19,"cp":193},{"S":20,"cp":206}]},{"name":"Enemy_Zombie_villager","base":{"attack":32,"defense":28,"maxHP":170,"attackSpeed":0.9,"moveSpeed":3},"rows":[{"S":1,"cp":59},{"S":2,"cp":64},{"S":3,"cp":69},{"S":4,"cp":74},{"S":5,"cp":80},{"S":6,"cp":87},{"S":7,"cp":94},{"S":8,"cp":101},{"S":9,"cp":109},{"S":10,"cp":117},{"S":11,"cp":126},{"S":12,"cp":135},{"S":13,"cp":144},{"S":14,"cp":155},{"S":15,"cp":166},{"S":16,"cp":177},{"S":17,"cp":189},{"S":18,"cp":202},{"S":19,"cp":215},{"S":20,"cp":229}]},{"name":"Enemy_Orc","base":{"attack":46,"defense":35,"maxHP":160,"attackSpeed":1,"moveSpeed":3.4},"rows":[{"S":1,"cp":71},{"S":2,"cp":77},{"S":3,"cp":83},{"S":4,"cp":90},{"S":5,"cp":97},{"S":6,"cp":105},{"S":7,"cp":113},{"S":8,"cp":121},{"S":9,"cp":131},{"S":10,"cp":140},{"S":11,"cp":150},{"S":12,"cp":161},{"S":13,"cp":173},{"S":14,"cp":185},{"S":15,"cp":197},{"S":16,"cp":211},{"S":17,"cp":225},{"S":18,"cp":239},{"S":19,"cp":255},{"S":20,"cp":271}]},{"name":"Enemy_Skeleton_Crusader_1","base":{"attack":44,"defense":52,"maxHP":205,"attackSpeed":0.95,"moveSpeed":3.2},"rows":[{"S":1,"cp":76},{"S":2,"cp":82},{"S":3,"cp":89},{"S":4,"cp":96},{"S":5,"cp":104},{"S":6,"cp":112},{"S":7,"cp":121},{"S":8,"cp":131},{"S":9,"cp":140},{"S":10,"cp":151},{"S":11,"cp":162},{"S":12,"cp":174},{"S":13,"cp":187},{"S":14,"cp":200},{"S":15,"cp":214},{"S":16,"cp":228},{"S":17,"cp":244},{"S":18,"cp":260},{"S":19,"cp":277},{"S":20,"cp":295}]},{"name":"Enemy_Golem_01","base":{"attack":58,"defense":65,"maxHP":275,"attackSpeed":0.85,"moveSpeed":2.9},"rows":[{"S":1,"cp":100},{"S":2,"cp":109},{"S":3,"cp":118},{"S":4,"cp":127},{"S":5,"cp":138},{"S":6,"cp":149},{"S":7,"cp":160},{"S":8,"cp":173},{"S":9,"cp":186},{"S":10,"cp":200},{"S":11,"cp":215},{"S":12,"cp":231},{"S":13,"cp":247},{"S":14,"cp":265},{"S":15,"cp":283},{"S":16,"cp":303},{"S":17,"cp":324},{"S":18,"cp":345},{"S":19,"cp":368},{"S":20,"cp":392}]},{"name":"Enemy_Golem_02","base":{"attack":70,"defense":78,"maxHP":340,"attackSpeed":0.85,"moveSpeed":3},"rows":[{"S":1,"cp":122},{"S":2,"cp":132},{"S":3,"cp":143},{"S":4,"cp":155},{"S":5,"cp":168},{"S":6,"cp":181},{"S":7,"cp":195},{"S":8,"cp":211},{"S":9,"cp":227},{"S":10,"cp":244},{"S":11,"cp":262},{"S":12,"cp":281},{"S":13,"cp":302},{"S":14,"cp":323},{"S":15,"cp":346},{"S":16,"cp":370},{"S":17,"cp":395},{"S":18,"cp":421},{"S":19,"cp":449},{"S":20,"cp":478}]}],"stageTotals":[{"S":1,"headcount":4,"totalCP":216,"breakdown":[{"stats":"Enemy_Reaper_Man_01","count":4}]},{"S":2,"headcount":4,"totalCP":236,"breakdown":[{"stats":"Enemy_Reaper_Man_01","count":4}]},{"S":3,"headcount":7,"totalCP":453,"breakdown":[{"stats":"Enemy_Reaper_Man_01","count":3},{"stats":"Enemy_Zombie_villager","count":2},{"stats":"Enemy_Reaper_Man_01","count":2}]},{"S":4,"headcount":9,"totalCP":641,"breakdown":[{"stats":"Enemy_Reaper_Man_01","count":3},{"stats":"Enemy_Zombie_villager","count":1},{"stats":"Enemy_Zombie_villager","count":3},{"stats":"Enemy_Reaper_Man_01","count":2}]},{"S":5,"headcount":10,"totalCP":770,"breakdown":[{"stats":"Enemy_Zombie_villager","count":2},{"stats":"Enemy_Reaper_Man_01","count":2},{"stats":"Enemy_Zombie_villager","count":3},{"stats":"Enemy_Reaper_Man_01","count":3}]},{"S":6,"headcount":9,"totalCP":798,"breakdown":[{"stats":"Enemy_Reaper_Man_01","count":3},{"stats":"Enemy_Zombie_villager","count":2},{"stats":"Enemy_Orc","count":2},{"stats":"Enemy_Zombie_villager","count":2}]},{"S":7,"headcount":9,"totalCP":879,"breakdown":[{"stats":"Enemy_Zombie_villager","count":3},{"stats":"Enemy_Orc","count":1},{"stats":"Enemy_Orc","count":2},{"stats":"Enemy_Reaper_Man_01","count":3}]},{"S":8,"headcount":10,"totalCP":1072,"breakdown":[{"stats":"Enemy_Orc","count":1},{"stats":"Enemy_Reaper_Man_01","count":2},{"stats":"Enemy_Zombie_villager","count":2},{"stats":"Enemy_Orc","count":3},{"stats":"Enemy_Zombie_villager","count":2}]},{"S":9,"headcount":9,"totalCP":1131,"breakdown":[{"stats":"Enemy_Zombie_villager","count":3},{"stats":"Enemy_Orc","count":2},{"stats":"Enemy_Skeleton_Crusader_1","count":2},{"stats":"Enemy_Orc","count":2}]},{"S":10,"headcount":10,"totalCP":1285,"breakdown":[{"stats":"Enemy_Orc","count":3},{"stats":"Enemy_Reaper_Man_01","count":2},{"stats":"Enemy_Skeleton_Crusader_1","count":2},{"stats":"Enemy_Zombie_villager","count":3}]},{"S":11,"headcount":10,"totalCP":1500,"breakdown":[{"stats":"Enemy_Skeleton_Crusader_1","count":1},{"stats":"Enemy_Orc","count":2},{"stats":"Enemy_Zombie_villager","count":2},{"stats":"Enemy_Skeleton_Crusader_1","count":3},{"stats":"Enemy_Orc","count":2}]},{"S":12,"headcount":11,"totalCP":1758,"breakdown":[{"stats":"Enemy_Orc","count":3},{"stats":"Enemy_Skeleton_Crusader_1","count":2},{"stats":"Enemy_Skeleton_Crusader_1","count":3},{"stats":"Enemy_Zombie_villager","count":3}]},{"S":13,"headcount":10,"totalCP":1876,"breakdown":[{"stats":"Enemy_Orc","count":2},{"stats":"Enemy_Skeleton_Crusader_1","count":2},{"stats":"Enemy_Zombie_villager","count":2},{"stats":"Enemy_Golem_01","count":2},{"stats":"Enemy_Skeleton_Crusader_1","count":2}]},{"S":14,"headcount":10,"totalCP":2055,"breakdown":[{"stats":"Enemy_Skeleton_Crusader_1","count":3},{"stats":"Enemy_Orc","count":2},{"stats":"Enemy_Golem_01","count":2},{"stats":"Enemy_Orc","count":3}]},{"S":15,"headcount":9,"totalCP":2133,"breakdown":[{"stats":"Enemy_Skeleton_Crusader_1","count":3},{"stats":"Enemy_Golem_01","count":1},{"stats":"Enemy_Golem_01","count":2},{"stats":"Enemy_Skeleton_Crusader_1","count":3}]},{"S":16,"headcount":11,"totalCP":2682,"breakdown":[{"stats":"Enemy_Skeleton_Crusader_1","count":3},{"stats":"Enemy_Orc","count":3},{"stats":"Enemy_Golem_01","count":3},{"stats":"Enemy_Skeleton_Crusader_1","count":2}]},{"S":17,"headcount":9,"totalCP":2818,"breakdown":[{"stats":"Enemy_Golem_01","count":2},{"stats":"Enemy_Skeleton_Crusader_1","count":3},{"stats":"Enemy_Golem_02","count":2},{"stats":"Enemy_Golem_01","count":2}]},{"S":18,"headcount":10,"totalCP":3092,"breakdown":[{"stats":"Enemy_Golem_01","count":2},{"stats":"Enemy_Skeleton_Crusader_1","count":3},{"stats":"Enemy_Golem_02","count":2},{"stats":"Enemy_Skeleton_Crusader_1","count":3}]},{"S":19,"headcount":11,"totalCP":4018,"breakdown":[{"stats":"Enemy_Golem_01","count":3},{"stats":"Enemy_Skeleton_Crusader_1","count":3},{"stats":"Enemy_Golem_02","count":3},{"stats":"Enemy_Golem_01","count":2}]},{"S":20,"headcount":12,"totalCP":4757,"breakdown":[{"stats":"Enemy_Golem_01","count":3},{"stats":"Enemy_Skeleton_Crusader_1","count":3},{"stats":"Enemy_Golem_02","count":4},{"stats":"Enemy_Golem_01","count":2}]}],"candidatesEnemy":[{"name":"Enemy_Reaper_Man_01","trueDPS":35,"effHP":156,"A_current":54,"B_product":210,"C_dpsEhp":55},{"name":"Enemy_Zombie_villager","trueDPS":28.8,"effHP":217.6,"A_current":59,"B_product":198,"C_dpsEhp":63},{"name":"Enemy_Orc","trueDPS":46,"effHP":216,"A_current":71,"B_product":344,"C_dpsEhp":99},{"name":"Enemy_Skeleton_Crusader_1","trueDPS":41.8,"effHP":311.6,"A_current":76,"B_product":431,"C_dpsEhp":130},{"name":"Enemy_Golem_01","trueDPS":49.3,"effHP":453.8,"A_current":100,"B_product":659,"C_dpsEhp":224},{"name":"Enemy_Golem_02","trueDPS":59.5,"effHP":605.2,"A_current":122,"B_product":968,"C_dpsEhp":360}]};</script>
+<script>
+(function(){
+"use strict";
+var D = window.CPDATA;
+if(!D){ return; }
+
+/* ---------------- helpers ---------------- */
+var NS="http://www.w3.org/2000/svg";
+function el(n,a){var e=document.createElementNS(NS,n);for(var k in a){if(a[k]!==null&&a[k]!==undefined)e.setAttribute(k,a[k]);}return e;}
+function txt(e,s){e.appendChild(document.createTextNode(s));return e;}
+function cvar(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+var SER=["--s1","--s2","--s3","--s4","--s5","--s6"];
+function fmt(n,d){ if(d===undefined)d=0; return Number(n).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
+/* Persian digit conversion for FA labels */
+var FAD="۰۱۲۳۴۵۶۷۸۹";
+function fa(s){ return String(s).replace(/[0-9]/g,function(d){return FAD[+d];}); }
+function L(lang,s){ return lang==="fa" ? fa(s) : String(s); }
+
+/* short archetype names — full names stay in the legend and table views */
+var SHORT={ "Enemy_Reaper_Man_01":"Reaper", "Enemy_Zombie_villager":"Zombie",
+  "Enemy_Orc":"Orc", "Enemy_Skeleton_Crusader_1":"Skeleton",
+  "Enemy_Golem_01":"Golem 01", "Enemy_Golem_02":"Golem 02" };
+function shortName(n){ return SHORT[n] || n.replace("Enemy_",""); }
+function fullName(n){ return n.replace("Enemy_",""); }
+
+/* tooltip */
+var tipEl=document.getElementById("tip");
+function showTip(ev,html){
+  tipEl.innerHTML=html; tipEl.style.opacity="1";
+  var r=tipEl.getBoundingClientRect();
+  var x=ev.clientX+14, y=ev.clientY+14;
+  if(x+r.width>window.innerWidth-8) x=ev.clientX-r.width-14;
+  if(y+r.height>window.innerHeight-8) y=ev.clientY-r.height-14;
+  tipEl.style.left=x+"px"; tipEl.style.top=y+"px";
+}
+function hideTip(){ tipEl.style.opacity="0"; }
+
+/* generic table builder */
+function buildTable(host,head,rows,cap){
+  if(!host) return;
+  var t=document.createElement("table");
+  var th=document.createElement("thead"),tr=document.createElement("tr");
+  head.forEach(function(h){var c=document.createElement("th");c.textContent=h;tr.appendChild(c);});
+  th.appendChild(tr); t.appendChild(th);
+  var tb=document.createElement("tbody");
+  rows.forEach(function(r){
+    var x=document.createElement("tr");
+    r.forEach(function(v,i){
+      var c=document.createElement("td");
+      c.textContent=v;
+      if(i===0)c.className="k"; else c.className="num";
+      x.appendChild(c);
+    });
+    tb.appendChild(x);
+  });
+  t.appendChild(tb);
+  if(cap){var cp=document.createElement("caption");cp.textContent=cap;t.appendChild(cp);}
+  host.innerHTML=""; host.appendChild(t);
+}
+
+function legend(host,items){
+  if(!host) return;
+  host.innerHTML="";
+  items.forEach(function(it){
+    var s=document.createElement("span");
+    if(it.dash){
+      s.innerHTML='<i class="dash" style="border-top-color:'+it.color+';color:'+it.color+'"></i>'+it.label;
+    }else{
+      s.innerHTML='<i style="background:'+it.color+'"></i>'+it.label;
+    }
+    host.appendChild(s);
+  });
+}
+
+/* ---------------- line chart ---------------- */
+function lineChart(id,opt){
+  var host=document.getElementById(id); if(!host) return;
+  host.innerHTML="";
+  var W=880,H=opt.h||330,m={t:16,r:opt.mr||76,b:44,l:opt.ml||56};
+  var pw=W-m.l-m.r, ph=H-m.t-m.b;
+  var svg=el("svg",{viewBox:"0 0 "+W+" "+H,role:"img","aria-label":opt.aria||""});
+  var xs=opt.series[0].pts.map(function(p){return p[0];});
+  var xmin=Math.min.apply(null,xs), xmax=Math.max.apply(null,xs);
+  var ymax=0;
+  opt.series.forEach(function(s){s.pts.forEach(function(p){ if(p[1]>ymax)ymax=p[1]; });});
+  var ymin=opt.ymin!==undefined?opt.ymin:0;
+  ymax=ymax*1.06;
+  function X(v){return m.l+(v-xmin)/(xmax-xmin)*pw;}
+  function Y(v){return m.t+ph-(v-ymin)/(ymax-ymin)*ph;}
+
+  // grid + y ticks
+  var ticks=opt.yticks||5;
+  for(var i=0;i<=ticks;i++){
+    var v=ymin+(ymax-ymin)*i/ticks, y=Y(v);
+    svg.appendChild(el("line",{x1:m.l,x2:m.l+pw,y1:y,y2:y,class:"gridline"}));
+    var tl=el("text",{x:m.l-9,y:y+3.5,class:"tick","text-anchor":"end"});
+    txt(tl,L(opt.lang,opt.yfmt?opt.yfmt(v):fmt(v,0))); svg.appendChild(tl);
+  }
+  // x axis
+  svg.appendChild(el("line",{x1:m.l,x2:m.l+pw,y1:Y(ymin),y2:Y(ymin),class:"axisline"}));
+  (opt.xticks||[]).forEach(function(v){
+    var x=X(v);
+    var tl=el("text",{x:x,y:Y(ymin)+18,class:"tick","text-anchor":"middle"});
+    txt(tl,L(opt.lang,String(v))); svg.appendChild(tl);
+  });
+  var xa=el("text",{x:m.l+pw/2,y:H-8,class:"axlabel","text-anchor":"middle"});
+  txt(xa,opt.xlabel||""); svg.appendChild(xa);
+  var ya=el("text",{x:0,y:0,class:"axlabel","text-anchor":"middle",transform:"translate(13,"+(m.t+ph/2)+") rotate(-90)"});
+  txt(ya,opt.ylabel||""); svg.appendChild(ya);
+
+  // series
+  opt.series.forEach(function(s){
+    var d=s.pts.map(function(p,i){return (i?"L":"M")+X(p[0]).toFixed(2)+" "+Y(p[1]).toFixed(2);}).join(" ");
+    svg.appendChild(el("path",{d:d,fill:"none",stroke:s.color,"stroke-width":s.w||2,
+      "stroke-dasharray":s.dash||null,"stroke-linejoin":"round","stroke-linecap":"round"}));
+    // endpoint direct label
+    var last=s.pts[s.pts.length-1];
+    var lb=el("text",{x:X(last[0])+7,y:Y(last[1])+3.5,class:"serieslabel",fill:s.color});
+    txt(lb,s.label); svg.appendChild(lb);
+  });
+
+  // hover crosshair
+  var cross=el("line",{x1:0,x2:0,y1:m.t,y2:m.t+ph,stroke:cvar("--c-axis"),"stroke-width":1,opacity:0});
+  svg.appendChild(cross);
+  var dots=opt.series.map(function(s){
+    var c=el("circle",{r:4.5,fill:s.color,stroke:cvar("--surface"),"stroke-width":2,opacity:0});
+    svg.appendChild(c); return c;
+  });
+  var hit=el("rect",{x:m.l,y:m.t,width:pw,height:ph,fill:"transparent"});
+  svg.appendChild(hit);
+  hit.addEventListener("mousemove",function(ev){
+    var bb=svg.getBoundingClientRect();
+    var px=(ev.clientX-bb.left)/bb.width*W;
+    var v=xmin+(px-m.l)/pw*(xmax-xmin);
+    var idx=0,best=1e9;
+    opt.series[0].pts.forEach(function(p,i){var dd=Math.abs(p[0]-v); if(dd<best){best=dd;idx=i;}});
+    var xv=opt.series[0].pts[idx][0];
+    cross.setAttribute("x1",X(xv)); cross.setAttribute("x2",X(xv)); cross.setAttribute("opacity",1);
+    var html='<div class="tt">'+opt.xlabel+" "+L(opt.lang,String(xv))+"</div>";
+    opt.series.forEach(function(s,i){
+      var p=s.pts[idx];
+      dots[i].setAttribute("cx",X(p[0])); dots[i].setAttribute("cy",Y(p[1])); dots[i].setAttribute("opacity",1);
+      html+='<div class="tr"><span><i style="background:'+s.color+'"></i>'+s.label+"</span><span>"+
+            L(opt.lang,opt.tfmt?opt.tfmt(p[1]):fmt(p[1],0))+"</span></div>";
+    });
+    showTip(ev,html);
+  });
+  hit.addEventListener("mouseleave",function(){
+    hideTip(); cross.setAttribute("opacity",0);
+    dots.forEach(function(d){d.setAttribute("opacity",0);});
+  });
+  host.appendChild(svg);
+}
+
+/* ---------------- 100% stacked bars ---------------- */
+function stackChart(id,opt){
+  var host=document.getElementById(id); if(!host) return;
+  host.innerHTML="";
+  var rows=opt.rows, n=rows.length;
+  var W=880,rowH=44,gap=13,m={t:10,r:20,b:34,l:opt.ml||86};
+  var H=m.t+n*rowH+(n-1)*gap+m.b;
+  var pw=W-m.l-m.r;
+  var svg=el("svg",{viewBox:"0 0 "+W+" "+H,role:"img","aria-label":opt.aria||""});
+  rows.forEach(function(r,i){
+    var y=m.t+i*(rowH+gap);
+    var lb=el("text",{x:m.l-11,y:y+rowH/2+4,class:"tick","text-anchor":"end"});
+    txt(lb,r.label); svg.appendChild(lb);
+    var acc=0;
+    r.vals.forEach(function(v,j){
+      var w=v/100*pw;
+      if(w<=0) return;
+      var x=m.l+acc/100*pw;
+      var g=el("rect",{x:x+ (j? 1:0),y:y,width:Math.max(0,w-(j?2:1)),height:rowH,
+        fill:opt.colors[j],rx:2});
+      g.addEventListener("mousemove",function(ev){
+        showTip(ev,'<div class="tt">'+r.label+"</div>"+
+          '<div class="tr"><span><i style="background:'+opt.colors[j]+'"></i>'+opt.keys[j]+
+          "</span><span>"+L(opt.lang,v.toFixed(2))+"%</span></div>");
+      });
+      g.addEventListener("mouseleave",hideTip);
+      svg.appendChild(g);
+      // in-bar label only when it fits
+      if(w>62){
+        var t2=el("text",{x:x+9,y:y+rowH/2+4,class:"dlabel",fill:opt.inkOn||"#fff"});
+        txt(t2,L(opt.lang,v.toFixed(1))+"%"); svg.appendChild(t2);
+      }
+      acc+=v;
+    });
+  });
+  var xa=el("text",{x:m.l+pw/2,y:H-8,class:"axlabel","text-anchor":"middle"});
+  txt(xa,opt.xlabel||""); svg.appendChild(xa);
+  host.appendChild(svg);
+}
+
+/* ---------------- vertical bars ---------------- */
+function barChart(id,opt){
+  var host=document.getElementById(id); if(!host) return;
+  host.innerHTML="";
+  var W=880,H=opt.h||300,m={t:26,r:16,b:46,l:opt.ml||62};
+  var pw=W-m.l-m.r, ph=H-m.t-m.b;
+  var bars=opt.bars, n=bars.length;
+  var ymax=Math.max.apply(null,bars.map(function(b){return b.v;}))*1.1;
+  var bw=pw/n;
+  var svg=el("svg",{viewBox:"0 0 "+W+" "+H,role:"img","aria-label":opt.aria||""});
+  for(var i=0;i<=4;i++){
+    var v=ymax*i/4, y=m.t+ph-v/ymax*ph;
+    svg.appendChild(el("line",{x1:m.l,x2:m.l+pw,y1:y,y2:y,class:"gridline"}));
+    var tl=el("text",{x:m.l-9,y:y+3.5,class:"tick","text-anchor":"end"});
+    txt(tl,L(opt.lang,fmt(v,0))); svg.appendChild(tl);
+  }
+  svg.appendChild(el("line",{x1:m.l,x2:m.l+pw,y1:m.t+ph,y2:m.t+ph,class:"axisline"}));
+  bars.forEach(function(b,i){
+    var h=b.v/ymax*ph, x=m.l+i*bw+2, y=m.t+ph-h;
+    var r=el("rect",{x:x,y:y,width:Math.max(1,bw-4),height:h,fill:b.hi?cvar("--crit"):cvar("--s1"),rx:3});
+    r.addEventListener("mousemove",function(ev){ showTip(ev,'<div class="tt">'+b.label+"</div>"+b.tip); });
+    r.addEventListener("mouseleave",hideTip);
+    svg.appendChild(r);
+    var tl=el("text",{x:x+(bw-4)/2,y:m.t+ph+16,class:"tick","text-anchor":"middle"});
+    txt(tl,L(opt.lang,b.short)); svg.appendChild(tl);
+    if(b.hi){
+      var dl=el("text",{x:x+(bw-4)/2,y:y-7,class:"dlabel",fill:cvar("--crit"),"text-anchor":"middle"});
+      txt(dl,L(opt.lang,b.hi)); svg.appendChild(dl);
+    }
+  });
+  var xa=el("text",{x:m.l+pw/2,y:H-8,class:"axlabel","text-anchor":"middle"});
+  txt(xa,opt.xlabel||""); svg.appendChild(xa);
+  var ya=el("text",{x:0,y:0,class:"axlabel","text-anchor":"middle",transform:"translate(13,"+(m.t+ph/2)+") rotate(-90)"});
+  txt(ya,opt.ylabel||""); svg.appendChild(ya);
+  host.appendChild(svg);
+}
+
+/* ---------------- slope chart ---------------- */
+function slopeChart(id,opt){
+  var host=document.getElementById(id); if(!host) return;
+  host.innerHTML="";
+  var W=880,H=280,m={t:34,r:150,b:40,l:150};
+  var pw=W-m.l-m.r, ph=H-m.t-m.b;
+  var svg=el("svg",{viewBox:"0 0 "+W+" "+H,role:"img","aria-label":opt.aria||""});
+  var all=[]; opt.items.forEach(function(it){all.push(it.a,it.b);});
+  var ymin=Math.min.apply(null,all)*0.94, ymax=Math.max.apply(null,all)*1.06;
+  function Y(v){return m.t+ph-(v-ymin)/(ymax-ymin)*ph;}
+  [[m.l,opt.aLabel],[m.l+pw,opt.bLabel]].forEach(function(c){
+    svg.appendChild(el("line",{x1:c[0],x2:c[0],y1:m.t-6,y2:m.t+ph+6,class:"axisline"}));
+    var t2=el("text",{x:c[0],y:m.t-16,class:"axlabel","text-anchor":"middle"});
+    txt(t2,c[1]); svg.appendChild(t2);
+  });
+  opt.items.forEach(function(it){
+    svg.appendChild(el("line",{x1:m.l,y1:Y(it.a),x2:m.l+pw,y2:Y(it.b),stroke:it.color,"stroke-width":2.5,"stroke-linecap":"round"}));
+    [[m.l,it.a,"end",-13],[m.l+pw,it.b,"start",13]].forEach(function(p){
+      svg.appendChild(el("circle",{cx:p[0],cy:Y(p[1]),r:5.5,fill:it.color,stroke:cvar("--surface"),"stroke-width":2}));
+      var t3=el("text",{x:p[0]+p[3],y:Y(p[1])+4,class:"dlabel",fill:it.color,"text-anchor":p[2]});
+      txt(t3,L(opt.lang,fmt(p[1],0))); svg.appendChild(t3);
+    });
+    var nm=el("text",{x:m.l-13,y:Y(it.a)-14,class:"serieslabel",fill:it.color,"text-anchor":"end"});
+    txt(nm,it.label); svg.appendChild(nm);
+  });
+  host.appendChild(svg);
+}
+
+/* ---------------- grouped index chart (candidates) ---------------- */
+function candChart(id,opt){
+  var host=document.getElementById(id); if(!host) return;
+  host.innerHTML="";
+  var W=880,H=364,m={t:18,r:74,b:92,l:60};
+  var pw=W-m.l-m.r, ph=H-m.t-m.b;
+  var cats=opt.cats, n=cats.length;
+  var ymax=0;
+  opt.series.forEach(function(s){s.vals.forEach(function(v){if(v>ymax)ymax=v;});});
+  ymax*=1.08;
+  var svg=el("svg",{viewBox:"0 0 "+W+" "+H,role:"img","aria-label":opt.aria||""});
+  function X(i){return m.l+(i+0.5)*(pw/n);}
+  function Y(v){return m.t+ph-v/ymax*ph;}
+  for(var i=0;i<=4;i++){
+    var v=ymax*i/4,y=Y(v);
+    svg.appendChild(el("line",{x1:m.l,x2:m.l+pw,y1:y,y2:y,class:"gridline"}));
+    var tl=el("text",{x:m.l-9,y:y+3.5,class:"tick","text-anchor":"end"});
+    txt(tl,L(opt.lang,fmt(v,0))); svg.appendChild(tl);
+  }
+  svg.appendChild(el("line",{x1:m.l,x2:m.l+pw,y1:Y(0),y2:Y(0),class:"axisline"}));
+  cats.forEach(function(c,i){
+    var t2=el("text",{x:X(i),y:Y(0)+17,class:"tick","text-anchor":"end",
+      transform:"rotate(-32 "+X(i)+" "+(Y(0)+17)+")"});
+    txt(t2,c); svg.appendChild(t2);
+  });
+  opt.series.forEach(function(s){
+    var d=s.vals.map(function(v,i){return (i?"L":"M")+X(i).toFixed(2)+" "+Y(v).toFixed(2);}).join(" ");
+    svg.appendChild(el("path",{d:d,fill:"none",stroke:s.color,"stroke-width":s.w||2,
+      "stroke-dasharray":s.dash||null,"stroke-linejoin":"round"}));
+    s.vals.forEach(function(v,i){
+      var c=el("circle",{cx:X(i),cy:Y(v),r:4.5,fill:s.color,stroke:cvar("--surface"),"stroke-width":2});
+      c.addEventListener("mousemove",function(ev){
+        showTip(ev,'<div class="tt">'+cats[i]+"</div>"+
+          '<div class="tr"><span><i style="background:'+s.color+'"></i>'+s.label+"</span><span>"+
+          L(opt.lang,fmt(v,0))+"</span></div>");
+      });
+      c.addEventListener("mouseleave",hideTip);
+      svg.appendChild(c);
+    });
+    var last=s.vals[s.vals.length-1];
+    var lb=el("text",{x:X(n-1)+10,y:Y(last)+3.5,class:"serieslabel",fill:s.color});
+    txt(lb,s.label); svg.appendChild(lb);
+  });
+  var ya=el("text",{x:0,y:0,class:"axlabel","text-anchor":"middle",transform:"translate(13,"+(m.t+ph/2)+") rotate(-90)"});
+  txt(ya,opt.ylabel||""); svg.appendChild(ya);
+  host.appendChild(svg);
+}
+
+/* ---------------- flow diagram ---------------- */
+function flowDiagram(id,lang){
+  var host=document.getElementById(id); if(!host) return;
+  host.innerHTML="";
+  var W=880,H=290;
+  var svg=el("svg",{viewBox:"0 0 "+W+" "+H,role:"img"});
+  var ink=cvar("--ink"),ink2=cvar("--ink-2"),ink3=cvar("--ink-3"),
+      rule=cvar("--rule-strong"),acc=cvar("--s1"),crit=cvar("--crit"),
+      surf=cvar("--surface-2"),surf3=cvar("--surface-3");
+  var T = lang==="fa" ? {
+    a:"UnitStatsSO",a2:"داده‌ی طراحی",
+    b:"UnitStatsRuntime",b2:"کپی زنده (FromSO)",
+    c:"رشد لِوِل",c2:"ProgressionMath",
+    d:"ضرایب روگ‌لایت",d2:"در حال حاضر خاموش",
+    e:"CPCalculator",e2:"عدد نهایی CP",
+    ui:"مسیر منو — ۴ ضریب از ۶",
+    cb:"مسیر نبرد — هر ۶ ضریب",
+    note:"دفاع و برد فقط در یک شاخه رشد می‌کنند"
+  } : {
+    a:"UnitStatsSO",a2:"design data",
+    b:"UnitStatsRuntime",b2:"live copy (FromSO)",
+    c:"level growth",c2:"ProgressionMath",
+    d:"roguelite multipliers",d2:"currently disabled",
+    e:"CPCalculator",e2:"the CP number",
+    ui:"menu path — 4 of 6 multipliers",
+    cb:"combat path — all 6 multipliers",
+    note:"defense & range grow on one branch only"
+  };
+  function box(x,y,w,h,t1,t2,col,fill){
+    var g=el("g",{});
+    g.appendChild(el("rect",{x:x,y:y,width:w,height:h,rx:5,fill:fill||surf,stroke:col||rule,"stroke-width":1.5}));
+    var a=el("text",{x:x+w/2,y:y+h/2-3,"text-anchor":"middle",fill:ink,
+      style:"font-family:var(--mono);font-size:12px;font-weight:600"});
+    txt(a,t1); g.appendChild(a);
+    var b=el("text",{x:x+w/2,y:y+h/2+14,"text-anchor":"middle",fill:ink3,
+      style:"font-family:var(--sans);font-size:10.5px"});
+    txt(b,t2); g.appendChild(b);
+    svg.appendChild(g);
+  }
+  function arrow(x1,y1,x2,y2,col,dash){
+    svg.appendChild(el("path",{d:"M"+x1+" "+y1+" L"+x2+" "+y2,stroke:col||rule,"stroke-width":1.6,
+      "stroke-dasharray":dash||null,fill:"none","marker-end":"url(#ah)"}));
+  }
+  var defs=el("defs",{});
+  var mk=el("marker",{id:"ah",viewBox:"0 0 8 8",refX:7,refY:4,markerWidth:7,markerHeight:7,orient:"auto"});
+  mk.appendChild(el("path",{d:"M0 0 L8 4 L0 8 z",fill:rule}));
+  defs.appendChild(mk); svg.appendChild(defs);
+
+  box(14,116,142,58,T.a,T.a2,rule);
+  arrow(160,145,196,145);
+  box(200,116,158,58,T.b,T.b2,rule);
+  arrow(362,145,398,145);
+  box(402,116,140,58,T.c,T.c2,acc,cvar("--accent-soft"));
+
+  // fork
+  arrow(546,138,596,58,crit);
+  arrow(546,152,596,232,acc);
+  box(600,26,150,58,T.e,T.e2,crit,cvar("--crit-soft"));
+  box(600,200,150,58,T.d,T.d2,rule,surf3);
+  arrow(676,196,676,90,rule,"3 3");
+
+  function tag(x,y,s,col,anchor){
+    var t=el("text",{x:x,y:y,"text-anchor":anchor||"start",fill:col,
+      style:"font-family:var(--mono);font-size:10px;font-weight:600"});
+    txt(t,s); svg.appendChild(t);
+  }
+  tag(556,74,T.ui,crit);
+  tag(556,264,T.cb,acc);
+  var nt=el("text",{x:W/2,y:H-8,"text-anchor":"middle",fill:ink3,
+    style:"font-family:var(--sans);font-size:11px"});
+  txt(nt,T.note); svg.appendChild(nt);
+  host.appendChild(svg);
+}
+
+/* ================= build every chart ================= */
+function S(i){return cvar(SER[i]);}
+
+function buildAll(){
+  ["en","fa"].forEach(function(lang){
+    var isFA = lang==="fa";
+    var T = isFA ? {
+      lvl:"لِوِل", stage:"استیج", mult:"ضریب", cp:"CP", share:"سهم از CP",
+      atk:"حمله", hp:"جان", other:"چهارتای دیگر", def:"دفاع", mv:"سرعت حرکت",
+      as:"سرعت حمله", rng:"برد", fast:"پروفایل سریع", slow:"پروفایل کند",
+      dps:"DPS واقعی", cpshown:"CP نمایشی", total:"مجموع CP", head:"تعداد",
+      step:"تغییر", truep:"قدرت واقعی", arch:"کهن‌الگو", idx:"شاخص (ضعیف‌ترین = ۱۰۰)"
+    } : {
+      lvl:"level", stage:"stage", mult:"multiplier", cp:"CP", share:"share of CP",
+      atk:"attack", hp:"max HP", other:"other four", def:"defense", mv:"move speed",
+      as:"attack speed", rng:"range", fast:"fast profile", slow:"slow profile",
+      dps:"true DPS", cpshown:"displayed CP", total:"total CP", head:"headcount",
+      step:"step", truep:"true power", arch:"archetype", idx:"index (weakest = 100)"
+    };
+
+    /* -- flow -- */
+    flowDiagram("flow-"+lang,lang);
+
+    /* -- growth curves -- */
+    var gp=D.growthPlayer;
+    lineChart("c-growth-"+lang,{
+      lang:lang, xlabel:T.lvl, ylabel:T.mult, h:340,
+      xticks:[1,10,20,30,40,50], yticks:5,
+      tfmt:function(v){return "×"+v.toFixed(2);},
+      yfmt:function(v){return "×"+v.toFixed(0);},
+      series:[
+        {label:"gH",color:S(1),pts:gp.map(function(r){return [r.L,r.gH];})},
+        {label:"gR",color:cvar("--crit"),dash:"5 3",pts:gp.map(function(r){return [r.L,r.gR];})},
+        {label:"gD",color:cvar("--crit"),dash:"1 3",pts:gp.map(function(r){return [r.L,r.gD];})},
+        {label:"gA",color:S(0),pts:gp.map(function(r){return [r.L,r.gA];})},
+        {label:"gMv = gAS",color:S(2),pts:gp.map(function(r){return [r.L,r.gMv];})}
+      ]
+    });
+    legend(document.getElementById("c-growth-"+lang+"-lg"),[
+      {color:S(0),label:"gA — "+T.atk},{color:S(1),label:"gH — "+T.hp},
+      {color:S(2),label:"gMv = gAS — "+T.mv+" / "+T.as},
+      {color:cvar("--crit"),dash:true,label:"gD — "+T.def+" ⚠"},
+      {color:cvar("--crit"),dash:true,label:"gR — "+T.rng+" ⚠"}
+    ]);
+    buildTable(document.getElementById("c-growth-"+lang+"-tb"),
+      [T.lvl,"gA","gH","gMv","gAS","gD ⚠","gR ⚠"],
+      [1,2,3,5,10,15,20,30,40,50].map(function(L2){
+        var r=gp[L2-1];
+        return [L(lang,String(L2)),"×"+r.gA.toFixed(3),"×"+r.gH.toFixed(3),"×"+r.gMv.toFixed(3),
+                "×"+r.gAS.toFixed(3),"×"+r.gD.toFixed(3),"×"+r.gR.toFixed(3)];
+      }));
+
+    /* -- CP composition -- */
+    var comp=D.compositionFast;
+    stackChart("c-comp-"+lang,{
+      lang:lang, xlabel:T.share,
+      keys:[T.atk,T.hp,T.other],
+      colors:[S(0),S(1),S(3)],
+      inkOn:"#ffffff",
+      rows:comp.map(function(c){
+        var other=c.share.moveSpeed+c.share.attackSpeed+c.share.defense+c.share.attackRange;
+        return {label:T.lvl+" "+L(lang,String(c.L)),vals:[c.share.attack,c.share.maxHP,other]};
+      })
+    });
+    legend(document.getElementById("c-comp-"+lang+"-lg"),[
+      {color:S(0),label:T.atk},{color:S(1),label:T.hp},
+      {color:S(3),label:T.other+" ("+T.mv+", "+T.as+", "+T.def+", "+T.rng+")"}
+    ]);
+    buildTable(document.getElementById("c-comp-"+lang+"-tb"),
+      [T.lvl,T.cp,T.atk+" %",T.hp+" %",T.mv+" %",T.as+" %",T.def+" %",T.rng+" %"],
+      comp.map(function(c){
+        return [T.lvl+" "+L(lang,String(c.L)),L(lang,String(c.cp)),
+          c.share.attack.toFixed(2),c.share.maxHP.toFixed(2),c.share.moveSpeed.toFixed(2),
+          c.share.attackSpeed.toFixed(2),c.share.defense.toFixed(2),c.share.attackRange.toFixed(3)];
+      }));
+
+    /* -- profile CP curves -- */
+    var pc=D.profileCurves;
+    lineChart("c-prof-"+lang,{
+      lang:lang, xlabel:T.lvl, ylabel:T.cp, h:320,
+      xticks:[1,10,20,30,40,50],
+      series:[
+        {label:T.slow,color:S(1),pts:pc.map(function(r){return [r.L,r.cpSlow];})},
+        {label:T.fast,color:S(0),pts:pc.map(function(r){return [r.L,r.cpFast];})}
+      ]
+    });
+    legend(document.getElementById("c-prof-"+lang+"-lg"),[
+      {color:S(0),label:T.fast+" — ATK 64 / AtkSpd 2.0 · "+T.dps+" 128"},
+      {color:S(1),label:T.slow+" — ATK 72 / AtkSpd 1.5 · "+T.dps+" 108"}
+    ]);
+    buildTable(document.getElementById("c-prof-"+lang+"-tb"),
+      [T.lvl,T.cp+" "+T.fast,T.cp+" "+T.slow,T.dps+" "+T.fast,T.dps+" "+T.slow],
+      [1,5,10,15,20,30,40,50].map(function(L2){
+        var r=pc[L2-1];
+        return [L(lang,String(L2)),L(lang,String(r.cpFast)),L(lang,String(r.cpSlow)),
+                L(lang,fmt(r.dpsFast,0)),L(lang,fmt(r.dpsSlow,0))];
+      }));
+
+    /* -- slope inversion -- */
+    slopeChart("c-slope-"+lang,{
+      lang:lang, aLabel:T.dps, bLabel:T.cpshown,
+      items:[
+        {label:T.fast,color:S(0),a:Math.round(128/108*100),b:Math.round(81/89*100)},
+        {label:T.slow,color:S(1),a:100,b:100}
+      ]
+    });
+    legend(document.getElementById("c-slope-"+lang+"-lg"),[
+      {color:S(0),label:T.fast+" — ATK 64 / AtkSpd 2.0"},
+      {color:S(1),label:T.slow+" — ATK 72 / AtkSpd 1.5"}
+    ]);
+
+    /* -- enemy CP by stage -- */
+    var ecolors=[S(0),S(1),S(2),S(3),S(4),S(5)];
+    lineChart("c-enemy-"+lang,{
+      lang:lang, xlabel:T.stage, ylabel:T.cp, h:330, mr:112,
+      xticks:[1,5,10,15,20],
+      series:D.enemies.map(function(e,i){
+        return {label:shortName(e.name),color:ecolors[i],
+                pts:e.rows.map(function(r){return [r.S,r.cp];})};
+      })
+    });
+    legend(document.getElementById("c-enemy-"+lang+"-lg"),
+      D.enemies.map(function(e,i){
+        return {color:ecolors[i],label:fullName(e.name)+" — ATK "+e.base.attack+" / DEF "+e.base.defense+" / HP "+e.base.maxHP};
+      }));
+    buildTable(document.getElementById("c-enemy-"+lang+"-tb"),
+      [T.arch,"S1","S5","S10","S15","S20"],
+      D.enemies.map(function(e){
+        return [fullName(e.name),
+          L(lang,String(e.rows[0].cp)),L(lang,String(e.rows[4].cp)),
+          L(lang,String(e.rows[9].cp)),L(lang,String(e.rows[14].cp)),
+          L(lang,String(e.rows[19].cp))];
+      }));
+
+    /* -- stage totals -- */
+    var st=D.stageTotals;
+    var hiMap={3:"+92%",6:"+3.6%",15:"+3.8%",19:"+30%"};
+    barChart("c-stage-"+lang,{
+      lang:lang, xlabel:T.stage, ylabel:T.total, h:310,
+      bars:st.map(function(s,i){
+        var prev=i?st[i-1].totalCP:0;
+        var pct=prev?((s.totalCP-prev)/prev*100):null;
+        var comp2=s.breakdown.map(function(b){return b.count+"× "+shortName(b.stats);}).join("<br>");
+        return {label:T.stage+" "+L(lang,String(s.S)),short:String(s.S),v:s.totalCP,
+          hi:hiMap[s.S]?L(lang,hiMap[s.S]):null,
+          tip:'<div class="tr"><span>'+T.total+"</span><span>"+L(lang,fmt(s.totalCP,0))+"</span></div>"+
+              '<div class="tr"><span>'+T.head+"</span><span>"+L(lang,String(s.headcount))+"</span></div>"+
+              (pct!==null?'<div class="tr"><span>'+T.step+"</span><span>"+L(lang,(pct>0?"+":"")+pct.toFixed(1)+"%")+"</span></div>":"")+
+              '<div class="tr" style="margin-top:5px;display:block">'+comp2+"</div>"};
+      })
+    });
+    buildTable(document.getElementById("c-stage-"+lang+"-tb"),
+      [T.stage,T.total,T.head,T.step,"waves"],
+      st.map(function(s,i){
+        var prev=i?st[i-1].totalCP:0;
+        var pct=prev?((s.totalCP-prev)/prev*100):null;
+        return [T.stage+" "+L(lang,String(s.S)),L(lang,fmt(s.totalCP,0)),L(lang,String(s.headcount)),
+          pct!==null?L(lang,(pct>0?"+":"")+pct.toFixed(1)+"%"):"—",
+          s.breakdown.map(function(b){return b.count+"× "+shortName(b.stats);}).join(", ")];
+      }));
+
+    /* -- candidates -- */
+    var ce=D.candidatesEnemy;
+    var base={t:ce[0].C_dpsEhp,a:ce[0].A_current,b:ce[0].B_product,c:ce[0].C_dpsEhp};
+    candChart("c-cand-"+lang,{
+      lang:lang, ylabel:T.idx,
+      cats:ce.map(function(c){return shortName(c.name);}),
+      series:[
+        {label:"C",color:cvar("--c-ref"),w:2.5,vals:ce.map(function(c){return c.C_dpsEhp/base.t*100;})},
+        {label:"B",color:S(1),vals:ce.map(function(c){return c.B_product/base.b*100;})},
+        {label:"A",color:S(0),vals:ce.map(function(c){return c.A_current/base.a*100;})}
+      ]
+    });
+    legend(document.getElementById("c-cand-"+lang+"-lg"),[
+      {color:cvar("--c-ref"),label:T.truep+" — DPS × EffectiveHP (C)"},
+      {color:S(1),label:"B — ATK × AtkSpd × √DEF × √HP"},
+      {color:S(0),label:"A — "+(isFA?"مجموع وزن‌دار فعلی":"current weighted sum")}
+    ]);
+    buildTable(document.getElementById("c-cand-"+lang+"-tb"),
+      [T.arch,T.dps,"EffectiveHP","A","B","C"],
+      ce.map(function(c){
+        return [fullName(c.name),L(lang,fmt(c.trueDPS,1)),L(lang,fmt(c.effHP,0)),
+          L(lang,String(c.A_current)),L(lang,String(c.B_product)),L(lang,String(c.C_dpsEhp))];
+      }));
+
+    /* -- roster tables -- */
+    var rb=document.getElementById("roster-"+lang);
+    if(rb){
+      rb.innerHTML="";
+      D.heroes.forEach(function(h){
+        var r1=h.rows[0], r10=h.rows[4], r20=h.rows[6];
+        var fastP = h.base.attackSpeed===2;
+        var tr=document.createElement("tr");
+        if(fastP) tr.className="hl";
+        [["k",L(lang,String(h.id))],["k",h.name],["num",h.base.attack],["num",h.base.attackSpeed],
+         ["num",h.base.maxHP],["num",h.base.defense],["num",L(lang,fmt(r1.trueDPS,0))],
+         ["num",L(lang,String(r1.cpUI))],["num",L(lang,String(r10.cpUI))],["num",L(lang,String(r20.cpUI))]
+        ].forEach(function(c){
+          var td=document.createElement("td"); td.className=c[0]; td.textContent=c[1]; tr.appendChild(td);
+        });
+        rb.appendChild(tr);
+      });
+    }
+    var eb=document.getElementById("enemyroster-"+lang);
+    if(eb){
+      eb.innerHTML="";
+      D.enemies.forEach(function(e){
+        var tr=document.createElement("tr");
+        [["k",e.name.replace("Enemy_","")],["num",e.base.attack],["num",e.base.defense],
+         ["num",e.base.maxHP],["num",e.base.attackSpeed],
+         ["num",L(lang,String(e.rows[0].cp))],["num",L(lang,String(e.rows[4].cp))],
+         ["num",L(lang,String(e.rows[9].cp))],["num",L(lang,String(e.rows[19].cp))]
+        ].forEach(function(c){
+          var td=document.createElement("td"); td.className=c[0]; td.textContent=c[1]; tr.appendChild(td);
+        });
+        eb.appendChild(tr);
+      });
+    }
+  });
+}
+
+buildAll();
+
+/* rebuild on theme change so chart colors follow tokens */
+var mq=window.matchMedia("(prefers-color-scheme: dark)");
+if(mq.addEventListener) mq.addEventListener("change",function(){ setTimeout(buildAll,30); });
+new MutationObserver(function(){ setTimeout(buildAll,30); })
+  .observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+
+/* open every table view before printing (charts keep direct labels regardless) */
+window.addEventListener("beforeprint",function(){
+  document.querySelectorAll("details.tv").forEach(function(d){ d.open=true; });
+});
+
+/* language jump highlighting */
+var jumps=Array.prototype.slice.call(document.querySelectorAll(".jump"));
+window.addEventListener("scroll",function(){
+  var faTop=document.getElementById("fa").getBoundingClientRect().top;
+  jumps.forEach(function(j){
+    var h=j.getAttribute("href");
+    if(h==="#en") j.setAttribute("aria-current", faTop>200 ? "true":"false");
+    if(h==="#fa") j.setAttribute("aria-current", faTop<=200 ? "true":"false");
+  });
+},{passive:true});
+})();
+</script>

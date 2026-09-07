@@ -55,6 +55,41 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-09-07] The CP system has 9 registered defects, none of them fixed.** Full analysis with
+  every number traced to a file:line in `Docs/cp-analysis/CP_SYSTEM_ANALYSIS.md`
+  (charted twin: <https://claude.ai/code/artifact/3d635747-5eb6-43f8-85cf-e868e41e783d>).
+  **Audited and documented, deliberately not changed** — the user asked for research only. The two
+  that change real numbers today: (1) `defPctByLevel` and `rangePctByLevel` in
+  `PlayerProgressionConfig.asset` are authored at negative time (t ≈ −9.0 / −1.1) and clamp to a
+  flat +6.25%/level defense and +6.75%/level range for all 50 levels — a L20 hero has ×3.17 the
+  intended defense, and `pctClamp` does not catch it because the values are inside the legal window;
+  (2) the menus (`UnitsPanelController.cs:517,579,881,962`) apply only 4 of 6 growth multipliers
+  while `PlayerStatsApplier.cs:135-142` applies all 6, so a L10 hero **fights** with defense 43.1
+  while every menu and the CP built on it says 25. Also: both flavour curves in `Player CP.asset`
+  are off-axis AND `CPWeightMath.cs:41-42` never samples `meleeMultByLevel` (the line is missing,
+  `rangedMult` is assigned twice), so **every `typeMult` in the game is 1.0**. Anyone editing these
+  curves in the Editor should first re-drag the four broken ones back onto the level axis, or the
+  edit will appear to do nothing.
+
+- **[2026-09-07] CP does not track combat strength, and the "TOTAL CP" on the menu is fake.**
+  Decide whether this matters before shipping. `CP ≈ ATK + 0.15·HP` — at L1 attack is 79.3% of the
+  score, defense is 0.00%, and the four non-attack/HP stats total 2.1%. Consequence: the 128-DPS
+  hero profile (ids 1/6/7) displays **CP 81** while the 108-DPS profile displays **CP 89**, at every
+  level 1→50. Two alternative formula shapes that both rank the roster correctly are worked out on
+  the real data in the analysis doc — including one (`DPS × EffectiveHP`) whose helper
+  `CPCalculator.EffectiveHP` is **already written in the project and has zero call sites**.
+  Separately, `MenuScene.unity:24724,36403` show `3460` / `32660` under `TOTAL CP:` as literal
+  TextMeshPro strings bound to no script; a real runtime total is reachable —
+  `EnemyManager.cp` is already computed per spawn into an unread debug field, and
+  `CPCalculator.SquadCP` exists unused — but nothing computes player CP during a battle at all.
+
+- **[2026-09-07] Three features are switched OFF for this version and must be switched back ON
+  for the next one.** `Assets/Scripts/Core/GameFeatureFlags.cs` — `RogueliteEnabled`,
+  `LastStandOfferEnabled`, `HeroBuyBackEnabled`, all `false`. Nothing was deleted; setting a
+  flag to `true` is the only edit needed. Not yet checked in Play mode. Re-enabling
+  `LastStandOfferEnabled` **alone** needs its `requireBuyBacksSpent` turned off too — see the
+  2026-09-07 log entry.
+
 - **[2026-09-06] The hero roster is two stat profiles wearing eight costumes, and three heroes are
   cross-wired to each other's stat assets.** Audited, documented, **not changed** — see
   `Assets/Scripts/UI/UI-SOs/UnitDef-SOs/README_HeroRoster.md`. All 8 share hp 100 / def 25 /
@@ -67,6 +102,13 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
   `PlayerWaveManager.playerPrefabs` only holds ids 5 and 8, so the three 128-DPS heroes never reach
   the field. Giving heroes real roles (tank / bruiser / glass cannon) is the obvious follow-up now
   that the enemies have tiers.
+  **[2026-09-07 correction]** The last claim is stale: `playerPrefabs` is read only by the dead
+  siblings `SpawnOneAt1`/`SpawnOneAt2`; the live `SpawnOneAt` uses `def.runtimePrefab`, so **all
+  deployed heroes do reach the field.** `LevelTemplate.prefab` still carries the stale wiring
+  (`playerPrefabs = [Player_Golem_3, Player_Dark_Oracle_3]`), which is what made it look otherwise.
+  The two-profile finding itself is confirmed and now quantified — see the CP threads above: the
+  "fast" three are not just strictly better, they also display a *lower* CP than the profile they
+  beat.
 
 - **[2026-09-06] The new enemy tiers and per-stage waves have never been played.** Stages 3-20 each
   got their own `Assets/Scriptable Objects/Spawner/Stage_NN.asset` (2 waves, mixed archetypes) and
@@ -354,6 +396,101 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-09-07 — CP system audited end to end and documented (analysis only, zero code changes)
+
+- **Goal:** find every script involved in Combat Power, read them plus their `.txt` docs, and
+  produce a bilingual (EN + FA) written + charted explanation of how CP is derived for each player
+  hero and each enemy; answer whether all stats grow at the same rate when CP rises, whether it
+  differs per unit, and whether a total CP can be obtained at runtime. Also research on the web
+  whether the formula shape is appropriate — **research only, explicitly no changes.**
+- **Status:** done.
+- **Changed:** `Docs/cp-analysis/` — **new top-level folder, the only addition to the repo, and
+  deliberately OUTSIDE `Assets/`** so Unity never imports it (no `.meta` files, no import cost, no
+  effect on build size) and it can be deleted later as one self-contained folder with nothing
+  referencing it. Contains `CP_SYSTEM_ANALYSIS.md` (the full bilingual analysis: formula, authored
+  weight/growth data, per-hero and per-enemy CP tables, per-stage totals, runtime feasibility, a
+  9-item defect register, formula research), `CP_DISCUSSION_LOG.md` (the open-decisions log for the
+  ongoing discussion), `report/CP_System_Report.html` (offline copy of the charted report) and
+  `tools/` (the Node scripts that recompute every number from the project's own `.asset` files).
+  ~355 KB total. Published twin with charts:
+  <https://claude.ai/code/artifact/3d635747-5eb6-43f8-85cf-e868e41e783d>
+- **Scene/Prefab/SO edits:** **none.** No `.cs`, `.asset`, `.prefab` or `.unity` file was opened for
+  writing. (The pre-existing dirty `.cs` files in `git status` are from the 2026-09-07
+  `GameFeatureFlags` session, not this one. `.claude/settings.json` gained one auto-added Bash
+  permission entry from running an analysis script — not a project change.)
+- **Verified:** every number was recomputed **outside Unity** by parsing the raw `.asset` YAML and
+  reimplementing `AnimationCurve.Evaluate` (with PreInfinity/PostInfinity clamp), `ProgressionMath`,
+  `CPWeightMath` and `CPCalculator` in Node; seven reference values were hand-computed and matched
+  the script exactly (hero CP L1 = 81/89, gA@L20 = 3.6025, gH@L20 = 4.9424, gD@L20 = 3.1650,
+  gR@L20 = 3.4569, Golem_02 CP@S20 = 478). **Not run in Play mode — nothing to run, no behaviour
+  changed.**
+- **Gotchas:** the two big ones, both new findings:
+  - **`CP ≈ ATK + 0.15·HP` and nothing else.** At level 1 a hero's CP is 79.3% attack / 18.6% HP;
+    the other four stats total 2.1% and **defense contributes exactly 0.00%** (`wDefenseByLevel` is
+    authored at 0 at L1). Defense never exceeds 0.17% of CP at any level, range never 0.06%.
+  - **CP currently ranks the roster backwards.** The 128-DPS profile (ATK 64 / AtkSpd 2.0, ids
+    1/6/7) shows **CP 81**; the 108-DPS profile (ATK 72 / AtkSpd 1.5) shows **CP 89** — because
+    `wA·ATK` adds 64 points while `wAS·AtkSpd` adds 0.8. This holds at every level 1→50.
+  - **Four `AnimationCurve`s across two assets are authored at negative time** and silently clamp
+    to values nobody chose: `defPctByLevel` → flat +6.25%/level (×3.17 defense at L20),
+    `rangePctByLevel` → +6.75%/level, and both `meleeMultByLevel` / `rangedMultByLevel`. Combined
+    with a missing line in `CPWeightMath.cs:41-42` (melee never sampled, ranged assigned twice),
+    **every `typeMult` in the game is 1.0.** `pctClamp` does not catch any of it — the values are
+    inside the legal window, just applied at the wrong place.
+  - The menu's `TOTAL CP: 32660` in `MenuScene.unity` is **hard-coded art bound to no script.**
+- **Next:** decide whether to act on any of the 9 registered defects — none were fixed. Defects 01
+  (off-axis growth curves) and 02 (menu vs combat computing different defense) are the two that
+  change real numbers today.
+
+### 2026-09-07 — Three features switched OFF for this version behind `GameFeatureFlags` (nothing deleted)
+
+- **Goal:** temporarily disable, **without deleting anything**, (1) the whole roguelite layer
+  including its pop-up, progression bar and menus, (2) `LastStandOffer`, and (3) the *gem
+  buy-back* half of the Heroes Stats panel — the panel itself must stay exactly as it is,
+  showing each hero type's alive/total count and the grey avatar on wipe-out, but with no
+  buttons and no "pay N gems to unlock heroes again" offer. All three come back next version.
+- **Status:** done (code); not yet run in Play mode.
+- **Changed:**
+  - `Assets/Scripts/Core/GameFeatureFlags.cs` — **NEW**. One static switchboard:
+    `RogueliteEnabled`, `LastStandOfferEnabled`, `HeroBuyBackEnabled`, all `false`. Flipping a
+    flag back to `true` is the ONLY edit needed to restore a feature — there is nothing else
+    to undo, no scene to re-wire.
+  - `Assets/Scripts/Roguelite/RogueliteManager.cs` — `Awake` now calls a new
+    `HideWhileDisabled()` and sets `enabled = false` when the flag is off.
+  - `Assets/Scripts/UI/HUD/LastStandOffer.cs` — `Awake` returns with `enabled = false` when the
+    flag is off, as the very first statement (ahead of its own "no offeredUnit" error logs).
+  - `Assets/Scripts/UI/HUD/HeroStatCell.cs` — `canBuy` in `SetAlive` now also requires the flag,
+    `Bind` does not attach the buy listener while it is off, `SetAffordable` respects it.
+  - `Assets/Scripts/UI/HUD/HeroStatsPanel.cs` — `HandleBuyBack` early-returns while the flag is
+    off. This is the lock that guarantees no gem is ever spent.
+  - `Assets/Documentation for scripts/` — new `GameFeatureFlags.txt`; dated entries added to
+    `RogueliteManager.txt`, `LastStandOffer.txt`, `HeroStatsPanel.txt`, `HeroStatCell.txt`,
+    each stating exactly what its OFF state changes and that nothing was removed.
+- **Scene/Prefab/SO edits:** **none, deliberately.** Verified in
+  `Assets/PREFABS/Level Template/LevelTemplate.prefab` that this needs no scene work:
+  `Regulite Show Panel` and `REGULITE-SLIDER-HOLDER` are already authored `m_IsActive: 0`,
+  `BattlePhaseTransition.showWhenBattleStarts` is empty, and its `fadeInAfterMove` list holds
+  only `Heros Stats panel` / `Timer  Holder` / `Enemy Counter Holder` — no roguelite object.
+  `LastStandOffer `'s only child, `OfferCell `, is also authored inactive.
+- **Verified:** not verified in Play mode — code + prefab inspection only. Next session should
+  enter Play mode on a stage and confirm: no XP bar, no card pop-up on kills, no last-stand
+  offer at 80% dead, and a wiped hero card reading "0/3" with no gem price.
+- **Gotchas:**
+  - The flags are `static readonly`, **not `const`**, on purpose. A `const false` makes every
+    guarded branch provably unreachable and Unity's console fills with CS0162 "unreachable code"
+    warnings on correct code. Do not "tidy" them into consts.
+  - Disabling a component from **inside `Awake`** means Unity never calls `OnEnable`, so nothing
+    is subscribed and nothing leaks. That is the whole mechanism for (1) and (2).
+  - A disabled component is invisible to `FindObjectOfType`. That is what silently neutralises
+    the two outside callers of the roguelite (`EnemyManager.cs:255`,
+    `PlayerWaveManager.cs:307`) with no edits of their own — both already null-check.
+  - **The two disabled features interact.** `LastStandOffer.requireBuyBacksSpent` waits on
+    `HeroStatsPanel.BuyBacksExhausted`, which can never become true while the buy-back is off.
+    Re-enabling `LastStandOfferEnabled` **alone** would give an offer that never appears —
+    turn `requireBuyBacksSpent` off in that case, or re-enable both flags together.
+- **Next:** Play-mode check as above. Then, when the next version ships, set the three flags to
+  `true` and re-test — no other edit is required.
 
 ### 2026-09-06 — Stages 4-20 converted to the template; level design finished to stage 20
 
