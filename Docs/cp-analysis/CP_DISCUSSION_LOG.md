@@ -34,6 +34,12 @@ These were set by Arash and hold until he says otherwise:
 3. **Be precise over fast.** He said time does not matter; accuracy does. Every claim should carry
    a `file.cs:line` or an `Asset.asset:line`.
 4. Points are raised **one at a time**. Record each one below as it is resolved.
+5. **Saving is manual and scoped.** Agreed 2026-09-07: after each point is settled, Claude writes it
+   into the Discussion log below and makes **one commit** for it. No auto-commit hook was installed,
+   and the raw chat transcript is deliberately **not** stored in the repo. Nothing is pushed by
+   Claude — `git push` needs Arash's GitHub credentials, which the Claude Code shell cannot prompt
+   for, so **pushing is always his step.** If a session ends with unpushed commits, they are still
+   safe locally; they just are not on GitHub yet.
 
 ---
 
