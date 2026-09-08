@@ -18,6 +18,7 @@ to a build. Nothing in the Unity project references it. Total size ~355 KB, all 
 |---|---|
 | `CP_SYSTEM_ANALYSIS.md` | **The findings.** How CP is computed for heroes and enemies, the authored weight/growth data, per-hero and per-enemy CP tables, per-stage totals, runtime feasibility, a 9-item defect register, and the formula research. Bilingual: full English, then full Persian. |
 | `CP_DISCUSSION_LOG.md` | **The decisions.** Open questions, ground rules for the discussion, and a running log. Start here when picking the thread back up. |
+| `CP_SESSION_TRANSCRIPT.md` | **The conversation.** Everything Arash asked and everything Claude answered, 2026-09-07 → 08. Arash's messages verbatim; Claude's replies condensed but complete. Read this to continue the thread on another machine. |
 | `report/CP_System_Report.html` | Offline copy of the charted report — open it in any browser, `Ctrl+P` for a PDF. No internet needed except for the web fonts. |
 | `tools/cpcalc.js` | Recomputes **every number** in the analysis from the project's own `.asset` files. |
 | `tools/build.js` | Rebuilds `report/CP_System_Report.html` from the template + computed data. |
