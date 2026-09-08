@@ -380,6 +380,82 @@ _Newest last. One entry per point Arash raises. Record the question, the answer,
   from the analysis docs per Arash's standing preference. **Not verified in Play mode** — no
   behaviour changed, so there is nothing to observe.
 
+### 2026-09-08 — "What is the ProgressionMath loop for?"
+
+- **Arash asked:** having seen the CP formula, what are the `ProgressionMath.cs:20-45` compound-growth
+  formulas *for*?
+
+- **Answer — they are a different system from CP, and the distinction is the whole point:**
+
+  > **`ProgressionMath` changes the game. `CPCalculator` only changes the display.**
+  > Delete `CPCalculator` and the game plays identically, minus a number on the units screen.
+  > Delete `ProgressionMath` and upgrades stop working — every hero is stuck at level-1 strength.
+
+  `UnitStatsSO` stores only **level-1** values. Nothing in the asset says what a level-10 hero
+  should have. `ProgressionMath` answers that, and it produces **multipliers**, not stats:
+
+  ```
+  UnitStatsSO       level-1 base            attack = 64
+        │
+  ProgressionMath   level → multipliers     gA = 1.9155
+        │
+  UnitStatsRuntime  base × multiplier       attack = 122.59
+        ├───────────► COMBAT (CombatMath deals real damage from this)
+        └───────────► CPCalculator → CP 155 (display only)
+  ```
+
+  So it runs **before** CP and feeds it. A level-10 hero shows CP 155 instead of 81 not because CP
+  changed, but because the stats it reads grew.
+
+- **How the loop works — three details worth noting:**
+  1. **Starts at `l = 2`.** Level 1 is the base and gets no growth; asking for level 1 skips the loop
+     entirely and every multiplier stays `1.0`.
+  2. **`*=` is multiply-accumulate, not add** — compound interest:
+     `gA = (1+pct(2)) × (1+pct(3)) × … × (1+pct(L))`.
+  3. **`Evaluate(l)` uses the loop counter `l`, not the target level `L`** — each level looks up its
+     *own* percentage. That is the entire reason the config uses curves rather than constants: the
+     designer can taper the rate.
+
+- **Worked example, "fast" hero (base attack 64), from the real `atkPctByLevel` curve (+8% → +3%):**
+
+  | Level | that level's % | running `gA` | actual attack |
+  |---|---|---|---|
+  | 1 | — (loop skipped) | 1.0000 | 64.00 |
+  | 2 | +7.898% | 1.0790 | 69.05 |
+  | 3 | +7.796% | 1.1631 | 74.44 |
+  | 5 | +7.592% | 1.3477 | 86.25 |
+  | 10 | +7.082% | 1.9155 | 122.59 |
+  | 20 | +6.061% | 3.6025 | 230.56 |
+
+  The percentage falls every level while the absolute gain rises (level 2 adds ~5 attack, level 20
+  adds ~13). Compounding against a tapering rate — a deliberate and sensible design.
+
+- **`ClampPct(..., cfg.pctClamp)` is the safety rail** that forces each percentage into −0.25…+0.50.
+  Note this is **the guard that failed to catch the two off-axis curves**: `0.0625` sits comfortably
+  inside the legal window. The *value* is reasonable; its *position on the axis* is what is wrong.
+
+- **Six separate curves in one loop is precisely why stats do not grow together** — this loop is the
+  origin of the ×3.60 attack / ×4.94 HP / ×1.40 attack-speed divergence at level 20. Two of its six
+  lines (`g.gD`, `g.gR`) read the broken curves. The loop itself is correct; its data is not.
+
+- **Call sites — 11, verified by grep:**
+
+  | Caller | Purpose | Multipliers applied |
+  |---|---|---|
+  | `PlayerStatsApplier.cs:129` | real combat stats | **all 6** |
+  | `EnemyManager.cs:113` | real enemy stats (level = stage) | only 4 |
+  | `UnitsPanelController.cs:516, 524, 578, 880, 961` | units-screen display + next-level preview | only 4 |
+  | `NewCharacterStats.cs:234` | new-hero popup | only 4 |
+  | `PlayerProgressionService.cs:233-234` | correct 6-stat snapshot — **nothing calls it** | all 6 |
+  | `EnemyManager.cs:71` | dead sibling `RebuildFromBase1` | only 4 |
+
+  That mismatch in the last column **is defect 02**: one function, called everywhere, but callers
+  consume different subsets of its output. Combat applies six multipliers, every menu applies four —
+  which is why a level-10 hero fights with defense 43.1 while the screen says 25.
+
+- **Outcome:** question answered; no action taken.
+- **Files touched:** none (analysis only).
+
 <!--
 Template for each point:
 
