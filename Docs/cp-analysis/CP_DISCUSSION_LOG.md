@@ -115,6 +115,7 @@ these until he says so.
 | Directive | Stated | Blocking question | Applied? |
 |---|---|---|---|
 | **Do not count `attackRange` in CP for Warrior / melee characters.** Measured cost: the term is 0.052% of CP at L1 and 0.003% at L50; dropping it moves the displayed integer in 3 of 20 hero rows and 5 of 120 enemy rows, always by exactly 1. | 2026-09-08 | All 15 characters are Warrior, so *"exclude for melee"* and *"exclude entirely"* are currently identical. Which does he mean — an `if (!isRanged)` guard that preserves range for future Archer/Mage units, or deleting the term outright? | **NO** |
+| **Fix the duplicated `rangedMult` assignment** at `CPWeightMath.cs:41-42` (the `meleeMult` sampling line is missing and `rangedMult` is assigned twice). Arash said "fix this defect at the end", i.e. authorised but to be done after the discussion concludes. | 2026-09-08 | Fixing the code line **alone changes no number** — `meleeMultByLevel` evaluates to 0.060 off-axis and the `Clamp(...,1,5)` floor lifts it back to the 1.0 it already is. Does he want only the code fix (#1), or the code fix **and** re-authoring both flavour curves onto the level axis (#2)? | **NO** |
 
 ### F. Scope
 
@@ -246,6 +247,70 @@ _Newest last. One entry per point Arash raises. Record the question, the answer,
   versus deleting the term outright — so Arash needs to say which he means.
 
 - **Outcome:** question answered; directive recorded as pending. **No change made.**
+- **Files touched:** none (analysis only).
+
+### 2026-09-08 — What is `baseScore`? And what range should `typeMult` be in?
+
+- **Arash asked (three parts):** (a) what range *should* `typeMult` be in, and is 1 sensible?
+  (b) `rangedMult` appears to be used twice — fix that defect "at the end"; (c) confusion: the CP
+  formula was already given, so what is `baseScore` for, and what does
+  `return Mathf.RoundToInt(baseScore * typeMult)` actually show?
+
+- **(c) `baseScore` is not a second calculation — it IS the parenthesis.** The one-line formula and
+  the code are the same thing written two ways:
+
+  ```
+  CP = round( ( wA·ATK + wH·HP + wMv·MoveSpeed + wAS·AtkSpeed + wD·DEF + wR·Range ) × typeMult )
+              └───────────────── this entire parenthesis = baseScore ─────────────┘
+  ```
+
+  `baseScore` names the weighted sum, i.e. the CP *before* the type multiplier.
+  `Mathf.RoundToInt(baseScore * typeMult)` returns the final integer CP — the number the units
+  screen displays. Substituting `baseScore` back into the return line reproduces the one-line
+  formula exactly. The split exists purely for readability and debuggability.
+
+  Worked example, "fast" hero at L1:
+  `baseScore = 1.00×64 + 0.15×100 + 0.25×3.5 + 0.40×2.0 + 0.00×25 + 0.05×0.85 = 80.7175`,
+  then `CP = round(80.7175 × 1.0) = 81`.
+
+- **(a) What range should `typeMult` be in?**
+  **While every unit is one type, 1.0 is the only value that means anything.** A multiplier applied
+  identically to every unit changes nothing comparative — if `typeMult` were 1.5 for all 15
+  characters, every CP would be 50% larger and every ranking identical. It is cosmetic inflation.
+  `typeMult` only earns its place once units differ in type.
+
+  For a future multi-class roster:
+
+  | | |
+  |---|---|
+  | Convention | one class is the baseline at **1.00**; others relative to it |
+  | Sensible band | **0.85 – 1.25** (±15–25%) |
+  | Rationale | the weighted sum already prices the stats — a ranged unit's reach is already in `wR·Range`. `typeMult` should only capture what the stats do NOT model (e.g. taking less return damage by attacking from outside melee reach), which is a second-order effect. |
+  | Beyond ±25% | the multiplier starts dominating; fix the **weights** instead. |
+
+  **The current clamp is badly chosen** (`Mathf.Clamp(..., 1, 5f)`, `CPWeightMath.cs:41`):
+  the floor of 1 means ranged can never be worth *less* than melee — "fragile mage worth less per
+  stat point" is inexpressible; the ceiling of 5 permits a multiplier that would swamp every other
+  term. A band like `[0.5, 2.0]` would be honest. Also noted: authoring **both** melee and ranged as
+  separate curves is over-engineering — one fixed baseline plus one relative multiplier suffices,
+  and that redundancy is exactly what produced the copy-paste bug.
+
+- **(b) Fixing the double `rangedMult` alone will change nothing.** The intended fix is
+  `w.meleeMult = Mathf.Clamp(cfg.meleeMultByLevel.Evaluate(L), 1, 5f)`. `meleeMultByLevel` is
+  authored off-axis and evaluates to `0.060`; the clamp floor of 1 raises it straight back to
+  **1.0** — precisely the hardcoded value `meleeMult` already carries. Output is byte-identical
+  before and after.
+
+  Making `typeMult` actually do something requires **all three** of:
+  1. fix the double assignment (code bug, `CPWeightMath.cs:41-42`)
+  2. re-author `meleeMultByLevel` and `rangedMultByLevel` onto the level axis (data bug, `Player CP.asset:159-206`)
+  3. have units that are not all the same type (roster)
+
+  None of the three is currently true, so the fix is correctness hygiene: worth doing so the code
+  says what it means, but it moves no number.
+
+- **Outcome:** questions answered. The `rangedMult` fix is **authorised but deferred** — Arash said
+  "fix it at the end". Open sub-question: does he want only #1, or #1 and #2 together?
 - **Files touched:** none (analysis only).
 
 <!--
