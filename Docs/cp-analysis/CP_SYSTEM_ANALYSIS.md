@@ -67,8 +67,11 @@ asset predates the field), so that weight falls back to the C# initializer
 
 Two faults compound:
 
-1. `CPWeightMath.cs:41-42` never reads `meleeMultByLevel`. The line is missing and
-   `rangedMult` is assigned twice on consecutive lines, so `meleeMult` keeps its hard-coded `1f`.
+1. ~~`CPWeightMath.cs:41-42` never reads `meleeMultByLevel`.~~ **FIXED 2026-09-08 (commit `80ed65b`).**
+   The line was missing and `rangedMult` was assigned twice on consecutive lines, so `meleeMult` kept
+   its hard-coded `1f`. The curve is now sampled — but **the fix changed no CP value**, because of
+   fault 2 below: the clamp floor lifts the off-axis curve's `0.060` back to exactly the `1.0` the
+   buggy code already produced. Verified at every level 1–50 against both config assets.
 2. Both flavour curves in `Player CP.asset` are authored at **negative time** — `meleeMultByLevel`
    at t ≈ −389, `rangedMultByLevel` at t ≈ −730 — where they evaluate to `0.060` and `0.026`.
    `rangedMult` is only rescued to 1.0 by the `Mathf.Clamp(…, 1, 5f)` floor.
@@ -273,7 +276,7 @@ Recorded only. **Nothing here has been changed.**
 |---|---|---|---|
 | 01 | High | Off-axis growth curves silently inflate defense (+6.25%/lvl) and range (+6.75%/lvl) for all 50 levels. A L20 hero has ×3.17 the intended defense. | `PlayerProgressionConfig.asset:111-158` |
 | 02 | High | Menu and battlefield compute different stats. Five UI sites apply only `gA/gH/gMv/gAS`; `PlayerStatsApplier` applies all six. A L10 hero fights with defense 43.1 while every menu — and the CP built on it — says 25. | `UnitsPanelController.cs:517,579,881,962` · `NewCharacterStats.cs:235` vs `PlayerStatsApplier.cs:135-142` |
-| 03 | High | `meleeMult` never read from config; the sampling line is missing and `rangedMult` is assigned twice on consecutive lines. | `CPWeightMath.cs:41-42` |
+| 03 | ~~High~~ **FIXED** | ~~`meleeMult` never read from config; the sampling line is missing and `rangedMult` is assigned twice on consecutive lines.~~ Fixed 2026-09-08, commit `80ed65b`. **Changed no CP value** — the clamp floor lifts the off-axis curve back to the same 1.0. Still blocked by defect 04. | `CPWeightMath.cs:41-42` |
 | 04 | High | Both flavour curves authored off-axis (t ≈ −389 / −730), evaluating to 0.060 / 0.026. No unit ever receives a type bonus. | `Player CP.asset:159-206` |
 | 05 | Medium | A second, divergent CP formula in `EnemyManager` (no range term, Mage treated as melee), reachable by leaving one Inspector slot empty. | `EnemyManager.cs:146-161` · `EnemySpawner.cs:410` |
 | 06 | Medium | Enemy defense never grows — four of six multipliers applied. The one axis with real tier spread stays flat across 20 stages. | `EnemyManager.cs:113-118` |
@@ -629,7 +632,7 @@ public void Initialize(int stageLevelFromSpawner)
 |---|---|---|---|
 | ۰۱ | بالا | منحنی‌های رشدِ بیرون‌محور، بی‌سروصدا دفاع (۶٫۲۵٪+ در هر لِوِل) و برد (۶٫۷۵٪+) را برای هر ۵۰ لِوِل باد می‌کنند. قهرمان L20 ×۳٫۱۷ دفاعِ موردنظر را دارد. | `PlayerProgressionConfig.asset:111-158` |
 | ۰۲ | بالا | منو و میدان نبرد استت‌های متفاوتی حساب می‌کنند. پنج محل UI فقط `gA/gH/gMv/gAS` را اعمال می‌کنند؛ `PlayerStatsApplier` هر شش‌تا را. قهرمان L10 با دفاع ۴۳٫۱ می‌جنگد ولی همه‌ی منوها — و CP ساخته‌شده روی آن — عدد ۲۵ را می‌گویند. | `UnitsPanelController.cs:517,579,881,962` · `NewCharacterStats.cs:235` در برابر `PlayerStatsApplier.cs:135-142` |
-| ۰۳ | بالا | `meleeMult` هیچ‌وقت از کانفیگ خوانده نمی‌شود؛ خط نمونه‌برداری جا افتاده و `rangedMult` دو بار پشت سر هم مقداردهی شده. | `CPWeightMath.cs:41-42` |
+| ۰۳ | ~~بالا~~ **رفع شد** | ~~`meleeMult` هیچ‌وقت از کانفیگ خوانده نمی‌شود؛ خط نمونه‌برداری جا افتاده و `rangedMult` دو بار پشت سر هم مقداردهی شده.~~ در ۲۰۲۶-۰۹-۰۸ با کامیت `80ed65b` رفع شد. **هیچ مقدار CP را تغییر نداد** — کفِ clamp مقدار منحنی بیرون‌محور را به همان ۱٫۰ قبلی برمی‌گرداند. هنوز به ایراد ۰۴ گره خورده است. | `CPWeightMath.cs:41-42` |
 | ۰۴ | بالا | هر دو منحنی سبک بیرون‌محور نوشته شده‌اند (t ≈ −۳۸۹ / −۷۳۰) و مقدارشان ۰٫۰۶۰ / ۰٫۰۲۶ است. هیچ واحدی هیچ‌وقت بونوس سبک نمی‌گیرد. | `Player CP.asset:159-206` |
 | ۰۵ | متوسط | یک فرمول CP دوم و واگرا در `EnemyManager` (بدون جمله‌ی برد، Mage نزدیک‌زن)، که با خالی‌گذاشتن یک اسلات Inspector قابل رسیدن است. | `EnemyManager.cs:146-161` · `EnemySpawner.cs:410` |
 | ۰۶ | متوسط | دفاع دشمن هیچ‌وقت رشد نمی‌کند — چهار ضریب از شش‌تا اعمال می‌شود. تنها محوری که تفاوت واقعی تیر دارد در ۲۰ استیج صاف می‌ماند. | `EnemyManager.cs:113-118` |

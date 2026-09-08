@@ -115,7 +115,8 @@ these until he says so.
 | Directive | Stated | Blocking question | Applied? |
 |---|---|---|---|
 | **Do not count `attackRange` in CP for Warrior / melee characters.** Measured cost: the term is 0.052% of CP at L1 and 0.003% at L50; dropping it moves the displayed integer in 3 of 20 hero rows and 5 of 120 enemy rows, always by exactly 1. | 2026-09-08 | All 15 characters are Warrior, so *"exclude for melee"* and *"exclude entirely"* are currently identical. Which does he mean — an `if (!isRanged)` guard that preserves range for future Archer/Mage units, or deleting the term outright? | **NO** |
-| **Fix the duplicated `rangedMult` assignment** at `CPWeightMath.cs:41-42` (the `meleeMult` sampling line is missing and `rangedMult` is assigned twice). Arash said "fix this defect at the end", i.e. authorised but to be done after the discussion concludes. | 2026-09-08 | Fixing the code line **alone changes no number** — `meleeMultByLevel` evaluates to 0.060 off-axis and the `Clamp(...,1,5)` floor lifts it back to the 1.0 it already is. Does he want only the code fix (#1), or the code fix **and** re-authoring both flavour curves onto the level axis (#2)? | **NO** |
+| ~~**Fix the duplicated `rangedMult` assignment** at `CPWeightMath.cs:41-42`.~~ | 2026-09-08 | — | **✅ DONE 2026-09-08, commit `80ed65b`** — code fix only. See discussion log entry. |
+| **Re-author the two flavour curves onto the level axis.** `meleeMultByLevel` (keys at t ≈ −389) and `rangedMultByLevel` (t ≈ −730) in `Player CP.asset` are both off-axis. Until they are redrawn over x = 1…50, `typeMult` stays 1.0 no matter what the code does — editing them in the Inspector still appears to do nothing. | 2026-09-08 (implied by the code fix) | Not authorised. This is a **data** change in the Unity Inspector, not a code change. Also: is it even wanted? While all 15 units are Warrior, `typeMult` is a no-op regardless — see Open decisions B. | **NO** |
 
 ### F. Scope
 
@@ -336,6 +337,48 @@ _Newest last. One entry per point Arash raises. Record the question, the answer,
 - **Outcome:** questions answered. The `rangedMult` fix is **authorised but deferred** — Arash said
   "fix it at the end". Open sub-question: does he want only #1, or #1 and #2 together?
 - **Files touched:** none (analysis only).
+
+### 2026-09-08 — FIRST CODE CHANGE: the duplicated `rangedMult` assignment is fixed
+
+- **Arash asked:** "did you fix this bug? if not, fix it." — explicit authorisation, so the deferral
+  from the previous entry ends here. Interpreted as the **code fix only** (#1); the flavour curves
+  are a separate Inspector/data change and were **not** touched.
+
+- **The change**, `Assets/Scripts/Data/CombatPower/CPWeightMath.cs:41` — a one-line diff:
+
+  ```diff
+  - w.rangedMult = Mathf.Clamp(cfg.rangedMultByLevel.Evaluate(L), 1, 5f);
+  + w.meleeMult  = Mathf.Clamp(cfg.meleeMultByLevel.Evaluate(L), 1, 5f);
+    w.rangedMult = Mathf.Clamp(cfg.rangedMultByLevel.Evaluate(L), 1, 5f);
+  ```
+
+  The clamp mirrors the existing `rangedMult` treatment exactly — deliberately a minimal, faithful
+  fix rather than a redesign of the (badly chosen) `1..5` band, which was not authorised.
+
+- **Verified to change NO CP value.** Parsed both config assets' raw YAML and reimplemented
+  `AnimationCurve.Evaluate` outside Unity, comparing `meleeMult` before (hard-coded `1f`) against
+  after (`Clamp(Evaluate(L), 1, 5)`) at **every level 1–50**:
+
+  | Asset | `meleeMultByLevel` | raw Evaluate(L) | after clamp | before | max diff |
+  |---|---|---|---|---|---|
+  | `Player CP.asset` | off-axis, keys at t = −389.47 / −357.95 | 0.060408 (all L) | **1.000000** | 1.0 | **0** |
+  | `EnemyCP.asset` | clean, flat 1.0 → 1.0 | 1.000000 | **1.000000** | 1.0 | **0** |
+
+  The `Clamp(..., 1, 5f)` floor lifts the broken curve's 0.060 straight back to the 1.0 the buggy
+  code already produced. Every number in this analysis remains valid — no report figure changed.
+
+- **What this fix does and does not achieve.** It makes the code do what it plainly intended, so
+  `meleeMultByLevel` is now genuinely read. It does **not** make `typeMult` functional, which still
+  needs both of: the `Player CP.asset` flavour curves re-authored onto x = 1…50 (now tracked as a
+  separate pending directive), and a roster containing units that are not all Warrior. Editing the
+  melee curve in the Inspector today *still* appears to do nothing.
+
+- **Outcome:** defect register item 03 marked FIXED in `CP_SYSTEM_ANALYSIS.md` (both language
+  sections). Item 04 (off-axis flavour curves) remains open and is now the sole blocker on this path.
+- **Files touched:** `Assets/Scripts/Data/CombatPower/CPWeightMath.cs` (1 line) and its reference doc
+  `Assets/Documentation for scripts/CPWeightMath.txt`, committed together as `80ed65b`, separately
+  from the analysis docs per Arash's standing preference. **Not verified in Play mode** — no
+  behaviour changed, so there is nothing to observe.
 
 <!--
 Template for each point:
