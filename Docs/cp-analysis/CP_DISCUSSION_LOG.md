@@ -456,6 +456,71 @@ _Newest last. One entry per point Arash raises. Record the question, the answer,
 - **Outcome:** question answered; no action taken.
 - **Files touched:** none (analysis only).
 
+### 2026-09-08 — `w.wA` vs `g.gA`: two multipliers on "attack", opposite jobs
+
+- **Arash asked:** isn't `w.wA` already the attack weight? Then why is `g.gA` used as well — what
+  is the difference?
+
+- **Answer — they do opposite jobs and come from different config files.** Every stat is multiplied
+  twice before it reaches CP:
+
+  ```
+     64          ×  g.gA (1.9155)      =  122.59        ×  w.wA (0.9816)  =  120.34
+  base attack     GROWTH multiplier      REAL attack       CP WEIGHT         points of CP
+  (UnitStatsSO)   "how strong is it?"    (used in combat)  "how much does    (a score, not
+                                                            attack count?"    a stat)
+  ```
+
+  `g.gA` changes **what the number is** — after it the hero genuinely hits for 122.59 and
+  `CombatMath` uses that. `w.wA` never touches the hero's attack; it only decides how much those
+  122.59 points **count toward the score**.
+
+  Analogy that landed (konkur): the stat is your نمره in a subject, `g.gA` is how much you studied
+  (it raises the نمره), and `w.wA` is that subject's ضریب. Changing the ضریب does not make you
+  better at maths — it changes how much maths counts in the final ranking.
+
+- **They live in different assets — the practical distinction:**
+
+  | | `g.gA` | `w.wA` |
+  |---|---|---|
+  | Type | `ProgressionConfigSO` | `CPWeightsConfigSO` |
+  | Asset | `PlayerProgressionConfig.asset` | `Player CP.asset` |
+  | Computed by | `ProgressionMath.GetGrowthMultipliers` | `CPWeightMath.Evaluate` |
+  | Multiplies | the **stat** | the stat's **contribution to the score** |
+  | Affects combat? | **YES** | **NO** |
+  | Editing it… | changes battle strength | changes only the displayed CP |
+
+- **Worked example — fast hero at level 10** (menu path, so `gD`/`gR` are 1.0):
+
+  | Stat | base | × growth | = real stat | × CP weight | = CP points |
+  |---|---|---|---|---|---|
+  | attack | 64 | `gA` 1.9155 | 122.59 | `wA` 0.9816 | 120.34 |
+  | maxHP | 100 | `gH` 2.2423 | 224.23 | `wH` 0.1445 | 32.40 |
+  | moveSpeed | 3.5 | `gMv` 1.1844 | 4.145 | `wMv` 0.2408 | 0.998 |
+  | attackSpeed | 2.0 | `gAS` 1.1844 | 2.369 | `wAS` 0.4092 | 0.969 |
+  | defense | 25 | `gD` 1.0 (menu) | 25.0 | `wD` 0.0092 | 0.230 |
+  | attackRange | 0.85 | `gR` 1.0 (menu) | 0.85 | `wR` 0.0482 | 0.041 |
+  | | | | | **baseScore** | **154.98** → **CP 155** |
+
+  The "real stat" column is what fights; the "CP points" column is only what is printed.
+
+- **The detail that makes it click:** both are curves indexed by level, which is why they blur —
+  but they move in **opposite directions**.
+
+  | Level | `gA` growth | `wA` weight |
+  |---|---|---|
+  | 1 | 1.00 | 1.000 |
+  | 10 | 1.92 | 0.982 |
+  | 20 | 3.60 | 0.961 |
+  | 50 | **13.40** | **0.900** |
+
+  `gA` climbs steeply (the hero really is ~13× stronger at L50); `wA` drifts gently down (attack
+  counts slightly less per point at high level, a deliberate knob so CP does not become a pure
+  attack readout). Independent dials that merely share the word "attack".
+
+- **Outcome:** question answered; no action taken.
+- **Files touched:** none (analysis only).
+
 <!--
 Template for each point:
 
