@@ -22,17 +22,44 @@ METHODS
       config still yields sensible CP.
       Otherwise samples every curve at 'level', clamps each by cfg.wClamp, and
       multiplies them all by globalWeightScaleByLevel (itself clamped to 1..10).
+      The two flavour multipliers are sampled separately and do NOT get the
+      globalWeightScale treatment - each is clamped to 1..5 on its own.
 
 NOTES / BUGS
 ------------
-  !! BUG: meleeMult is never read from the config. The line that should sample
-  !! cfg.meleeMultByLevel is missing, and instead rangedMult is assigned TWICE
-  !! (the identical statement appears on two consecutive lines). Consequence:
-  !! the meleeMultByLevel curve in the ScriptableObject is completely ignored -
-  !! melee units always use the hard-coded fallback of 1.0. If a designer edits
-  !! that curve, nothing happens.
-  !! Fix would be: w.meleeMult = Mathf.Clamp(cfg.meleeMultByLevel.Evaluate(L), 1, 5f);
-  !! and delete the duplicated rangedMult line.
+  [FIXED 2026-09-08] meleeMult was never read from the config. The line that
+  should sample cfg.meleeMultByLevel was missing, and rangedMult was assigned
+  TWICE (the identical statement on two consecutive lines, 41-42), so
+  meleeMult kept the hard-coded struct default of 1f and the meleeMultByLevel
+  curve was completely ignored. Line 41 is now:
+      w.meleeMult = Mathf.Clamp(cfg.meleeMultByLevel.Evaluate(L), 1, 5f);
 
-  - rangedMult is clamped to 1..5, so a curve value below 1 is silently raised
-    to 1. Ranged units can therefore never be weighted BELOW melee.
+  !! IMPORTANT: that fix changed NO CP value, and still does not. Verified
+  !! against both config assets at every level 1..50:
+  !!   - "Player CP.asset": meleeMultByLevel is authored OFF THE LEVEL AXIS
+  !!     (keys at t = -389.47 and t = -357.95). Because AnimationCurve clamps
+  !!     past its last key, Evaluate(L) returns 0.060408 for every L >= 1, and
+  !!     the Clamp(..., 1, 5f) floor lifts that straight back to 1.0 - exactly
+  !!     the value the buggy code already produced.
+  !!   - "EnemyCP.asset": meleeMultByLevel is clean (flat 1.0 -> 1.0), so it
+  !!     evaluated to 1.0 anyway.
+  !! So the curve is now genuinely read, but it cannot influence anything until
+  !! the Player CP curve is re-authored back onto the level axis (x = 1..50).
+  !! Editing that curve in the Inspector today still appears to do nothing.
+
+  !! The same off-axis fault affects rangedMultByLevel in "Player CP.asset"
+  !! (keys at t = -729.95 / -694.19, evaluating to 0.026349). The Clamp floor
+  !! of 1 rescues it to 1.0, hiding the fault. Both flavour curves in that asset
+  !! need re-drawing before typeMult can do anything.
+
+  - rangedMult is clamped to 1..5, and meleeMult now uses the same clamp, so a
+    curve value below 1 is silently raised to 1. Neither class can be weighted
+    BELOW 1.0, which means "this class is worth less per stat point" is not
+    expressible. A band such as 0.5..2.0 would be more honest if the flavour
+    system is ever made functional.
+
+  - Note also that typeMult is currently a no-op for gameplay reasons beyond
+    this file: every UnitStatsSO in the live roster (the 15 prefabs under
+    Assets/PREFABS/Characters/New Characters/) is FighterType.Warrior, so
+    CPCalculator's isRanged branch never executes and only meleeMult is ever
+    read. See Docs/cp-analysis/CP_SYSTEM_ANALYSIS.md for the full trace.
