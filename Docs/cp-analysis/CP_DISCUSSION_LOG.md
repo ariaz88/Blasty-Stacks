@@ -113,7 +113,59 @@ Full detail for each is in `CP_SYSTEM_ANALYSIS.md` §8.
 
 _Newest last. One entry per point Arash raises. Record the question, the answer, and the outcome._
 
-### (no points recorded yet — discussion started 2026-09-07)
+### 2026-09-08 — "Where is the `melee` type? All our units are Warrior."
+
+- **Arash asked:** every `UnitStatsSO` has one of only four types (Warrior, Archer, Horseman, Mage)
+  and every character in the game is Warrior — so why do the CP weights talk about
+  `meleeMult` / `rangedMult`? What does that mean, and where does a type called `melee` even exist?
+
+- **Answer:** **`melee` is not a type and exists nowhere in the project.** It is the name of the
+  `else` branch of a 4→2 fold that `CPCalculator` performs at runtime:
+
+  ```csharp
+  bool isRanged = s.type == FighterType.Archer || s.type == FighterType.Mage;  // CPCalculator.cs:26
+  float typeMult = isRanged ? w.rangedMult : w.meleeMult;                      // CPCalculator.cs:27
+  ```
+
+  Archer + Mage → `rangedMult`; Warrior + Horseman → `meleeMult`. Nothing is ever tagged "melee" —
+  it just means "not Archer and not Mage". The source comment on `CPCalculator.cs:25` says so
+  directly: *"Map 4 classes → melee / ranged"*.
+
+  The other three types are real in the data but are **fossils of an earlier four-class design**.
+  Of the 24 `UnitStatsSO` assets in the project, 20 are type 0 (Warrior) and four are not:
+
+  | type | asset | referenced by |
+  |---|---|---|
+  | 1 Archer | `UI-SOs/UnitSTats-SO/ArcherStats.asset` | `ArcherDefSO` only |
+  | 1 Archer | `BaseStats/PlayerArcher.asset` | **nothing at all** |
+  | 2 Horseman | `UI-SOs/UnitSTats-SO/Horseman.asset` | `HorseManDefSO` only |
+  | 3 Mage | `UI-SOs/UnitSTats-SO/MageStats.asset` | `MageDefSO` only |
+
+  Verified that `ArcherDefSO`, `HorseManDefSO` and `MageDefSO` are **absent from
+  `UnitsDatabaseSO.asset`** (it holds exactly 8 entries, all type 0). They can therefore never enter
+  `PlayerUnitsModel`, never spawn, and never reach `CPCalculator`.
+
+- **Consequence — the flavour mechanism is dead three times over:**
+  1. **Unreachable by roster design.** Every live hero and every enemy is type 0, so `isRanged` is
+     always `false`; the `rangedMult` branch has never executed once.
+  2. **The reachable branch is broken.** `meleeMult` is never sampled from the config
+     (`CPWeightMath.cs:41-42` — the line is missing, `rangedMult` is assigned twice), so it keeps
+     the hard-coded `1f`.
+  3. **The data behind it is broken too.** `meleeMultByLevel` in `Player CP.asset` is authored at
+     t ≈ −389 and would evaluate to `0.060` even if the line were fixed.
+
+  Net: `typeMult` is exactly 1.0 for every unit in the game and always has been.
+
+- **Latent trap worth remembering:** the day a real Archer or Mage hero is added, the `ranged` branch
+  activates for the first time and immediately hits fault 3 — `rangedMultByLevel` is off-axis
+  (t ≈ −730, value 0.026) and gets floored to 1.0 by `Mathf.Clamp(..., 1, 5f)`, so the intended 1.05
+  ranged bonus would silently not apply.
+
+- **Outcome:** question answered; no action taken. This does not add a new defect — it sharpens
+  register items 03 and 04 by establishing that the mechanism is also **unreachable by roster
+  design**, not merely buggy. Whether to delete the flavour system, fix it, or leave it for a future
+  multi-class roster is still open (see Open decisions B).
+- **Files touched:** none (analysis only).
 
 <!--
 Template for each point:
