@@ -107,6 +107,22 @@ Full detail for each is in `CP_SYSTEM_ANALYSIS.md` §8.
 | Enemy castle HP is a flat 350 at every stage 1→20 — the win condition never gets harder | — | — |
 | The roster is two stat profiles wearing eight costumes; the "fast" three are strictly better | — | — |
 
+### E. Pending directives from Arash — stated, but NOT yet applied
+
+He has said what he wants but explicitly withheld authorisation to change the game. Do not act on
+these until he says so.
+
+| Directive | Stated | Blocking question | Applied? |
+|---|---|---|---|
+| **Do not count `attackRange` in CP for Warrior / melee characters.** Measured cost: the term is 0.052% of CP at L1 and 0.003% at L50; dropping it moves the displayed integer in 3 of 20 hero rows and 5 of 120 enemy rows, always by exactly 1. | 2026-09-08 | All 15 characters are Warrior, so *"exclude for melee"* and *"exclude entirely"* are currently identical. Which does he mean — an `if (!isRanged)` guard that preserves range for future Archer/Mage units, or deleting the term outright? | **NO** |
+
+### F. Scope
+
+The roster that matters is `Assets/PREFABS/Characters/New Characters/` — **15 prefabs, verified**:
+5 Deployed Players, 6 Enemies, 4 Undeployed Players. All are `FighterType.Warrior`, therefore all
+melee. Anything outside that folder (the legacy Archer / Horseman / Mage assets, the Old Characters
+prefabs) is out of scope unless he says otherwise.
+
 ---
 
 ## Discussion log
@@ -165,6 +181,71 @@ _Newest last. One entry per point Arash raises. Record the question, the answer,
   register items 03 and 04 by establishing that the mechanism is also **unreachable by roster
   design**, not merely buggy. Whether to delete the flavour system, fix it, or leave it for a future
   multi-class roster is still open (see Open decisions B).
+- **Files touched:** none (analysis only).
+
+### 2026-09-08 — Scope pinned to the 15 New Characters prefabs; is the melee/ranged split live?
+
+- **Arash established the scope:** the roster that matters is
+  `Assets/PREFABS/Characters/New Characters/` — **verified 15 prefabs**: 5 `Deployed Players`
+  (Player_CowMinotaur_02, Player_Dark_Oracle_01, Player_Minotaur_02, Player_Pref, Player_Valkyrie),
+  6 `Enemies` (Golem_01, Golem_02, Orc, Reaper_Man_01, Skeleton_Crusader_1, Zombie_villager),
+  4 `Undployed Players` (Dark_Oracle_3, Fallen_Angels_02, Golem_3, Minotaur_01). All are Warrior,
+  therefore all fall in the melee bucket.
+
+- **Arash asked:** is the melee/ranged classification actually applied in the game? If we had a
+  Horseman or Warrior, would they really be counted as melee — or is the code simply not active?
+
+- **Answer — the code runs, but it has no effect. Three separate facts:**
+  1. **It runs and is correct.** `CPCalculator.cs:26-27` executes on every `UnitCP` call; a Warrior
+     or Horseman genuinely takes the `meleeMult` branch.
+  2. **It changes nothing.** `meleeMult` is always exactly `1.0` (never sampled from config), and
+     multiplying by 1.0 is identity — so "classified melee" is numerically indistinguishable from
+     no classification at all.
+  3. **It exists only inside CP.** A grep of every `FighterType` use in `Assets/Scripts` shows the
+     type is read to make a decision in exactly two places, both CP:
+
+     | Location | Decides |
+     |---|---|
+     | `CPCalculator.cs:26` | melee vs ranged for `typeMult` |
+     | `EnemyManager.cs:152` | same, in the divergent fallback — tests only `Archer`, so it would classify a **Mage as melee**, disagreeing with `CPCalculator` |
+
+     Every other reference is dead storage or an explicit disclaimer: `SkillData.cs:45`
+     `allowedTypes` and `:112 AppliesTo()` are labelled **LEGACY** in the source;
+     `RogueliteManager.cs:149-150` and `BuffDraw.cs:20-21` carry comments saying they key by
+     **unitId, not FighterType**, because *"every UnitDefinitionSO in this project is
+     classType = Warrior, so FighterType cannot tell two heroes apart"*; `UnitDefinitionSO.cs:39`
+     `classType` is "for UI filtering" but nothing filters by it.
+
+     **Combat never reads `type` at all** — `CombatMath.DamagePerHit` uses only attack and defense;
+     targeting, movement, range and AI never consult it.
+
+  Summary: **wired, correct, and completely inert.**
+
+- **Arash's directive (NOTED, NOT APPLIED — he explicitly said do not change the game yet):**
+  for Warrior / melee characters, `attackRange` should **not** be counted in the CP calculation.
+
+- **Measured impact of dropping the range term** (computed from the real assets, not estimated):
+
+  | | value |
+  |---|---|
+  | Range term at L1 | 0.0425 points of a CP of 81 — **0.052%** |
+  | Range term at L50 | 0.034 points of 1096 — **0.003%** |
+  | Hero rows where displayed CP changes | **3 of 20** |
+  | Enemy rows where displayed CP changes | **5 of 120** |
+  | Largest change anywhere | **1 point** (rounding-boundary flips only, e.g. slow profile L1: 89 → 88) |
+
+  Two notes attached to that: (a) it makes CP **more honest**, because `attackRange` is dead in
+  gameplay anyway — players use the Inspector field `PlayerManager.maxAttackRange` (0.85) and enemies
+  use `EnemyLocoMotion.stoppingDistance` (0.83), and the stat-block value is never read (defect 07);
+  (b) it **will not fix the ranking inversion**, which is caused by attack sitting at 79% of the
+  score while attack speed contributes 0.99% — removing a 0.05% term cannot move that.
+
+- **Open sub-question for when the change is authorised:** because all 15 characters are Warrior,
+  *"exclude range for melee"* and *"exclude range entirely"* are currently identical. They diverge
+  only when an Archer or Mage is added. That changes the implementation — an `if (!isRanged)` guard
+  versus deleting the term outright — so Arash needs to say which he means.
+
+- **Outcome:** question answered; directive recorded as pending. **No change made.**
 - **Files touched:** none (analysis only).
 
 <!--
