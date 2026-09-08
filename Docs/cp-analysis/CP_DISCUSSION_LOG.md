@@ -273,6 +273,30 @@ _Newest last. One entry per point Arash raises. Record the question, the answer,
   `baseScore = 1.00×64 + 0.15×100 + 0.25×3.5 + 0.40×2.0 + 0.00×25 + 0.05×0.85 = 80.7175`,
   then `CP = round(80.7175 × 1.0) = 81`.
 
+  **Notation key** (a follow-up question showed the maths/code notation gap is a real trip hazard —
+  `w.wA * s.attack` does not *look* like `wA·ATK`, but is identical). In C# the dot means "the field
+  inside this object" — it is an address, not an operation. Two objects are in play inside `UnitCP`:
+  `s` is the unit's stat block (the method parameter, `CPCalculator.cs:10`) and `w` is the weights
+  sampled at this unit's level (`var w = CPWeightMath.Evaluate(level, cfg);`, `CPCalculator.cs:14`).
+  Maths notation omits which object a value came from; code cannot, because many units exist at once.
+
+  | Formula shorthand | Actual code | Note |
+  |---|---|---|
+  | `wA` | `w.wA` | `w.` = from the weights struct |
+  | `ATK` | `s.attack` | `ATK` is a doc shorthand; the field is named `attack` |
+  | `HP` | `s.maxHP` | shorthand |
+  | `MoveSpeed` | `s.moveSpeed` | same word, C# casing |
+  | `AtkSpeed` | `s.attackSpeed` | shorthand |
+  | `DEF` | `s.defense` | shorthand |
+  | `Range` | `s.attackRange` | shorthand |
+  | `·` | `*` | both mean multiply |
+
+  Written purely in code names, the formula is character-for-character the source:
+  `CP = round( ( w.wA·s.attack + w.wH·s.maxHP + w.wMv·s.moveSpeed + w.wAS·s.attackSpeed
+  + w.wD·s.defense + w.wR·s.attackRange ) × typeMult )`.
+  The `ATK`/`HP`/`DEF` shorthands are this documentation's own labels, chosen to match the UI — they
+  are not different values.
+
 - **(a) What range should `typeMult` be in?**
   **While every unit is one type, 1.0 is the only value that means anything.** A multiplier applied
   identically to every unit changes nothing comparative — if `typeMult` were 1.5 for all 15
