@@ -173,15 +173,54 @@ All eight are `FighterType.Warrior`.
 | 7 | Fallen_Minotaur_01 | `Player_Minotaur_01` | 64 | 2.0 | **128** | **81** | 155 | 293 |
 | 8 | Dark_Oracle_3 | `Player_Dark_Oracle_3` | 72 | 1.5 | 108 | 89 | 170 | 320 |
 
-## The ranking is inverted
+## ⚠ CORRECTED 2026-09-09 — the "ranking is inverted" claim was WRONG
 
-The fast profile deals **128 DPS** and displays **CP 81**. The slow profile deals **108 DPS** and
-displays **CP 89**. The genuinely stronger unit shows a 9% lower number.
+> **This section originally claimed CP ranks the roster backwards. That was an error and has been
+> retracted.** It assumed `trueDPS = attack × attackSpeed`, taken from the `UnitStatsSO` field
+> comment ("hits/sec") without verifying the game implements it. **It does not.**
+>
+> `attackSpeed` does not affect a player's rate of attack at all. Cadence is set by
+> `PlayerAttackAction.recoveryTime` (`PlayerAttackState.cs:99-100`) and released purely by a timer
+> (`PlayerManager.cs:798-812`); `attackSpeed` appears nowhere in that path and is used only as the
+> animator playback speed. **All 10 `PlayerAttackAction` assets carry `recoveryTime = 0.6`**, so every
+> hero attacks once per 0.6 s and real output is `attack ÷ 0.6`:
+>
+> | Profile | ATK | AtkSpd | originally claimed | **actual** |
+> |---|---|---|---|---|
+> | "fast" (ids 1, 6, 7) | 64 | 2.0 | 128 DPS | **106.7 DPS** |
+> | "slow" (ids 2, 3, 4, 5, 8) | 72 | 1.5 | 108 DPS | **120.0 DPS** |
+>
+> The "slow" profile is genuinely **12.5% stronger**, and CP rates it 9.9% higher (89 vs 81).
+> **CP ranks these two profiles correctly.**
 
-The cause is arithmetic: `wA·ATK` contributes 64 points while `wAS·AtkSpd` contributes 0.8.
-Attack speed is priced at roughly 1/80th of its combat value, so the formula rewards the stat that
-is displayed rather than the stat that wins fights. The gap never closes — the fast profile stays
-below the slow one at every level from 1 to 50, because both share every growth curve.
+## What IS wrong with CP — established 2026-09-09 over 407 simulated duels
+
+CP is not inverted, but it **is** an unreliable predictor, and its errors are systematic.
+Simulating 407 real player-vs-enemy matchups (2 hero profiles × levels 1/3/5/10/15/20 × 6 enemy
+archetypes × stages 1/3/5/10/15/20) with the project's own combat model:
+
+**CP named the wrong winner in 40 of 407 matchups (9.8%)** — and the bias is entirely
+one-directional:
+
+| | count |
+|---|---|
+| CP said **player** wins, enemy actually won | **40** |
+| CP said **enemy** wins, player actually won | **0** |
+
+**CP systematically overrates the player.** Worked counterexample — "fast" hero @L3 vs
+Skeleton_Crusader_1 @S1:
+
+| | CP | ATK | DEF | HP | kills in |
+|---|---|---|---|---|---|
+| Player | **94** | 74 | 28 | 121 | 5 hits (3.0 s) |
+| Skeleton | **76** | 44 | 52 | 205 | **4 hits (2.4 s)** |
+
+The cause is the weights, not the ordering of the two hero profiles: at level 10 CP prices attack at
+**0.982**, HP at **0.144** and defense at **0.009**, while the enemies are built as tanks (DEF 52–78,
+HP 205–340) and the heroes as damage dealers. CP sees the heroes' one strength clearly and the
+enemies' two strengths barely at all.
+
+Reproduce with `tools/duel.js` and `tools/duel2.js`.
 
 ---
 
@@ -320,15 +359,39 @@ with zero call sites.
 
 ## How the three score the real roster
 
-**Hero test** — the true power ratio between the two profiles is 1.19 (the fast profile is 19%
-stronger). Anything below 1.00 has ranked the roster backwards.
+> **⚠ CORRECTED 2026-09-09.** The original version of this section tested the formulas against
+> `trueDPS = attack × attackSpeed`, which is not how the game works (see the correction in §5).
+> That test has been **replaced** with a far stronger one: simulating all 408 real duels and asking
+> which metric names the actual winner.
 
-| Formula | Fast profile | Slow profile | Ratio | Verdict |
-|---|---|---|---|---|
-| True DPS (reference) | 128 | 108 | 1.19 | — |
-| **A — current weighted sum** | **81** | **89** | **0.91** | **Inverted** |
-| B — product with √ damping | 640 | 540 | 1.19 | Correct |
-| C — DPS × EffectiveHP | 160 | 135 | 1.19 | Correct |
+**The real test — which metric predicts who wins?** (408 matchups, `tools/duel2.js`)
+
+| Metric | correct predictions | |
+|---|---|---|
+| **C — ATK × EffectiveHP** | **408 / 408 = 100.0%** | exact |
+| B — product with √ damping | 388 / 408 = 95.1% | |
+| A′ — current CP minus the 3 inert stats | 369 / 408 = 90.4% | |
+| A — current shipped CP | 368 / 408 = 90.2% | |
+
+**C is 100% because it is the duel condition rearranged, not a heuristic.** Both sides share a fixed
+0.6 s cadence, so:
+
+```
+player needs   enemyEHP ÷ playerATK   hits,   where EHP = HP × (100 + DEF)/100
+enemy  needs   playerEHP ÷ enemyATK   hits
+player wins  ⟺  playerATK × playerEHP  >  enemyATK × enemyEHP
+```
+
+Whoever has the larger `ATK × EffectiveHP` wins. `CPCalculator.EffectiveHP` already computes exactly
+that and has **zero call sites**.
+
+Note that A′ beats A by only 0.2 points: **the three inert stats are not the real problem — the
+near-zero defense weight is.**
+
+**Robustness.** A weighted sum *can* be tuned to 100% on this roster (`wA 1.00, wH 0.35, wD 0.90`),
+but it is fitted, not structural — 95.4% on a wider sweep within current ranges, 87.9% over a wide
+range, 85.6% in a high-DEF regime. The product holds 100% in every regime, because DEF multiplies HP
+and a linear DEF term cannot express that.
 
 **Enemy test** — does the formula reflect the real size of the tier gap? Indexed to Reaper = 100:
 
@@ -392,7 +455,7 @@ fix the ordering with no change to the underlying stat data.
 | CP از ۱۰۰ به ۱۲۰ یعنی ۲۰٪+ روی همه‌ی استت‌ها؟ | **نه.** هر استت منحنی *متفاوتی* را مرکب می‌کند، و CP وزن‌ها را چنان نابرابر پخش کرده که چهار استت از شش‌تا نامرئی‌اند. در عمل **CP ≈ ATK + 0.15·HP**. |
 | برای قهرمان‌ها/دشمن‌های مختلف فرق دارد؟ | **نرخ رشد فرق نمی‌کند.** هر ۸ قهرمان یک `ProgressionConfigSO` مشترک دارند و هر ۶ کهن‌الگوی دشمن یکی دیگر. فقط برگه‌ی پایه فرق دارد. برای دشمن‌ها *لِوِل* فرق می‌کند — لِوِل هر دشمن **همان شماره‌ی استیج** است. |
 | total CP در ران‌تایم؟ | **قابل گرفتن است و کدش از قبل نوشته شده ولی استفاده نمی‌شود.** دشمن‌ها CP را در فیلد دیباگی می‌ریزند که کسی نمی‌خواند؛ بازیکن اصلاً CP محاسبه نمی‌کند؛ `CPCalculator.SquadCP` صفر فراخوانی دارد. |
-| آیا فرمول درست است؟ | **ضعیف‌ترین شکل استاندارد است و همین حالا روستر را وارونه رتبه‌بندی می‌کند.** بخش ۹ را ببینید. |
+| آیا فرمول درست است؟ | ⚠ **CORRECTED 2026-09-09** — the earlier "ranks the roster backwards" claim was wrong and is retracted. CP ranks the two hero profiles correctly. The real defect: over 407 simulated duels CP names the wrong winner **9.8%** of the time, and the bias is entirely one-directional (40 cases of "CP said player wins, enemy won"; 0 the other way), caused by defense carrying a near-zero weight. See §5 and §9. |
 
 ---
 
@@ -530,15 +593,48 @@ t ≈ −۱٫۱ نشسته‌اند. چون منحنی بعد از آخرین ک
 | ۷ | Fallen_Minotaur_01 | `Player_Minotaur_01` | 64 | 2.0 | **128** | **81** | 155 | 293 |
 | ۸ | Dark_Oracle_3 | `Player_Dark_Oracle_3` | 72 | 1.5 | 108 | 89 | 170 | 320 |
 
-## رتبه‌بندی وارونه است
+## ⚠ اصلاح‌شده در ۲۰۲۶-۰۹-۰۹ — ادعای «رتبه‌بندی وارونه» غلط بود
 
-پروفایل سریع **۱۲۸ DPS** می‌زند و **CP ۸۱** نشان می‌دهد. پروفایل کند **۱۰۸ DPS** می‌زند و
-**CP ۸۹** نشان می‌دهد. واحدی که واقعاً قوی‌تر است عددی ۹٪ کمتر نمایش می‌دهد.
+> **این بخش قبلاً ادعا می‌کرد CP روستر را وارونه رتبه‌بندی می‌کند. آن یک خطا بود و پس گرفته شد.**
+> فرض شده بود `trueDPS = attack × attackSpeed`، برداشته از کامنت فیلد در `UnitStatsSO`
+> («hits/sec»)، بدون اینکه تأیید شود بازی واقعاً آن را پیاده کرده. **پیاده نکرده است.**
+>
+> `attackSpeed` اصلاً روی نرخ حمله اثر ندارد. کِیدنس با `PlayerAttackAction.recoveryTime` تعیین
+> می‌شود (`PlayerAttackState.cs:99-100`) و فقط با یک تایمر آزاد می‌شود
+> (`PlayerManager.cs:798-812`)؛ `attackSpeed` در آن مسیر نیست و تنها سرعت پخش انیمیشن را تعیین
+> می‌کند. **هر ۱۰ فایل `PlayerAttackAction` مقدار `recoveryTime = 0.6` دارند**، پس هر قهرمان یک بار
+> در هر ۰٫۶ ثانیه حمله می‌کند و خروجی واقعی `attack ÷ 0.6` است:
+>
+> | پروفایل | ATK | AtkSpd | ادعای اولیه | **واقعی** |
+> |---|---|---|---|---|
+> | «سریع» (ids 1, 6, 7) | 64 | 2.0 | ۱۲۸ DPS | **۱۰۶٫۷ DPS** |
+> | «کند» (ids 2, 3, 4, 5, 8) | 72 | 1.5 | ۱۰۸ DPS | **۱۲۰٫۰ DPS** |
+>
+> پروفایل «کند» واقعاً **۱۲٫۵٪ قوی‌تر** است و CP آن را ۹٫۹٪ بالاتر می‌سنجد (۸۹ در برابر ۸۱).
+> **CP این دو پروفایل را درست رتبه‌بندی می‌کند.**
 
-علتش حساب است: `wA·ATK` عدد ۶۴ اضافه می‌کند در حالی که `wAS·AtkSpd` فقط ۰٫۸. سرعت حمله تقریباً
-یک‌هشتادمِ ارزش واقعی‌اش قیمت خورده، پس فرمول به استتی پاداش می‌دهد که نمایش داده می‌شود نه استتی
-که نبرد را می‌برد. این فاصله هیچ‌وقت بسته نمی‌شود — پروفایل سریع در تمام لِوِل‌های ۱ تا ۵۰ زیر
-پروفایل کند می‌ماند، چون هر دو تمام منحنی‌های رشد را مشترکاً دارند.
+## مشکل واقعی CP — اثبات‌شده روی ۴۰۷ دوئل شبیه‌سازی‌شده
+
+CP وارونه نیست، اما پیش‌بینی‌کننده‌ی قابل‌اعتمادی هم نیست، و خطاهایش سیستماتیک‌اند.
+
+**CP در ۴۰ مورد از ۴۰۷ (۹٫۸٪) برنده را اشتباه اعلام کرد** — با سوگیری کاملاً یک‌طرفه:
+
+| | تعداد |
+|---|---|
+| CP گفت **بازیکن** می‌برد، دشمن برد | **۴۰** |
+| CP گفت **دشمن** می‌برد، بازیکن برد | **۰** |
+
+**CP به‌طور سیستماتیک بازیکن را بیش‌ارزش‌گذاری می‌کند.** مثال — قهرمان «سریع» در L3 برابر
+Skeleton_Crusader_1 در S1:
+
+| | CP | ATK | DEF | HP | کشتن در |
+|---|---|---|---|---|---|
+| بازیکن | **۹۴** | 74 | 28 | 121 | ۵ ضربه (۳٫۰ ثانیه) |
+| اسکلت | **۷۶** | 44 | 52 | 205 | **۴ ضربه (۲٫۴ ثانیه)** |
+
+علت در وزن‌هاست: در لِوِل ۱۰، CP حمله را **۰٫۹۸۲**، جان را **۰٫۱۴۴** و دفاع را **۰٫۰۰۹** قیمت
+می‌گذارد، در حالی که دشمن‌ها تانک‌اند (DEF ۵۲ تا ۷۸، HP ۲۰۵ تا ۳۴۰) و قهرمان‌ها دمیج‌دیلر.
+بازتولید با `tools/duel.js` و `tools/duel2.js`.
 
 ---
 
@@ -675,15 +771,39 @@ public void Initialize(int stageLevelFromSpawner)
 
 ## این سه فرمول روی روستر واقعی چه امتیازی می‌دهند
 
-**آزمون قهرمان‌ها** — نسبت قدرت واقعی بین دو پروفایل ۱٫۱۹ است (پروفایل سریع ۱۹٪ قوی‌تر). هر عدد
-زیر ۱٫۰۰ یعنی روستر وارونه رتبه‌بندی شده.
+> **⚠ اصلاح‌شده در ۲۰۲۶-۰۹-۰۹.** نسخه‌ی اولیه‌ی این بخش فرمول‌ها را با
+> `trueDPS = attack × attackSpeed` می‌سنجید، که روش کار بازی نیست (اصلاح در بخش ۵ را ببینید).
+> آن آزمون با آزمونی به‌مراتب قوی‌تر **جایگزین شد**: شبیه‌سازی هر ۴۰۸ دوئل واقعی و پرسیدن اینکه
+> کدام معیار برنده‌ی واقعی را درست می‌گوید.
 
-| فرمول | پروفایل سریع | پروفایل کند | نسبت | حکم |
-|---|---|---|---|---|
-| DPS واقعی (مرجع) | 128 | 108 | 1.19 | — |
-| **A — مجموع وزن‌دار فعلی** | **81** | **89** | **0.91** | **وارونه** |
-| B — ضرب با میرایی جذری | 640 | 540 | 1.19 | درست |
-| C — DPS × جان مؤثر | 160 | 135 | 1.19 | درست |
+**آزمون واقعی — کدام معیار برنده را پیش‌بینی می‌کند؟** (۴۰۸ رویارویی، `tools/duel2.js`)
+
+| معیار | پیش‌بینی درست | |
+|---|---|---|
+| **C — ATK × جان مؤثر** | **۴۰۸ / ۴۰۸ = ۱۰۰٫۰٪** | دقیق |
+| B — ضرب با میرایی جذری | ۳۸۸ / ۴۰۸ = ۹۵٫۱٪ | |
+| ′A — CP فعلی منهای سه استت بی‌اثر | ۳۶۹ / ۴۰۸ = ۹۰٫۴٪ | |
+| A — CP فعلی | ۳۶۸ / ۴۰۸ = ۹۰٫۲٪ | |
+
+**C دقیقاً ۱۰۰٪ است چون خودِ شرط دوئل است، نه یک حدس مهندسی.** چون هر دو طرف کِیدنس ثابت ۰٫۶
+ثانیه دارند:
+
+```
+بازیکن نیاز دارد به   enemyEHP ÷ playerATK   ضربه،   که EHP = HP × (100 + DEF)/100
+دشمن  نیاز دارد به   playerEHP ÷ enemyATK   ضربه
+بازیکن می‌برد  ⟺  playerATK × playerEHP  >  enemyATK × enemyEHP
+```
+
+هرکس `ATK × EffectiveHP` بزرگ‌تری داشته باشد می‌برد. `CPCalculator.EffectiveHP` همین را حساب
+می‌کند و **صفر فراخوانی** دارد.
+
+توجه: ′A فقط ۰٫۲ واحد از A بهتر است — **سه استت بی‌اثر مشکل اصلی نیستند؛ وزن نزدیک‌به‌صفرِ دفاع
+مشکل اصلی است.**
+
+**پایداری.** یک مجموع وزن‌دار *می‌تواند* روی همین روستر به ۱۰۰٪ تنظیم شود
+(`wA 1.00, wH 0.35, wD 0.90`)، اما این برازش است نه ساختار — ۹۵٫۴٪ روی بازه‌ی گسترده‌تر در محدوده‌ی
+فعلی، ۸۷٫۹٪ روی بازه‌ی وسیع، و ۸۵٫۶٪ در رژیم دفاع بالا. فرم ضربی در همه‌ی رژیم‌ها ۱۰۰٪ می‌ماند،
+چون دفاع در جان **ضرب** می‌شود و یک جمله‌ی خطی برای دفاع نمی‌تواند این را بیان کند.
 
 **آزمون دشمن‌ها** — آیا فرمول اندازه‌ی واقعی فاصله‌ی تیرها را بازتاب می‌دهد؟ شاخص‌سازی نسبت به
 Reaper = ۱۰۰:

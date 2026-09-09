@@ -880,6 +880,187 @@ GitHub, outside `Assets/` so Unity never imports it and the project size is unto
 
 ---
 
+<a id="16"></a>
+## 16. Same type, different CP — and a correction — 2026-09-09
+
+**Arash** asked whether two characters of the same type can have different CP but identical combat
+power.
+
+**Answer:** no — CP is computed *from* the stats, so identical stats give identical CP, and different
+CP means different stats and therefore different combat behaviour.
+
+**But the question exposed an error.** Investigating it revealed that **`attackSpeed` does not affect
+a player's rate of attack at all.** Cadence is set by `PlayerAttackAction.recoveryTime`
+(`PlayerAttackState.cs:99-100`), released purely by a timer (`PlayerManager.cs:798-812`), and
+`attackSpeed` appears nowhere in that path — it only drives animator playback speed. All 10
+`PlayerAttackAction` assets carry `recoveryTime = 0.6`.
+
+| Profile | ATK | AtkSpd | previously claimed | **actual** |
+|---|---|---|---|---|
+| "fast" | 64 | 2.0 | 128 DPS | **106.7 DPS** |
+| "slow" | 72 | 1.5 | 108 DPS | **120.0 DPS** |
+
+**The "slow" profile is genuinely 12.5% stronger and CP rates it 9.9% higher. CP ranks them
+correctly** — the reported "inversion" was an artefact of assuming `trueDPS = attack × attackSpeed`.
+
+The real defect is narrower: `moveSpeed`, `attackSpeed` and `attackRange` are **~2.1% of CP and all
+inert in gameplay**, and defense contributes **0.00%** at level 1 while genuinely affecting combat.
+
+---
+
+<a id="17"></a>
+## 17. Does higher CP always win? — proven no
+
+**Arash** asked the sharper form: if a player and enemy meet and one has higher CP, can the lower-CP
+one win?
+
+**Simulated 407 real matchups.** CP named the wrong winner **40 times (9.8%)**, and the bias is
+entirely one-directional:
+
+| | count |
+|---|---|
+| CP said **player** wins, enemy won | **40** |
+| CP said **enemy** wins, player won | **0** |
+
+Counterexample — "fast" hero @L3 vs Skeleton_Crusader_1 @S1: player CP 94 kills in 5 hits; Skeleton
+CP 76 kills in **4**. Cause: CP weights ATK 0.982, HP 0.144, DEF **0.009**, while enemies are tanks
+and heroes are damage dealers.
+
+**Which metric actually predicts the winner:**
+
+| Metric | correct |
+|---|---|
+| **C — ATK × EffectiveHP** | **408/408 = 100.0%** |
+| B — product with √ damping | 388/408 = 95.1% |
+| A′ — CP minus the 3 inert stats | 369/408 = 90.4% |
+| A — current shipped CP | 368/408 = 90.2% |
+
+C is 100% because it *is* the duel condition rearranged:
+`player wins ⟺ playerATK × playerEHP > enemyATK × enemyEHP`. Note A′ beats A by only 0.2 points —
+**the inert stats are not the problem; the near-zero defense weight is.**
+
+Scripts committed as `tools/duel.js` and `tools/duel2.js`.
+
+---
+
+<a id="18"></a>
+## 18. DEF vs HP, and both analysis methods
+
+**Arash** asked the difference between DEF and HP, whether using both in CP is correct, and
+**required two analysis methods going forward: in-game testing AND web comparison with other games.**
+
+**DEF vs HP:** DEF is divisive (`damage = ATK × 100/(100+DEF)`); HP is linear. Critically **they
+multiply**: `EffectiveHP = HP × (100 + DEF)/100`. Using both is necessary; *adding* them is the
+modelling error.
+
+**Web research** — [Epic Seven's public formula](https://epic-seven.fandom.com/wiki/Combat_Power):
+`P1 = ((att×1.6 + att×1.6×chc×chd) × (1 + (spd−45)×0.02) + hp + def×9.3) × (1 + (res+eff)/4)`.
+Speed *multiplies* the attack term; DEF's 9.3 coefficient is scale normalisation so DEF and HP
+contribute comparably. Typical shares ≈ **offense 45% / HP 32% / DEF 23%**.
+[Plarium states](https://raid-support.plarium.com/hc/en-us/articles/360020897500-Champion-and-Team-Power)
+Raid's Team Power "was not designed to be used as a definitive predictor of battle outcomes" —
+Arash's goal is stricter than the industry norm.
+
+**Both methods agreed independently:** derivation gives ATK 51 / HP 33 / DEF 16; Epic Seven gives
+~45 / 32 / 23. Against the shipped **79 / 19 / 0**.
+
+---
+
+<a id="19"></a>
+## 19. Arash's decisions, and two balance landmines
+
+**Arash decided:** attack speed **must** count (3 hits/sec beats 2 hits/sec); hard-coding must go
+("anything updated in the stats must be what the game outputs"); `moveSpeed` gets **no CP role** but
+**should still grow** for progression feel, base ~**0.25–0.3**, growth deferred; range **removed
+entirely** from CP and growth; and **the game must not get easier**.
+
+**Two landmines flagged before implementing:**
+
+| | stat sheet | game actually uses |
+|---|---|---|
+| Player movement | 3.5 | **0.5** (`PlayerManager.cs:685`) |
+| Enemy movement | 2.9–3.5 | **0.2** (`EnemyLocoMotion.cs:214`) |
+
+Wiring naively → players 7× and enemies 15× faster. And cadence `recoveryTime / attackSpeed` with
+today's 2.0/1.5 → heroes **1.5–2× stronger**.
+
+**Resolution:** make the stat authoritative *and* rewrite SO values to the tuned figures; narrow
+authored `attackSpeed` to **0.9–1.3**, keeping cadence at 0.46–0.67 s around today's flat 0.6 s.
+One change solves both.
+
+---
+
+<a id="20"></a>
+## 20. "What are these percentages?" — they are not weights
+
+**Arash** asked whether 33.9% means `w.wA = 0.33`.
+
+**No.** In the product form `CP = ATK × AtkSpd × HP × (1 + DEF/100)` there are **no coefficients at
+all** — nothing to set, nothing stored, `Player CP.asset` becomes largely unused. The percentage is a
+**measurement**, not a setting.
+
+**Two meanings of "share":** *elasticity* (per-1% importance) is fixed by the combat math at
+ATK = AtkSpd = HP = 1, DEF ≈ 0.06–0.11. *Practical influence* depends on the **authored range**:
+
+| Stat | range | practical influence |
+|---|---|---|
+| ATK | 32 – 252 | **33.9%** |
+| AtkSpd | 0.85 – 2.0 | **14.0%** |
+| HP | 100 – 1680 | **46.3%** |
+| DEF | 25 – 78 | **5.8%** |
+
+Attack is held down by **HP spanning 16.8× against attack's 7.8×**, not by attack speed.
+**Arash accepted these current values.** A cosmetic display divisor (~/200) keeps CP near today's
+familiar numbers.
+
+---
+
+<a id="21"></a>
+## 21. Growth curve shape, and the open problem
+
+**Arash** objected that growth should not be linear — the per-upgrade gain should start high and
+taper.
+
+**It already does.** `atkPctByLevel` runs **+8% → +3%**. The chart he was reading plots the
+*cumulative* multiplier, which bends upward because of **compounding**: a smaller % on a bigger
+number still gives a bigger absolute step. For the cumulative curve to bend downward, the percentage
+would have to fall faster than `pct²` per level, driving growth to zero within ~12 levels.
+
+**The +21–33% figure was Claude's proposal and Arash rejected it. Player growth stays +8% → +3%.**
+
+**⚠ OPEN PROBLEM — the upgrade-cadence asymmetry.** Upgrades are gated to every ~4–5 stages, but
+enemy level = stage:
+
+| Stage | enemy lvl | player lvl | enemy / player power |
+|---|---|---|---|
+| 1 | 1 | 1 | 5.3× |
+| 8 | 8 | 2 | 13.9× |
+| 20 | 20 | 5 | **45.8×** |
+
+The gap widens **8.6×** across 20 stages. Arash wants a **sawtooth** instead: difficulty rises
+between upgrades, near-parity restored at each upgrade.
+
+**BLOCKED:** Arash will supply an **Excel of intended CP progression for levels 1–20**. Two numbers
+are needed to fit the enemy curve: how close "small gap" is at the upgrade moment, and how large the
+gap should grow before the next one.
+
+---
+
+## Implementation plan — approved in principle, NOT yet written
+
+| # | Change | Needs the Excel? |
+|---|---|---|
+| 1 | Movement reads `unitStats.moveSpeed`; SO values → **0.3** | no |
+| 2 | Cadence → `recoveryTime / attackSpeed`; hero `attackSpeed` → **0.9–1.3** | no |
+| 3 | CP → **`(ATK × AtkSpd) × EffectiveHP`** + display divisor | no |
+| 4 | `attackRange` removed from CP and growth | no |
+| 5 | moveSpeed growth rate | **yes — deferred** |
+| 6 | Enemy growth curves / difficulty sawtooth | **yes — deferred** |
+
+**Only one code change has been made this session:** `CPWeightMath.cs:41` (`80ed65b`).
+
+---
+
 ## Where things stand
 
 ### Answered

@@ -55,6 +55,25 @@
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
 
+- **[2026-09-09] CP redesign is designed but BLOCKED on Arash's Excel.** Goal: higher CP must always
+  win a 1v1. Four changes are specified and ready (`Docs/cp-analysis/CP_DISCUSSION_LOG.md`, section
+  "Implementation plan"): wire movement to `unitStats.moveSpeed` with SO values retuned to 0.3;
+  cadence → `recoveryTime / attackSpeed` with hero `attackSpeed` re-authored into 0.9–1.3; CP →
+  `(ATK × AtkSpd) × EffectiveHP` with a cosmetic display divisor; `attackRange` removed from CP and
+  growth. **Do not start until the Excel of intended CP progression for levels 1–20 arrives**, plus
+  the two sawtooth numbers (gap size at an upgrade, gap size before the next). **Two traps:** wiring
+  movement naively makes players 7× and enemies 15× faster; enabling `attackSpeed` at today's 2.0/1.5
+  makes heroes 1.5–2× stronger. Both are avoided by the retunes above. Standing instruction from
+  Arash: **all notes in English.**
+
+- **[2026-09-09] ⚠ A 2026-09-07 CP finding was retracted.** "CP ranks the roster backwards" was
+  **wrong** — it assumed `attackSpeed` multiplies DPS. It does not: cadence is a flat
+  `recoveryTime = 0.6` on all 10 `PlayerAttackAction` assets and `attackSpeed` only drives animator
+  playback. CP ranks the two hero profiles correctly. The real, proven defect is that CP names the
+  wrong winner in **9.8%** of 407 simulated duels with an **entirely one-directional bias** — it
+  always overrates the player — because defense carries a near-zero weight. If you read the older
+  analysis or the published Artifact, check the corrected sections first.
+
 - **[2026-09-07] The CP system has 9 registered defects, none of them fixed.** Full analysis with
   every number traced to a file:line in `Docs/cp-analysis/CP_SYSTEM_ANALYSIS.md`
   (charted twin: <https://claude.ai/code/artifact/3d635747-5eb6-43f8-85cf-e868e41e783d>).
@@ -396,6 +415,50 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ## Session Log
 
 _Newest first._
+
+### 2026-09-08/09 — CP redesign discussion: one code fix, a retracted finding, and a blocked design decision
+
+- **Goal:** work through the CP system point by point with Arash and decide how to change it. His
+  stated objective: **in a 1v1, the character with the higher CP should always win.**
+- **Status:** partial — analysis and decisions complete, **implementation not started** (blocked, see
+  Next).
+- **Changed:**
+  - `Assets/Scripts/Data/CombatPower/CPWeightMath.cs:41` — **the only code change.** `meleeMult` was
+    never sampled from config (the line was missing, `rangedMult` assigned twice). Fixed, and its
+    reference doc updated. Commit `80ed65b`.
+  - `Docs/cp-analysis/` — discussion log, analysis and transcript all extended; two new simulation
+    tools (`tools/duel.js`, `tools/duel2.js`).
+- **Scene/Prefab/SO edits:** **none.**
+- **Verified:** the `CPWeightMath` fix was proven to change **no CP value** at any level 1–50 for both
+  config assets (the `Clamp(...,1,5)` floor lifts the off-axis curve's 0.060 back to the 1.0 it
+  already produced). Everything else is simulation over the project's real `.asset` data. **Nothing
+  run in Play mode** — no behaviour changed.
+- **Gotchas — read these before touching CP:**
+  - **⚠ A previous finding was WRONG and is retracted.** The 2026-09-07 claim that "CP ranks the
+    roster backwards" was based on assuming `trueDPS = attack × attackSpeed`. **`attackSpeed` does
+    not affect attack rate at all** — cadence is `PlayerAttackAction.recoveryTime`, a flat **0.6 on
+    all 10 assets**, released by a timer (`PlayerManager.cs:798-812`); `attackSpeed` only drives
+    animator playback. Real output is `attack ÷ 0.6`, so the ATK-72 profile is 12.5% stronger and
+    **CP ranks the two profiles correctly.**
+  - **The real defect, proven over 407 simulated duels:** CP names the wrong winner **9.8%** of the
+    time, and the bias is **entirely one-directional** — 40 cases of "CP said player wins, enemy
+    won", 0 the other way. **CP systematically overrates the player.** Cause: defense carries a
+    near-zero weight (`wD = 0.00` at L1) while enemies are built as tanks.
+  - **`ATK × EffectiveHP` predicts 408/408.** Not a heuristic — it is the duel condition rearranged.
+    `CPCalculator.EffectiveHP` already computes it and has **zero call sites**.
+  - **Movement is hard-coded away from the stats:** players move at `PlayerManager.moveSpeed` 0.5,
+    enemies at `EnemyLocoMotion.moveSpeed` 0.2, while the SOs say 3.5 / 2.9–3.5. **Wiring the stat
+    through naively would make players 7× and enemies 15× faster.**
+  - **The upgrade-cadence asymmetry is the big open problem.** Enemy level = stage (20 levels of
+    growth) but upgrades are gated to every ~4–5 stages (~5 upgrades). The power gap widens **8.6×**
+    across 20 stages (5.3× at stage 1 → 45.8× at stage 20).
+- **Next:** **BLOCKED on Arash**, who will supply an Excel of intended CP progression for levels 1–20
+  plus two numbers (how close the gap is at an upgrade, how wide it grows before the next). Four
+  changes are designed and ready to write once unblocked: movement wired to stats with SO values
+  retuned to 0.3; cadence → `recoveryTime / attackSpeed` with hero `attackSpeed` re-authored into
+  0.9–1.3 (this also prevents a 1.5–2× player power jump); CP → `(ATK × AtkSpd) × EffectiveHP` with a
+  cosmetic display divisor; `attackRange` removed from CP and growth. Full detail and the reasoning
+  behind each is in `Docs/cp-analysis/CP_DISCUSSION_LOG.md`.
 
 ### 2026-09-07 — CP system audited end to end and documented (analysis only, zero code changes)
 
