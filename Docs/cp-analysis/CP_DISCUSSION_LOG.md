@@ -533,6 +533,80 @@ Template for each point:
 
 ---
 
+### 2026-09-09 — ⚠ CORRECTION: the "rank inversion" finding was WRONG
+
+- **Arash asked:** if `g.gX` is what wins battles, what is the point of two characters of the same
+  type having different CP? Are their powers identical while only the UI shows a different CP?
+
+- **Direct answer: no.** CP is *computed from* the stats — it is never stored or set by hand.
+  Identical stats always produce identical CP; different CP always means different stats, which
+  means genuinely different combat behaviour. The scenario "same power, different CP" cannot arise
+  through CP itself.
+
+- **But the question exposed a real error in the earlier analysis.** Investigating it revealed that
+  **`attackSpeed` does not affect a player's rate of attack at all.**
+
+  ```csharp
+  // PlayerAttackState.cs:99-100 — on every attack
+  pm.isPerformingAction   = true;
+  pm.currentRecoveryTimer = currentAttack.recoveryTime;
+
+  // PlayerManager.cs:798-812 — the ONLY thing that releases it
+  currentRecoveryTimer -= Time.deltaTime;
+  if (isPerformingAction && currentRecoveryTimer <= 0) isPerformingAction = false;
+  ```
+
+  `attackSpeed` appears nowhere in that path — it is used only at `PlayerAttackState.cs:105` as the
+  animator playback speed (`PlayTargetAnimation(..., speedMultiplier)`). And **all 10
+  `PlayerAttackAction` assets carry `recoveryTime = 0.6`**, identical. Every hero therefore attacks
+  once per 0.6 s regardless of `attackSpeed`, so real output is `attack ÷ 0.6`.
+
+  | Profile | ATK | AtkSpd | previously claimed | **actual** |
+  |---|---|---|---|---|
+  | "fast" (ids 1, 6, 7) | 64 | 2.0 | 128 DPS | **106.7 DPS** |
+  | "slow" (ids 2, 3, 4, 5, 8) | 72 | 1.5 | 108 DPS | **120.0 DPS** |
+
+  **The "slow" profile is genuinely 12.5% stronger, and CP rates it 9.9% higher (89 vs 81). CP ranks
+  the roster CORRECTLY.** The reported inversion was an artefact of assuming
+  `trueDPS = attack × attackSpeed`, taken from the `UnitStatsSO` field comment ("hits/sec") without
+  verifying the game implements it. It does not.
+
+- **What the real defect is.** Three of the six stats CP prices are inert in gameplay:
+
+  | Stat | share of CP at L1 | what actually governs it |
+  |---|---|---|
+  | `moveSpeed` | 1.08% | `PlayerManager.moveSpeed` (0.5), an Inspector field |
+  | `attackSpeed` | 0.99% | nothing — cadence is a fixed `recoveryTime` of 0.6 |
+  | `attackRange` | 0.05% | `PlayerManager.maxAttackRange` (0.85), an Inspector field |
+  | **total** | **~2.1%** | |
+
+  So ~2% of every CP score is awarded for stats that do not affect combat. Two heroes differing
+  *only* in those three stats would show different CP while fighting identically — the honest
+  version of Arash's intuition. In the real roster, of the 8-point gap between the profiles, ~8.2
+  points come from the genuine attack difference and −0.2 from the inert attack-speed difference.
+
+  The larger issue is unchanged: **defense contributes 0.00% of CP at level 1** while very much
+  affecting combat (`CombatMath.DamagePerHit` divides by `100 + defense`). CP under-credits a stat
+  that matters and over-credits three that do not.
+
+- **⚠ WHAT THIS INVALIDATES — a correction pass is owed.** The formula comparison in
+  `CP_SYSTEM_ANALYSIS.md` §9 was built on `trueDPS = attack × attackSpeed`. With the correct
+  `attack ÷ 0.6`, the conclusion that candidates B and C "fix the ordering" was solving a
+  non-existent problem. Affected and **not yet corrected**: `CP_SYSTEM_ANALYSIS.md` §5 and §9,
+  `CP_SESSION_TRANSCRIPT.md`, `SESSIONS.md`, and the published Artifact.
+
+- **Unmeasured caveat:** if an attack animation is long and `attackSpeed` low, the
+  `EnableDamageCollier` animation event might not fire within the 0.6 s window, dropping the hit —
+  which would give `attackSpeed` an indirect effect. Confirming this needs the animation clip
+  lengths, which have not been read. Until then, "attackSpeed is inert" holds for the cadence but
+  not provably for hit delivery.
+
+- **Outcome:** correction recorded. **The full correction pass across the other documents and the
+  Artifact is still pending.**
+- **Files touched:** none in the project (analysis only).
+
+---
+
 ## Decisions taken
 
 _Empty. Move a row here from "Open decisions" once it is settled, with the reasoning._
