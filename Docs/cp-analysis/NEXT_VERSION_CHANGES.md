@@ -3,7 +3,8 @@
     Compiled : 2026-09-09
     Source   : the CP redesign discussion (see CP_DISCUSSION_LOG.md) plus the
                9-item defect register in CP_SYSTEM_ANALYSIS.md
-    Status   : NOTHING below is implemented except A0.
+    Status   : Group A (A0-A3) is IMPLEMENTED, commit `d505719`. Everything else below
+               is still unimplemented.
 
 Every item states what changes, why, the risk, and whether it is blocked. Order within each group is
 the order to do them in — later items assume earlier ones.
@@ -29,7 +30,7 @@ missing, so `meleeMult` kept its hard-coded `1f`. **Verified to change no CP val
 `Clamp(...,1,5)` floor lifts the off-axis curve's 0.060 back to the 1.0 it already produced.
 *Defect register item 03 — closed.*
 
-### A1 · 🟢 Replace the CP formula
+### A1 · ✅ DONE — Replace the CP formula (commit `d505719`)
 ```
 OLD:  CP = round( wA·ATK + wH·HP + wMv·Move + wAS·AtkSpd + wD·DEF + wR·Range ) × typeMult
 NEW:  CP = round( ATK × AtkSpd × EffectiveHP ÷ K )
@@ -44,19 +45,52 @@ NEW:  CP = round( ATK × AtkSpd × EffectiveHP ÷ K )
   every CP by the same constant changes no ordering.
 - **Consequence:** `CPWeightsConfigSO` and both `.asset` files become almost entirely unused. Do not
   delete them yet — decide that once the new formula is in play.
+- **As shipped:** `K = 200`, exposed as `CPCalculator.DisplayDivisor`. **E6 was answered by
+  choosing this default** — changing it rescales the whole roster and reorders nothing, so it is a
+  one-line cosmetic tweak if the magnitudes feel wrong.
+- **Also required by A1:** `EnemyManager.UnitCP_WithFallback` carried a *second*, divergent
+  hard-coded CP formula for the `cfg == null` case (register item 05 / D3). Since the new
+  `UnitCP` needs no config, that branch was deleted — leaving it would have been actively wrong,
+  because it produced numbers on a completely different scale. **There is now exactly one CP
+  formula in the project.** D3 is therefore partly closed; what remains of D3 is only "make a null
+  config a loud error", which is now moot.
+- **Measured effect on the shipped roster** (old → new):
 
-### A2 · 🟢 Remove `attackRange` from CP **and** from growth
+  | unit | old CP | new CP |
+  |---|---|---|
+  | ArcherStats | 37 | 11 |
+  | WarriorStats | 59 | 40 |
+  | `Player_Minotaur_01` (ATK 64 × AS 2.0) | **81** | **80** |
+  | `Golem_3` (ATK 72 × AS 1.5) | **89** | **68** |
+  | Enemy_Golem_02 | 122 | 180 |
+  | PlayerMeleeReaper (attackSpeed 4.0) | 114 | 240 |
+
+  The first two highlighted rows are the rank inversion, now corrected: the 128-DPS unit finally
+  outranks the 108-DPS one. `PlayerMeleeReaper`'s jump is real — attackSpeed 4.0 is an outlier that
+  **B2 is scheduled to re-author**. `GateBase` now scores 0 because its ATK is 0, which is correct
+  but will change any UI that showed the old 15.
+
+### A2 · ✅ DONE — Remove `attackRange` from CP **and** from growth (commit `d505719`)
 - **Files:** `CPCalculator.cs`, `CPConfigSO.cs`, `ProgressionMath.cs`, `ProgressionConfigSO.cs`
 - **Why:** Arash's directive. Range is inert in gameplay — players use
   `PlayerManager.maxAttackRange` (0.85) and enemies `EnemyLocoMotion.stoppingDistance` (0.83); the
   stat-block value is never read.
 - **Measured cost:** the range term is 0.052% of CP at L1 and 0.003% at L50. Dropping it moves the
   displayed integer in 3 of 20 hero rows and 5 of 120 enemy rows, always by exactly 1.
-- **Note:** all 15 units are Warrior, so "exclude for melee" and "exclude entirely" are identical
-  today. Deleting the term outright is simpler; an `if (!isRanged)` guard would preserve it for a
-  future Archer/Mage. **Arash to confirm which.** 🟡
+- **E4 answered by the directive "Remove attackRange from CP and growth":** the term was **deleted
+  outright**, not guarded. A future ranged class would need it re-added — but note the new formula
+  has no per-stat weights at all, so range would have to enter some other way regardless.
+- **What was actually removed:** `CPWeightMath.Weights.wR`, `CPWeightsConfigSO.wRangeByLevel`,
+  `ProgressionMath.Growth.gR`, `ProgressionConfigSO.rangePctByLevel`, the `rangePct` parameter of
+  `UnitStatsRuntime.ApplyLevelGrowth`, and all three consumers of `gR`
+  (`PlayerStatsApplier.cs:141`, `PlayerProgressionService.cs:242,250`).
+- **Still present on purpose:** `UnitStatsSO.attackRange`, `UnitStatsRuntime.attackRange`, the
+  `rangeMult` buff parameter of `ApplyMultipliers`, and the range readouts in the UI. Range is still
+  a stat — it just neither grows nor scores. Its upgrade delta now always reads 0.
+- **Asset note:** the `.asset` files still carry serialized `rangePctByLevel` / `wRangeByLevel`
+  blocks. They are already inert; Unity drops them the next time it re-saves those assets.
 
-### A3 · 🟢 Remove `moveSpeed` from CP (keep its growth)
+### A3 · ✅ DONE — Remove `moveSpeed` from CP (keep its growth) (commit `d505719`)
 - **Why:** movement does not decide a duel. Arash agreed weight 0.
 - **Important:** this removes it from **CP only**. `moveSpeed` still grows, purely to convey
   progression. See C3.
@@ -180,13 +214,19 @@ feel of progression. **Explicitly deferred: do not set this until he says.**
   stays flat across all 20 stages while attack ×3.6 and HP ×4.9.
 - *Register item 06.*
 
-### D3 · 🟢 A second, divergent CP formula inside `EnemyManager`
+### D3 · ✅ DONE — A second, divergent CP formula inside `EnemyManager` (commit `d505719`)
+Deleted as a required consequence of A1. See the A1 entry. The remaining half of the original
+suggestion — "make a null config a loud error" — is moot: the new `UnitCP` does not use the config.
+
+<details><summary>original entry</summary>
+
 - **File:** `EnemyManager.cs:146-161`, reachable whenever `cpWeights` is null.
 - It has no range term and treats Mage as melee, so it disagrees with `CPCalculator` even given
   identical weights. `EnemySpawner.cs:410` overwrites the prefab's config at spawn, so leaving one
   Inspector slot empty silently downgrades every enemy in a stage to this fallback.
 - **Delete it** and make a null config a loud error instead.
 - *Register item 05.*
+</details>
 
 ### D4 · 🟡 The flavour-multiplier system
 - Both `meleeMultByLevel` and `rangedMultByLevel` in `Player CP.asset` are authored off-axis
@@ -219,17 +259,18 @@ feel of progression. **Explicitly deferred: do not set this until he says.**
 | E1 | The CP progression spreadsheet for levels 1–20 | C2, C4, C5 |
 | E2 | Sawtooth: how close is the gap at an upgrade? (player ~1.1× ahead / even / behind) | C4 |
 | E3 | Sawtooth: how wide does the gap grow before the next upgrade? (1.5× / 2×) | C4 |
-| E4 | Range: delete the term outright, or guard it with `if (!isRanged)` for future ranged units? | A2 |
+| ~~E4~~ | ~~Range: delete outright or guard?~~ **Answered: deleted outright** (A2 shipped) | — |
 | E5 | Flavour system: delete it, or re-author the curves for a future multi-class roster? | D4 |
-| E6 | Display divisor `K` — is ~200 right, i.e. should CP stay near today's magnitudes? | A1 |
+| ~~E6~~ | ~~Display divisor `K`~~ **Shipped at 200** as `CPCalculator.DisplayDivisor`. Revisit only if the displayed magnitudes feel wrong — it reorders nothing | — |
 
 ---
 
 # Suggested order
 
-1. **A1 + A2 + A3** — the formula. Self-contained, no balance risk, immediately fixes the 9.8% duel error.
+1. ~~**A1 + A2 + A3** — the formula.~~ ✅ **DONE**, commit `d505719`. Took D3 with it.
 2. **C1** — the off-axis curves. Pure correctness; the game is silently running numbers nobody chose.
-3. **D1 + D2 + D3** — the correctness bugs. Independent of the balance pass.
+   **This is now the top item.** Must be done in the Unity Inspector.
+3. **D1 + D2** — the correctness bugs. Independent of the balance pass.
 4. **B1 + B2** — wiring the stats to the game. ⚠️ Both carry balance traps; do them together with their retunes.
 5. **C2 + C4 + C5** — the balance pass. 🔴 Requires the spreadsheet.
 6. **D4 + D5 + D6** — cleanup, once the shape is settled.
@@ -241,6 +282,34 @@ part waiting on Arash.
 
 # What has NOT been touched
 
-For the record: across this entire discussion exactly **one line of game code** changed —
-`CPWeightMath.cs:41` (A0). No `.asset`, `.prefab` or `.unity` file has been modified. Everything else
-listed above is designed and evidenced but unimplemented.
+Two commits of game code exist: `80ed65b` (A0, one line) and `d505719` (A1 + A2 + A3 + D3, nine
+`.cs` files plus their nine reference docs).
+
+**No `.asset`, `.prefab` or `.unity` file has been modified at any point.** That matters because the
+two highest-value remaining fixes — C1 (the off-axis growth curves) and B1/B2 (the retunes) — are
+*data* changes that must be made in the Unity Inspector, and nothing done so far pre-empts them.
+
+Everything in groups B, C, D (except D3) and E remains designed and evidenced but unimplemented.
+
+---
+
+# ⚠️ Scope note — what A1 does and does not guarantee
+
+A1 makes the CP number exact **for a 1v1 duel**. That guarantee does not extend to group battles,
+and the difference is not a tuning gap — it is structural. Measured against a simulation of the real
+combat rules (nearest-enemy sticky targeting, walk time, individual HP and damage):
+
+| Total CP gap between the two sides | higher-CP side actually wins |
+|---|---|
+| < 1% | ~51% — a coin flip |
+| 1–5% | ~52–60% |
+| 5–10% | ~55–71% |
+| > 10% | ~64–90% |
+
+The cause: with sticky nearest-enemy targeting the battle decomposes into several simultaneous local
+duels, and **which unit gets paired against which is a geometric accident**. Freezing the stats and
+re-shuffling only the positions flips the winner in **31% of matchups**. No team-level scalar can see
+pairing, so no Total CP formula — sum, product, or otherwise — can predict it. Removing travel time
+entirely, or switching to focus-fire targeting, does not help.
+
+See `CP_DISCUSSION_LOG.md` for the full measurement set and the options that remain.

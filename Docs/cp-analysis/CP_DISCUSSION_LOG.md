@@ -4,7 +4,9 @@
              CP_SYSTEM_ANALYSIS.md is the FINDINGS (what is true).
              This file is the DECISIONS (what we choose to do about it).
     Opened : 2026-09-07
-    Status : discussion in progress — NOTHING has been decided, NOTHING has been changed.
+    Status : 2026-09-09 — the CP formula group (A1/A2/A3, plus D3) is IMPLEMENTED in
+             commit `d505719`. Groups B, C and the rest of D remain unimplemented.
+             No `.asset` / `.prefab` / `.unity` file has been modified at any point.
 
 > **فارسی:** این فایل دفترچه‌ی گفتگوی ماست. یافته‌ها در `CP_SYSTEM_ANALYSIS.md` هستند؛
 > اینجا فقط تصمیم‌ها و سؤال‌های باز ثبت می‌شوند. بخش فارسی در انتهای همین فایل است.
@@ -867,21 +869,83 @@ Template for each point:
 
 ---
 
-## Implementation plan — APPROVED IN PRINCIPLE, NOT YET WRITTEN
+## Implementation plan
 
-Nothing below has been implemented. No `.cs`, `.asset`, `.prefab` or `.unity` file has been modified
-in this discussion beyond the single `CPWeightMath.cs` line fixed as `80ed65b`.
+| # | Change | Depends on the Excel? | Status |
+|---|---|---|---|
+| 1 | Movement reads `unitStats.moveSpeed`; SO values retuned to **0.3** for players and enemies | no | not started (B1) |
+| 2 | Cadence becomes `recoveryTime / attackSpeed`; hero `attackSpeed` re-authored into **0.9–1.3** | no | not started (B2) |
+| 3 | CP becomes **`(ATK × AtkSpd) × EffectiveHP ÷ K`**, K = 200 | no | ✅ **done** `d505719` |
+| 4 | `attackRange` removed from CP and from growth | no | ✅ **done** `d505719` |
+| 5 | moveSpeed growth rate | **yes — deferred** | blocked |
+| 6 | Enemy growth curves / difficulty sawtooth | **yes — deferred** | blocked |
 
-| # | Change | Depends on the Excel? |
+---
+
+## 2026-09-09 — Total CP for GROUP battles: measured, and it does not work
+
+Arash's requirement was: whichever side has the higher **Total CP** should win, with
+**1–5% → 95%**, **5–10% → 99.5%**, **>10% → 100%**. This was tested properly and the requirement
+**cannot be met by choosing a formula.** Recording it so no future session re-derives it.
+
+### What was corrected along the way
+
+Three of Claude's earlier numbers were wrong and are retracted:
+
+| Claim | Why it was wrong |
+|---|---|
+| "sum 89.86% / product 94.84%" | Measured on *random unmatched* teams, where the median Total CP gap is **172%** and only **2.7%** of battles are within 5%. Those figures describe blowouts, not close matches. |
+| "spread targeting gives 85% at a 1% margin" | The test always handed the lead to the **same** side. With unequal team sizes that measures a size bonus, not CP accuracy. Randomising which side leads drops it to ~50%. |
+| "W (ordered sum) gives 99.9%" | True only under a **focus-fire** model that does not match this game. Under real targeting it is no better than the others. |
+
+A bug in the simulator was also fixed mid-analysis: defense was applied twice (HP stored as
+EffectiveHP *and* damage reduced by DEF again). `CombatMath.cs:16` applies it once.
+
+### The measurement, against the real rules
+
+Simulated from source: nearest-enemy targeting (`TargetDetectionForPlayer.cs:119`), sticky targets
+(`allowNearestSwitch = false`, `:14`), `maxAttackRange = 1`, `moveSpeed = 0.5`, cadence `0.6 / as`,
+individual HP, individual damage, no unit collision (`AttackSlotRegistry.cs:8`).
+
+**Equal sizes, 5 v 5:**
+
+| formula | < 1% | 1–5% | 5–10% | > 10% |
+|---|---|---|---|---|
+| **SUM of unit CPs** | 51.0% | **59.5%** | **71.3%** | **90.3%** |
+| TotalDPS × TotalEHP | 52.1% | 58.0% | 69.1% | 88.1% |
+| W (ordered sum) | 49.7% | 55.7% | 63.0% | 81.0% |
+
+**Player outnumbered, 3–5 vs 6–10 (the real game shape):**
+
+| formula | < 1% | 1–5% | 5–10% | > 10% |
+|---|---|---|---|---|
+| **SUM of unit CPs** | 50.6% | 51.8% | 55.2% | 63.7% |
+| TotalDPS × TotalEHP | 50.8% | 51.7% | 52.8% | 60.3% |
+| W (ordered sum) | 50.3% | 53.3% | 57.8% | 66.0% |
+
+### Three conclusions
+
+1. **The SUM of unit CPs is the best formula** under the real rules — Arash's instinct was right and
+   Claude's argument for the product was based on a combat model that does not match this game.
+2. **The spec is unreachable by formula choice.** Best real figure in the 1–5% band is 59.5%
+   (equal sizes) and 51.8% (outnumbered), against a target of 95%.
+3. **The cause is positional, not numerical.** Freeze the stats, re-shuffle only *where units stand*,
+   and the winner changes in **31% of matchups**. Sticky nearest-enemy targeting decomposes the
+   battle into simultaneous local duels, and the pairing is a geometric accident. A team-level scalar
+   cannot see pairing. Confirmed not to be caused by travel time — removing travel entirely, or
+   switching to focus-fire targeting, does not improve it (57.1% and 53.8% respectively).
+
+### Options that remain (Arash to choose)
+
+| Option | Reaches 95%+? | Cost |
 |---|---|---|
-| 1 | Movement reads `unitStats.moveSpeed`; SO values retuned to **0.3** for players and enemies | no |
-| 2 | Cadence becomes `recoveryTime / attackSpeed`; hero `attackSpeed` re-authored into **0.9–1.3** | no |
-| 3 | CP becomes **`(ATK × AtkSpd) × EffectiveHP`**, with a cosmetic display divisor | no |
-| 4 | `attackRange` removed from CP and from growth | no |
-| 5 | moveSpeed growth rate | **yes — deferred** |
-| 6 | Enemy growth curves / difficulty sawtooth | **yes — deferred** |
+| **A.** Decide the winner from Total CP; play the battle as presentation | ✅ 100% by construction | Battle becomes a show, not a simulation. Standard practice in auto-battlers |
+| **B.** Keep the exact guarantee for **1v1 only** (A1 already delivers this) | ✅ in duels | No group guarantee |
+| **C.** Tune so stage-to-stage CP gaps are always > 20–30% | partly | Avoids close matches rather than predicting them |
+| **D.** Change combat to be pairing-independent | unknown | The version that measured 100% was proportional **shared damage** — Arash rejected it outright |
 
-Items 1–4 were ready to start when the session was wrapped.
+**Rejected by Arash, do not re-propose:** any rule where damage to one character is spread across
+the others. Each character must take its damage individually.
 
 ---
 
