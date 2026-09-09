@@ -4,8 +4,9 @@
     Source   : the CP redesign discussion (see CP_DISCUSSION_LOG.md) plus the
                9-item defect register in CP_SYSTEM_ANALYSIS.md
     Status   : Group A (A0-A3) + D3 → commit `d505719`.
-               Group B (B1, B2) → commit `5587d2a`.
-               Remaining: C1-C5, D1, D2, D4-D6.
+               Group B (B1, B2)     → commit `5587d2a`.
+               C3 + attackSpeed flattening → commit `15ca808` (2026-09-10 directives).
+               Remaining: C1, C2, C4, C5, D1, D2, D4-D6.
 
 Every item states what changes, why, the risk, and whether it is blocked. Order within each group is
 the order to do them in — later items assume earlier ones.
@@ -109,9 +110,10 @@ Every `UnitStatsSO.moveSpeed` re-authored to **0.3**, in the same commit, so the
 `TopDownMover2D` still holds a raw `moveSpeed`, but it is on **none** of the 15 character prefabs and
 `EnemyManager` only ever disables it — verified, no action needed.
 
-⚠️ **Known consequence, deferred to C3:** enemy level = stage number, so enemy `moveSpeed` compounds
-with `g.gMv` every stage while a hero only grows on upgrade. **Enemies get measurably faster than
-heroes late in the campaign.**
+~~⚠️ **Known consequence, deferred to C3:** enemy level = stage number, so enemy `moveSpeed` compounds
+with `g.gMv` every stage while a hero only grows on upgrade. Enemies get measurably faster than
+heroes late in the campaign.~~ → **FIXED in `15ca808`**: `moveSpeed` was removed from growth
+entirely, so it is a flat 0.3 at every stage. See C3.
 
 <details><summary>original entry</summary>
 
@@ -205,9 +207,49 @@ Net relative shift **~1.1%** in the players' favour, versus ~19% if the spec had
 Arash confirmed: **stay at +8% → +3% per level, tapering.** Rejected the +21–33% figure that would
 have let the player fully keep pace. Final values depend on the spreadsheet.
 
-### C3 · 🔴 `moveSpeed` growth rate
-Arash: base ~0.3, then rising with upgrades — roughly **10–15% every 4–5 levels** — purely for the
-feel of progression. **Explicitly deferred: do not set this until he says.**
+### C3 · ✅ RESOLVED — `moveSpeed` has NO growth at all (commit `15ca808`)
+**Arash, 2026-09-10:** *"moveSpeed رو نباید داخل فرمول g.g اصلا قرار داد — چه برای پلیر چه انمی. فعلاً
+همون 0.3 بمونه و اگر نیاز شد می‌گم کی و چجوری تغییر کنه."*
+
+This **supersedes** the earlier "10–15% every 4–5 levels" idea, which is withdrawn.
+
+`ProgressionMath.Growth` no longer has a `gMv` field; `ProgressionConfigSO` no longer has
+`movePctByLevel`; `UnitStatsRuntime.ApplyLevelGrowth` no longer takes `movePct`. All **eight**
+consumers were updated — `PlayerStatsApplier`, `PlayerProgressionService` (×2), `EnemyManager` (×2),
+`UnitsPanelController` (×5), `NewCharacterStats`.
+
+moveSpeed is now a genuinely constant **0.3** — same at level 1 and at stage 20, players and enemies
+alike. **This closes the problem B1 introduced**: enemy level = stage number, so a growing moveSpeed
+made enemies outpace heroes late in the campaign. With no growth axis it cannot happen, and the
+caution added to `EnemyLocoMotion.txt` is retracted.
+
+Re-introducing movement growth later needs a code change, not just data.
+
+### C3b · ✅ DONE — `attackSpeed` flattened to 0.7 for every unit (commit `15ca808`)
+**Arash, 2026-09-10:** *"برای اتک اسپید هم بجای 0.9_1.3 فعلاً روی 0.7 بذار برای همه."*
+
+This **supersedes the 0.9–1.3 retune** shipped in `5587d2a`. All 23 assets are now `attackSpeed: 0.7`
+(`GateBase` excepted — it is 0 and deals no damage).
+
+**Balance is exactly untouched**, because a uniform factor cancels out of the comparison:
+
+| | before B2 | at 0.9–1.3 | at 0.7 |
+|---|---|---|---|
+| hero total DPS | 920.0 | 924.0 | 644.0 |
+| enemy total DPS | 475.0 | 471.9 | 332.5 |
+| **hero ÷ enemy** | **1.9368** | 1.9580 | **1.9368** |
+
+What it *does* change:
+- cadence is a uniform `0.6 / 0.7` = **0.857 s**, so every fight runs **~43% longer**
+- every CP drops **30% uniformly** → ordering untouched
+- attack animations play at 70% speed, staying in sync with cadence
+
+⚠️ **Design consequence worth knowing:** with `attackSpeed` identical everywhere it no longer
+differentiates anyone, so CP order is now decided by **ATK × EffectiveHP alone**. The fast-vs-slow
+hero split that A1 was built to rank correctly (64 ATK / 2.0 speed vs 72 ATK / 1.5 speed) **no longer
+exists in the data** — every unit swings at the same rate, so raw ATK decides damage. A1 is still
+correct; there is simply nothing left for its `attackSpeed` term to separate. Restoring per-unit
+attackSpeed later is a **data** change only, no code needed.
 
 ### C4 · 🔴 ⚠️ Enemy growth curves — the difficulty sawtooth
 - **The problem:** enemy level = stage number (20 levels of growth), but upgrades are gated to every
