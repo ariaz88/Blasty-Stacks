@@ -605,6 +605,86 @@ Template for each point:
   Artifact is still pending.**
 - **Files touched:** none in the project (analysis only).
 
+### 2026-09-09 — Does higher CP always mean stronger? **NO — proven, 9.8% wrong, bias one-directional**
+
+- **Arash asked (the sharper form of the previous question):** if a player and an enemy face each
+  other and one has higher CP, is it possible for the lower-CP one to win? Does higher CP always
+  mean stronger?
+
+- **Answer: no.** Simulated **407 real matchups** (2 hero profiles × levels 1/3/5/10/15/20 × 6 enemy
+  archetypes × stages 1/3/5/10/15/20) using the project's actual combat model —
+  `CombatMath.cs:15-18` for damage, and the verified fact that **both sides share a fixed 0.6 s
+  cadence** (`PlayerAttackState.cs:100` + `PlayerManager.cs:798-812`;
+  `EnemyManager.cs:579/708`), so hits-to-kill decides the duel.
+
+  **CP named the wrong winner in 40 of 407 matchups (9.8%).**
+
+  | | count |
+  |---|---|
+  | CP said **player** wins, enemy actually won | **40** |
+  | CP said **enemy** wins, player actually won | **0** |
+
+  The bias is **entirely one-directional: CP systematically overrates the player.** That is worse
+  than noise — it misleads consistently in one direction.
+
+- **Worked counterexample** — "fast" hero @L3 vs Skeleton_Crusader_1 @S1:
+
+  | | CP | ATK | DEF | HP | kills in |
+  |---|---|---|---|---|---|
+  | Player | **94** | 74 | 28 | 121 | 5 hits (3.0 s) |
+  | Skeleton | **76** | 44 | 52 | 205 | **4 hits (2.4 s)** |
+
+  CP rates the player 24% stronger; the Skeleton wins with a hit to spare.
+
+- **Mechanism.** CP weight at L10 vs what the stat does in a duel:
+
+  | Stat | CP weight | effect in combat |
+  |---|---|---|
+  | ATK | **0.982** | how fast you kill |
+  | HP | **0.144** | how long you live — linear |
+  | DEF | **0.009** | divides ALL incoming damage — large |
+
+  The enemies are built as tanks (DEF 52–78, HP 205–340); the heroes as damage (ATK 64–72, DEF a
+  flat 25). CP prices attack at ~1.0 and defense at ~0.009, so it sees the heroes' single strength
+  clearly and the enemies' two strengths barely at all.
+
+- **Which metric actually predicts the winner** (same 408 matchups):
+
+  | Metric | correct | |
+  |---|---|---|
+  | **C — ATK × EffectiveHP** | **408 / 408 = 100.0%** | exact |
+  | B — product with √ damping | 388 / 408 = 95.1% | |
+  | A′ — current CP minus the 3 inert stats | 369 / 408 = 90.4% | |
+  | A — current shipped CP | 368 / 408 = 90.2% | |
+
+  **C is 100% because it is the duel condition rearranged, not a heuristic.** With equal cadence:
+
+  ```
+  player needs   enemyEHP ÷ playerATK   hits,  where EHP = HP × (100 + DEF)/100
+  enemy  needs   playerEHP ÷ enemyATK   hits
+  player wins  ⟺  playerATK × playerEHP  >  enemyATK × enemyEHP
+  ```
+
+  So whoever has the larger `ATK × EffectiveHP` wins. `CPCalculator.EffectiveHP`
+  (`CPCalculator.cs:50-54`) already computes exactly that and has **zero call sites**.
+
+  Note A′ vs A: removing the three inert stats moves accuracy only 90.2% → 90.4%. **The inert stats
+  are not the real problem — the near-zero defense weight is.**
+
+- **This repairs the previous day's flawed argument.** Candidate C was recommended earlier on the
+  basis of a rank inversion that did not exist (the `attackSpeed` error, corrected above). That
+  justification was wrong. This one rests on 408 simulated matchups from the real assets plus the
+  algebra above — **same conclusion, sound reasoning.**
+
+- **Caveat:** the 100% figure is empirical over these 408 matchups; the `ceil()` on hits-to-kill
+  means an exact tie-break edge case could in principle flip. Also this models a clean 1v1; real
+  battles are many-vs-many with targeting, positioning and the castle, which no single scalar
+  captures.
+
+- **Outcome:** question answered. No change made. Strengthens the case for revisiting the CP weights
+  (Open decisions B) — in particular `wDefenseByLevel`, authored at 0.00 at level 1.
+- **Files touched:** none in the project (analysis only).
+
 ---
 
 ## Decisions taken
