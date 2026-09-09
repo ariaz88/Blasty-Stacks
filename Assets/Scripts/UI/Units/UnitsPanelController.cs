@@ -516,7 +516,6 @@ public class UnitsPanelController : MonoBehaviour
         var gCur = ProgressionMath.GetGrowthMultipliers(level, progressionConfig);
         cur.attack *= gCur.gA;
         cur.maxHP *= gCur.gH;
-        cur.moveSpeed *= gCur.gMv;
         cur.attackSpeed *= gCur.gAS;
 
         var nxt = new UnitStatsRuntime();
@@ -524,7 +523,6 @@ public class UnitsPanelController : MonoBehaviour
         var gNxt = ProgressionMath.GetGrowthMultipliers(level + 1, progressionConfig);
         nxt.attack *= gNxt.gA;
         nxt.maxHP *= gNxt.gH;
-        nxt.moveSpeed *= gNxt.gMv;
         nxt.attackSpeed *= gNxt.gAS;
 
         float dHP = nxt.maxHP - cur.maxHP;
@@ -578,7 +576,6 @@ public class UnitsPanelController : MonoBehaviour
         var gCur = ProgressionMath.GetGrowthMultipliers(level, progressionConfig);
         cur.attack *= gCur.gA;
         cur.maxHP *= gCur.gH;
-        cur.moveSpeed *= gCur.gMv;
         cur.attackSpeed *= gCur.gAS;
 
         // No “next level” preview for locked units → deltas = 0
@@ -880,7 +877,6 @@ public class UnitsPanelController : MonoBehaviour
             var g = ProgressionMath.GetGrowthMultipliers(lvl, progressionConfig);
             cur.attack *= g.gA;
             cur.maxHP *= g.gH;
-            cur.moveSpeed *= g.gMv;
             cur.attackSpeed *= g.gAS;
 
             int cp = CPCalculator.UnitCP(cur, lvl, cpWeights);
@@ -961,7 +957,6 @@ public class UnitsPanelController : MonoBehaviour
             var g = ProgressionMath.GetGrowthMultipliers(lvl, progressionConfig);
             cur.attack *= g.gA;
             cur.maxHP *= g.gH;
-            cur.moveSpeed *= g.gMv;
             cur.attackSpeed *= g.gAS;
 
             // 4) CP and upgrade cost

@@ -12,13 +12,19 @@ for each stat. Pure math - no Unity objects, no side effects.
 
 TYPES
 -----
-  struct Growth { gA, gH, gMv, gAS, gD }
-      Multiplier for Attack, HP, MoveSpeed, AttackSpeed, Defense.
+  struct Growth { gA, gH, gAS, gD }
+      Multiplier for Attack, HP, AttackSpeed, Defense.
       A value of 1.0 means "no change".
 
-      There is NO gR. Attack range has no growth axis: it is excluded from CP and
-      from progression, and the stat-block value is never read in combat (players
-      use PlayerManager.maxAttackRange, enemies use their stopping distance).
+      There is NO gMv. moveSpeed does not grow at all - Arash's directive
+      2026-09-10. Movement is a flat 0.3 for every unit on both sides and is not
+      part of progression. This also removed a real problem: enemy level = stage
+      number, so a growing moveSpeed made enemies outpace heroes late in the
+      campaign, since a hero only levels on upgrade.
+
+      There is NO gR either. Attack range has no growth axis: it is excluded from
+      CP and from progression, and the stat-block value is never read in combat
+      (players use PlayerManager.maxAttackRange, enemies their stopping distance).
       See A2 in Docs/cp-analysis/NEXT_VERSION_CHANGES.md.
 
 METHODS

@@ -66,7 +66,9 @@ FIELDS
       serialized moveSpeed. Introduced by B1: before it, the Inspector value was
       the silent authority and unitStats.moveSpeed was never read at all, which
       is why the stat sheet said 3.5 while heroes actually walked at 0.5.
-      The SO values are now 0.3 for players AND enemies (Arash's chosen base).
+      The SO values are now 0.3 for players AND enemies (Arash's chosen base),
+      and moveSpeed does NOT grow - ProgressionMath has no gMv, so 0.3 is the
+      speed at every level for every unit until Arash says otherwise.
 
   AttackCadence(float recoveryTime) -> float
       Seconds to wait between swings = recoveryTime / attackSpeed, with
@@ -76,6 +78,10 @@ FIELDS
       attackSpeed only set animator playback speed - so the stat contributed
       NOTHING to damage output. EnemyManager.AttackCadence mirrors this exactly;
       both factions must use the same rule or they are on different clocks.
+      Every UnitStatsSO currently authors attackSpeed = 0.7 (Arash, 2026-09-10),
+      so cadence is a uniform 0.6 / 0.7 = 0.857 s. Because the value is the same
+      on both sides it shifts no balance; it simply makes every fight run ~43%
+      longer than the old flat 0.6 s, and drops every CP by 30% uniformly.
 
   Facing/Targeting
     faceCenterOnStart, enemyIsInLeft, chosenEnemyOffset (Transform - which

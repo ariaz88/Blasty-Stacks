@@ -40,7 +40,6 @@ public class UnitStatsRuntime
     public void ApplyLevelGrowth(int level,
                                  float atkPct,
                                  float hpPct,
-                                 float movePct,
                                  float atkSpdPct,
                                  float defPct = 0f)
     {
@@ -48,16 +47,14 @@ public class UnitStatsRuntime
 
         float gA = Mathf.Pow(1f + atkPct, d);
         float gH = Mathf.Pow(1f + hpPct, d);
-        float gMv = Mathf.Pow(1f + movePct, d);
         float gAS = Mathf.Pow(1f + atkSpdPct, d);
         float gD = Mathf.Pow(1f + defPct, d);
 
         attack *= gA;
         maxHP *= gH;
-        moveSpeed *= gMv;
         attackSpeed *= gAS;
         defense *= gD;
-        // attackRange does not grow - range is excluded from CP and progression.
+        // moveSpeed and attackRange do not grow - neither has a growth curve.
     }
 
     // Runtime multipliers (buffs/wave/gear)

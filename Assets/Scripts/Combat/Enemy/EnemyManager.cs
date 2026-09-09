@@ -86,7 +86,6 @@ public class EnemyManager : MonoBehaviour
             var g = ProgressionMath.GetGrowthMultipliers(unitLevel, progression);
             unitStats.attack *= g.gA;
             unitStats.maxHP *= g.gH;
-            unitStats.moveSpeed *= g.gMv;
             unitStats.attackSpeed *= g.gAS;
         }
 
@@ -128,7 +127,6 @@ public class EnemyManager : MonoBehaviour
             var g = ProgressionMath.GetGrowthMultipliers(unitLevel, progression);
             unitStats.attack *= g.gA;
             unitStats.maxHP *= g.gH;
-            unitStats.moveSpeed *= g.gMv;
             unitStats.attackSpeed *= g.gAS;
             // NOTE: g.gD (defense) is still not applied here - see D2 in
             // Docs/cp-analysis/NEXT_VERSION_CHANGES.md. Range no longer has a

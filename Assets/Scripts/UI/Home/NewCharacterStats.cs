@@ -234,7 +234,6 @@ public class NewCharacterStats : MonoBehaviour
             var g = ProgressionMath.GetGrowthMultipliers(unitLevel, prog);
             runtime.attack *= g.gA;
             runtime.maxHP *= g.gH;
-            runtime.moveSpeed *= g.gMv;
             runtime.attackSpeed *= g.gAS;
         }
 

@@ -32,11 +32,12 @@ INSPECTOR FIELDS
                        Inspector value was the silent authority and the stat was
                        never read, which is why the sheet said 2.9-3.5 while
                        enemies crawled at 0.2. The SO value is now 0.3.
-                       CAUTION: enemy level = stage number, so unitStats.moveSpeed
-                       compounds with g.gMv every stage while a player hero only
-                       grows on upgrade. Enemies therefore get measurably faster
-                       than heroes late in the campaign. Tuning that is item C3,
-                       which Arash deferred.
+                       moveSpeed does NOT grow (2026-09-10): ProgressionMath has
+                       no gMv at all, so this is a flat 0.3 at every stage and for
+                       every unit on both sides. An earlier note here warned that
+                       growing enemy moveSpeed would make enemies outpace heroes
+                       late in the campaign, since enemy level = stage number.
+                       Removing the growth axis is exactly what fixed that.
   fairDistanceToPlayer (float, default 1.6) only chase a player unit within this
                        distance - stops enemies being pulled far off their lane
 

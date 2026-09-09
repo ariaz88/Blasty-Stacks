@@ -16,8 +16,12 @@ FIELDS
   Curves - x axis = level (1..Max), y axis = per-level percent (0.08 means +8%)
     atkPctByLevel      attack growth per level      (default 1->+8%, 50->+3%)
     hpPctByLevel       HP growth per level          (default 1->+10%, 50->+4%)
-    movePctByLevel     move speed growth            (default 1->+2%, 50->+1%)
     atkSpdPctByLevel   attack speed growth          (default 1->+2%, 50->+1%)
+
+    There is no move-speed curve. moveSpeed does NOT grow - it is a flat 0.3 for
+    every unit on both sides (Arash's directive, 2026-09-10). Existing .asset
+    files may still carry a serialized `movePctByLevel` block until Unity next
+    re-saves them; it is already inert.
     defPctByLevel      defense growth               (default 1->+2%, 50->+0.5%)
 
     There is no range curve. Attack range does not grow - it is excluded from CP
