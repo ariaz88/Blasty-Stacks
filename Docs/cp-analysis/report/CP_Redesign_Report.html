@@ -146,7 +146,7 @@ ul.tight{margin:0 0 16px;padding-left:20px} ul.tight li{margin:0 0 6px}
 
   <div class="tiles">
     <div class="tile c"><p class="tl">Current CP</p><div class="tv">90.2%</div><p class="tn">of duels predicted correctly</p></div>
-    <div class="tile g"><p class="tl">Proposed CP</p><div class="tv">100%</div><p class="tn">on the same 408 duels</p></div>
+    <div class="tile g"><p class="tl">Proposed CP</p><div class="tv">0</div><p class="tn">reversals — if cadence stays shared</p></div>
     <div class="tile c"><p class="tl">Current bias</p><div class="tv">40 / 0</div><p class="tn">always overrates the player</p></div>
     <div class="tile"><p class="tl">Defense weight now</p><div class="tv">0.009</div><p class="tn">vs attack at 0.982</p></div>
   </div>
@@ -171,13 +171,16 @@ ul.tight{margin:0 0 16px;padding-left:20px} ul.tight li{margin:0 0 6px}
       <pre>CP = (ATK × AtkSpd) × EffectiveHP ÷ K
 
 where EffectiveHP = HP × (100+DEF)/100
-      K = cosmetic display divisor</pre>
+      K = cosmetic display divisor
+
+and AtkSpd scales DAMAGE PER HIT,
+not the cadence  (see §4)</pre>
       <ul class="tight">
         <li><strong>Multiplies</strong> where the game multiplies</li>
         <li>Defense matters automatically, no tuning</li>
         <li>Inert stats removed entirely</li>
-        <li><strong>100%</strong> correct on every regime tested</li>
         <li><strong>No coefficients to maintain</strong></li>
+        <li>Monotonic <strong>only if attack speed scales damage, not cadence</strong> — see §4</li>
       </ul>
     </div>
   </div>
@@ -293,11 +296,22 @@ where EffectiveHP = HP × (100+DEF)/100
 <section>
   <div class="sh"><span class="sn">04</span><h2>Your requirement: does 1 more CP always win?</h2></div>
 
-  <div class="note">
-    <p class="t">Short answer</p>
-    <p><strong>The formula guarantees it. The combat model does not.</strong> In continuous maths the
-    guarantee is exact — 0 errors in 200,000 random duels, and provable algebraically. What breaks it
-    is that <strong>hits are whole numbers</strong>.</p>
+  <div class="note good">
+    <p class="t">Short answer — yes, achievable</p>
+    <p><strong>Yes, if attack speed scales damage rather than cadence.</strong> The formula is exactly
+    monotonic in continuous maths (0 errors in 200,000 duels, and provable algebraically). Whole-number
+    hits only break it when the two sides swing at <em>different</em> rates. Keep the cadence shared
+    and the guarantee is absolute — <strong>0 reversals in 400,000 duels</strong>; rounding can then
+    produce a draw, never a loss.</p>
+  </div>
+
+  <div class="note crit">
+    <p class="t">⚠ This corrects an earlier version of this report</p>
+    <p>The first version quoted "100% correct on every regime tested" beside the formula
+    <code>(ATK × AtkSpd) × EffectiveHP</code>. That 100% was measured on a <strong>different
+    model</strong> — today's flat cadence with <code>ATK × EffectiveHP</code>. With attack speed
+    driving the cadence the true figure is <strong>98.9%, with 4,466 reversals</strong>. The two were
+    conflated. Section 4 below now separates them properly.</p>
   </div>
 
   <h3>Why whole hits break a 1-CP edge</h3>
@@ -322,10 +336,50 @@ result: DRAW — both die on the same swing</pre>
   </figure>
 
   <div class="note crit">
-    <p class="t">⚠ The honest answer</p>
-    <p>"1 more CP always wins" is <strong>not achievable</strong> with whole-number hits, in any
-    formula — not just this one. At a 0.1% margin the higher-CP unit wins 52.9% of the time. That
-    residue is quantisation, not a flaw in the metric.</p>
+    <p class="t">⚠ Corrected — an earlier version of this section overstated the problem</p>
+    <p>The margin table above was measured on a model where <strong>attack speed drives the
+    cadence</strong>. That is what breaks the guarantee — not the rounding by itself. With a
+    <strong>shared cadence</strong>, rounding can only ever produce a <strong>draw</strong>, never a
+    reversal, because <code>x &lt; y ⟹ ceil(x) ≤ ceil(y)</code>. The higher-CP unit then literally
+    cannot lose.</p>
+  </div>
+
+  <h3>Your two requirements conflict — and one option resolves it</h3>
+
+  <p class="prose">The winner is decided by
+  <code>ceil(EHP_B / dmgA) × cadenceA</code> vs <code>ceil(EHP_A / dmgB) × cadenceB</code>. If the
+  two cadences are <strong>equal they cancel</strong>, and the comparison reduces to
+  <code>ceil(x)</code> vs <code>ceil(y)</code> — order-preserving. Put attack speed into the cadence
+  and the two sides get different multipliers, so the order can flip after rounding.</p>
+
+  <div class="tw"><table>
+    <caption>400,000–500,000 duels per row. Option 3 delivers both requirements at once.</caption>
+    <thead><tr><th>Option</th><th>What attackSpeed does</th><th>Draws</th><th>Higher CP wins</th><th>Reversals</th></tr></thead>
+    <tbody>
+      <tr><td class="k">1 — today</td><td>nothing</td><td>3.24%</td><td>100.000%</td><td><b>0</b></td></tr>
+      <tr class="bad"><td class="k">2 — drives cadence</td><td>more hits per second</td><td>0%</td><td>98.883%</td><td><b>4,466</b></td></tr>
+      <tr class="good"><td class="k"><b>3 — scales damage</b></td><td><b>harder hits, shared cadence</b></td><td>3.56%</td><td><b>100.000%</b></td><td><b>0</b></td></tr>
+      <tr class="bad"><td class="k">4 — cadence on a 0.1s tick</td><td>quantised cadence</td><td>1.73%</td><td>98.636%</td><td>5,360</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note good">
+    <p class="t">✅ Option 3 gives you both</p>
+    <p>DPS is identical to option 2 — <code>ATK × AtkSpd ÷ 0.6</code> either way — so attack speed
+    carries its full 31.3% weight and remains a real design lever. But because the cadence stays
+    shared, <strong>CP is perfectly monotonic: 0 reversals in 400,000 duels.</strong></p>
+    <p><strong>The trade-off:</strong> a "fast" unit hits <em>harder</em> rather than <em>more
+    often</em>. Keep the visual by driving the attack <em>animation</em> speed from
+    <code>attackSpeed</code> while damage lands on the shared tick — it looks faster and the maths
+    stays clean.</p>
+  </div>
+
+  <div class="note warn">
+    <p class="t">Why the 408-duel test showed 100%</p>
+    <p>Because near-ties barely occur between a hero and an enemy. The <strong>median CP gap in that
+    set is 242%</strong>, and not one matchup sat below a 1% margin — so it never probed the zone
+    where rounding matters. A high score there is necessary but not sufficient; the random-pair tests
+    above are the real check.</p>
   </div>
 
   <h3>But it is fixable — and the lever is fight length</h3>
@@ -439,7 +493,7 @@ result: DRAW — both die on the same swing</pre>
     <thead><tr><th>#</th><th>Change</th><th>Blocked?</th></tr></thead>
     <tbody>
       <tr><td class="k">1</td><td>Movement reads <code>unitStats.moveSpeed</code>; SO values → 0.3</td><td>no</td></tr>
-      <tr><td class="k">2</td><td>Cadence → <code>recoveryTime / attackSpeed</code>; attackSpeed → 0.9–1.3</td><td>no</td></tr>
+      <tr><td class="k">2</td><td><b>attackSpeed scales damage per hit</b>, cadence stays shared; attackSpeed → 0.9–1.3; animation speed still driven by attackSpeed for the visual</td><td>no</td></tr>
       <tr><td class="k">3</td><td>CP → <code>(ATK × AtkSpd) × EffectiveHP</code> + display divisor</td><td>no</td></tr>
       <tr><td class="k">4</td><td><code>attackRange</code> removed from CP and growth</td><td>no</td></tr>
       <tr><td class="k">5</td><td>Raise HP:ATK so fights take 15–20 hits</td><td><b>yes</b></td></tr>
