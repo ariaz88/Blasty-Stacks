@@ -3,8 +3,9 @@
     Compiled : 2026-09-09
     Source   : the CP redesign discussion (see CP_DISCUSSION_LOG.md) plus the
                9-item defect register in CP_SYSTEM_ANALYSIS.md
-    Status   : Group A (A0-A3) is IMPLEMENTED, commit `d505719`. Everything else below
-               is still unimplemented.
+    Status   : Group A (A0-A3) + D3 → commit `d505719`.
+               Group B (B1, B2) → commit `5587d2a`.
+               Remaining: C1-C5, D1, D2, D4-D6.
 
 Every item states what changes, why, the risk, and whether it is blocked. Order within each group is
 the order to do them in — later items assume earlier ones.
@@ -99,7 +100,21 @@ NEW:  CP = round( ATK × AtkSpd × EffectiveHP ÷ K )
 
 # B. Making the stats real (they are currently disconnected from the game)
 
-### B1 · ⚠️ 🟢 Wire movement to `unitStats.moveSpeed`
+### B1 · ✅ DONE — Wire movement to `unitStats.moveSpeed` (commit `5587d2a`)
+**As shipped:** `PlayerManager.CurrentMoveSpeed` and `EnemyLocoMotion.CurrentMoveSpeed` read the live
+stat block, falling back to the serialized Inspector field only when the stat block is missing or not
+yet built. All movement sites rewired (PlayerManager 685/741; all five in `EnemyLocoMotion`).
+Every `UnitStatsSO.moveSpeed` re-authored to **0.3**, in the same commit, so the trap never fires.
+**No prefab was modified** — the `0.5` / `0.2` overrides simply become unused fallbacks.
+`TopDownMover2D` still holds a raw `moveSpeed`, but it is on **none** of the 15 character prefabs and
+`EnemyManager` only ever disables it — verified, no action needed.
+
+⚠️ **Known consequence, deferred to C3:** enemy level = stage number, so enemy `moveSpeed` compounds
+with `g.gMv` every stage while a hero only grows on upgrade. **Enemies get measurably faster than
+heroes late in the campaign.**
+
+<details><summary>original entry</summary>
+
 - **Files:** `Assets/Scripts/Combat/Player/PlayerManager.cs` (lines 64, 685, 741),
   `Assets/Scripts/Combat/Enemy/EnemyLocoMotion.cs` (lines 20, 104, 128, 155, 214, 257)
 - **The trap:**
@@ -115,8 +130,46 @@ NEW:  CP = round( ATK × AtkSpd × EffectiveHP ÷ K )
   to **0.3** for both players and enemies (Arash's chosen base). The `0.5`/`0.2` Inspector fields are
   the real tuned values; the `3.5` in the SOs is legacy from a 3D template.
 - **Affects:** 15 prefabs + ~14 `UnitStatsSO` assets.
+</details>
 
-### B2 · ⚠️ 🟢 Make `attackSpeed` actually control attack rate
+### B2 · ✅ DONE — Make `attackSpeed` actually control attack rate (commit `5587d2a`)
+**As shipped:** `PlayerManager.AttackCadence` and `EnemyManager.AttackCadence` both return
+`recoveryTime / attackSpeed`, with `attackSpeed` floored at **0.05** so a zero or negative stat cannot
+produce an infinite or negative cooldown. Applied at both player sites and **all three** enemy sites
+(`509`, `575`, `704`) — the plan listed only two.
+
+**⚠️ The plan's retune was wrong and was NOT followed literally.** Today every unit swings on a flat
+0.6 s regardless of `attackSpeed`, so after B2 each unit's DPS is multiplied by its **new**
+`attackSpeed`. Putting players in 0.9–1.3 (mean ≈ 1.10) while leaving enemies at 0.85–1.00
+(mean 0.93) would have handed players a **~19% relative power gain** — i.e. made the game *easier*,
+the opposite of the stated goal.
+
+**What was done instead:** both sides re-authored into 0.9–1.3, rank preserved *within* each side,
+mean ≈ 1.00 on *each* side — so `attackSpeed` becomes a real lever with no difficulty shift:
+
+| side | mean attackSpeed | total DPS before → after | change |
+|---|---|---|---|
+| player heroes (8) | 1.0125 | 920.0 → 924.0 | **+0.43%** |
+| enemy archetypes (6) | 1.0100 | 475.0 → 471.9 | **−0.65%** |
+
+Net relative shift **~1.1%** in the players' favour, versus ~19% if the spec had been followed.
+
+| old attackSpeed | new | who |
+|---|---|---|
+| 1.5 | **0.90** | Golem_3, Player_Dark_Oracle_3, Minotaur_02, CowMinotaur_2, Dark_Oracle_01 |
+| 2.0 | **1.20** | Player_Minotaur_01, PlayerFallen_Angels_02, PlayerValkir3 |
+| 0.85 | **0.90** | Enemy_Golem_01, Enemy_Golem_02 |
+| 0.90 | **0.97** | Enemy_Zombie_villager |
+| 0.95 | **1.05** | Enemy_Skeleton_Crusader_1 |
+| 1.00 | **1.12** | Enemy_Orc, Enemy_Reaper_Man_01 |
+| 4.00 | **1.30** | PlayerMeleeReaper — a wild outlier, now sane |
+
+`GateBase` untouched (`attackSpeed 0`, deals no damage). 23 assets rewritten in total.
+
+**Note for C5:** cadence now lands at 0.46–0.67 s, straddling the old flat 0.6 s.
+
+<details><summary>original entry</summary>
+
 - **Files:** `Assets/Scripts/Combat/Player/States/PlayerAttackState.cs:76,100`,
   `Assets/Scripts/Combat/Enemy/EnemyManager.cs:579,708`
 - **Current behaviour:** cadence is `PlayerAttackAction.recoveryTime`, a flat **0.6 on all 10 attack
@@ -130,6 +183,7 @@ NEW:  CP = round( ATK × AtkSpd × EffectiveHP ÷ K )
   jump.
 - **Bonus:** the animation already scales by `attackSpeed`, so animation and cadence stay in sync and
   the damage event lands at the same point in the cycle. Mechanically clean.
+</details>
 
 ---
 
@@ -271,25 +325,41 @@ suggestion — "make a null config a loud error" — is moot: the new `UnitCP` d
 2. **C1** — the off-axis curves. Pure correctness; the game is silently running numbers nobody chose.
    **This is now the top item.** Must be done in the Unity Inspector.
 3. **D1 + D2** — the correctness bugs. Independent of the balance pass.
-4. **B1 + B2** — wiring the stats to the game. ⚠️ Both carry balance traps; do them together with their retunes.
+4. ~~**B1 + B2** — wiring the stats to the game.~~ ✅ **DONE**, commit `5587d2a`.
 5. **C2 + C4 + C5** — the balance pass. 🔴 Requires the spreadsheet.
 6. **D4 + D5 + D6** — cleanup, once the shape is settled.
 
-**Steps 1–3 can start immediately.** Step 4 needs a Play-mode check afterwards. Step 5 is the only
-part waiting on Arash.
+**⚠️ B1 + B2 have NOT been verified in Play mode.** They are the first changes in this whole effort
+that alter what happens on the battlefield, and nothing in this repo can test them — there is no CLI
+build and no authored test suite. **Open `StarterScene` and play a stage before trusting them.**
+What to watch for:
+- units walk at a sane pace (0.3 base, not crawling and not sprinting)
+- heroes and enemies visibly differ in swing rate, and the swing animation still lands its hit
+- a stage that used to be beatable still is — the retune is arithmetically neutral, but arithmetic
+  neutrality is not the same as feeling the same
+
+Steps 2 and 3 remain safe to start. Step 5 is still waiting on Arash's spreadsheet.
 
 ---
 
 # What has NOT been touched
 
-Two commits of game code exist: `80ed65b` (A0, one line) and `d505719` (A1 + A2 + A3 + D3, nine
-`.cs` files plus their nine reference docs).
+Three commits of game code exist:
 
-**No `.asset`, `.prefab` or `.unity` file has been modified at any point.** That matters because the
-two highest-value remaining fixes — C1 (the off-axis growth curves) and B1/B2 (the retunes) — are
-*data* changes that must be made in the Unity Inspector, and nothing done so far pre-empts them.
+| commit | what |
+|---|---|
+| `80ed65b` | A0 — one line |
+| `d505719` | A1 + A2 + A3 + D3 — nine `.cs` files + nine reference docs |
+| `5587d2a` | B1 + B2 — four `.cs` files, **23 `.asset` files**, four reference docs |
 
-Everything in groups B, C, D (except D3) and E remains designed and evidenced but unimplemented.
+**No `.prefab` and no `.unity` file has been modified at any point.** The prefab `moveSpeed`
+overrides (`0.5` player / `0.2` enemy) are still there; they are simply no longer read.
+
+`.asset` files were first touched in `5587d2a`, and only the `moveSpeed` and `attackSpeed` lines of
+`UnitStatsSO` assets. **The growth-curve assets are still untouched**, so C1 — the highest-value
+remaining fix — is unaffected and must still be done in the Unity Inspector.
+
+Remaining: **C1–C5, D1, D2, D4–D6**, plus decisions E1, E2, E3, E5.
 
 ---
 
