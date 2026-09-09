@@ -1,0 +1,631 @@
+<title>CP Redesign Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<style>
+:root{
+  color-scheme: light;
+  --ground:#f5f7f9; --surface:#ffffff; --surface-2:#eef1f5; --surface-3:#e4e9ef;
+  --ink:#14161a; --ink-2:#4a5058; --ink-3:#767d87;
+  --rule:#dee3ea; --rule-strong:#c6ccd6;
+  --accent:#2a78d6; --accent-ink:#1c5cab; --accent-soft:#e9f0fb;
+  --crit:#d03b3b; --crit-ink:#a82c2c; --crit-soft:#fbeceb;
+  --good:#0ca30c; --good-ink:#006300; --good-soft:#e7f4e7;
+  --warn-ink:#8a5a00; --warn-soft:#fdf3e0;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300;
+  --c-grid:#e6eaef; --c-axis:#c6ccd6; --c-ref:#14161a;
+  --shadow:0 1px 2px rgba(20,22,26,.05), 0 4px 16px rgba(20,22,26,.05);
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --sans:"IBM Plex Sans",system-ui,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  color-scheme: dark;
+  --ground:#0d0f12; --surface:#16191e; --surface-2:#1c2027; --surface-3:#242a32;
+  --ink:#f1f3f6; --ink-2:#b4bac4; --ink-3:#848b95;
+  --rule:#282e36; --rule-strong:#39414b;
+  --accent:#3987e5; --accent-ink:#7cb0ee; --accent-soft:#14243a;
+  --crit:#e66767; --crit-ink:#f09a9a; --crit-soft:#2e1a1a;
+  --good:#3cbb3c; --good-ink:#3cbb3c; --good-soft:#152613;
+  --warn-ink:#e0a53c; --warn-soft:#2b2213;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
+  --c-grid:#242a32; --c-axis:#39414b; --c-ref:#f1f3f6;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+}}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0d0f12; --surface:#16191e; --surface-2:#1c2027; --surface-3:#242a32;
+  --ink:#f1f3f6; --ink-2:#b4bac4; --ink-3:#848b95;
+  --rule:#282e36; --rule-strong:#39414b;
+  --accent:#3987e5; --accent-ink:#7cb0ee; --accent-soft:#14243a;
+  --crit:#e66767; --crit-ink:#f09a9a; --crit-soft:#2e1a1a;
+  --good:#3cbb3c; --good-ink:#3cbb3c; --good-soft:#152613;
+  --warn-ink:#e0a53c; --warn-soft:#2b2213;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
+  --c-grid:#242a32; --c-axis:#39414b; --c-ref:#f1f3f6;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.62;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px 90px}
+p,li{color:var(--ink-2)} p{margin:0 0 1em}
+h1,h2,h3,h4{color:var(--ink);text-wrap:balance;margin:0;line-height:1.2;font-weight:600}
+h2{font-size:1.5rem;letter-spacing:-.018em} h3{font-size:1.06rem;margin:22px 0 8px}
+h4{font-size:.93rem;margin:16px 0 6px}
+code,.mono{font-family:var(--mono);font-size:.88em}
+code{background:var(--surface-2);padding:.5px 4px;border-radius:3px;color:var(--ink)}
+strong{color:var(--ink);font-weight:600}
+.prose{max-width:70ch}
+
+.mast{padding:52px 0 30px;border-bottom:1px solid var(--rule)}
+.eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+.mast h1{font-size:clamp(1.9rem,4vw,2.7rem);letter-spacing:-.03em;max-width:22ch}
+.dek{margin:14px 0 0;font-size:1.05rem;max-width:64ch}
+.meta{display:flex;flex-wrap:wrap;gap:7px 9px;margin-top:22px;font-family:var(--mono);font-size:.73rem}
+.meta span{border:1px solid var(--rule);border-radius:3px;padding:4px 9px;color:var(--ink-2);background:var(--surface)}
+.meta b{color:var(--ink)}
+
+section{padding:40px 0;border-bottom:1px solid var(--rule)}
+.sh{display:flex;gap:15px;align-items:baseline;margin-bottom:18px}
+.sn{font-family:var(--mono);font-size:.76rem;font-weight:600;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:2px 7px;flex:none}
+
+.tw{overflow-x:auto;margin:0 0 18px;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.83rem;font-variant-numeric:tabular-nums}
+th,td{padding:8px 12px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font-family:var(--mono);font-size:.67rem;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);font-weight:500;background:var(--surface-2)}
+tbody tr:last-child td{border-bottom:none} tbody td{color:var(--ink-2)} td.k{color:var(--ink);font-weight:500}
+tr.bad td{background:var(--crit-soft)} tr.good td{background:var(--good-soft)}
+caption{caption-side:bottom;text-align:left;padding:9px 12px;font-size:.78rem;color:var(--ink-3);border-top:1px solid var(--rule)}
+
+figure{margin:0 0 24px;background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:18px 18px 12px;box-shadow:var(--shadow)}
+.ft{font-size:.97rem;font-weight:600;color:var(--ink)}
+.fs{font-size:.83rem;color:var(--ink-3);margin:3px 0 12px;max-width:78ch}
+.chart{width:100%;overflow-x:auto} .chart svg{display:block;width:100%;height:auto;min-width:500px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:10px 0 0;font-size:.78rem;color:var(--ink-2)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.tick{fill:var(--ink-3);font-family:var(--mono);font-size:10px}
+.axlabel{fill:var(--ink-3);font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase}
+.dlabel{font-family:var(--mono);font-size:10.5px;font-weight:600}
+.gridline{stroke:var(--c-grid);stroke-width:1} .axisline{stroke:var(--c-axis);stroke-width:1}
+
+.note{border:1px solid var(--rule);border-left:3px solid var(--accent);background:var(--surface);border-radius:0 5px 5px 0;padding:15px 18px;margin:0 0 20px;box-shadow:var(--shadow)}
+.note.crit{border-left-color:var(--crit);background:var(--crit-soft)}
+.note.good{border-left-color:var(--good);background:var(--good-soft)}
+.note.warn{border-left-color:var(--s4);background:var(--warn-soft)}
+.note .t{font-family:var(--mono);font-size:.68rem;letter-spacing:.09em;text-transform:uppercase;font-weight:600;color:var(--accent-ink);margin:0 0 6px}
+.note.crit .t{color:var(--crit-ink)} .note.good .t{color:var(--good-ink)} .note.warn .t{color:var(--warn-ink)}
+.note p:last-child{margin:0}
+
+pre{font-family:var(--mono);font-size:.8rem;line-height:1.6;background:var(--surface-2);border:1px solid var(--rule);border-radius:5px;padding:12px 14px;overflow-x:auto;margin:0 0 16px;color:var(--ink-2)}
+.ba{display:grid;gap:14px;grid-template-columns:1fr;margin:0 0 20px}
+@media(min-width:780px){.ba{grid-template-columns:1fr 1fr}}
+.bx{border:1px solid var(--rule);border-radius:6px;padding:16px 18px;background:var(--surface);box-shadow:var(--shadow)}
+.bx.before{border-top:3px solid var(--crit)} .bx.after{border-top:3px solid var(--good)}
+.bx .lbl{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;margin:0 0 8px;font-weight:600}
+.bx.before .lbl{color:var(--crit-ink)} .bx.after .lbl{color:var(--good-ink)}
+.bx pre{margin:0 0 10px;background:var(--surface-2)}
+.tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin:0 0 22px}
+.tile{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;box-shadow:var(--shadow)}
+.tile .tl{font-family:var(--mono);font-size:.66rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin:0 0 5px}
+.tile .tv{font-size:1.7rem;font-weight:600;line-height:1.1;letter-spacing:-.02em}
+.tile .tn{font-size:.78rem;color:var(--ink-3);margin:4px 0 0}
+.tile.g .tv{color:var(--good-ink)} .tile.c .tv{color:var(--crit-ink)}
+ul.tight{margin:0 0 16px;padding-left:20px} ul.tight li{margin:0 0 6px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media print{
+  :root{--ground:#fff;--surface:#fff;--surface-2:#f4f6f8;--ink:#000;--ink-2:#222;--ink-3:#555;--rule:#c8ced6;--shadow:none}
+  body{background:#fff;font-size:10.5pt} .wrap{max-width:100%;padding:0}
+  figure,.note,.tw,.bx,.tile{break-inside:avoid;box-shadow:none}
+  section{padding:20px 0} h2,h3{break-after:avoid} .chart svg{min-width:0}
+  @page{size:A4;margin:15mm}
+}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">Blasty-Stacks · Combat Power · Before &amp; After · 2026-09-09</p>
+  <h1>Redesigning CP so the stronger unit always wins</h1>
+  <p class="dek">A complete evaluation of the current Combat Power formula, the proposed replacement,
+  and an honest answer to the hard requirement: <strong>should a unit with even 1 more CP always win
+  a 1v1?</strong></p>
+  <div class="meta">
+    <span>Duels simulated <b>1,200,000+</b></span>
+    <span>Current accuracy <b>90.2%</b></span>
+    <span>Proposed accuracy <b>100%</b></span>
+    <span>Code changed so far <b>1 line</b></span>
+    <span>Status <b>design complete, not implemented</b></span>
+  </div>
+</header>
+
+<!-- 1 -->
+<section>
+  <div class="sh"><span class="sn">01</span><h2>Executive summary</h2></div>
+
+  <div class="tiles">
+    <div class="tile c"><p class="tl">Current CP</p><div class="tv">90.2%</div><p class="tn">of duels predicted correctly</p></div>
+    <div class="tile g"><p class="tl">Proposed CP</p><div class="tv">100%</div><p class="tn">on the same 408 duels</p></div>
+    <div class="tile c"><p class="tl">Current bias</p><div class="tv">40 / 0</div><p class="tn">always overrates the player</p></div>
+    <div class="tile"><p class="tl">Defense weight now</p><div class="tv">0.009</div><p class="tn">vs attack at 0.982</p></div>
+  </div>
+
+  <div class="ba">
+    <div class="bx before">
+      <p class="lbl">Before — shipped today</p>
+      <pre>CP = round(
+   wA·ATK + wH·HP + wMv·Move
+ + wAS·AtkSpd + wD·DEF + wR·Range
+) × typeMult</pre>
+      <ul class="tight">
+        <li><strong>Adds</strong> stats that multiply in combat</li>
+        <li>Defense weighted <strong>0.00</strong> at level 1</li>
+        <li>Prices 3 stats that do <strong>nothing</strong></li>
+        <li>Wrong winner <strong>9.8%</strong> of the time</li>
+        <li>Bias is <strong>entirely one-directional</strong></li>
+      </ul>
+    </div>
+    <div class="bx after">
+      <p class="lbl">After — proposed</p>
+      <pre>CP = (ATK × AtkSpd) × EffectiveHP ÷ K
+
+where EffectiveHP = HP × (100+DEF)/100
+      K = cosmetic display divisor</pre>
+      <ul class="tight">
+        <li><strong>Multiplies</strong> where the game multiplies</li>
+        <li>Defense matters automatically, no tuning</li>
+        <li>Inert stats removed entirely</li>
+        <li><strong>100%</strong> correct on every regime tested</li>
+        <li><strong>No coefficients to maintain</strong></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note good">
+    <p class="t">The core insight</p>
+    <p>Survival in this game is <code>HP × (100+DEF)/100</code> — defense <strong>multiplies</strong>
+    HP, it does not add to it. The current formula adds two quantities that multiply. That single
+    modelling error is the source of almost every problem below.</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section>
+  <div class="sh"><span class="sn">02</span><h2>What is wrong today</h2></div>
+
+  <p class="prose">Every claim here was measured by simulating real matchups using the project's own
+  combat model — 2 hero profiles × 6 levels × 6 enemy archetypes × 6 stages.</p>
+
+  <figure>
+    <figcaption>
+      <div class="ft">Which metric names the actual winner?</div>
+      <p class="fs">408 real duels. A′ is the current formula with the three inert stats removed —
+      note it barely helps, which proves the inert stats are not the main problem.</p>
+    </figcaption>
+    <div class="chart" id="c-acc"></div>
+  </figure>
+
+  <div class="note crit">
+    <p class="t">⚠ The bias is one-directional, which is worse than noise</p>
+    <p>Of 40 mistakes, <strong>all 40</strong> were "CP said the player wins, the enemy won". Zero
+    went the other way. A player trusting CP will consistently walk into stages believing they are
+    stronger than they are.</p>
+  </div>
+
+  <div class="tw"><table>
+    <caption>A concrete case: the player's CP is 24% higher and he loses with a hit to spare.</caption>
+    <thead><tr><th></th><th>CP</th><th>ATK</th><th>DEF</th><th>HP</th><th>kills in</th></tr></thead>
+    <tbody>
+      <tr class="bad"><td class="k">"fast" hero @L3</td><td>94</td><td>74</td><td>28</td><td>121</td><td>5 hits (3.0s)</td></tr>
+      <tr class="good"><td class="k">Skeleton_Crusader @S1</td><td>76</td><td>44</td><td>52</td><td>205</td><td><b>4 hits (2.4s)</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Why: CP prices the wrong things</h3>
+  <figure>
+    <figcaption>
+      <div class="ft">What CP pays for vs what decides the fight</div>
+      <p class="fs">Weights at level 10. Your enemies are tanks (DEF 52–78, HP 205–340); your heroes
+      are damage dealers. CP sees the heroes' one strength clearly and the enemies' two barely at all.</p>
+    </figcaption>
+    <div class="chart" id="c-weights"></div>
+  </figure>
+
+  <h3>Three stats are priced but inert</h3>
+  <div class="tw"><table>
+    <caption>Verified in source. Together ~2.1% of CP is paid for stats that cannot affect a fight.</caption>
+    <thead><tr><th>Stat</th><th>share of CP</th><th>what actually governs it</th></tr></thead>
+    <tbody>
+      <tr><td class="k">moveSpeed</td><td>1.08%</td><td><code>PlayerManager.moveSpeed</code> = 0.5, an Inspector field</td></tr>
+      <tr><td class="k">attackSpeed</td><td>0.99%</td><td>nothing — cadence is a flat <code>recoveryTime</code> 0.6</td></tr>
+      <tr><td class="k">attackRange</td><td>0.05%</td><td><code>PlayerManager.maxAttackRange</code> = 0.85</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note warn">
+    <p class="t">A retracted finding</p>
+    <p>An earlier version of this analysis claimed CP ranks the hero roster backwards. <strong>That
+    was wrong and is retracted.</strong> It assumed <code>trueDPS = attack × attackSpeed</code>, taken
+    from a field comment without verifying the game implements it — it does not. Real output is
+    <code>attack ÷ 0.6</code>, which makes the ATK-72 profile 12.5% stronger, and CP rates it 9.9%
+    higher. <strong>CP ranks those two correctly.</strong> The real defect is the 9.8% duel error above.</p>
+  </div>
+</section>
+
+<!-- 3 -->
+<section>
+  <div class="sh"><span class="sn">03</span><h2>The proposed formula</h2></div>
+
+  <pre>player wins  ⟺  playerATK × playerAtkSpd × playerEHP  &gt;  enemyATK × enemyAtkSpd × enemyEHP
+
+                 └────────────────── this is CP ──────────────────┘</pre>
+
+  <p class="prose">This is not a heuristic that happens to score well. It is <strong>the duel
+  condition rearranged</strong>. Both sides kill in <code>targetEHP ÷ myATK</code> hits at a cadence
+  of <code>recoveryTime ÷ myAtkSpd</code>, so comparing times to kill reduces algebraically to
+  comparing <code>ATK × AtkSpd × EHP</code>. Whoever's product is larger wins, by construction.</p>
+
+  <div class="note good">
+    <p class="t">The helper already exists in your project</p>
+    <p><code>CPCalculator.EffectiveHP</code> (<code>CPCalculator.cs:50-54</code>) computes
+    <code>HP × (100+DEF)/100</code> exactly, mirrors your real damage equation, and has
+    <strong>zero call sites</strong>. It was written and never used.</p>
+  </div>
+
+  <h3>Robustness — why not just retune the old weights?</h3>
+  <p class="prose">A weighted sum <em>can</em> be tuned to 100% on today's roster
+  (<code>wA 1.00, wH 0.35, wD 0.90</code>). But it is fitted, not structural — it degrades as soon as
+  a unit falls outside current stat ranges, because it treats defense as linear when survivability is
+  multiplicative.</p>
+
+  <figure>
+    <figcaption>
+      <div class="ft">Tuned sum vs product, across four stat regimes</div>
+      <p class="fs">Add one heavy tank later and the tuned sum breaks. The product does not.</p>
+    </figcaption>
+    <div class="chart" id="c-robust"></div>
+    <div class="legend"><span><i style="background:var(--s2)"></i>tuned weighted sum</span><span><i style="background:var(--s1)"></i>product ATK × EffectiveHP</span></div>
+  </figure>
+</section>
+
+<!-- 4 -->
+<section>
+  <div class="sh"><span class="sn">04</span><h2>Your requirement: does 1 more CP always win?</h2></div>
+
+  <div class="note">
+    <p class="t">Short answer</p>
+    <p><strong>The formula guarantees it. The combat model does not.</strong> In continuous maths the
+    guarantee is exact — 0 errors in 200,000 random duels, and provable algebraically. What breaks it
+    is that <strong>hits are whole numbers</strong>.</p>
+  </div>
+
+  <h3>Why whole hits break a 1-CP edge</h3>
+  <pre>A: ATK 100  HP 300  DEF 50  →  CP 45,000
+B: ATK  99  HP 300  DEF 50  →  CP 44,550     (A leads by 450)
+
+A needs ceil(450 / 100) = 5 hits  →  3.000 s
+B needs ceil(450 /  99) = 5 hits  →  3.000 s
+
+result: DRAW — both die on the same swing</pre>
+
+  <p class="prose">A's advantage is real but invisible: it did not change the <em>hit count</em>. Until
+  the edge is large enough to remove a whole hit from the kill, it changes nothing.</p>
+
+  <figure>
+    <figcaption>
+      <div class="ft">How often the higher-CP unit actually wins, by CP margin</div>
+      <p class="fs">600,000 random duels under the proposed formula and combat model. Below ~1% margin
+      the outcome is close to a coin flip; above 10% it is near-certain.</p>
+    </figcaption>
+    <div class="chart" id="c-margin"></div>
+  </figure>
+
+  <div class="note crit">
+    <p class="t">⚠ The honest answer</p>
+    <p>"1 more CP always wins" is <strong>not achievable</strong> with whole-number hits, in any
+    formula — not just this one. At a 0.1% margin the higher-CP unit wins 52.9% of the time. That
+    residue is quantisation, not a flaw in the metric.</p>
+  </div>
+
+  <h3>But it is fixable — and the lever is fight length</h3>
+  <p class="prose">The more hits a kill takes, the finer the granularity and the tighter the
+  guarantee. This is the single most actionable finding in the report.</p>
+
+  <figure>
+    <figcaption>
+      <div class="ft">Accuracy against how many hits a kill takes</div>
+      <p class="fs">Identical formula throughout — only the HP-to-ATK ratio changes. Your game
+      currently resolves fights in <strong>3–6 hits</strong>, which sits in the worst zone.</p>
+    </figcaption>
+    <div class="chart" id="c-hits"></div>
+  </figure>
+
+  <div class="tw"><table>
+    <caption>Raising HP relative to ATK lengthens fights and tightens the guarantee. No formula change needed.</caption>
+    <thead><tr><th>Fight length</th><th>hits per kill</th><th>CP predicts correctly</th></tr></thead>
+    <tbody>
+      <tr class="bad"><td class="k">your game today</td><td>3–6</td><td>~95%</td></tr>
+      <tr><td class="k">HP ×2 vs attack</td><td>~9</td><td>97.7%</td></tr>
+      <tr class="good"><td class="k">HP ×4 vs attack</td><td>~18</td><td><b>98.9%</b></td></tr>
+      <tr class="good"><td class="k">HP ×8 vs attack</td><td>~36</td><td><b>99.4%</b></td></tr>
+      <tr><td class="k">HP ×16 vs attack</td><td>~71</td><td>99.7%</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note good">
+    <p class="t">Recommendation</p>
+    <p>Target <strong>15–20 hits per kill</strong>. That reaches ~99% while keeping fights short
+    enough to feel snappy. It also makes battles read better — units trade blows instead of deleting
+    each other in three swings.</p>
+  </div>
+</section>
+
+<!-- 5 -->
+<section>
+  <div class="sh"><span class="sn">05</span><h2>Before &amp; after: stat shares</h2></div>
+
+  <p class="prose">In the new formula there are <strong>no weights at all</strong> — nothing to set,
+  nothing stored. A stat's influence comes from how wide a range you author it over. These are
+  measurements, not settings.</p>
+
+  <figure>
+    <figcaption>
+      <div class="ft">Share of CP, before and after</div>
+      <p class="fs">Before: the shipped weighted sum at level 1. After: practical influence across
+      the roster under the product formula. Defense goes from literally nothing to real.</p>
+    </figcaption>
+    <div class="chart" id="c-shares"></div>
+    <div class="legend" id="c-shares-lg"></div>
+  </figure>
+
+  <div class="tw"><table>
+    <caption>Attack was never held down by attack speed — it was held down by HP spanning 16.8× against attack's 7.8×.</caption>
+    <thead><tr><th>Stat</th><th>before</th><th>after</th><th>change</th></tr></thead>
+    <tbody>
+      <tr><td class="k">ATK</td><td>79.3%</td><td>33.9%</td><td>−45.4</td></tr>
+      <tr><td class="k">AtkSpd</td><td>0.99%</td><td>14.0%</td><td>+13.0</td></tr>
+      <tr><td class="k">HP</td><td>18.6%</td><td>46.3%</td><td>+27.7</td></tr>
+      <tr class="good"><td class="k">DEF</td><td><b>0.00%</b></td><td><b>5.8%</b></td><td>+5.8</td></tr>
+      <tr><td class="k">MoveSpeed</td><td>1.08%</td><td>0 (removed)</td><td>−1.1</td></tr>
+      <tr><td class="k">Range</td><td>0.05%</td><td>0 (removed)</td><td>−0.05</td></tr>
+    </tbody>
+  </table></div>
+
+  <p class="prose">For comparison, <strong>Epic Seven</strong> — whose formula is public — lands at
+  roughly offense 45% / HP 32% / DEF 23% with a typical hero. Two independent routes, the same
+  region. Your current 79 / 19 / 0 sits far outside it.</p>
+</section>
+
+<!-- 6 -->
+<section>
+  <div class="sh"><span class="sn">06</span><h2>Supporting changes required</h2></div>
+
+  <p class="prose">The formula alone is not enough — two stats it depends on are currently disconnected
+  from the game.</p>
+
+  <div class="note crit">
+    <p class="t">⚠ Two balance landmines</p>
+    <p><strong>Movement.</strong> The sheets say <code>moveSpeed 3.5</code> (players) and
+    <code>2.9–3.5</code> (enemies). The game actually uses <strong>0.5</strong> and
+    <strong>0.2</strong> from Inspector fields. Wiring the stat through naively makes players
+    <strong>7×</strong> and enemies <strong>15×</strong> faster.</p>
+    <p><strong>Attack speed.</strong> Making cadence <code>recoveryTime / attackSpeed</code> with
+    today's values (2.0 / 1.5) makes heroes <strong>1.5–2× stronger</strong> and enemies weaker —
+    every stage becomes dramatically easier.</p>
+  </div>
+
+  <div class="note good">
+    <p class="t">Both are solved by the same move</p>
+    <p>Re-author <code>attackSpeed</code> into <strong>0.9–1.3</strong> and set movement SO values to
+    the tuned figures. Cadence then lands at 0.46–0.67 s, straddling today's flat 0.6 s — attack speed
+    becomes a real design lever with no free power jump.</p>
+  </div>
+
+  <div class="tw"><table>
+    <caption>The full change set. Items 5–6 are blocked pending the CP progression spreadsheet.</caption>
+    <thead><tr><th>#</th><th>Change</th><th>Blocked?</th></tr></thead>
+    <tbody>
+      <tr><td class="k">1</td><td>Movement reads <code>unitStats.moveSpeed</code>; SO values → 0.3</td><td>no</td></tr>
+      <tr><td class="k">2</td><td>Cadence → <code>recoveryTime / attackSpeed</code>; attackSpeed → 0.9–1.3</td><td>no</td></tr>
+      <tr><td class="k">3</td><td>CP → <code>(ATK × AtkSpd) × EffectiveHP</code> + display divisor</td><td>no</td></tr>
+      <tr><td class="k">4</td><td><code>attackRange</code> removed from CP and growth</td><td>no</td></tr>
+      <tr><td class="k">5</td><td>Raise HP:ATK so fights take 15–20 hits</td><td><b>yes</b></td></tr>
+      <tr><td class="k">6</td><td>Enemy growth curves / difficulty sawtooth</td><td><b>yes</b></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 7 -->
+<section>
+  <div class="sh"><span class="sn">07</span><h2>The open problem: upgrade pacing</h2></div>
+
+  <p class="prose">Enemy level equals the stage number, so enemies gain 20 levels of growth across the
+  campaign. Player upgrades are gated to roughly every 4–5 stages — about 5 upgrades. The two do not
+  meet.</p>
+
+  <figure>
+    <figcaption>
+      <div class="ft">Enemy power divided by player power, stages 1–20</div>
+      <p class="fs">One hero against one Golem_02, current curves. A value of 1.0 would be an even
+      fight. The gap widens 8.6× across the campaign.</p>
+    </figcaption>
+    <div class="chart" id="c-diverge"></div>
+  </figure>
+
+  <div class="note warn">
+    <p class="t">What is needed to close this</p>
+    <p>The intended design is a <strong>sawtooth</strong>: difficulty rises between upgrades, and each
+    upgrade restores near-parity. Fitting the enemy curve needs two numbers — how close the gap is at
+    the moment of an upgrade, and how wide it grows before the next one. Those, plus the CP
+    progression spreadsheet, unblock items 5 and 6 above.</p>
+  </div>
+</section>
+
+<!-- 8 -->
+<section style="border-bottom:none">
+  <div class="sh"><span class="sn">08</span><h2>Status</h2></div>
+  <div class="tiles">
+    <div class="tile"><p class="tl">Code changed</p><div class="tv">1 line</div><p class="tn"><code>CPWeightMath.cs:41</code></p></div>
+    <div class="tile"><p class="tl">Designed, ready</p><div class="tv">4</div><p class="tn">items 1–4 above</p></div>
+    <div class="tile"><p class="tl">Blocked</p><div class="tv">2</div><p class="tn">need the spreadsheet</p></div>
+  </div>
+  <p class="prose">Nothing in section 6 has been implemented. The only code change made during this
+  work was fixing <code>CPWeightMath</code> to sample <code>meleeMultByLevel</code>, which was proven
+  to change no CP value at any level. Every number in this report is reproducible from the scripts in
+  <code>Docs/cp-analysis/tools/</code>.</p>
+</section>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+var NS="http://www.w3.org/2000/svg";
+function el(n,a){var e=document.createElementNS(NS,n);for(var k in a)if(a[k]!=null)e.setAttribute(k,a[k]);return e;}
+function tx(e,s){e.appendChild(document.createTextNode(s));return e;}
+function cv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+
+/* horizontal bars with value labels */
+function hbar(id,opt){
+  var h=document.getElementById(id); if(!h)return; h.innerHTML="";
+  var rows=opt.rows,n=rows.length,W=860,rh=opt.rh||34,gap=10,m={t:6,r:64,b:30,l:opt.ml||190};
+  var H=m.t+n*rh+(n-1)*gap+m.b, pw=W-m.l-m.r;
+  var svg=el("svg",{viewBox:"0 0 "+W+" "+H});
+  var max=opt.max||Math.max.apply(null,rows.map(function(r){return r.v;}))*1.02;
+  rows.forEach(function(r,i){
+    var y=m.t+i*(rh+gap), w=Math.max(1,r.v/max*pw);
+    var lb=el("text",{x:m.l-12,y:y+rh/2+4,class:"tick","text-anchor":"end"});
+    tx(lb,r.label); svg.appendChild(lb);
+    svg.appendChild(el("rect",{x:m.l,y:y,width:w,height:rh,fill:r.color||cv("--s1"),rx:3}));
+    var v=el("text",{x:m.l+w+9,y:y+rh/2+4,class:"dlabel",fill:r.color||cv("--s1")});
+    tx(v,r.txt!=null?r.txt:r.v.toFixed(1)+"%"); svg.appendChild(v);
+  });
+  var xa=el("text",{x:m.l+pw/2,y:H-6,class:"axlabel","text-anchor":"middle"});
+  tx(xa,opt.xlabel||""); svg.appendChild(xa);
+  h.appendChild(svg);
+}
+
+/* grouped bars */
+function gbar(id,opt){
+  var h=document.getElementById(id); if(!h)return; h.innerHTML="";
+  var W=860,H=opt.h||300,m={t:20,r:16,b:56,l:56},pw=W-m.l-m.r,ph=H-m.t-m.b;
+  var svg=el("svg",{viewBox:"0 0 "+W+" "+H});
+  var cats=opt.cats,ser=opt.series,nc=cats.length,ns=ser.length;
+  var max=opt.max||110, gw=pw/nc, bw=(gw*0.62)/ns;
+  for(var i=0;i<=4;i++){var v=max*i/4,y=m.t+ph-v/max*ph;
+    svg.appendChild(el("line",{x1:m.l,x2:m.l+pw,y1:y,y2:y,class:"gridline"}));
+    var t=el("text",{x:m.l-8,y:y+3.5,class:"tick","text-anchor":"end"});tx(t,v.toFixed(0)+"%");svg.appendChild(t);}
+  svg.appendChild(el("line",{x1:m.l,x2:m.l+pw,y1:m.t+ph,y2:m.t+ph,class:"axisline"}));
+  cats.forEach(function(c,ci){
+    ser.forEach(function(s,si){
+      var v=s.vals[ci],bh=v/max*ph;
+      var x=m.l+ci*gw+gw*0.19+si*bw;
+      svg.appendChild(el("rect",{x:x+1,y:m.t+ph-bh,width:bw-2,height:bh,fill:s.color,rx:2}));
+      var t=el("text",{x:x+bw/2,y:m.t+ph-bh-6,class:"dlabel",fill:s.color,"text-anchor":"middle"});
+      tx(t,v.toFixed(1)); svg.appendChild(t);
+    });
+    var cl=el("text",{x:m.l+ci*gw+gw/2,y:m.t+ph+18,class:"tick","text-anchor":"middle"});
+    tx(cl,c); svg.appendChild(cl);
+  });
+  h.appendChild(svg);
+}
+
+/* line chart */
+function line(id,opt){
+  var h=document.getElementById(id); if(!h)return; h.innerHTML="";
+  var W=860,H=opt.h||300,m={t:18,r:opt.mr||70,b:48,l:60},pw=W-m.l-m.r,ph=H-m.t-m.b;
+  var svg=el("svg",{viewBox:"0 0 "+W+" "+H});
+  var xs=opt.pts.map(function(p){return p[0];}),ys=opt.pts.map(function(p){return p[1];});
+  var xmin=Math.min.apply(null,xs),xmax=Math.max.apply(null,xs);
+  var ymin=opt.ymin!=null?opt.ymin:0,ymax=opt.ymax||Math.max.apply(null,ys)*1.08;
+  var lg=!!opt.logx;
+  function X(v){return lg? m.l+(Math.log(v)-Math.log(xmin))/(Math.log(xmax)-Math.log(xmin))*pw
+                         : m.l+(v-xmin)/(xmax-xmin)*pw;}
+  function Y(v){return m.t+ph-(v-ymin)/(ymax-ymin)*ph;}
+  for(var i=0;i<=4;i++){var v=ymin+(ymax-ymin)*i/4,y=Y(v);
+    svg.appendChild(el("line",{x1:m.l,x2:m.l+pw,y1:y,y2:y,class:"gridline"}));
+    var t=el("text",{x:m.l-8,y:y+3.5,class:"tick","text-anchor":"end"});
+    tx(t,opt.yfmt?opt.yfmt(v):v.toFixed(0));svg.appendChild(t);}
+  svg.appendChild(el("line",{x1:m.l,x2:m.l+pw,y1:Y(ymin),y2:Y(ymin),class:"axisline"}));
+  (opt.xticks||xs).forEach(function(v){
+    var t=el("text",{x:X(v),y:Y(ymin)+18,class:"tick","text-anchor":"middle"});
+    tx(t,opt.xfmt?opt.xfmt(v):String(v));svg.appendChild(t);});
+  var d=opt.pts.map(function(p,i){return (i?"L":"M")+X(p[0]).toFixed(2)+" "+Y(p[1]).toFixed(2);}).join(" ");
+  svg.appendChild(el("path",{d:d,fill:"none",stroke:opt.color||cv("--s1"),"stroke-width":2.5,"stroke-linejoin":"round"}));
+  opt.pts.forEach(function(p){
+    svg.appendChild(el("circle",{cx:X(p[0]),cy:Y(p[1]),r:4,fill:opt.color||cv("--s1"),stroke:cv("--surface"),"stroke-width":2}));});
+  if(opt.labelPts) opt.pts.forEach(function(p,i){
+    if(!opt.labelPts.includes(i))return;
+    var t=el("text",{x:X(p[0]),y:Y(p[1])-11,class:"dlabel",fill:opt.color||cv("--s1"),"text-anchor":"middle"});
+    tx(t,opt.plfmt?opt.plfmt(p[1]):p[1].toFixed(1));svg.appendChild(t);});
+  var xa=el("text",{x:m.l+pw/2,y:H-6,class:"axlabel","text-anchor":"middle"});tx(xa,opt.xlabel||"");svg.appendChild(xa);
+  var ya=el("text",{x:0,y:0,class:"axlabel","text-anchor":"middle",transform:"translate(14,"+(m.t+ph/2)+") rotate(-90)"});
+  tx(ya,opt.ylabel||"");svg.appendChild(ya);
+  h.appendChild(svg);
+}
+
+function build(){
+  var S1=cv("--s1"),S2=cv("--s2"),S3=cv("--s3"),S4=cv("--s4"),CR=cv("--crit"),GD=cv("--good");
+
+  hbar("c-acc",{xlabel:"duels predicted correctly",max:105,ml:250,rows:[
+    {label:"C — ATK × EffectiveHP  (proposed)",v:100.0,color:GD,txt:"100.0%  ✓"},
+    {label:"B — product with √ damping",v:95.1,color:S3},
+    {label:"A′ — current CP, inert stats removed",v:90.4,color:S4},
+    {label:"A — current shipped CP",v:90.2,color:CR}
+  ]});
+
+  gbar("c-weights",{cats:["ATK","HP","DEF"],max:110,series:[
+    {color:S1,vals:[98.2,14.4,0.9]}
+  ],h:250});
+
+  gbar("c-robust",{cats:["your 408 duels","within current ranges","wide range","high-DEF regime"],max:110,
+    series:[{color:S2,vals:[100.0,95.4,87.9,85.6]},{color:S1,vals:[100,100,100,100]}]});
+
+  line("c-margin",{
+    pts:[[0.05,52.87],[0.3,53.04],[0.75,59.12],[1.5,64.41],[3.5,79.33],[7.5,91.92],[30,99.44]],
+    logx:true,ymin:45,ymax:105,color:S1,
+    xticks:[0.05,0.3,0.75,1.5,3.5,7.5,30],
+    xfmt:function(v){return v<1?v.toFixed(2):v+"%";},
+    yfmt:function(v){return v.toFixed(0)+"%";},
+    xlabel:"CP margin between the two units",ylabel:"higher CP wins",
+    labelPts:[0,6],plfmt:function(v){return v.toFixed(1)+"%";}});
+
+  line("c-hits",{
+    pts:[[4.9,95.49],[9.3,97.72],[18.1,98.87],[35.7,99.42],[71,99.71],[141,99.86],[282,99.93],[704,99.97]],
+    logx:true,ymin:94,ymax:100.4,color:GD,
+    xticks:[4.9,9.3,18.1,35.7,71,141,282,704],
+    xfmt:function(v){return v<100?v.toFixed(0):v.toFixed(0);},
+    yfmt:function(v){return v.toFixed(1)+"%";},
+    xlabel:"hits needed for a kill",ylabel:"CP predicts correctly",
+    labelPts:[0,2,3],plfmt:function(v){return v.toFixed(1)+"%";}});
+
+  var host=document.getElementById("c-shares");
+  if(host){
+    host.innerHTML="";
+    var rows=[
+      {label:"ATK",b:79.3,a:33.9},{label:"AtkSpd",b:0.99,a:14.0},
+      {label:"HP",b:18.6,a:46.3},{label:"DEF",b:0.0,a:5.8},
+      {label:"MoveSpd",b:1.08,a:0},{label:"Range",b:0.05,a:0}
+    ];
+    gbar("c-shares",{cats:rows.map(function(r){return r.label;}),max:90,h:280,
+      series:[{color:CR,vals:rows.map(function(r){return r.b;})},
+              {color:GD,vals:rows.map(function(r){return r.a;})}]});
+    var lg=document.getElementById("c-shares-lg");
+    lg.innerHTML='<span><i style="background:'+CR+'"></i>before — shipped weighted sum</span>'+
+                 '<span><i style="background:'+GD+'"></i>after — product formula</span>';
+  }
+
+  line("c-diverge",{
+    pts:[[1,5.3],[4,8.8],[8,13.9],[12,21.4],[16,31.8],[20,45.8]],
+    ymin:0,ymax:52,color:CR,xticks:[1,4,8,12,16,20],
+    yfmt:function(v){return v.toFixed(0)+"×";},
+    xlabel:"stage",ylabel:"enemy ÷ player power",
+    labelPts:[0,5],plfmt:function(v){return v.toFixed(1)+"×";}});
+}
+build();
+var mq=window.matchMedia("(prefers-color-scheme: dark)");
+if(mq.addEventListener)mq.addEventListener("change",function(){setTimeout(build,30);});
+new MutationObserver(function(){setTimeout(build,30);}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+})();
+</script>
