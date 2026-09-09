@@ -21,8 +21,22 @@ INSPECTOR FIELDS
   playerDetectionLayer (LayerMask) visual only - detection logic lives in
                        EnemyManager
   detectionRadius      (float, default 6) gizmo radius
-  moveSpeed            (float, default 1.5) units per second
+  moveSpeed            (float, default 1.5) FALLBACK ONLY since B1. Prefabs
+                       serialize 0.2 here, but the real speed is CurrentMoveSpeed.
   stoppingDistance     (float, default 0.5) how close before halting
+
+  CurrentMoveSpeed     (property, float)
+                       enemyManager.unitStats.moveSpeed when the stat block is
+                       built and > 0, else the serialized moveSpeed. All five
+                       movement sites in this file use it. Before B1 the
+                       Inspector value was the silent authority and the stat was
+                       never read, which is why the sheet said 2.9-3.5 while
+                       enemies crawled at 0.2. The SO value is now 0.3.
+                       CAUTION: enemy level = stage number, so unitStats.moveSpeed
+                       compounds with g.gMv every stage while a player hero only
+                       grows on upgrade. Enemies therefore get measurably faster
+                       than heroes late in the campaign. Tuning that is item C3,
+                       which Arash deferred.
   fairDistanceToPlayer (float, default 1.6) only chase a player unit within this
                        distance - stops enemies being pulled far off their lane
 

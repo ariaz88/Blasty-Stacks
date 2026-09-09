@@ -14,6 +14,21 @@ public class EnemyManager : MonoBehaviour
     [Header("Live stats (mutable)")]
     public UnitStatsRuntime unitStats = new UnitStatsRuntime();
 
+    /// <summary>
+    /// Seconds this enemy must wait between swings, given an attack's authored
+    /// recoveryTime. Faster attackSpeed = shorter gap = more hits per second.
+    ///
+    /// Before B2, cadence was the raw recoveryTime and attackSpeed only set
+    /// animator playback speed, so the stat contributed nothing to damage output.
+    /// Mirrors PlayerManager.AttackCadence exactly - both sides must use the same
+    /// rule or the two factions are silently on different clocks.
+    /// </summary>
+    public float AttackCadence(float recoveryTime)
+    {
+        float atkSpd = (unitStats != null && unitStats.initialized) ? unitStats.attackSpeed : 1f;
+        return recoveryTime / Mathf.Max(0.05f, atkSpd);
+    }
+
     [Header("Progression (curves)")]
     [Min(1)] public int unitLevel = 1;
     public ProgressionConfigSO progression;
@@ -506,7 +521,7 @@ public class EnemyManager : MonoBehaviour
                 }
 
                 isPerformingAction = true;
-                currentRecoveryTimer = currentAttack.recoveryTime;
+                currentRecoveryTimer = AttackCadence(currentAttack.recoveryTime);
 
                 StopMovingEnemy();
 
@@ -572,7 +587,7 @@ public class EnemyManager : MonoBehaviour
                 IsAttacking = true;
 
                 isPerformingAction = true;
-                currentRecoveryTimer = currentAttack.recoveryTime;
+                currentRecoveryTimer = AttackCadence(currentAttack.recoveryTime);
 
                 enemyLocoMotion.SetAnimMoving(false);
 
@@ -701,7 +716,7 @@ public class EnemyManager : MonoBehaviour
 
 
         isPerformingAction = true;
-        currentRecoveryTimer = currentAttack.recoveryTime;
+        currentRecoveryTimer = AttackCadence(currentAttack.recoveryTime);
 
         enemyAnimationManager.anim.SetFloat("Vertical", 0f, 0f, 0f);
 

@@ -56,7 +56,26 @@ FIELDS
     maxAttackRange (default 1), distanceFromTarget (published for states)
 
   Movement
-    moveSpeed (default 0.5), canMove (bool), isUnlocked (bool - the FSM lock gate)
+    moveSpeed (default 0.5) - FALLBACK ONLY since B1. The real walking speed is
+      the CurrentMoveSpeed property, which reads unitStats.moveSpeed. This field
+      is used only while the stat block is missing or not yet built.
+    canMove (bool), isUnlocked (bool - the FSM lock gate)
+
+  CurrentMoveSpeed (property, float)
+      unitStats.moveSpeed when the stat block is built and > 0, else the
+      serialized moveSpeed. Introduced by B1: before it, the Inspector value was
+      the silent authority and unitStats.moveSpeed was never read at all, which
+      is why the stat sheet said 3.5 while heroes actually walked at 0.5.
+      The SO values are now 0.3 for players AND enemies (Arash's chosen base).
+
+  AttackCadence(float recoveryTime) -> float
+      Seconds to wait between swings = recoveryTime / attackSpeed, with
+      attackSpeed floored at 0.05 so a zero stat cannot produce an infinite or
+      negative cooldown. Introduced by B2: before it, cadence was the raw
+      recoveryTime (a flat 0.6 on all ten PlayerAttackAction assets) and
+      attackSpeed only set animator playback speed - so the stat contributed
+      NOTHING to damage output. EnemyManager.AttackCadence mirrors this exactly;
+      both factions must use the same rule or they are on different clocks.
 
   Facing/Targeting
     faceCenterOnStart, enemyIsInLeft, chosenEnemyOffset (Transform - which
@@ -189,7 +208,7 @@ MOVEMENT
       missing. Computes the direction to chosenEnemyOffset, and if effectively
       AT the target applies a half-speed "idle separation nudge" so units do not
       perfectly stack. Otherwise normalizes direction, runs it through
-      ApplyFriendlySeparation, and sets linearVelocity = dir * moveSpeed - with
+      ApplyFriendlySeparation, and sets linearVelocity = dir * CurrentMoveSpeed - with
       an extra 0.7x damping once within maxAttackRange, to slow the approach for
       a cleaner stop.
 

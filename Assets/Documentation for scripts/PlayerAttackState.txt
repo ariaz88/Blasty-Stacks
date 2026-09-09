@@ -45,7 +45,8 @@ Tick()  - order of checks
       Zeroes velocity and sets the body Kinematic, then if the recovery timer
       has expired and no action is in progress:
         - marks isPerformingAction and resets currentRecoveryTimer from the
-          attack's recoveryTime
+          pm.AttackCadence(attack's recoveryTime) = recoveryTime / attackSpeed.
+          Before B2 this was the raw recoveryTime, so attackSpeed did nothing.
         - zeroes the Vertical/Horizontal animator floats so the locomotion blend
           does not bleed into the attack clip
         - plays the attack animation with a speed multiplier taken from

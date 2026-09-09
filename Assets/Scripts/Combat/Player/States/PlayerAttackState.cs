@@ -73,7 +73,7 @@ public class PlayerAttackState : PlayerState
                 if (pm.currentRecoveryTimer <= 0 && !pm.isPerformingAction)
                 {
                     pm.isPerformingAction = true;
-                    pm.currentRecoveryTimer = currentAttack.recoveryTime;
+                    pm.currentRecoveryTimer = pm.AttackCadence(currentAttack.recoveryTime);
 
                     // neutralize locomotion params
                     pm.playerAnimatitorManager.anim.SetFloat("Vertical", 0, 0, 0);
@@ -97,7 +97,7 @@ public class PlayerAttackState : PlayerState
                 if (pm.currentRecoveryTimer <= 0 && !pm.isPerformingAction)
                 {
                     pm.isPerformingAction = true;
-                    pm.currentRecoveryTimer = currentAttack.recoveryTime;
+                    pm.currentRecoveryTimer = pm.AttackCadence(currentAttack.recoveryTime);
 
                     pm.playerAnimatitorManager.anim.SetFloat("Vertical", 0, 0, 0);
                     pm.playerAnimatitorManager.anim.SetFloat("Horizontal", 0, 0, 0);

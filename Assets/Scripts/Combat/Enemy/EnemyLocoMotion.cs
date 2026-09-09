@@ -17,8 +17,31 @@ public class EnemyLocoMotion : MonoBehaviour
     public float detectionRadius = 6f;
 
     [Header("Movement")]
+    [Tooltip("FALLBACK ONLY. The real walking speed comes from " +
+             "enemyManager.unitStats.moveSpeed (see CurrentMoveSpeed). This value is " +
+             "used only while the stat block has not been built yet.")]
     public float moveSpeed = 1.5f;          // units/sec
     public float stoppingDistance = 0.5f;
+
+    /// <summary>
+    /// The speed this enemy actually walks at.
+    ///
+    /// Reads the LIVE stat block, so per-stage growth genuinely moves the unit.
+    /// Before B1 this Inspector field was the silent authority and
+    /// unitStats.moveSpeed was never read, which is why the stat sheet said
+    /// 2.9-3.5 while enemies crawled at the prefab's 0.2.
+    ///
+    /// Falls back to the serialized field only when the stat block is missing or
+    /// not built yet, so a mis-configured prefab still moves.
+    /// </summary>
+    public float CurrentMoveSpeed
+    {
+        get
+        {
+            var s = enemyManager != null ? enemyManager.unitStats : null;
+            return (s != null && s.initialized && s.moveSpeed > 0f) ? s.moveSpeed : moveSpeed;
+        }
+    }
 
 
     // NEW: pursue player only when close enough and only if player is "opposite side"
@@ -101,7 +124,7 @@ public class EnemyLocoMotion : MonoBehaviour
             if (dist > stoppingDistance)
             {
                 Vector2 dir = toTarget.normalized;
-                Vector2 next = pos + dir * moveSpeed * Time.deltaTime;
+                Vector2 next = pos + dir * CurrentMoveSpeed * Time.deltaTime;
                 enemyRigidbody2D.MovePosition(next);
                 SetAnimMoving(true);
             }
@@ -125,7 +148,7 @@ public class EnemyLocoMotion : MonoBehaviour
                 if (toStop.sqrMagnitude > 0.001f)
                 {
                     Vector2 dir = toStop.normalized;
-                    Vector2 next = pos + dir * moveSpeed * Time.deltaTime;
+                    Vector2 next = pos + dir * CurrentMoveSpeed * Time.deltaTime;
 
                     // clamp so we don't overshoot the stop point
                     Vector2 after = enemyManager.gateStopPosition - next;
@@ -152,7 +175,7 @@ public class EnemyLocoMotion : MonoBehaviour
             if (distG > stoppingDistance)
             {
                 Vector2 dir = toGate.normalized;
-                Vector2 next = pos + dir * moveSpeed * Time.deltaTime;
+                Vector2 next = pos + dir * CurrentMoveSpeed * Time.deltaTime;
                 enemyRigidbody2D.MovePosition(next);
                 SetAnimMoving(true);
             }
@@ -211,7 +234,7 @@ public class EnemyLocoMotion : MonoBehaviour
                 if (shouldChasePlayer && toPlayer.sqrMagnitude > 0.0001f)
                     moveDir = toPlayer.normalized;
 
-                Vector2 next = pos + moveDir * moveSpeed * Time.deltaTime;
+                Vector2 next = pos + moveDir * CurrentMoveSpeed * Time.deltaTime;
 
                 enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
                 enemyRigidbody2D.MovePosition(next);
@@ -254,7 +277,7 @@ public class EnemyLocoMotion : MonoBehaviour
             if (!enemyManager.reachedGate)
             {
                 Vector2 dir = -(Vector2)transform.up;
-                Vector2 next = pos + dir * moveSpeed * Time.deltaTime;
+                Vector2 next = pos + dir * CurrentMoveSpeed * Time.deltaTime;
 
                 enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
                 enemyRigidbody2D.MovePosition(next);

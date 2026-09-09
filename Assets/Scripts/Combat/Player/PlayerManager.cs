@@ -61,7 +61,45 @@ public class PlayerManager : MonoBehaviour
     public float distanceFromTarget;
 
     [Header("  Player Movement Variables")]
+    [Tooltip("FALLBACK ONLY. The real walking speed comes from unitStats.moveSpeed " +
+             "(see CurrentMoveSpeed). This value is used only while the stat block " +
+             "has not been built yet, or if a prefab has no UnitStatsSO at all.")]
     public float moveSpeed = 0.5F;
+
+    /// <summary>
+    /// The speed this hero actually walks at.
+    ///
+    /// Reads the LIVE stat block, so upgrades and roguelite buffs genuinely move
+    /// the unit. Before B1 this Inspector field was the silent authority and
+    /// unitStats.moveSpeed was never read at all, which is why the stat sheet
+    /// said 3.5 while heroes walked at 0.5.
+    ///
+    /// Falls back to the serialized field only when the stat block is missing or
+    /// not built yet, so a mis-configured prefab still moves instead of freezing.
+    /// </summary>
+    public float CurrentMoveSpeed =>
+        (unitStats != null && unitStats.initialized && unitStats.moveSpeed > 0f)
+            ? unitStats.moveSpeed
+            : moveSpeed;
+
+    /// <summary>
+    /// Seconds this hero must wait between swings, given an attack's authored
+    /// recoveryTime. Faster attackSpeed = shorter gap = more hits per second.
+    ///
+    /// Before B2, cadence was the raw recoveryTime (a flat 0.6 on all ten attack
+    /// assets) and attackSpeed only set animator playback speed - so the stat did
+    /// nothing at all to damage output. Dividing here is what makes it real, and
+    /// it keeps animation and cadence in sync because the animator is scaled by
+    /// the same attackSpeed.
+    ///
+    /// attackSpeed is floored at 0.05 so a zero or negative stat cannot produce an
+    /// infinite or negative cooldown (which would let a unit attack every frame).
+    /// </summary>
+    public float AttackCadence(float recoveryTime)
+    {
+        float atkSpd = (unitStats != null && unitStats.initialized) ? unitStats.attackSpeed : 1f;
+        return recoveryTime / Mathf.Max(0.05f, atkSpd);
+    }
     public bool canMove = false;
     public bool isUnlocked = false;
     private float damageAppling;
@@ -682,7 +720,7 @@ public class PlayerManager : MonoBehaviour
             transform.position += (Vector3)CrowdSeparation2D.Instance.ResolveOverlap(transform);
         }
 
-        playerRigidbody.linearVelocity = dir * moveSpeed;
+        playerRigidbody.linearVelocity = dir * CurrentMoveSpeed;
         SetAnimMoving(true);
     }
 
@@ -738,7 +776,7 @@ public class PlayerManager : MonoBehaviour
         dir = CrowdSeparation2D.Instance.SteerAroundBlockers(transform, dir);
 
     // NEW: Use velocity for smooth movement (no tunneling)
-    playerRigidbody.linearVelocity = dir * moveSpeed;
+    playerRigidbody.linearVelocity = dir * CurrentMoveSpeed;
     // Optional: Dampen if too far (for precision near target)
     if (dist < maxAttackRange)
         playerRigidbody.linearVelocity *= 0.7f;  // Slow down for attack

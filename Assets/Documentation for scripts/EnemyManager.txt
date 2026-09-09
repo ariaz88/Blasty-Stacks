@@ -53,6 +53,14 @@ REGION: CP / STATS / PROGRESSION
   SetRuntimeMultipliers(atk, def, hp, mv, atkSpd, rng, rebuildNow = true)
       Stores the multipliers and optionally rebuilds immediately.
 
+  AttackCadence(float recoveryTime) -> float
+      Seconds between swings = recoveryTime / attackSpeed, attackSpeed floored at
+      0.05. All THREE cadence sites in this file use it (the gate-attack path, the
+      second gate branch, and AttackTarget). Mirrors PlayerManager.AttackCadence
+      exactly - both factions must use the same rule or they run on different
+      clocks. Added by B2; before it, attackSpeed only set animator playback speed
+      and contributed nothing to damage output.
+
   UnitCP_WithFallback(stats, stage, cfg)
       Now simply delegates to CPCalculator.UnitCP. The name is historical.
       It used to contain a SECOND, divergent hard-coded weighted-sum formula for
@@ -169,7 +177,8 @@ ACTION DECISION
          then RETURN - player takes priority over the gate.
       2. Else, if attackPlayerGate is set and the gate is alive: on cooldown
          expiry, sets IsAttacking + isPerformingAction, resets
-         currentRecoveryTimer from currentAttack.recoveryTime (falling back to
+         currentRecoveryTimer from AttackCadence(currentAttack.recoveryTime),
+         i.e. recoveryTime / attackSpeed since B2 (falling back to
          defaultAttack with a warning if currentAttack was somehow null), stops
          the walk animation, and plays the attack animation at
          unitStats.attackSpeed.
@@ -221,7 +230,7 @@ ATTACK  (#region Attack)
       returns (do not restart the swing). If no currentAttack, calls
       GetNewAttack() and returns (try again next call). If the target has died,
       bails out. Otherwise sets IsAttacking/isPerformingAction, starts the
-      cooldown from currentAttack.recoveryTime, zeroes the movement animator
+      cooldown from AttackCadence(currentAttack.recoveryTime), zeroes the movement animator
       float, and plays the attack clip at unitStats.attackSpeed.
 
   GetNewAttack()
