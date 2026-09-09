@@ -6,9 +6,9 @@ Analysis of the Combat Power (CP) system, produced 2026-09-07.
 Unity never scans it, so it generates no `.meta` files, costs nothing at import, and adds nothing
 to a build. Nothing in the Unity project references it. Total size ~355 KB, all plain text.
 
-> **ÙØ§Ø±Ø³ÛŒ:** Ø§ÛŒÙ† Ù¾ÙˆØ´Ù‡ ÙÙ‚Ø· Ù…Ø³ØªÙ†Ø¯Ø§Øª Ø§Ø³Øª Ùˆ **Ø¹Ù…Ø¯Ø§Ù‹ Ø¨ÛŒØ±ÙˆÙ† Ø§Ø² `Assets/`** Ú¯Ø°Ø§Ø´ØªÙ‡ Ø´Ø¯Ù‡ ØªØ§ Unity Ø¢Ù† Ø±Ø§
-> Ø§ÛŒÙ…Ù¾ÙˆØ±Øª Ù†Ú©Ù†Ø¯ØŒ ÙØ§ÛŒÙ„ `.meta` Ù†Ø³Ø§Ø²Ø¯ØŒ Ùˆ Ø±ÙˆÛŒ Ø­Ø¬Ù… Ø¨ÛŒÙ„Ø¯ Ø§Ø«Ø±ÛŒ Ù†Ú¯Ø°Ø§Ø±Ø¯. Ù‡Ø± ÙˆÙ‚Øª Ø®ÙˆØ§Ø³ØªÛŒØ¯ØŒ Ú©Ù„ Ù¾ÙˆØ´Ù‡ Ø±Ø§ Ø¨Ø§ ÛŒÚ©
-> Ø¯Ø³ØªÙˆØ± Ø­Ø°Ù Ú©Ù†ÛŒØ¯ â€” Ù‡ÛŒÚ†â€ŒÚ†ÛŒØ² Ø¯Ø± Ù¾Ø±ÙˆÚ˜Ù‡ Ø¨Ù‡ Ø¢Ù† Ø§Ø±Ø¬Ø§Ø¹ Ù†Ù…ÛŒâ€ŒØ¯Ù‡Ø¯. Ø±Ø§Ù‡Ù†Ù…Ø§ÛŒ Ø­Ø°Ù Ø¯Ø± Ø§Ù†ØªÙ‡Ø§ÛŒ Ù‡Ù…ÛŒÙ† ÙØ§ÛŒÙ„.
+> **فارسی:** این پوشه فقط مستندات است و **عمداً بیرون از `Assets/`** گذاشته شده تا Unity آن را
+> ایمپورت نکند، فایل `.meta` نسازد، و روی حجم بیلد اثری نگذارد. هر وقت خواستید، کل پوشه را با یک
+> دستور حذف کنید — هیچ‌چیز در پروژه به آن ارجاع نمی‌دهد. راهنمای حذف در انتهای همین فایل.
 
 ---
 
@@ -18,9 +18,10 @@ to a build. Nothing in the Unity project references it. Total size ~355 KB, all 
 |---|---|
 | `CP_SYSTEM_ANALYSIS.md` | **The findings.** How CP is computed for heroes and enemies, the authored weight/growth data, per-hero and per-enemy CP tables, per-stage totals, runtime feasibility, a 9-item defect register, and the formula research. Bilingual: full English, then full Persian. |
 | `CP_DISCUSSION_LOG.md` | **The decisions.** Open questions, ground rules for the discussion, and a running log. Start here when picking the thread back up. |
-| `CP_SESSION_TRANSCRIPT.md` | **The conversation.** Everything Arash asked and everything Claude answered, 2026-09-07 â†’ 08. Arash's messages verbatim; Claude's replies condensed but complete. Read this to continue the thread on another machine. |
-| `NEXT_VERSION_CHANGES.md` | **The work list.** Every change queued for the next version - CP formula, the stat-wiring fixes, the open defects, and the decisions still needed. Start here when implementing. |
-| `report/CP_System_Report.html` | Offline copy of the charted report â€” open it in any browser, `Ctrl+P` for a PDF. No internet needed except for the web fonts. |
+| `CP_SESSION_TRANSCRIPT.md` | **The conversation.** Everything Arash asked and everything Claude answered, 2026-09-07 → 08. Arash's messages verbatim; Claude's replies condensed but complete. Read this to continue the thread on another machine. |
+| `NEXT_VERSION_CHANGES.md` | **The work list.** Every change queued for the next version — the CP formula, the stat-wiring fixes, the open defects, and the decisions still needed. **Start here when implementing.** |
+| `report/CP_Redesign_Report.html` | Before/after evaluation of the formula change, with charts. Offline copy of the published artifact. |
+| `report/CP_System_Report.html` | Offline copy of the charted report — open it in any browser, `Ctrl+P` for a PDF. No internet needed except for the web fonts. |
 | `tools/cpcalc.js` | Recomputes **every number** in the analysis from the project's own `.asset` files. |
 | `tools/build.js` | Rebuilds `report/CP_System_Report.html` from the template + computed data. |
 | `tools/report.template.html` | The report page with a `/*__DATA__*/` placeholder that `build.js` fills. |
@@ -39,19 +40,19 @@ node Docs/cp-analysis/tools/cpcalc.js      # parses the .asset YAML, writes tool
 node Docs/cp-analysis/tools/build.js       # regenerates report/CP_System_Report.html
 ```
 
-`cpcalc.js` is **read-only** with respect to the project â€” it parses `Assets/` and writes only
+`cpcalc.js` is **read-only** with respect to the project — it parses `Assets/` and writes only
 `out.json` next to itself. It reimplements, outside Unity:
 
 - `AnimationCurve.Evaluate`, including cubic Hermite interpolation between keys and the
-  PreInfinity/PostInfinity **clamp** behaviour â€” which is what exposed the four curves authored at
+  PreInfinity/PostInfinity **clamp** behaviour — which is what exposed the four curves authored at
   negative time.
-- `ProgressionMath.GetGrowthMultipliers` (the compounding `âˆ(1 + pct(l))` loop).
-- `CPWeightMath.Evaluate` â€” **faithfully, including the bug**: `meleeMult` is never sampled from
+- `ProgressionMath.GetGrowthMultipliers` (the compounding `∏(1 + pct(l))` loop).
+- `CPWeightMath.Evaluate` — **faithfully, including the bug**: `meleeMult` is never sampled from
   the config. Pass `buggy = false` to that function to model the intended behaviour instead.
 - `CPCalculator.UnitCP`.
 
 On finishing it prints seven **sanity checks** against values that were also computed by hand.
-All seven must say `PASS`. If you retune a curve in the Editor and re-run, expect them to fail â€”
+All seven must say `PASS`. If you retune a curve in the Editor and re-run, expect them to fail —
 that is the script telling you the data moved, not that the script broke. Update the expected
 values in the `checks` array at the bottom of `cpcalc.js`.
 
@@ -80,7 +81,7 @@ git commit -m "Remove the CP analysis docs"
 ```
 
 Or, to drop the whole `Docs/` tree, remove `Docs/` instead. Because the folder lives outside
-`Assets/`, there are no `.meta` files to clean up and no Unity references to break â€” deleting it
+`Assets/`, there are no `.meta` files to clean up and no Unity references to break — deleting it
 cannot affect the project, the Editor, or a build.
 
 If you would rather keep the files but stop tracking them, add `Docs/` to `.gitignore` and run
