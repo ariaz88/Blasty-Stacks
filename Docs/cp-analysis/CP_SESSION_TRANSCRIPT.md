@@ -1,9 +1,13 @@
 # CP_SESSION_TRANSCRIPT — the full CP conversation
 
     Session : 2dcb4830-f417-4e5f-af46-479906a13c53
-    Dates   : 2026-09-07 → 2026-09-08
+    Dates   : 2026-09-07 → 2026-09-09
     Repo    : ariaz88/Blasty-Stacks
-    Scope   : Combat Power audit — everything Arash asked and everything Claude answered.
+    Scope   : Combat Power audit and redesign — everything Arash asked and everything Claude
+              answered, plus the full change list for the next version.
+
+**Read the SUMMARY below first** — it holds every decision, finding and queued change in one place.
+The numbered transcript after it is the detail.
 
 > **فارسی:** این فایل رونوشت کامل گفتگوی CP است — هر چه آرش پرسید و هر چه Claude پاسخ داد.
 > پیام‌های آرش **عیناً** و به فارسی نقل شده‌اند. پاسخ‌های Claude به انگلیسی و کمی فشرده‌شده‌اند
@@ -25,7 +29,147 @@ finding, number, table and conclusion is kept. Where a claim was verified agains
 | `tools/` | Scripts that recompute every number from the project's own `.asset` files |
 | **this file** | The conversation itself |
 
-Live charted report: <https://claude.ai/code/artifact/3d635747-5eb6-43f8-85cf-e868e41e783d>
+**Published reports**
+- Original CP audit: <https://claude.ai/code/artifact/3d635747-5eb6-43f8-85cf-e868e41e783d>
+- **Before/after redesign report:** <https://claude.ai/code/artifact/dd5ae694-903d-4fbf-90ec-5092fbcb5b54>
+
+---
+
+# SUMMARY
+
+Everything decided, found and queued — the whole session in one place.
+
+## 1. What Arash decided
+
+| Decision | Detail |
+|---|---|
+| **The goal** | In a 1v1, the unit with higher CP must win — **even by 1 point** |
+| **Attack speed must count** | 3 hits/sec beats 2 hits/sec; it cannot stay a dead stat |
+| **No hard-coding** | Whatever the stats say must be what the game actually does |
+| **Move speed** | **No** CP role, but keeps growing for the feel of progression. Base ~**0.3** for players and enemies |
+| **Range** | **Removed entirely** — from CP *and* from growth |
+| **Difficulty** | Must rise stage by stage. **The game must not get easier** |
+| **Upgrade pacing** | The player can upgrade only every **4–5 stages** (~5 upgrades over 20) |
+| **Growth shape** | Front-loaded and tapering (+8% → +3%). Rejected a flat +21–33% per upgrade |
+| **CP shares** | Accepted the elasticity split: **ATK 31.3 / AtkSpd 31.3 / HP 31.3 / DEF 6.3** |
+| **Working method** | Two analyses for every question — in-game testing **and** web comparison with shipped games |
+| **Language** | All notes in **English** |
+| **Saving** | One commit per settled point. No auto-commit hook. Claude never pushes |
+
+## 2. What was found
+
+**The current formula is wrong in shape, not just in tuning.** Survival is
+`HP × (100+DEF)/100` — defense **multiplies** HP. CP *adds* two things that multiply. That single
+error causes almost everything else.
+
+| Finding | Evidence |
+|---|---|
+| CP names the wrong winner **9.8%** of the time | 40 of 407 simulated duels |
+| The bias is **entirely one-directional** | 40 "player wins" errors, **0** the other way — CP always overrates the player |
+| Defense earns **0.00%** of CP at level 1 | while enemies are built as tanks (DEF 52–78) |
+| Three stats are priced but **inert** | `moveSpeed`, `attackSpeed`, `attackRange` — ~2.1% of CP paid for nothing |
+| `attackSpeed` does **nothing at all** | cadence is a flat `recoveryTime = 0.6` on all 10 attack assets |
+| Movement ignores the stats | players use 0.5, enemies 0.2 — the sheets say 3.5 and 2.9–3.5 |
+| Four `AnimationCurve`s authored at **negative time** | silently running ×3.17 defense that nobody chose |
+| The player cannot keep pace | enemy ÷ player power widens **8.6×** across 20 stages (5.3× → 45.8×) |
+
+**A finding was retracted.** The earlier claim that CP ranks the roster backwards was **wrong** — it
+assumed `attackSpeed` multiplies DPS. It does not. CP ranks the two hero profiles correctly.
+
+## 3. The answer to the goal
+
+**The formula guarantees it. The combat model does not.**
+
+`CP = ATK × AtkSpd × EffectiveHP` is **exactly monotonic** — 0 errors in 200,000 duels, and provable
+algebraically, because comparing times-to-kill reduces to comparing that product.
+
+But **hits are whole numbers**, so a small CP edge is invisible unless it removes a whole hit:
+
+| CP margin | higher CP wins | | hits per kill | CP correct |
+|---|---|---|---|---|
+| 0–0.1% | **52.9%** — coin flip | | **3–6 — today** | ~95% |
+| 1–2% | 64.4% | | ~9 | 97.7% |
+| 5–10% | 91.9% | | **15–20 — target** | **~99%** |
+| 10%+ | 99.4% | | ~36 | 99.4% |
+
+**"1 more CP always wins" is not achievable in any formula while hits are integers.** The fix is
+**fight length**, not the formula: raise HP relative to ATK so kills take 15–20 hits.
+
+## 4. Formula: before → after
+
+```
+BEFORE   CP = round( wA·ATK + wH·HP + wMv·Move + wAS·AtkSpd + wD·DEF + wR·Range ) × typeMult
+AFTER    CP = round( ATK × AtkSpd × EffectiveHP ÷ K )      EffectiveHP = HP × (100+DEF)/100
+```
+
+| Metric | duel accuracy |
+|---|---|
+| current shipped CP | 90.2% |
+| current minus the 3 inert stats | 90.4% |
+| product with √ damping | 95.1% |
+| **ATK × EffectiveHP** | **100.0%** |
+
+| Stat | before | after |
+|---|---|---|
+| ATK | 79.3% | **31.3%** |
+| AtkSpd | 0.99% | **31.3%** |
+| HP | 18.6% | **31.3%** |
+| DEF | **0.00%** | **6.3%** |
+| MoveSpd | 1.08% | removed |
+| Range | 0.05% | removed |
+
+The new formula has **no coefficients at all** — nothing to set, nothing to maintain. Defense's share
+rises on its own as a unit gets tankier (6.3% at DEF 25 → 18.0% at DEF 78). For comparison, Epic
+Seven's public formula lands at ~offense 45 / HP 32 / DEF 23 — the same region, reached independently.
+
+## 5. What must change — the full list
+
+Detail, files and reasoning for each: **`NEXT_VERSION_CHANGES.md`**.
+
+**A · The formula** 🟢 *ready now*
+- **A0** ✅ done — `CPWeightMath` now samples `meleeMultByLevel` (`80ed65b`)
+- **A1** replace CP with `(ATK × AtkSpd) × EffectiveHP ÷ K`
+- **A2** remove `attackRange` from CP and growth
+- **A3** remove `moveSpeed` from CP (growth stays)
+
+**B · Make the stats real** ⚠️ *both carry balance traps*
+- **B1** wire movement to `unitStats.moveSpeed`, SO values → 0.3 — *naive wiring = players 7×, enemies 15× faster*
+- **B2** cadence → `recoveryTime / attackSpeed`, re-author to 0.9–1.3 — *naive wiring = heroes 1.5–2× stronger*
+
+**C · Growth curves**
+- **C1** 🟢 fix the two off-axis curves (`defPct`, `rangePct`)
+- **C2** 🔴 player growth stays +8% → +3%
+- **C3** 🔴 `moveSpeed` growth rate
+- **C4** 🔴 enemy curves / the difficulty sawtooth
+- **C5** 🔴 raise HP:ATK so fights take 15–20 hits
+
+**D · Defects still open**
+- **D1** 🟢 menu and combat compute different stats (L10 hero fights with DEF 43.1, menu says 25)
+- **D2** 🟢 enemy defense never grows
+- **D3** 🟢 delete the second, divergent CP formula in `EnemyManager`
+- **D4** 🟡 the flavour system — delete, or re-author for a future multi-class roster
+- **D5** 🟢 the fake hard-coded "TOTAL CP" in `MenuScene`
+- **D6** 🟢 three stale reference docs
+
+**Suggested order:** formula → off-axis curves → correctness bugs → stat wiring → balance pass.
+**Steps 1–3 can start immediately.**
+
+## 6. Blocked on Arash
+
+| # | Needed | Blocks |
+|---|---|---|
+| E1 | The CP progression spreadsheet, levels 1–20 | C2, C4, C5 |
+| E2 | Sawtooth: how close is the gap at an upgrade? | C4 |
+| E3 | Sawtooth: how wide before the next upgrade? | C4 |
+| E4 | Range — delete outright, or guard with `if (!isRanged)`? | A2 |
+| E5 | Flavour system — delete, or re-author? | D4 |
+| E6 | Display divisor `K` ≈ 200? | A1 |
+
+## 7. State of the code
+
+**Exactly one line of game code changed across this entire session** — `CPWeightMath.cs:41`
+(`80ed65b`), and it was proven to change no CP value. **No `.asset`, `.prefab` or `.unity` file has
+been modified.** Everything else is designed, evidenced and unimplemented.
 
 ---
 
@@ -1043,6 +1187,57 @@ between upgrades, near-parity restored at each upgrade.
 **BLOCKED:** Arash will supply an **Excel of intended CP progression for levels 1–20**. Two numbers
 are needed to fit the enemy curve: how close "small gap" is at the upgrade moment, and how large the
 gap should grow before the next one.
+
+---
+
+<a id="22"></a>
+## 22. Session wrapped before implementation
+
+**Arash** asked to wrap the session before any edits, so he could continue elsewhere, and asked
+whether wrapping would preserve everything.
+
+**Honest answer: `/wrap` alone would not.** It writes a `SESSIONS.md` summary; the real continuity
+lives in `CP_DISCUSSION_LOG.md`, and the last eight exchanges existed only in chat. Three things were
+outstanding and were committed: all the design decisions; the retraction of the wrong `attackSpeed`
+claim, which was still live in `CP_SYSTEM_ANALYSIS.md` §5/§9 in both languages; and the transcript
+and `SESSIONS.md` continuity entries.
+
+**Arash also set a standing instruction: all notes in English.** Existing Persian was left in place.
+
+---
+
+<a id="23"></a>
+## 23. The before/after report, and the monotonicity limit
+
+**Arash** asked for a complete report covering the evaluation before and after the change, with
+tables and charts, and specifically demanding that a unit with **even 1 more CP** must win.
+
+Testing that requirement produced the sharpest result of the session:
+
+- **Without rounding, the formula is exactly monotonic** — 0 errors in 200,000 random duels, and
+  provable algebraically.
+- **With whole-number hits it breaks at small margins** — at a 0.1% margin the higher-CP unit wins
+  only 52.9% of the time. A 1-CP edge is invisible unless it removes a whole hit from the kill; both
+  units then land their killing blow on the same tick and draw.
+- **The fix is fight length, not the formula.** At ~5 hits per kill accuracy is 95.5%; at ~18 hits it
+  is 98.9%. The game currently resolves fights in **3–6 hits — the worst zone.** Target 15–20.
+
+Report published and committed as `report/CP_Redesign_Report.html`.
+
+---
+
+<a id="24"></a>
+## 24. Correcting the share chart
+
+**Arash** pointed out the before/after chart used the wrong "after" numbers — the practical-influence
+figures (33.9 / 14.0 / 46.3 / 5.8) rather than the elasticity figures he had chosen
+(**31.3 / 31.3 / 31.3 / 6.3**). Corrected and republished.
+
+While fixing it, a justification that had been missing was added: **the two columns are exactly
+comparable**, because for a weighted sum a term's share of the total *is* its elasticity —
+`(∂CP/∂ATK)·(ATK/CP) = wA·ATK / CP`. Also recorded that ATK, AtkSpd and HP are *necessarily* equal
+under the product form, since they enter as a symmetric product — which is why attack could not be
+tuned to 45–50% without breaking duel prediction.
 
 ---
 
