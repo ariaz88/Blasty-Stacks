@@ -9,11 +9,18 @@
   !! CPWeightsConfigSO. This is legal for a ScriptableObject (unlike a
   !! MonoBehaviour) but it makes the class hard to find by filename.
 
+  !! LARGELY UNUSED AS OF THE A1 CP REWRITE. CPCalculator no longer consults any
+  !! of these curves - CP is now (ATK x AtkSpd) x EffectiveHP / K, which has no
+  !! per-stat weights. CPWeightMath.Evaluate still reads this config, but nothing
+  !! in the CP path calls CPWeightMath any more. The class and its two .asset
+  !! files are kept rather than deleted pending a decision (D4/E5 in
+  !! Docs/cp-analysis/NEXT_VERSION_CHANGES.md).
+
 PURPOSE
 -------
-Holds the weighting curves used to convert a unit's raw stats into a single
-"Combat Power" (CP) number - the score shown in the UI so the player can compare
-units and judge whether they are strong enough for a stage.
+Holds the weighting curves that USED to convert a unit's raw stats into a single
+"Combat Power" (CP) number via a weighted sum. That formula was replaced because
+it ranked the shipped roster incorrectly - see CPCalculator.txt NOTES.
 
 FIELDS
 ------
@@ -23,7 +30,9 @@ FIELDS
     wMoveSpeedByLevel     (default 0.25 -> 0.20)
     wAttackSpeedByLevel   (default 0.40 -> 0.45)   grows in importance
     wDefenseByLevel       (default 0.00 -> 0.05)   ignored at low level
-    wRangeByLevel         (default 0.05 -> 0.04)   deliberately small
+
+    The range weight has been removed (A2). Existing .asset files may still carry
+    a serialized `wRangeByLevel` block until Unity next re-saves them.
 
   Type flavour
     meleeMultByLevel      (default flat 1.00)
@@ -35,6 +44,9 @@ FIELDS
 
 HOW IT CONNECTS
 ---------------
-  - Consumed by CPWeightMath.Evaluate(), which is called by CPCalculator.
-  - Assets: "Assets/Scriptable Objects/CP/Player CP.asset" and "EnemyCP.asset"
-    (player and enemy CP can be weighted differently).
+  - Consumed by CPWeightMath.Evaluate(). NOTHING calls CPWeightMath any more -
+    CPCalculator dropped it in the A1 rewrite. This is currently a dead branch.
+  - Assets: "Assets/Scriptable Objects/CP/Player CP.asset" and "EnemyCP.asset".
+  - Both assets author meleeMultByLevel / rangedMultByLevel entirely off the
+    level axis (keys at t ~= -389 and t ~= -730), so every typeMult evaluated to
+    1.0 anyway. The new formula has no typeMult at all.

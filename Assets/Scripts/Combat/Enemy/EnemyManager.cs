@@ -115,7 +115,9 @@ public class EnemyManager : MonoBehaviour
             unitStats.maxHP *= g.gH;
             unitStats.moveSpeed *= g.gMv;
             unitStats.attackSpeed *= g.gAS;
-            // (Add defense/range growth here if you want later)
+            // NOTE: g.gD (defense) is still not applied here - see D2 in
+            // Docs/cp-analysis/NEXT_VERSION_CHANGES.md. Range no longer has a
+            // growth axis at all (A2).
         }
 
         // 3) Apply runtime multipliers (buffs / wave scaling)
@@ -145,19 +147,13 @@ public class EnemyManager : MonoBehaviour
 
     int UnitCP_WithFallback(UnitStatsRuntime s, int stage, CPWeightsConfigSO cfg)
     {
-        if (cfg != null)
-            return CPCalculator.UnitCP(s, stage, cfg);
-
-        float wA = 1.00f, wH = 0.15f, wMv = 0.25f, wAS = 0.40f, wD = 0.00f;
-        float typeMult = (s.type == FighterType.Archer) ? 1.05f : 1.00f;
-
-        float baseScore = wA * s.attack +
-                          wH * s.maxHP +
-                          wMv * s.moveSpeed +
-                          wAS * s.attackSpeed +
-                          wD * s.defense;
-
-        return Mathf.RoundToInt(baseScore * typeMult);
+        // There used to be a second, hard-coded weighted-sum formula here for the
+        // case where cfg was null. It is gone: CPCalculator.UnitCP no longer needs
+        // a weights config at all, so there is nothing left to fall back to and
+        // exactly one CP formula exists in the project. Keeping the old branch
+        // would now be actively wrong - it produced numbers on a completely
+        // different scale from the new formula.
+        return CPCalculator.UnitCP(s, stage, cfg);
     }
 
     #endregion

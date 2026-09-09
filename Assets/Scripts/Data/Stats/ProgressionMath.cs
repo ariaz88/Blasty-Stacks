@@ -9,8 +9,10 @@ public static class ProgressionMath
         public float gH;   // HP
         public float gMv;  // Move Speed
         public float gAS;  // Attack Speed
-        public float gD;   // Defense      (NEW)
-        public float gR;   // Attack Range (NEW)
+        public float gD;   // Defense
+        // Attack Range has no growth: range plays no part in CP or in the duel
+        // outcome, and the stat-block value is never read in combat. See A2 in
+        // Docs/cp-analysis/NEXT_VERSION_CHANGES.md.
     }
 
     /// <summary>
@@ -19,7 +21,7 @@ public static class ProgressionMath
     /// </summary>
     public static Growth GetGrowthMultipliers(int level, ProgressionConfigSO cfg)
     {
-        Growth g = new Growth { gA = 1f, gH = 1f, gMv = 1f, gAS = 1f, gD = 1f, gR = 1f };
+        Growth g = new Growth { gA = 1f, gH = 1f, gMv = 1f, gAS = 1f, gD = 1f };
         if (cfg == null || level <= 1) return g;
 
         int L = Mathf.Max(1, level);
@@ -30,16 +32,13 @@ public static class ProgressionMath
             float m = ClampPct(cfg.movePctByLevel.Evaluate(l), cfg.pctClamp);
             float s = ClampPct(cfg.atkSpdPctByLevel.Evaluate(l), cfg.pctClamp);
 
-            // NEW: Defense & Range (curves exist in cfg; still clamped)
             float d = ClampPct(cfg.defPctByLevel.Evaluate(l), cfg.pctClamp);
-            float r = ClampPct(cfg.rangePctByLevel.Evaluate(l), cfg.pctClamp);
 
             g.gA *= (1f + a);
             g.gH *= (1f + h);
             g.gMv *= (1f + m);
             g.gAS *= (1f + s);
             g.gD *= (1f + d);
-            g.gR *= (1f + r);
         }
         return g;
     }

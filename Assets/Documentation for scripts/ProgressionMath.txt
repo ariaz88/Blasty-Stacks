@@ -12,9 +12,14 @@ for each stat. Pure math - no Unity objects, no side effects.
 
 TYPES
 -----
-  struct Growth { gA, gH, gMv, gAS, gD, gR }
-      Multiplier for Attack, HP, MoveSpeed, AttackSpeed, Defense, Range.
+  struct Growth { gA, gH, gMv, gAS, gD }
+      Multiplier for Attack, HP, MoveSpeed, AttackSpeed, Defense.
       A value of 1.0 means "no change".
+
+      There is NO gR. Attack range has no growth axis: it is excluded from CP and
+      from progression, and the stat-block value is never read in combat (players
+      use PlayerManager.maxAttackRange, enemies use their stopping distance).
+      See A2 in Docs/cp-analysis/NEXT_VERSION_CHANGES.md.
 
 METHODS
 -------
@@ -31,10 +36,16 @@ HOW IT CONNECTS
 ---------------
   - PlayerProgressionService uses it to preview "current vs next level" stats
     in the unit upgrade UI.
-  - The same numbers feed UnitStatsRuntime.ApplyLevelGrowth at spawn time.
+  - PlayerStatsApplier applies all five multipliers when building a hero's
+    runtime stats.
+  - EnemyManager.RebuildFromBase applies only four of the five - g.gD (defense)
+    is still missing there. See D2 in Docs/cp-analysis/NEXT_VERSION_CHANGES.md.
 
 NOTES
 -----
   - The loop is O(level). It is called from UI code, so at very high levels this
     is a linear cost per query. Fine at the current cap, worth caching if levels
     ever reach the hundreds.
+  - UnitStatsRuntime.ApplyLevelGrowth computes the same idea independently with
+    Mathf.Pow instead of this compounding loop, and has ZERO call sites. Do not
+    assume it runs at spawn - it does not.

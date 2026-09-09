@@ -8,36 +8,95 @@
 PURPOSE
 -------
 Computes "Combat Power" - the single number the UI shows to summarise how strong
-a unit or a squad is. CP is a weighted sum of live stats, adjusted by a
-melee/ranged multiplier.
+a unit or a squad is.
+
+CP is NOT a scoring heuristic. It is the 1v1 duel condition rearranged, so that
+in a duel the unit with the higher CP wins by construction:
+
+    CP = (ATK x AtkSpd) x EffectiveHP / K
+
+Derivation: a duel is won by whoever kills first, i.e. whoever has the smaller
+
+    time-to-kill = enemy EffectiveHP / (own ATK x own AtkSpd)
+
+Cross-multiplying that comparison gives
+
+    ATK_a x AtkSpd_a x EffectiveHP_a  >  ATK_b x AtkSpd_b x EffectiveHP_b
+
+which is exactly the CP comparison. The shared attack cadence
+(PlayerAttackAction.recoveryTime) appears on both sides and cancels, which is
+why it does not appear in the formula.
+
+FIELDS
+------
+  DisplayDivisor (const float = 200)
+      Cosmetic only. The raw product lands in the thousands; dividing every unit
+      by the SAME constant keeps displayed CP near the magnitudes the menus
+      showed before. Because it is identical for every unit it cannot change any
+      ordering - changing it rescales the whole roster and nothing else.
 
 METHODS
 -------
   UnitCP(UnitStatsRuntime s, int level, CPWeightsConfigSO cfg) -> int
-      1. Samples the weights for this level via CPWeightMath.Evaluate.
-      2. baseScore = wA*attack + wH*maxHP + wMv*moveSpeed
-                   + wAS*attackSpeed + wD*defense + wR*attackRange
-      3. Classifies the unit: Archer and Mage count as RANGED, Warrior and
-         Horseman as MELEE, and applies the matching multiplier.
-      4. Returns the rounded integer.
-      Returns 0 if either argument is null.
+      Returns round( ATK * AtkSpd * EffectiveHP(s) / DisplayDivisor ).
+      ATK and AtkSpd are floored at 0 so a malformed stat block cannot produce a
+      negative CP. Returns 0 if s is null.
+
+      `level` and `cfg` are retained ONLY so existing call sites still compile.
+      They are not read. The formula has no per-stat weights and no level lens -
+      the three factors enter multiplicatively, and that is precisely what makes
+      the duel comparison exact rather than approximate.
+
+      moveSpeed and attackRange are deliberately absent: neither changes who wins
+      a duel. See A2/A3 in Docs/cp-analysis/NEXT_VERSION_CHANGES.md.
 
   SquadCP(UnitStatsRuntime[] squad, int level, cfg) -> int
       Sums UnitCP over the array using ONE shared level for all units.
 
   SquadCP(UnitStatsRuntime[] squad, int[] levels, cfg) -> int
-      Same, but with a per-unit level array. Returns 0 if the array lengths
-      do not match - a silent failure worth being aware of.
+      Same, but with a per-unit level array. Returns 0 if the array lengths do
+      not match - a silent failure worth being aware of.
 
   EffectiveHP(UnitStatsRuntime s) -> float
-      Converts HP + defense into an "effective HP" figure using the same damage
-      formula as combat:  dmgFraction = 100 / (100 + defense)
-      effectiveHP = maxHP / dmgFraction  (so defense multiplies survivability).
-      NOTE: this mirrors CombatMath - if the damage formula there ever changes,
-      this must change with it or the UI will lie to the player.
+      How much RAW damage the unit can absorb, given that defense reduces every
+      incoming hit:
+          dmgFraction = 100 / (100 + defense)
+          effectiveHP = maxHP / dmgFraction     (= maxHP * (100 + defense) / 100)
+      Mirrors CombatMath.DamagePerHit exactly. If the damage formula there ever
+      changes, this MUST change with it or CP will lie to the player.
+      Returns 0 for a null unit.
 
 HOW IT CONNECTS
 ---------------
-  - Called by the unit roster / detail UI (UnitCardView, UnitDetailView,
-    BucketStatsPanel) to display CP.
+  - UnitsPanelController calls UnitCP at six sites to display per-unit CP and the
+    "next level" delta in the roster and upgrade panels.
+  - EnemyManager.UnitCP_WithFallback calls it when building an enemy at spawn and
+    stores the result in its `cp` debug field.
   - Reads live UnitStatsRuntime values, so CP reflects upgrades and buffs.
+  - CPWeightMath / CPWeightsConfigSO are no longer consulted by this class. They
+    still exist and still compile, but nothing in the CP path reads them.
+
+NOTES
+-----
+  - Previous formula (removed): a weighted SUM
+        round( (wA*ATK + wH*HP + wMv*Move + wAS*AtkSpd + wD*DEF + wR*Range)
+               * typeMult )
+    It ranked the shipped roster incorrectly. Because wAS was only 0.40, the
+    attackSpeed term contributed under one point while ATK contributed ~64, so a
+    64-ATK / 2.0-speed hero (128 DPS) scored 81 while a 72-ATK / 1.5-speed hero
+    (108 DPS) scored 89 - the genuinely stronger unit showed the LOWER number.
+    Under the new formula those same two units score 80 and 68, in the right
+    order.
+  - typeMult (melee/ranged flavour) is gone with the weighted sum. All 15 shipped
+    units are FighterType.Warrior, so this is a no-op on today's roster.
+  - CP scale changed. Sample of the shipped roster (old -> new):
+        ArcherStats            37 -> 11
+        WarriorStats           59 -> 40
+        Player_Minotaur_01     81 -> 80
+        Enemy_Golem_02        122 -> 180
+        PlayerMeleeReaper     114 -> 240   (attackSpeed 4.0, an outlier that
+                                            item B2 is scheduled to re-author)
+    Defense now genuinely counts, via EffectiveHP, where the old wD was 0.00.
+  - GateBase now scores 0 because its ATK is 0. That is correct - a gate deals no
+    damage and cannot win a duel - but any UI that displayed the old value of 15
+    will now show 0.

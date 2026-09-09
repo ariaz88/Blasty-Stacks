@@ -19,7 +19,11 @@ FIELDS
     movePctByLevel     move speed growth            (default 1->+2%, 50->+1%)
     atkSpdPctByLevel   attack speed growth          (default 1->+2%, 50->+1%)
     defPctByLevel      defense growth               (default 1->+2%, 50->+0.5%)
-    rangePctByLevel    attack range growth          (default 1->+1%, 50->+0.3%)
+
+    There is no range curve. Attack range does not grow - it is excluded from CP
+    and from progression (A2 in Docs/cp-analysis/NEXT_VERSION_CHANGES.md).
+    NOTE: existing .asset files may still carry a serialized `rangePctByLevel`
+    block. Unity drops it the next time the asset is saved; it is already inert.
 
   Safety
     pctClamp  (Vector2, default -0.25 .. 0.50)

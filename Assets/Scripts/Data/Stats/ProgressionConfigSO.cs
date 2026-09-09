@@ -10,9 +10,10 @@ public class ProgressionConfigSO : ScriptableObject
     public AnimationCurve movePctByLevel = AnimationCurve.Linear(1, 0.02f, 50, 0.01f);
     public AnimationCurve atkSpdPctByLevel = AnimationCurve.Linear(1, 0.02f, 50, 0.01f);
 
-    // NEW: Defense & Range growth curves (tune as desired)
     public AnimationCurve defPctByLevel = AnimationCurve.Linear(1, 0.02f, 50, 0.005f);
-    public AnimationCurve rangePctByLevel = AnimationCurve.Linear(1, 0.01f, 50, 0.003f);
+
+    // attackRange has no growth curve: range is excluded from CP and from
+    // progression. See A2 in Docs/cp-analysis/NEXT_VERSION_CHANGES.md.
 
     [Header("Safety")]
     [Tooltip("Clamp evaluated percents into this range to avoid wild values.")]

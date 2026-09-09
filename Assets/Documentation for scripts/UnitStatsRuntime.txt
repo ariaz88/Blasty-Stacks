@@ -32,9 +32,15 @@ METHODS
       This is what the roguelite skill layer calls when a skill card is picked -
       effects therefore STACK multiplicatively across picks.
 
-  ApplyLevelGrowth(level, atkPct, hpPct, movePct, atkSpdPct, defPct, rangePct)
+  ApplyLevelGrowth(level, atkPct, hpPct, movePct, atkSpdPct, defPct)
       Applies compound growth for an upgrade level: each stat is multiplied by
       (1 + pct) raised to the power (level - 1). So level 1 = no change.
+      attackRange is NOT grown - range is excluded from CP and from progression
+      (A2). The rangePct parameter was removed.
+      !! This method has ZERO call sites. Growth actually reaches units through
+      !! PlayerStatsApplier and EnemyManager.RebuildFromBase, which call
+      !! ProgressionMath.GetGrowthMultipliers and multiply the fields directly.
+      !! Do not assume this runs at spawn - it does not.
 
 HOW IT CONNECTS
 ---------------

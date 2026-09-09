@@ -5,7 +5,7 @@ public static class CPWeightMath
 {
     public struct Weights
     {
-        public float wA, wH, wMv, wAS, wD, wR;  // NEW: wR = attackRange weight
+        public float wA, wH, wMv, wAS, wD;
         public float meleeMult, rangedMult;
     }
 
@@ -18,7 +18,6 @@ public static class CPWeightMath
             wMv = 0.25f,
             wAS = 0.40f,
             wD = 0f,
-            wR = 0.05f,
             meleeMult = 1f,
             rangedMult = 1.05f
         };
@@ -34,9 +33,6 @@ public static class CPWeightMath
         w.wMv = Mathf.Clamp(cfg.wMoveSpeedByLevel.Evaluate(L), clampMin, clampMax) * s;
         w.wAS = Mathf.Clamp(cfg.wAttackSpeedByLevel.Evaluate(L), clampMin, clampMax) * s;
         w.wD = Mathf.Clamp(cfg.wDefenseByLevel.Evaluate(L), clampMin, clampMax) * s;
-
-        // NEW: range
-        w.wR = Mathf.Clamp(cfg.wRangeByLevel.Evaluate(L), clampMin, clampMax) * s;
 
         w.meleeMult = Mathf.Clamp(cfg.meleeMultByLevel.Evaluate(L), 1, 5f);
         w.rangedMult = Mathf.Clamp(cfg.rangedMultByLevel.Evaluate(L), 1, 5f);

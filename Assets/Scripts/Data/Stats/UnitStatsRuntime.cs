@@ -42,8 +42,7 @@ public class UnitStatsRuntime
                                  float hpPct,
                                  float movePct,
                                  float atkSpdPct,
-                                 float defPct = 0f,
-                                 float rangePct = 0f)
+                                 float defPct = 0f)
     {
         int d = Mathf.Max(0, level - 1);
 
@@ -52,14 +51,13 @@ public class UnitStatsRuntime
         float gMv = Mathf.Pow(1f + movePct, d);
         float gAS = Mathf.Pow(1f + atkSpdPct, d);
         float gD = Mathf.Pow(1f + defPct, d);
-        float gR = Mathf.Pow(1f + rangePct, d);
 
         attack *= gA;
         maxHP *= gH;
         moveSpeed *= gMv;
         attackSpeed *= gAS;
         defense *= gD;
-        attackRange *= gR;
+        // attackRange does not grow - range is excluded from CP and progression.
     }
 
     // Runtime multipliers (buffs/wave/gear)

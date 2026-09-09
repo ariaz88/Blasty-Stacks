@@ -69,11 +69,13 @@ METHODS
       3. Reads the player's SAVED level L for this unit via
          _gsm.PlayerUnits.GetLevel(unitId), floored at 1.
       4. Computes growth multipliers via ProgressionMath.GetGrowthMultipliers.
-      5. Builds a FRESH UnitStatsRuntime from the base SO and multiplies ALL
-         SIX stats (attack, defense, maxHP, attackSpeed, moveSpeed,
-         attackRange) by their respective growth factors - this is a complete
-         recompute from scratch each time, so it correctly resets any earlier
-         session's temporary multipliers rather than compounding them.
+      5. Builds a FRESH UnitStatsRuntime from the base SO and multiplies the
+         five growing stats (attack, defense, maxHP, attackSpeed, moveSpeed) by
+         their respective growth factors - this is a complete recompute from
+         scratch each time, so it correctly resets any earlier session's
+         temporary multipliers rather than compounding them.
+         attackRange is deliberately NOT grown: range has no growth curve and no
+         part in CP (A2 in Docs/cp-analysis/NEXT_VERSION_CHANGES.md).
       6. Stores the result in CurrentStats.
       7. Calls TryApplyHealth(rt.maxHP).
 

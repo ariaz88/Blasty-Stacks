@@ -11,8 +11,8 @@ public class CPWeightsConfigSO : ScriptableObject
     public AnimationCurve wAttackSpeedByLevel = AnimationCurve.Linear(1, 0.40f, 50, 0.45f);
     public AnimationCurve wDefenseByLevel = AnimationCurve.Linear(1, 0.00f, 50, 0.05f);
 
-    // NEW: range matters a bit (keep small so CP isn’t dominated by range)
-    public AnimationCurve wRangeByLevel = AnimationCurve.Linear(1, 0.05f, 50, 0.04f);
+    // attackRange is deliberately absent: range plays no part in CP. See A2 in
+    // Docs/cp-analysis/NEXT_VERSION_CHANGES.md.
 
     [Header("Type flavor (curves allowed)")]
     public AnimationCurve meleeMultByLevel = AnimationCurve.Linear(1, 1.00f, 50, 1.00f);

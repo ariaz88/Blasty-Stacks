@@ -76,8 +76,12 @@ UI HELPERS
       Computes the "+X in green" preview for the upgrade screen:
         current = baseStats * growthMultipliers(level)
         next    = baseStats * growthMultipliers(level + 1)
-      for all six stats. Returns false if the unit, its baseStats or the
-      progression config is missing.
+      for the five growing stats. Returns false if the unit, its baseStats or
+      the progression config is missing.
+      attackRange is still reported in the snapshot so the UI keeps compiling,
+      but it no longer grows: current and next are both the base value and the
+      green delta is always 0. See A2 in
+      Docs/cp-analysis/NEXT_VERSION_CHANGES.md.
       IMPORTANT: this reads UnitStatsSO (design base) and applies growth fresh -
       it does NOT read the live UnitStatsRuntime of a spawned unit, so roguelite
       in-run buffs correctly do not appear in the menu preview.

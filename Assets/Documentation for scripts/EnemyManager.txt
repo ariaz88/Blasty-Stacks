@@ -40,8 +40,11 @@ REGION: CP / STATS / PROGRESSION
   RebuildFromBase()
       1. unitStats.FromSO(statsBase) - reset to base.
       2. Apply growth multipliers from ProgressionMath using unitLevel
-         (attack, HP, moveSpeed, attackSpeed only - defense/range growth is
-         commented as "add later" and never applied).
+         (attack, HP, moveSpeed, attackSpeed only - g.gD (defense) is still
+         never applied here, which matters because defense is the axis where
+         the six enemy archetypes actually differ, 28..78. See D2 in
+         Docs/cp-analysis/NEXT_VERSION_CHANGES.md. Range no longer has a growth
+         axis at all, so there is nothing missing on that side any more.)
       3. Apply the runtime multipliers via ApplyMultipliers.
       4. Push maxHealth/currentHP into the EnemyStats component so the health
          bar matches.
@@ -51,10 +54,13 @@ REGION: CP / STATS / PROGRESSION
       Stores the multipliers and optionally rebuilds immediately.
 
   UnitCP_WithFallback(stats, stage, cfg)
-      If cfg is assigned, delegates to CPCalculator.UnitCP. Otherwise computes a
-      simplified CP using hard-coded fallback weights (missing the range term
-      that the real calculator has) - a safety net for a spawner that forgot to
-      assign cpWeights.
+      Now simply delegates to CPCalculator.UnitCP. The name is historical.
+      It used to contain a SECOND, divergent hard-coded weighted-sum formula for
+      the case where cfg was null. That branch was deleted with the A1 rewrite:
+      CPCalculator.UnitCP no longer needs a weights config, so there is nothing
+      to fall back to, and keeping the old branch would have been actively wrong
+      - it produced numbers on a completely different scale from the new formula.
+      There is now exactly ONE CP formula in the project.
 
 CORE FIELDS (outside the region)
 ---------------------------------

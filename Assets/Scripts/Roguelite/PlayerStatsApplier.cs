@@ -132,13 +132,13 @@ public class PlayerStatsApplier : MonoBehaviour
         var rt = new UnitStatsRuntime();
         rt.FromSO(def.baseStats);
 
-        // Apply growth to ALL six stats (matches your extended ProgressionMath)
+        // Apply growth to all five growing stats. attackRange is deliberately
+        // excluded - it has no growth curve and no part in CP.
         rt.attack *= g.gA;
         rt.defense *= g.gD;
         rt.maxHP *= g.gH;
         rt.attackSpeed *= g.gAS;
         rt.moveSpeed *= g.gMv;
-        rt.attackRange *= g.gR;
 
         CurrentStats = rt;
 

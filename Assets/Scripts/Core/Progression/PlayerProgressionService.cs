@@ -239,7 +239,9 @@ public class PlayerProgressionService
         float hpC = def.baseStats.maxHP * gL.gH;
         float asC = def.baseStats.attackSpeed * gL.gAS;
         float mvC = def.baseStats.moveSpeed * gL.gMv;
-        float rgC = def.baseStats.attackRange * gL.gR;
+        // attackRange does not grow, so current and next are both the base value
+        // and the UI's delta is always 0.
+        float rgC = def.baseStats.attackRange;
 
         // next
         float atkN = def.baseStats.attack * gL1.gA;
@@ -247,7 +249,7 @@ public class PlayerProgressionService
         float hpN = def.baseStats.maxHP * gL1.gH;
         float asN = def.baseStats.attackSpeed * gL1.gAS;
         float mvN = def.baseStats.moveSpeed * gL1.gMv;
-        float rgN = def.baseStats.attackRange * gL1.gR;
+        float rgN = def.baseStats.attackRange;
 
         snap.attack = new StatSnapshot { current = atkC, next = atkN };
         snap.defense = new StatSnapshot { current = defC, next = defN };

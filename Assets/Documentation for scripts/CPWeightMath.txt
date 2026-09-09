@@ -12,14 +12,15 @@ numbers. Separating this from CPCalculator keeps the curve sampling in one place
 
 TYPES
 -----
-  struct Weights { wA, wH, wMv, wAS, wD, wR, meleeMult, rangedMult }
+  struct Weights { wA, wH, wMv, wAS, wD, meleeMult, rangedMult }
+      wR (range weight) was removed with A2 - range plays no part in CP.
 
 METHODS
 -------
   Evaluate(int level, CPWeightsConfigSO cfg) -> Weights
       Starts from hard-coded fallback defaults (wA=1, wH=0.15, wMv=0.25,
-      wAS=0.40, wD=0, wR=0.05, meleeMult=1, rangedMult=1.05) so that a null
-      config still yields sensible CP.
+      wAS=0.40, wD=0, meleeMult=1, rangedMult=1.05) so that a null config still
+      yields sensible weights.
       Otherwise samples every curve at 'level', clamps each by cfg.wClamp, and
       multiplies them all by globalWeightScaleByLevel (itself clamped to 1..10).
       The two flavour multipliers are sampled separately and do NOT get the
@@ -27,6 +28,13 @@ METHODS
 
 NOTES / BUGS
 ------------
+  !! DEAD CODE AS OF THE A1 CP REWRITE. Nothing calls Evaluate() any more.
+  !! CPCalculator used to be the sole caller; its new formula
+  !! ((ATK x AtkSpd) x EffectiveHP / K) has no per-stat weights and no typeMult,
+  !! so this class and CPWeightsConfigSO are both off the CP path. They are kept
+  !! rather than deleted pending decision D4/E5 in
+  !! Docs/cp-analysis/NEXT_VERSION_CHANGES.md.
+
   [FIXED 2026-09-08] meleeMult was never read from the config. The line that
   should sample cfg.meleeMultByLevel was missing, and rangedMult was assigned
   TWICE (the identical statement on two consecutive lines, 41-42), so

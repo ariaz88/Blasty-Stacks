@@ -1,32 +1,47 @@
-﻿// CPCalculator.cs
+// CPCalculator.cs
 using UnityEngine;
 
 public static class CPCalculator
 {
     /// <summary>
-    /// Compute CP for a single unit, using live stats (UnitStatsRuntime),
-    /// a level (for CP-weights evaluation), and a curve-based CP weight config.
+    /// Cosmetic display divisor. CP is a raw product of three stats, so it lands
+    /// in the thousands; dividing every unit by the same constant keeps the
+    /// displayed number near the magnitudes the menus already showed. Because it
+    /// is the SAME constant for every unit it cannot change any ordering -
+    /// raising or lowering it rescales the whole roster and nothing else.
+    /// </summary>
+    public const float DisplayDivisor = 200f;
+
+    /// <summary>
+    /// CP for a single unit:  (ATK x AtkSpd) x EffectiveHP / K
+    ///
+    /// This is the 1v1 duel condition rearranged, not a scoring heuristic. A duel
+    /// is won by whoever kills first, i.e. whoever has the smaller
+    ///
+    ///     time-to-kill = enemy EffectiveHP / (own ATK x own AtkSpd)
+    ///
+    /// Cross-multiplying that comparison turns it into
+    ///
+    ///     ATK_a x AtkSpd_a x EffectiveHP_a   >   ATK_b x AtkSpd_b x EffectiveHP_b
+    ///
+    /// so in a duel the unit with the higher CP wins by construction.
+    ///
+    /// moveSpeed and attackRange are deliberately absent - neither changes who
+    /// wins a duel. There are no per-stat weights any more: the three factors
+    /// enter multiplicatively, which is what makes the comparison exact.
+    ///
+    /// <paramref name="level"/> and <paramref name="cfg"/> are kept so existing
+    /// call sites still compile, but the formula needs neither.
     /// </summary>
     public static int UnitCP(UnitStatsRuntime s, int level, CPWeightsConfigSO cfg)
     {
-        if (s == null || cfg == null) return 0;
+        if (s == null) return 0;
 
-        var w = CPWeightMath.Evaluate(level, cfg);
+        // Damage per second, ignoring the shared attack cadence: that cadence is
+        // the same constant for both sides of any comparison, so it cancels.
+        float dps = Mathf.Max(0f, s.attack) * Mathf.Max(0f, s.attackSpeed);
 
-        // Weighted sum of live stats (now includes Range)
-        float baseScore =
-              w.wA * s.attack
-            + w.wH * s.maxHP
-            + w.wMv * s.moveSpeed
-            + w.wAS * s.attackSpeed
-            + w.wD * s.defense
-            + w.wR * s.attackRange;   // NEW
-
-        // Map 4 classes → melee / ranged
-        bool isRanged = s.type == FighterType.Archer || s.type == FighterType.Mage;
-        float typeMult = isRanged ? w.rangedMult : w.meleeMult;
-
-        return Mathf.RoundToInt(baseScore * typeMult);
+        return Mathf.RoundToInt(dps * EffectiveHP(s) / DisplayDivisor);
     }
 
     public static int SquadCP(UnitStatsRuntime[] squad, int level, CPWeightsConfigSO cfg)
@@ -47,8 +62,14 @@ public static class CPCalculator
         return sum;
     }
 
+    /// <summary>
+    /// How much raw damage this unit can absorb, given that defense reduces every
+    /// incoming hit by 100/(100+DEF). Mirrors <see cref="CombatMath.DamagePerHit"/>
+    /// exactly, so it reflects the damage the unit will really take in battle.
+    /// </summary>
     public static float EffectiveHP(UnitStatsRuntime s)
     {
+        if (s == null) return 0f;
         float dmgFrac = 100f / (100f + Mathf.Max(0f, s.defense));
         return s.maxHP / dmgFrac;
     }
