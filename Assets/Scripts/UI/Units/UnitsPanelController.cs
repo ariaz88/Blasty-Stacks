@@ -515,6 +515,7 @@ public class UnitsPanelController : MonoBehaviour
         cur.FromSO(def.baseStats);
         var gCur = ProgressionMath.GetGrowthMultipliers(level, progressionConfig);
         cur.attack *= gCur.gA;
+        cur.defense *= gCur.gD;
         cur.maxHP *= gCur.gH;
         cur.attackSpeed *= gCur.gAS;
 
@@ -522,6 +523,7 @@ public class UnitsPanelController : MonoBehaviour
         nxt.FromSO(def.baseStats);
         var gNxt = ProgressionMath.GetGrowthMultipliers(level + 1, progressionConfig);
         nxt.attack *= gNxt.gA;
+        nxt.defense *= gNxt.gD;
         nxt.maxHP *= gNxt.gH;
         nxt.attackSpeed *= gNxt.gAS;
 
@@ -575,6 +577,7 @@ public class UnitsPanelController : MonoBehaviour
         cur.FromSO(def.baseStats);
         var gCur = ProgressionMath.GetGrowthMultipliers(level, progressionConfig);
         cur.attack *= gCur.gA;
+        cur.defense *= gCur.gD;
         cur.maxHP *= gCur.gH;
         cur.attackSpeed *= gCur.gAS;
 
@@ -876,6 +879,7 @@ public class UnitsPanelController : MonoBehaviour
 
             var g = ProgressionMath.GetGrowthMultipliers(lvl, progressionConfig);
             cur.attack *= g.gA;
+            cur.defense *= g.gD;
             cur.maxHP *= g.gH;
             cur.attackSpeed *= g.gAS;
 
@@ -956,6 +960,7 @@ public class UnitsPanelController : MonoBehaviour
 
             var g = ProgressionMath.GetGrowthMultipliers(lvl, progressionConfig);
             cur.attack *= g.gA;
+            cur.defense *= g.gD;
             cur.maxHP *= g.gH;
             cur.attackSpeed *= g.gAS;
 

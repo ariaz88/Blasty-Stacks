@@ -191,7 +191,7 @@ Net relative shift **~1.1%** in the players' favour, versus ~19% if the spec had
 
 # C. Growth curves
 
-### C1 · 🟢 ⚠️ Fix the two off-axis progression curves
+### C1 · ✅ DONE — Fix the two off-axis progression curves
 - **File:** `Assets/Scriptable Objects/Stats/Progression/PlayerProgressionConfig.asset`
 - **Problem:** `defPctByLevel` has keyframes at t ≈ −9.0 and `rangePctByLevel` at t ≈ −1.1 — entirely
   off the level axis. Curves clamp past their last key, so `Evaluate(l)` returns the same value at
@@ -294,7 +294,7 @@ attackSpeed later is a **data** change only, no code needed.
 
 # D. Defects still open (from the 9-item register)
 
-### D1 · 🟢 The menu and the battlefield compute different stats
+### D1 · ✅ DONE — The menu and the battlefield compute different stats
 - **Files:** `UnitsPanelController.cs:517, 579, 881, 962` and `NewCharacterStats.cs:235` apply only
   `gA/gH/gMv/gAS`; `PlayerStatsApplier.cs:135-142` applies all six.
 - **Effect:** a level-10 hero **fights with defense 43.1** while every menu — and the CP built on it —
@@ -303,7 +303,7 @@ attackSpeed later is a **data** change only, no code needed.
   correctly and **nothing calls it**. Route the UI through it.
 - *Register item 02. This is the second-biggest correctness bug after C1.*
 
-### D2 · 🟢 Enemy defense never grows
+### D2 · ✅ DONE — Enemy defense never grows
 - **File:** `EnemyManager.cs:113-118` — `RebuildFromBase` applies only 4 of 6 multipliers, with a
   comment acknowledging the gap.
 - **Effect:** defense is the one axis where the six archetypes meaningfully differ (28 → 78), and it
