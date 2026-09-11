@@ -83,6 +83,46 @@ public class PlayerWaveManager : MonoBehaviour
     private PlayerUnitsModel PlayerUnits => _gsm ? _gsm.PlayerUnits : null;
     private UnitsDatabaseSO _unitsDb;
 
+    public int RuleLevel => LevelBattleRules.ResolveLevel(gameObject, enemySpawner ? enemySpawner.levelConfig : null);
+    public bool UsesDeploymentRules => LevelBattleRules.AppliesTo(RuleLevel);
+    public int MatchesCleared { get; private set; }
+    public int MatchesReleased { get; private set; }
+    public bool DeploymentFailed { get; private set; }
+    private bool sealedForBattle;
+    private readonly List<UnitDefinitionSO> plannedHeroes = new();
+    private readonly List<PlayerManager> releasedHeroes = new();
+    private int plannedSpawnIndex;
+    public IReadOnlyList<PlayerManager> ReleasedHeroes => releasedHeroes;
+    public bool DeploymentsReady
+    {
+        get
+        {
+            if (DeploymentFailed || MatchesReleased < MatchesCleared) return false;
+            foreach (var hero in releasedHeroes)
+            {
+                if (!hero) continue;
+                var jump = hero.GetComponent<FrogJumpTransformOnly>();
+                if (jump && jump.IsJumping) return false;
+            }
+            return true;
+        }
+    }
+
+    public void SealForBattle()
+    {
+        if (UsesDeploymentRules) sealedForBattle = true;
+    }
+
+    public double ReleasedPlayerCP
+    {
+        get
+        {
+            double cp = 0;
+            foreach (var hero in releasedHeroes) if (hero) cp += CPCalculator.UnitPower(hero.unitStats);
+            return cp;
+        }
+    }
+
 
     private void OnEnable()
     {
@@ -103,7 +143,7 @@ public class PlayerWaveManager : MonoBehaviour
         if (!enemySpawner) enemySpawner = FindObjectOfType<EnemySpawner>(true);
         if (!gapFiller) gapFiller = FindObjectOfType<FormationGapFiller>(true);
 
-        _gsm = FindObjectOfType<GameStartManager>();
+        _gsm = GameStartManager.Instance ? GameStartManager.Instance : FindObjectOfType<GameStartManager>();
         if (_gsm == null)
         {
             Debug.LogError("PlayerWaveManager: GameStartManager not found.");
@@ -143,6 +183,10 @@ public class PlayerWaveManager : MonoBehaviour
         waveLocked = false;
         currentWave.Clear();
         waveUnlockIndex = 0;   // lanes restart from the front rank after a revive
+        MatchesCleared = MatchesReleased = plannedSpawnIndex = 0;
+        sealedForBattle = DeploymentFailed = unlockAnimInProgress = false;
+        plannedHeroes.Clear();
+        releasedHeroes.Clear();
 
         BeginWaves();   // uses WaveLoop that checks puzzle again
     }
@@ -152,7 +196,91 @@ public class PlayerWaveManager : MonoBehaviour
     {
         if (running) return;
         running = true;
-        StartCoroutine(WaveLoop());
+        StartCoroutine(UsesDeploymentRules ? PlannedWaveLoop() : WaveLoop());
+    }
+
+    private IEnumerator PlannedWaveLoop()
+    {
+        while (running && !PuzzleHasStacks() && MatchesCleared == 0) yield return null;
+        if (!running) yield break;
+
+        // Same deployed roster and uniform random selection as SpawnOneAt.
+        // Reserve the attempt's order without changing hero-type eligibility.
+        var deployed = GetDeployedUnitDefinitions();
+        if (deployed.Count == 0)
+        {
+            FailDeployment("No deployed hero types are available.");
+            yield break;
+        }
+        int max = LevelBattleRules.TotalHeroes(RuleLevel, LevelBattleRules.TotalPairs(RuleLevel));
+        for (int i = 0; i < max; i++)
+        {
+            var def = deployed[UnityEngine.Random.Range(0, deployed.Count)];
+            if (!def.runtimePrefab || !def.runtimePrefab.GetComponent<PlayerManager>() ||
+                !def.runtimePrefab.GetComponent<PlayerStatsApplier>())
+            {
+                FailDeployment("A deployed type is missing its runtime prefab or stats components.");
+                yield break;
+            }
+            plannedHeroes.Add(def);
+        }
+
+        for (int match = 1; running && match <= LevelBattleRules.TotalPairs(RuleLevel); match++)
+        {
+            if (sealedForBattle && match > MatchesCleared) break;
+            int count = LevelBattleRules.HeroesForMatch(RuleLevel, match);
+            float waited = 0;
+            while (running && GetFreeGateIndices().Count < count && waited < 5f)
+            {
+                waited += Time.deltaTime;
+                yield return null;
+            }
+            if (!running) yield break;
+            if (GetFreeGateIndices().Count < count)
+            {
+                FailDeployment("Not enough free permanent deployment stages for the required wave.");
+                yield break;
+            }
+            // Queued matches remain valid after the final pieces disappear or the
+            // battle camera hides the board. Never discard those earned summons.
+            SpawnLockedWave(count, true);
+            if (currentWave.Count != count)
+            {
+                FailDeployment("Could not spawn every hero in the required wave.");
+                yield break;
+            }
+            while (running && MatchesCleared < match && !sealedForBattle) yield return null;
+            if (!running) yield break;
+            if (MatchesCleared < match)
+            {
+                foreach (var hero in currentWave) if (hero) Destroy(hero.gameObject);
+                currentWave.Clear();
+                waveLocked = false;
+                break;
+            }
+            PlayStageUnlockAnimations();
+            float timer = 0;
+            while (running && waveLocked)
+            {
+                timer += Time.deltaTime;
+                if (timer >= 1.5f)
+                {
+                    unlockAnimInProgress = false;
+                    pendingStageEvents = 0;
+                    UnlockCurrentWaveViaAnimation();
+                }
+                yield return null;
+            }
+            if (match < LevelBattleRules.TotalPairs(RuleLevel)) yield return new WaitForSeconds(nextWaveDelay);
+        }
+        running = false;
+    }
+
+    private void FailDeployment(string reason)
+    {
+        DeploymentFailed = true;
+        running = false;
+        Debug.LogError("[PlayerWaveManager] " + reason, this);
     }
 
     // Call this when level ends (win/lose)
@@ -212,10 +340,10 @@ public class PlayerWaveManager : MonoBehaviour
     }
 
 
-    private void SpawnLockedWave(int count)
+    private void SpawnLockedWave(int count, bool earnedOrPlanned = false)
     {
         // Safety: don't spawn if puzzle is empty
-        if (!PuzzleHasStacks())
+        if (!earnedOrPlanned && !PuzzleHasStacks())
             return;
 
         currentWave.Clear();
@@ -578,6 +706,11 @@ public class PlayerWaveManager : MonoBehaviour
     }
     private PlayerManager SpawnOneAt(Vector3 pos, Quaternion rot)
     {
+        if (UsesDeploymentRules)
+        {
+            if (plannedSpawnIndex >= plannedHeroes.Count) return null;
+            return SpawnUnitAt(plannedHeroes[plannedSpawnIndex++], pos, rot);
+        }
         var deployed = GetDeployedUnitDefinitions();
         if (deployed.Count == 0)
         {
@@ -635,12 +768,19 @@ public class PlayerWaveManager : MonoBehaviour
             // ApplyNow leaves CurrentStats null when GameStartManager/PlayerUnits
             // is missing; never overwrite the prefab's stats with that null.
             if (pm.playerStatsApplier.CurrentStats != null)
+            {
                 pm.unitStats = pm.playerStatsApplier.CurrentStats;
+                // A fresh summon starts with its actual upgraded maximum HP.
+                var health = pm.GetComponent<PlayerStats>();
+                if (UsesDeploymentRules && health)
+                    health.currentHP = health.maxHealth = pm.unitStats.maxHP;
+            }
             else
                 Debug.LogWarning($"[PlayerWaveManager] Spawned '{def.displayName}' with no " +
                                  "computed stats - keeping prefab defaults.", pm);
         }
 
+        if (UsesDeploymentRules) CPBattleController.CalibrateHero(pm, RuleLevel);
         return pm;
     }
 
@@ -855,6 +995,12 @@ public class PlayerWaveManager : MonoBehaviour
     // Called by MatchResolver when a group clears
     private void HandleBlast(int _)
     {
+        if (UsesDeploymentRules)
+        {
+            if (sealedForBattle || DeploymentFailed) return;
+            MatchesCleared = Mathf.Min(LevelBattleRules.TotalPairs(RuleLevel), MatchesCleared + Mathf.Max(0, _));
+            return; // the planned loop drains every earned match, even during animation
+        }
         if (!running) return;
         if (!waveLocked) return; // already unlocked; ignore extra blasts
         if (unlockAnimInProgress) return; // ignore extra blasts while animation is running
@@ -933,6 +1079,8 @@ public class PlayerWaveManager : MonoBehaviour
     }
     private void UnlockCurrentWaveViaAnimation()
     {
+        if (!waveLocked) return;
+        if (UsesDeploymentRules) MatchesReleased++;
         // One lane per match: 1st match -> lane 0, 2nd -> lane 1, ...
         // Resolved once for the whole wave so everyone lands on the same rank.
         float? laneY = GetLaneYForNextWave();
@@ -959,6 +1107,7 @@ public class PlayerWaveManager : MonoBehaviour
 
             // 3) UNLOCK + JUMP
             pm.isUnlocked = true;
+            if (UsesDeploymentRules) releasedHeroes.Add(pm);
             ApplyLock(pm, false);
             StartCoroutine(JumpThenSwitch(pm, laneY));
         }
@@ -1064,7 +1213,8 @@ public class PlayerWaveManager : MonoBehaviour
     private List<int> GetFreeGateIndices()
     {
         var list = new List<int>(gatePoints.Length);
-        for (int i = 0; i < gatePoints.Length; i++)
+        int gateCount = UsesDeploymentRules ? Mathf.Min(4, gatePoints.Length) : gatePoints.Length;
+        for (int i = 0; i < gateCount; i++)
         {
             if (!IsGateUsable(gatePoints[i])) continue;
 

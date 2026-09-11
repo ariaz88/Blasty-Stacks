@@ -22,19 +22,31 @@ Tick()
 ------
   1. If playerLockState is assigned and !pm.isUnlocked -> return lock.
   2. If pm.currentTarget is null -> return PlayerPursueTargetState (reacquire).
-  3. Measure distance to the target.
-  4. If pm.currentRecoveryTimer <= 0 AND distance <= pm.maxAttackRange
+  3. Ask pm.IsInAttackPosition() - not a raw distance. See NOTES.
+  4. If pm.currentRecoveryTimer <= 0 AND in position
          -> return PlayerAttackState   (swing now)
-  5. If distance > pm.maxAttackRange
-         -> return PlayerPursueTargetState  (chase again)
-  6. Otherwise return this - in range but still on cooldown, so wait here.
+  5. If NOT in position
+         -> return PlayerPursueTargetState  (walk round / back out)
+  6. Otherwise return this - in position but still on cooldown, so wait here.
 
 HOW IT CONNECTS
 ---------------
   - currentRecoveryTimer is decremented by PlayerManager; this state only reads
     it. That keeps the attack-rate logic in one place.
+  - IsInAttackPosition() is PlayerManager's wrapper around
+    MeleeEngagement.InAttackPosition. PlayerPursueTargetState uses the SAME call,
+    which is what stops the two states disagreeing and bouncing the hero between
+    them.
 
 NOTES
 -----
   - Step 6 is the attack cooldown wait. The unit stands in range doing nothing
     until the recovery timer expires, which is what makes attackSpeed matter.
+  - CHANGED 2026-09-11. Steps 3-5 used to compare a bare radial
+    `distance <= pm.maxAttackRange`. A radial test calls "stacked directly on top
+    of the enemy" a valid fighting position; it is not, because the melee hitboxes
+    are wide flat boxes that only reach sideways, so the hero swung through its
+    target forever without landing a hit. MeleeEngagement explains the geometry.
+  - The new test ALSO fails when the hero is too deep inside the target, so a
+    target that walks into a hero sends it back out to a proper standoff instead
+    of the two sprites merging.

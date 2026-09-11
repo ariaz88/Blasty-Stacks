@@ -8,6 +8,9 @@
 
 PURPOSE
 -------
+Stage 1-5 addition: actual player-body hits notify MeleeContactRecovery; units
+without that component (including later stages) behave as before.
+
 The enemy's attack HITBOX. Enabled only during the active frames of an attack
 animation, it damages the player unit or the player's gate on contact.
 

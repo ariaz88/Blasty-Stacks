@@ -11,15 +11,21 @@ public class PlayerStats : CharacterStats
     }
     void Start()
     {
-        healthBar.SetCurrentHealth(currentHP, maxHealth);
+        if (healthBar) healthBar.SetCurrentHealth(currentHP, maxHealth);
 
     }
 
 
     public void ApplyDamageToPlayer(float damageAmount)
     {
-        currentHP = Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount));
-        healthBar.SetCurrentHealth(currentHP , PlayerManager.statsBase.maxHP);
+        damageAmount = CPBattleController.AdjustIncomingDamage(this, damageAmount);
+        SetResolvedHealth(Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount)));
+    }
+
+    public void SetResolvedHealth(float hp)
+    {
+        currentHP = Mathf.Clamp(hp, 0, maxHealth);
+        if (healthBar) healthBar.SetCurrentHealth(currentHP, maxHealth);
         if (currentHP <= 0)
         {
             currentHP = 0;

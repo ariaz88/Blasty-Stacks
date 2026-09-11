@@ -248,6 +248,23 @@ public class EnemyManager : MonoBehaviour
         else
             initialBodyType = RigidbodyType2D.Dynamic;   // safe default
 
+        EnsureDepthSorter();
+    }
+
+    /// <summary>
+    /// Gives this enemy a Y-driven draw depth, so the unit standing in FRONT is the
+    /// one actually painted in front. Every character part in the game sits on
+    /// sorting layer Default at order 1, so without this the tie between two
+    /// overlapping units resolves arbitrarily - which is why an enemy's head could
+    /// be drawn over the hero it was fighting. See UnitDepthSorter.
+    ///
+    /// Added in code rather than on the six enemy prefabs so that nothing can ship
+    /// without it, including anything spawned by the debug stage tools.
+    /// </summary>
+    private void EnsureDepthSorter()
+    {
+        if (GetComponent<UnitDepthSorter>() == null)
+            gameObject.AddComponent<UnitDepthSorter>();
     }
 
     private void Start()
@@ -458,6 +475,7 @@ public class EnemyManager : MonoBehaviour
     }
     void FixedUpdate()
     {
+        if (GetComponent<MeleeContactRecovery>() is { IsRepositioning: true }) return;
         if (GameplayPause.IsPaused)
             return;
 
@@ -551,9 +569,15 @@ public class EnemyManager : MonoBehaviour
     {
         if (enemyLocoMotion == null) return;
 
-        // 1) If we have a player target in melee range -> attack player
+        // 1) If we are standing where our weapon can reach the hero -> attack it.
+        //
+        // The test used to be the radial `distanceFromTarget <= stoppingDistance`,
+        // which is TRUE for an enemy parked directly above its target - so the
+        // enemy froze its locomotion and played swing after swing through a hero it
+        // could not touch, because the weapon box only reaches sideways. Gating on
+        // the position instead lets it finish walking round to the flank first.
         if (enemyLocoMotion.currentTarget != null &&
-            enemyLocoMotion.distanceFromTarget <= enemyLocoMotion.stoppingDistance)
+            enemyLocoMotion.IsInAttackPosition())
         {
             var ps = enemyLocoMotion.currentTarget;
             if (!ps.playerIsdead && !enemyStats.enemyIsdead)

@@ -126,11 +126,21 @@ public class PlayerStatsApplier : MonoBehaviour
         }
 
         int L = Mathf.Max(1, _gsm.PlayerUnits.GetLevel(unitId));
-        var g = ProgressionMath.GetGrowthMultipliers(L, progressionConfig);
+        var rt = BuildStatsAtLevel(unitId, L);
+        CurrentStats = rt;
+        TryApplyHealth(rt.maxHP);
+    }
+
+    // Shared stat construction used by ApplyNow.
+    public UnitStatsRuntime BuildStatsAtLevel(int id, int level)
+    {
+        var definition = unitsDatabase ? unitsDatabase.GetById(id) : null;
+        if (definition == null || definition.baseStats == null || progressionConfig == null) return null;
+        var g = ProgressionMath.GetGrowthMultipliers(level, progressionConfig);
 
         // Build fresh runtime stats from base SO
         var rt = new UnitStatsRuntime();
-        rt.FromSO(def.baseStats);
+        rt.FromSO(definition.baseStats);
 
         // Apply growth to the four growing stats. moveSpeed and attackRange are
         // deliberately excluded - neither has a growth curve any more.
@@ -139,9 +149,7 @@ public class PlayerStatsApplier : MonoBehaviour
         rt.maxHP *= g.gH;
         rt.attackSpeed *= g.gAS;
 
-        CurrentStats = rt;
-
-        TryApplyHealth(rt.maxHP);
+        return rt;
     }
 
     /// <summary>

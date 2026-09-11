@@ -8,6 +8,9 @@
 
 PURPOSE
 -------
+Stage 1-5 addition: FixedUpdate temporarily defers state-machine movement/attacks
+while MeleeContactRecovery is making a physical sidestep after missed contact.
+
 The player unit's central hub. Unlike EnemyManager (which does all its own
 decision logic), PlayerManager mostly HOSTS the state machine and provides
 shared services to it: stats, target detection, facing, movement toward a
@@ -101,9 +104,19 @@ LIFECYCLE
       Subscribe/unsubscribe EnemyGateStats.OnGateDestroyed -> HandleGateDestroyed.
 
   Awake()
-      Caches every component reference. Note enemyStats is resolved with
-      FindAnyObjectByType<EnemyStats>() - it is assigned but never actually used
-      anywhere else in the class; dead lookup.
+      Caches every component reference, then calls EnsureDepthSorter(). Note
+      enemyStats is resolved with FindAnyObjectByType<EnemyStats>() - it is
+      assigned but never actually used anywhere else in the class; dead lookup.
+
+  EnsureDepthSorter()   [private, from Awake]   (added 2026-09-11)
+      Adds a UnitDepthSorter if the object has none, giving the hero a Y-driven
+      draw depth so a unit standing in front is actually PAINTED in front. Every
+      character part in the game sits on sorting layer Default at order 1, so
+      without it the tie between two overlapping units resolves arbitrarily and an
+      enemy's head can end up on top of the hero it is fighting.
+      Skipped when CompareTag("PlayerGate") - the castle carries a PlayerManager
+      but is not a unit. Done in code, not on the prefabs, because heroes are
+      spawned from several places and none may ship without it.
 
   Start()
       Sets the Rigidbody2D to Dynamic, disables the damage collider, applies
@@ -209,44 +222,79 @@ UpdateTargetSelection() -> bool
 
 MOVEMENT
 --------
+  IsInAttackPosition() -> bool     (added 2026-09-11)
+      MeleeEngagement.InAttackPosition(self, currentTarget, maxAttackRange).
+      TRUE only when the hero is close enough, NOT sunk into its target, and
+      level enough with it for the weapon box to overlap. Read by
+      PlayerPursueTargetState and PlayerCombatState - they both call THIS, so
+      they cannot disagree about whether the hero has arrived.
+
   HandleMoveToTarget(bool canMove)
-      No-ops if canMove is false, or the Rigidbody2D or chosenEnemyOffset is
-      missing. Computes the direction to chosenEnemyOffset, and if effectively
-      AT the target applies a half-speed "idle separation nudge" so units do not
-      perfectly stack. Otherwise normalizes direction, runs it through
-      ApplyFriendlySeparation, and sets linearVelocity = dir * CurrentMoveSpeed - with
-      an extra 0.7x damping once within maxAttackRange, to slow the approach for
-      a cleaner stop.
+      No-ops if canMove is false or the Rigidbody2D is missing. Bails out on a
+      null chosenEnemyOffset ONLY when there is no enemy target (the gate march
+      still needs an anchor) - see NOTES.
+      Applies CrowdSeparation2D.ResolveOverlap as a positional nudge, resolves
+      its own destination with ResolveAttackDestination, and walks there:
+      stops dead within 5 cm of it, otherwise bends the direction through
+      CrowdSeparation2D.SteerAroundBlockers (allies only) and sets
+      linearVelocity = dir * CurrentMoveSpeed, damped 0.7x inside maxAttackRange
+      for a cleaner stop.
 
-  ApplyFriendlySeparation(desiredDir) -> Vector2
-      A crowd-avoidance steering function. Finds nearby same-tag friendly
-      colliders within separationRadius, and for each one BEHIND OR LEVEL in Y
-      (myPos.y > otherPos.y is skipped - i.e. only units further back get
-      pushed, so the FRONT of a formation is not perturbed) computes a
-      horizontal-only push scaled by closeness. Blends multiple overlapping
-      neighbours with a crowd-density multiplier (up to 2x for 4+ neighbours)
-      and returns the desired direction bent toward the combined dodge vector.
-      2D, horizontal-only, deliberately biased so player waves fan out sideways
-      rather than clumping in a single file.
+  ResolveAttackDestination(anchor) -> Vector2      (rewritten 2026-09-11)
+      Where this hero walks to fight: BESIDE the target, at standoff distance,
+      inside the vertical band where its weapon can reach.
+        - Claims an AttackSlotRegistry slot on the target the first time, and
+          re-claims (plus resets the held side) whenever the target changes.
+          Released in OnDisable.
+        - For a GATE target it returns the anchor unchanged. The gate is a wide
+          building, not a duellist; walking to one of its flanks would march
+          heroes off the side of it.
+        - For an ENEMY target the `anchor` (the EnemyOffsetLeft/Right marker
+          EnemyStats hands out) is only a hint. The side is re-derived from the
+          hero's OWN position through MeleeEngagement.ChooseSide with
+          PlayerPreferredSide, so the enemy walking toward this hero arrives at a
+          compatible spot instead of the two circling each other. The point comes
+          from MeleeEngagement.StandPoint.
 
-  ResolveHorizontalOverlap()
-      A separate, SIMPLER anti-stacking pass, called every FixedUpdate
-      regardless of movement state. Finds same-tag neighbours within
-      spacingCheckRadius that are too close in X (and roughly the same row in
-      Y), computes an average push distance, and directly MovePosition()s
-      halfway toward a corrected spot. This runs on TOP OF the velocity-based
-      separation in HandleMoveToTarget, so two separate anti-overlap systems
-      are active simultaneously.
+      CRITICAL INVARIANT: the returned point must always satisfy
+      IsInAttackPosition. The pursue state decides with that predicate while this
+      method decides where the mover walks; if the two can disagree the mover
+      reports "arrived" and stops, the state reports "not there yet" and keeps
+      pursuing, and the hero freezes playing its walk animation. MeleeEngagement
+      keeps the point on the standoff circle and inside the band precisely so this
+      cannot recur.
+
+  HandleRoamForward()
+      The march on the enemy gate once the field is clear. Goes through
+      CrowdSeparation2D for both steering and personal space, then writes
+      linearVelocity along transform.up at CurrentMoveSpeed. It exists because
+      PlayerPursueTargetState used to drive this march with a raw inline
+      linearVelocity write that skipped avoidance entirely.
 
   SetAnimMoving(bool moving)
       Sets the Horizontal/Vertical blend-tree floats, null-safe.
 
+  DELETED 2026-08-21: ApplyFriendlySeparation() and ResolveHorizontalOverlap().
+      Both tried to keep units apart and fought each other - one bent the move
+      direction so a crowded unit walked sideways instead of at its target, the
+      other ran MovePosition every FixedUpdate unconditionally and gave two units
+      at the same x the SAME push sign, sliding them along together. Spacing is
+      now owned by the scene-level CrowdSeparation2D; attacker spread is owned by
+      AttackSlotRegistry + MeleeEngagement.
+
+  REMOVED 2026-09-11: the serialized attackSlotAngleStep / attackStandoffFactor.
+      They tuned an arc that fanned attackers AROUND the target, which let a hero
+      come to rest directly above or below it. Spacing is now defined once, for
+      both factions, in MeleeEngagement.
+
 FixedUpdate()
 -------------
-  Calls HandleStateMachine() then ResolveHorizontalOverlap() every physics
-  step - NOT gated by GameplayPause, unlike Update(), meaning the state machine
-  keeps ticking during a pause unless the individual state itself checks the
-  pause flag (most states do not).
+  Yields immediately if MeleeContactRecovery.IsRepositioning, then calls
+  HandleStateMachine() every physics step - NOT gated by GameplayPause, unlike
+  Update(), meaning the state machine keeps ticking during a pause unless the
+  individual state itself checks the pause flag (most states do not).
+  (ResolveHorizontalOverlap used to be called here too; it was deleted
+  2026-08-21.)
 
   HandleStateMachine()
       currentState.Tick(this, PlayerStats, playerAnimatitorManager) -> if a
@@ -308,10 +356,10 @@ NOTES / RISKS
     running every frame per unit in the combat layer (full-scene
     FindObjectsOfType scan). With many player units alive simultaneously this
     is O(units * enemies) per frame.
-  - Two anti-overlap systems (ApplyFriendlySeparation inside movement, and the
-    separate ResolveHorizontalOverlap in FixedUpdate) run concurrently and were
-    likely added at different times to solve the same "units stacking" problem
-    rather than one being removed when the other was added.
+  - [2026-08-21] RESOLVED: the two concurrent anti-overlap systems
+    (ApplyFriendlySeparation inside movement, and the separate
+    ResolveHorizontalOverlap in FixedUpdate) are both gone. Spacing is owned by
+    CrowdSeparation2D; attacker spread by AttackSlotRegistry + MeleeEngagement.
   - A dead numbered sibling HandleGateDestroyed1() remains - differs from the
     live version mainly in explicitly calling ChangeStateSafe with a comment
     referencing a "real state-switch method name", suggesting an in-progress
@@ -332,3 +380,21 @@ NOTES / RISKS
     UnitStatsRuntime, and logs a warning naming the object.
     NOTE this is a resilience fix, not a substitute for booting properly - a
     unit that keeps its serialized zeros still has no real stats.
+
+  - [2026-09-11] MELEE UNITS NOW ENGAGE FROM THE SIDE, NOT FROM ABOVE OR BELOW.
+    Reported bug: with a hero and an enemy in the same lane, neither could damage
+    the other and the two sprites merged. Cause: every melee hitbox in the project
+    is a wide flat trigger on a weapon bone that only reaches SIDEWAYS
+    (Player_Valkyrie's sword box is ~1.46 x 0.24 in world units, offset +0.78 on
+    X), while both sides decided "I have arrived" from a bare radial distance,
+    which cannot tell "beside" from "on top of". Three files changed on the hero
+    side - IsInAttackPosition + the rewritten ResolveAttackDestination here,
+    PlayerPursueTargetState and PlayerCombatState - plus the mirror-image fix in
+    EnemyLocoMotion / EnemyManager. See MeleeEngagement.txt for the geometry, the
+    invariant, and the two-body stability argument.
+
+  - [2026-09-11] HandleMoveToTarget's null-anchor bail-out is now conditional, and
+    that mattered: UpdateFacingAndOffset only assigns chosenEnemyOffset once the
+    target is at least facingDeadZoneX (0.12) off-centre, so a hero that acquired
+    a target sitting DEAD LEVEL above it never got an anchor at all - and then
+    never took a step. Exactly the alignment this whole fix is about.

@@ -21,12 +21,16 @@ public class PlayerCombatState : PlayerState
 
 
 
-        float distanceFromTarget = Vector3.Distance(pm.currentTarget.transform.position, pm.transform.position);
+        // Same rule as the pursue state uses to decide it has arrived, so the two
+        // can never disagree and bounce the hero between them. A bare radial
+        // distance would call "stacked directly on top of the enemy" a valid
+        // fighting position - it is not; the melee hitboxes only reach sideways.
+        bool inPosition = pm.IsInAttackPosition();
 
-        if (pm.currentRecoveryTimer <= 0 && distanceFromTarget <= pm.maxAttackRange)
+        if (pm.currentRecoveryTimer <= 0 && inPosition)
             return PlayerAttackState;
 
-        if (distanceFromTarget > pm.maxAttackRange)
+        if (!inPosition)
             return PlayerPursueTargetState;
 
         return this;

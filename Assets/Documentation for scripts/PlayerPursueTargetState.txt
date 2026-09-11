@@ -45,18 +45,19 @@ Tick()  - evaluated in this order
      NOTE the comment: use transform.right instead if the sprite art faces right.
 
   4. HAVE TARGET -> CHASE OR ENGAGE
-     Measures distance from the Rigidbody2D position (falling back to the
-     transform) to the target.
-       distance > pm.maxAttackRange  -> stay Dynamic, HandleMoveToTarget(true),
-                                        play move animation, remain in pursue.
-       distance <= pm.maxAttackRange -> stop, zero velocity, set body Static,
-                                        and return PlayerCombatState.
+     Asks pm.IsInAttackPosition() - NOT a raw distance. See NOTES.
+       not in position -> stay Dynamic, HandleMoveToTarget(true),
+                          play move animation, remain in pursue.
+       in position     -> stop, zero velocity, set body Static,
+                          and return PlayerCombatState.
 
 HOW IT CONNECTS
 ---------------
-  - Reads pm.isUnlocked, attackPlayerGate, currentTarget, maxAttackRange,
-    moveSpeed; calls pm.HandleMoveToTarget and pm.SetAnimMoving.
+  - Reads pm.isUnlocked, attackPlayerGate, currentTarget, IsInAttackPosition();
+    calls pm.HandleMoveToTarget and pm.SetAnimMoving.
   - Uses TargetDetectionForPlayer.AnyEnemyAliveInScene().
+  - IsInAttackPosition() is the same call PlayerCombatState makes, so the two
+    states cannot disagree about whether the hero has arrived.
 
 NOTES
 -----
@@ -65,4 +66,13 @@ NOTES
     push-back, but it also means the unit cannot be shoved by anything while
     fighting. Consider freezing constraints instead if push-back is ever wanted.
   - distanceToFaceOff is dead configuration - it is serialized (so it shows in
-    the Inspector and invites tuning) but never read.
+    the Inspector and invites tuning) but never read. It produces a live
+    CS0414 compiler warning.
+  - CHANGED 2026-09-11. Step 4 used to be a bare radial
+    `distance > pm.maxAttackRange`. That is why a hero walking up a lane at an
+    enemy coming down it came to rest DIRECTLY BELOW its target: in range, sunk
+    into its sprite, and unable to land a hit, because every melee hitbox here is
+    a wide flat box that only reaches sideways. The mover
+    (PlayerManager.ResolveAttackDestination) was already aiming for a spot beside
+    the enemy - this test stopped the hero before it ever got there.
+    See MeleeEngagement for the geometry and the stability argument.

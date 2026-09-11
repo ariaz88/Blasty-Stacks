@@ -100,6 +100,7 @@ public class EnemyDamageCollider : MonoBehaviour
 
             if (!isAttacking) return;
 
+            enemyManager.GetComponent<MeleeContactRecovery>()?.ReportContact(playerStats);
             playerStats.ApplyDamageToPlayer(damageToPlayer);
             return;
         }

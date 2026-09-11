@@ -43,16 +43,31 @@ INSPECTOR FIELDS
 
 LIFECYCLE
 ---------
-  Awake()  caches EnemyManager, Rigidbody2D and a child Animator
+  Awake()  caches EnemyManager, Rigidbody2D, a child Animator and (if present at
+           that moment) MeleeContactRecovery
   Start()  forces correct top-down 2D physics:
                gravityScale = 0, freezeRotation = true,
                interpolation = Interpolate
 
+  BindContactRecovery(recovery)
+      Called by MeleeContactRecovery from ITS Awake. Required because
+      CPBattleController ADDS that component at runtime on stages 1-5, long after
+      this script's Awake has run, so the GetComponent above finds nothing.
+
+  RecoveryOwnsBody  (property, bool)
+      TRUE while MeleeContactRecovery is physically stepping this enemy sideways.
+      FixedUpdate stands down when it is set. See NOTES - this is the fix for the
+      "enemy slides into the hero" bug.
+
   Update()
-      Respects GameplayPause.IsPaused - stops the walk animation and returns
-      early, so enemies freeze correctly while a modal panel is open.
-      Otherwise calls HandleMoveToTarget() and republishes distanceFromTarget
-      (20f when there is no target, i.e. "very far").
+      Respects GameplayPause.IsPaused. Republishes distanceFromTarget only
+      (20f when there is no target, i.e. "very far"). NO MOVEMENT - see NOTES.
+
+  FixedUpdate()
+      Respects GameplayPause.IsPaused, yields if RecoveryOwnsBody, then calls
+      HandleMoveToTarget(). All movement is on the physics clock and uses
+      Time.fixedDeltaTime, so an enemy walks at exactly its stat speed regardless
+      of frame rate.
 
 HandleMoveToTarget()  - the live version, evaluated in order
 ------------------------------------------------------------
@@ -62,17 +77,30 @@ HandleMoveToTarget()  - the live version, evaluated in order
      This is a hard clamp: once an enemy arrives at the gate it can NEVER move
      again or drift past it.
 
-  2. CHASE A PLAYER UNIT
-     If currentTarget exists and is not dead, and distance > stoppingDistance:
-       - laneDir = -transform.up  (the default "march down the lane" direction)
-       - isRealPlayer  = currentTarget.CompareTag("Player") - the gate uses the
+  2. ENGAGE A PLAYER UNIT
+     If currentTarget exists and is not dead:
+       - FIRST, if MeleeEngagement.InAttackPosition(pos, targetPos,
+         stoppingDistance) - already standing somewhere the weapon can reach -
+         go Kinematic and stop. This replaced a bare radial
+         `dist <= stoppingDistance`; see NOTES.
+       - isRealPlayer = currentTarget.CompareTag("Player") - the gate uses the
          tag "PlayerGate", so this distinguishes a real unit from the gate
-       - withinFair    = dist <= fairDistanceToPlayer
-       - shouldChasePlayer = isRealPlayer && withinFair
-     If chasing, the move direction becomes the direct vector to the player
-     (diagonal); otherwise the enemy keeps marching straight along the lane.
-     Body becomes Dynamic and moves with MovePosition.
-     Within stoppingDistance it becomes Kinematic and stops.
+       - withinFair   = dist <= fairDistanceToPlayer
+       - If both, walk to ResolveStandPoint(targetPos): a spot BESIDE the hero.
+         Arriving within 5 cm of it also stops and goes Kinematic.
+       - Otherwise keep marching straight down the lane (-transform.up).
+     Body becomes Dynamic and moves with MovePosition at
+     CurrentMoveSpeed * Time.fixedDeltaTime.
+
+  ResolveStandPoint(targetPos)
+     Claims an AttackSlotRegistry slot on the target the first time (released in
+     OnDisable, and re-claimed when the target changes), re-derives the side from
+     this enemy's OWN position via MeleeEngagement.ChooseSide with
+     EnemyPreferredSide, and returns MeleeEngagement.StandPoint.
+
+  IsInAttackPosition()
+     Public. The same test as above, read by EnemyManager.HandleCurrentAction so
+     the enemy cannot start a swing while still walking round to the flank.
 
   3. MARCH TO THE GATE
      With no player target, and the gate alive:
@@ -97,12 +125,45 @@ HOW IT CONNECTS
 
 NOTES
 -----
-  - There is an unused field 'enemyPassedPlayerInY' computed inside the chase
-    branch and then commented out of the condition - a rule that was tried and
-    disabled ("enemy tracks player only after it has passed the player in Y").
-  - Two dead numbered variants remain: Update1() (which also considered the gate
-    when computing distanceFromTarget) and HandleMoveToTarget1() (an earlier
-    design that chased the gate directly rather than marching along the lane).
-    Neither is called - Unity only invokes the exactly-named Update().
+  - CHANGED 2026-09-11, three related fixes for a reported bug (enemy slides into
+    the hero, both sprites overlap, neither takes damage):
+
+    (a) MOVEMENT MOVED FROM Update() TO FixedUpdate(). MovePosition is a physics
+        call, and driving it from Update with Time.deltaTime made the step size
+        depend on the frame rate: each physics step moved the body by whatever the
+        LAST Update wrote, so an enemy travelled speed * (deltaTime * 50) per
+        second - about 83% of its stat speed at 60fps and about 167% of it, in
+        steps twice as long, whenever the frame rate dipped to 30. Those oversized
+        steps are the forward "skating" that was reported. Expect enemies to move
+        at their true authored speed now, which is a small pacing change.
+
+    (b) FixedUpdate YIELDS WHILE MeleeContactRecovery IS REPOSITIONING.
+        EnemyManager.FixedUpdate and PlayerManager.FixedUpdate already did this,
+        but enemy MOVEMENT does not live in EnemyManager - it lives here. So the
+        recovery called MovePosition toward a spot beside the hero in FixedUpdate
+        while this script called MovePosition straight AT the hero in Update, and
+        Update runs after FixedUpdate, so this script won the race every time: the
+        enemy ignored the sidestep and glided into the hero. Heroes never showed
+        the same thing because their mover is inside the FixedUpdate that yields.
+
+    (c) THE STOPPING RULE IS NO LONGER RADIAL. `dist <= stoppingDistance` is TRUE
+        for an enemy parked directly ABOVE its target, which is the natural result
+        of marching down a lane into a hero walking up it - in range, sprites
+        merged, and unable to land a hit, because the enemy weapon box is a wide
+        flat trigger (Enemy_Orc: 6.58 x 1.19 local, offset +2.79 on X) that only
+        reaches sideways. MeleeEngagement.InAttackPosition adds "not sunk into the
+        target" and "level enough to connect" to the distance test, and
+        ResolveStandPoint walks the enemy round to the hero's flank instead.
+
+  - There is an unused field 'enemyPassedPlayerInY' - REMOVED with the rewrite of
+    the chase branch; the rule it belonged to ("enemy tracks player only after it
+    has passed the player in Y") had already been commented out of the condition.
+  - The dead numbered variants Update1() and HandleMoveToTarget1() were DELETED
+    on 2026-09-11. Both still drove the body from the frame clock and
+    HandleMoveToTarget1 carried its own separate (also radial) stopping rule - a
+    second place to get the enemy approach wrong.
   - The lane direction is hard-coded to -transform.up, so enemy prefabs must be
     rotated correctly or they will walk the wrong way.
+  - stoppingDistance doubles as this enemy's "attack range" everywhere:
+    MeleeEngagement derives the standoff and band from it, and
+    MeleeContactRecovery reads it as the unit's range. Live prefabs author 0.83.

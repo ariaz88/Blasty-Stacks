@@ -1,0 +1,31 @@
+PURPOSE
+Stage 1-5 runtime CP calibration and hit-only tutorial assistance. Replaces the
+rejected timed-budget implementation. Never updates HP on a timer, remotely
+kills units, stops waves, or calls a gate damage/destruction method.
+
+FIELDS
+Instance is scene-scoped and cleared on destruction. PlayerCP/EnemyCP report
+reference totals. PlayerShouldWin is the required match-count outcome, not an
+observed result. BattleResult is labeled Expected. HeroCount and Level determine
+outnumbered assistance; registered health components determine membership.
+
+FLOW
+PlayerWaveManager calibrates each hero to 100 CP at stage 1 or 125 at stages 2-5.
+EnemySpawner waits for releases, then Prepare validates totals and computes the
+enemy normalization. RegisterEnemy scales ATK and HP by sqrt(target/rawCP),
+preserving archetype differences. Enemy totals: 80,100,115,400,650.
+Physical PlayerStats/EnemyStats damage calls AdjustIncomingDamage. Blanket winner
+armor and the boosted damage against losers have been removed. Both armies take
+ordinary damage, capped at 25% of the struck unit's maximum health per hit.
+A hit counter also prevents death before the fourth positive hit. Only the winning
+side's LAST living unit has a 1% HP safety floor. For stage 5's four-hero Slow Loss,
+heroes take 60% incoming damage to give them time to inflict casualties.
+No other target's HP changes on that hit. HeroDeaths/EnemyDeaths and
+FewestHitsBeforeDeath expose casualty/hit telemetry for real-scene verification.
+HasLivingDefenders shields a base until its defending army has been defeated.
+Afterward weapon hits damage the base normally. Gate events decide results.
+
+NOTES
+Tutorial assistance is separate from nominal CP, not a claimed predictive formula.
+Dead/missing attackers or stuck AI can still stall siege; never auto-resolve.
+No new mechanics apply at stage 6 onward. Shared prefab/SO stats are not modified.

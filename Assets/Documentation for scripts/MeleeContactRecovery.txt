@@ -1,0 +1,46 @@
+PURPOSE
+Stage 1-5 melee contact recovery for current player/enemy prefabs. Added at runtime
+by CPBattleController; does not modify shared prefab assets or later stages.
+
+FLOW
+After 2.5 seconds without its own weapon hitting its target, a nearby melee unit
+tries a standoff point to one side, between attack animations. Movement uses its
+Rigidbody2D and live movement speed, with a bounded 1.1-second attempt and retry
+delay. Retries vary the SLOT (a step up or down the same flank), never the side,
+and every destination comes from MeleeEngagement.StandPoint, so it is always a
+legal fighting spot inside normal melee range. Managers temporarily suspend attack
+-state ticks during the physical sidestep, and EnemyLocoMotion suspends MOVEMENT.
+Weapon colliders report actual contacts; a successful hit resets the missed-contact
+timer. Working fights are left alone. Gates are not recovery targets.
+
+FIELDS
+IsRepositioning gates the normal manager attack tick AND EnemyLocoMotion.FixedUpdate.
+RepositionCount is runtime diagnostic telemetry. Cached player/enemy/health/body/
+target references scope work to this fighter. No HP, damage, CP, gate-result or
+teleport operations occur here.
+
+Awake also calls EnemyLocoMotion.BindContactRecovery(this). That hand-off is
+required, not cosmetic: this component is ADDED AT RUNTIME, long after
+EnemyLocoMotion.Awake has run, so the locomotion's own GetComponent finds nothing
+and it would never know to stand down.
+
+NOTES
+This is a local recovery step, not a general navigation/pathfinding replacement.
+Recovery stops on death, lost/dead target, locked deployment, pause or battle end.
+
+CHANGED 2026-09-11, two fixes to the retry destination:
+  - It used to be `target.position + (side * radius, 0)` with a hand-rolled radius
+    that shrank to 0.55 * range on every third attempt. That put the unit at the
+    target's EXACT Y and deliberately walked it deeper INTO the body it was meant
+    to be standing beside - which is what made the two sprites overlap, usually
+    with the enemy's head drawn over the hero.
+  - It used to flip the SIDE on odd attempts (`if ((attempts & 1) != 0) side =
+    -side;`), marching the unit straight through its target to the far side. A
+    unit standing on the far side of something that is also trying to stand on ITS
+    far side is the one arrangement with no solution, and the pair slides sideways
+    together. See MeleeEngagement.StandPoint.
+
+With the lateral approach now built into normal locomotion for BOTH factions, this
+component is a fallback for fights that still fail to connect rather than the main
+answer to vertical alignment. It is still only added on stages 1-5; stage 6+ relies
+on the locomotion fix alone.

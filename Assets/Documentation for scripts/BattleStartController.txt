@@ -1,3 +1,6 @@
+CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+StartBattle seals PlayerWaveManager immediately after the existing energy eligibility flow and before camera transition, preventing extra puzzle matches during the transition. EnemySpawner independently waits until all earned heroes are released and their jumps complete. No hero deployment changes in stages 6+.
+
 ================================================================================
   BattleStartController.cs
   Path : Assets/Scripts/Combat/Spawning/BattleStartController.cs

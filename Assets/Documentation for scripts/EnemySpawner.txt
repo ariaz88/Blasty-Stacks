@@ -1,3 +1,6 @@
+CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+Stages 1-5 wait for the sealed earned hero deployments, then prepare CPBattleController. ReferenceEntries takes authored enemy types and cycles them into exactly stage-number units. RunReferenceLevel uses the first authored wave's area/delay and dispatches all reference enemies together. Shared LevelConfig assets are never mutated. PlannedEnemyCP prices precisely these selected enemies, using the same growth as Initialize. RegisterEnemy applies proportional team CP calibration. Stages 6+ still run the original sequential waves/counts. No CP controller stops waves or ends a battle.
+
 ================================================================================
   EnemySpawner.cs
   Path : Assets/Scripts/Combat/Spawning/EnemySpawner.cs

@@ -27,7 +27,7 @@ public class EnemyGateStats : CharacterStats
         {
             healthBar.SetCurrentHealth(currentHP, maxHealth);
         }
-        baseTxt.text = currentHP.ToString();
+        if (baseTxt) baseTxt.text = currentHP.ToString();
 
     }
 
@@ -48,11 +48,12 @@ public class EnemyGateStats : CharacterStats
 
     public void ApplyDamageToEnemy(float damageAmount)
     {
+        if (CPBattleController.HasLivingDefenders(this)) return;
         if (isDestroyed)
             return;
 
         currentHP = Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount));
-        baseTxt.text = Mathf.FloorToInt(currentHP).ToString();
+        if (baseTxt) baseTxt.text = Mathf.FloorToInt(currentHP).ToString();
 
         if (healthBar != null)
             healthBar.SetCurrentHealth(currentHP, maxHealth);

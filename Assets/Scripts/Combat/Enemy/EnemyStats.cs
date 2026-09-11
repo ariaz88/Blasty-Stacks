@@ -42,8 +42,14 @@ public class EnemyStats : CharacterStats
     }
     public void ApplyDamageToEnemy(float damageAmount)
     {
-        currentHP = Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount));
-        healthBar.SetCurrentHealth(currentHP, maxHealth);
+        damageAmount = CPBattleController.AdjustIncomingDamage(this, damageAmount);
+        SetResolvedHealth(Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount)));
+    }
+
+    public void SetResolvedHealth(float hp)
+    {
+        currentHP = Mathf.Clamp(hp, 0, maxHealth);
+        if (healthBar) healthBar.SetCurrentHealth(currentHP, maxHealth);
 
         if (currentHP <= 0)
         {

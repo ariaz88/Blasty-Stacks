@@ -1,3 +1,6 @@
+CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+ApplyDamageToEnemy now passes real incoming hit damage through CPBattleController.AdjustIncomingDamage. SetResolvedHealth is called only from the incoming damage method; no timer or team-budget controller calls it. Missing health bars are safe. Defeat still follows actual HP reaching zero and EnemyManager processes normal death/XP.
+
 ================================================================================
   EnemyStats.cs
   Path : Assets/Scripts/Combat/Enemy/EnemyStats.cs

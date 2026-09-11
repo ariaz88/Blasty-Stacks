@@ -8,6 +8,9 @@
 
 PURPOSE
 -------
+Stage 1-5 addition: actual enemy-body hits notify MeleeContactRecovery so a unit
+only repositions after failing to connect. The hitbox and damage remain physical.
+
 The player's attack HITBOX. It is enabled only during the active frames of an
 attack animation (via the Enable/DisableDamageCollider animation events) and
 applies damage to whatever enemy it overlaps.

@@ -241,6 +241,8 @@ public class LevelGameManager : MonoBehaviour
     /// </summary>
     private void Update()
     {
+        // Tutorial results require a physically destroyed gate, never a timeout.
+        if (CPBattleController.Instance && CPBattleController.Instance.IsPrepared) return;
         if (!detectMutualWipe || CurrentState != GameState.Playing)
         {
             stalemateTimer = 0f;

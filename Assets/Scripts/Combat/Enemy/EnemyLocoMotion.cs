@@ -48,13 +48,57 @@ public class EnemyLocoMotion : MonoBehaviour
     public float fairDistanceToPlayer = 1.6f;
 
     Animator anim;
+    MeleeContactRecovery contactRecovery;
+
+    // Side of the target this enemy committed to, +1/-1 (0 = not chosen yet), and
+    // the target that choice belongs to. Held so crossing the hero's centre line
+    // does not reverse the approach halfway.
+    float heldAttackSide;
+    Object attackSlotTarget;
+    int attackSlotIndex;
 
     void Awake()
     {
         enemyManager = GetComponent<EnemyManager>();
         if (!enemyRigidbody2D) enemyRigidbody2D = GetComponent<Rigidbody2D>();
         anim = GetComponentInChildren<Animator>();
+        contactRecovery = GetComponent<MeleeContactRecovery>();
     }
+
+    /// <summary>
+    /// Called by MeleeContactRecovery from its own Awake.
+    ///
+    /// Needed because the recovery is ADDED AT RUNTIME by CPBattleController, long
+    /// after this Awake has run, so the GetComponent above finds nothing on a
+    /// stage 1-5 enemy. Without this hand-off the yield check below would be
+    /// permanently false and the sidestep would keep being overridden.
+    /// </summary>
+    public void BindContactRecovery(MeleeContactRecovery recovery)
+    {
+        contactRecovery = recovery;
+    }
+
+    void OnDisable()
+    {
+        // Hand the attack spot back so another enemy can use it.
+        AttackSlotRegistry.Release(this);
+        attackSlotTarget = null;
+    }
+
+    /// <summary>
+    /// TRUE while MeleeContactRecovery is physically stepping this enemy sideways.
+    ///
+    /// THIS CHECK IS THE FIX FOR THE "ENEMY SLIDES INTO THE HERO" BUG.
+    /// EnemyManager.FixedUpdate and PlayerManager.FixedUpdate both already stand
+    /// down while the recovery owns the body - but enemy MOVEMENT does not live in
+    /// EnemyManager, it lives here. So the recovery was calling MovePosition toward
+    /// a spot beside the hero in FixedUpdate while this script called MovePosition
+    /// straight AT the hero in the same frame. Update runs after FixedUpdate, so
+    /// this script won the race every time: the enemy ignored the sidestep, glided
+    /// into the hero, and the two sprites ended up on top of each other. Heroes
+    /// never showed it because their mover is inside the FixedUpdate that yields.
+    /// </summary>
+    bool RecoveryOwnsBody => contactRecovery != null && contactRecovery.IsRepositioning;
 
     void Start()
     {
@@ -63,30 +107,23 @@ public class EnemyLocoMotion : MonoBehaviour
         enemyRigidbody2D.interpolation = RigidbodyInterpolation2D.Interpolate;
     }
 
-    void Update1()
-    {
-        if (GameplayPause.IsPaused)
-        {
-            SetAnimMoving(false);
-            return;
-        }
+    // NOTE: the dead numbered sibling "Update1" was DELETED on 2026-09-11. Unity
+    // never called it (Update1 is not a message), it still drove movement from the
+    // frame clock, and leaving it there invited someone to "fix" the wrong copy.
 
-        HandleMoveToTarget();
-
-        // distance info for EnemyManager
-        if (currentTarget != null)
-        {
-            distanceFromTarget = Vector2.Distance(currentTarget.transform.position, transform.position);
-        }
-        else if (enemyManager.currentGateTarget != null)
-        {
-            distanceFromTarget = Vector2.Distance(enemyManager.currentGateTarget.transform.position, transform.position);
-        }
-        else
-        {
-            distanceFromTarget = 20f;
-        }
-    }
+    /// <summary>
+    /// Update keeps the DISTANCE readout current (EnemyManager reads it every frame
+    /// to decide whether to swing) and nothing else.
+    ///
+    /// Movement used to live here too, and that was a real defect, not a style
+    /// nit: MovePosition is a physics call, and driving it from Update with
+    /// Time.deltaTime made the step size depend on the frame rate. Each physics
+    /// step moved the body by whatever the LAST Update wrote, so the enemy
+    /// travelled speed * (deltaTime * 50) per second - about 83% of its stat speed
+    /// at 60fps and about 167% of it, in steps twice as long, whenever the frame
+    /// rate dipped to 30. Those oversized steps are the forward "skating" that was
+    /// reported. See FixedUpdate.
+    /// </summary>
     void Update()
     {
         if (GameplayPause.IsPaused)
@@ -95,8 +132,6 @@ public class EnemyLocoMotion : MonoBehaviour
             return;
         }
 
-        HandleMoveToTarget();
-
         if (currentTarget != null)
         {
             distanceFromTarget = Vector2.Distance(currentTarget.transform.position, transform.position);
@@ -107,94 +142,31 @@ public class EnemyLocoMotion : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// All movement, on the physics clock, in fixed-size steps - so an enemy walks
+    /// at exactly its unitStats.moveSpeed no matter what the frame rate is doing.
+    /// </summary>
+    void FixedUpdate()
+    {
+        if (GameplayPause.IsPaused)
+        {
+            SetAnimMoving(false);
+            return;
+        }
+
+        // The sidestep recovery is driving the body this frame - stay out of its way.
+        if (RecoveryOwnsBody) return;
+
+        HandleMoveToTarget();
+    }
+
 
     // ---------- LOCOMOTION (2D) ----------
-    public void HandleMoveToTarget1()
-    {
-        if (!enemyRigidbody2D) return;
+    // NOTE: the dead numbered sibling "HandleMoveToTarget1" was DELETED on
+    // 2026-09-11. It had no call sites, drove the body from the frame clock,
+    // and carried its own separate (also radial) stopping rule - a second place
+    // to get the enemy approach wrong.
 
-        Vector2 pos = enemyRigidbody2D.position;
-
-        // 1) Chase player if we have one
-        if (currentTarget != null && !currentTarget.playerIsdead)
-        {
-            Vector2 toTarget = (Vector2)currentTarget.transform.position - pos;
-            float dist = toTarget.magnitude;
-
-            if (dist > stoppingDistance)
-            {
-                Vector2 dir = toTarget.normalized;
-                Vector2 next = pos + dir * CurrentMoveSpeed * Time.deltaTime;
-                enemyRigidbody2D.MovePosition(next);
-                SetAnimMoving(true);
-            }
-            else
-            {
-                enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
-                SetAnimMoving(false);
-            }
-
-            return;
-        }
-
-        // 2) No player target -> move toward gate if it exists and is not destroyed
-        if (enemyManager.currentGateTarget != null && !enemyManager.currentGateTarget.isPlayerGateDestroyed)
-        {
-            // If we already reached the gate once, never pass that position
-            if (enemyManager.reachedGate)
-            {
-                Vector2 toStop = enemyManager.gateStopPosition - pos;
-
-                if (toStop.sqrMagnitude > 0.001f)
-                {
-                    Vector2 dir = toStop.normalized;
-                    Vector2 next = pos + dir * CurrentMoveSpeed * Time.deltaTime;
-
-                    // clamp so we don't overshoot the stop point
-                    Vector2 after = enemyManager.gateStopPosition - next;
-                    if (after.sqrMagnitude > toStop.sqrMagnitude)
-                        next = enemyManager.gateStopPosition;
-
-                    enemyRigidbody2D.MovePosition(next);
-                    SetAnimMoving(true);
-                }
-                else
-                {
-                    enemyRigidbody2D.position = enemyManager.gateStopPosition;
-                    enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
-                    SetAnimMoving(false);
-                }
-
-                return;
-            }
-
-            // We haven't reached the gate yet
-            Vector2 toGate = (Vector2)enemyManager.currentGateTarget.transform.position - pos;
-            float distG = toGate.magnitude;
-
-            if (distG > stoppingDistance)
-            {
-                Vector2 dir = toGate.normalized;
-                Vector2 next = pos + dir * CurrentMoveSpeed * Time.deltaTime;
-                enemyRigidbody2D.MovePosition(next);
-                SetAnimMoving(true);
-            }
-            else
-            {
-                // treat as reached gate even if trigger didn't fire
-                enemyManager.reachedGate = true;
-                enemyManager.gateStopPosition = enemyRigidbody2D.position;
-
-                enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
-                SetAnimMoving(false);
-            }
-
-            return;
-        }
-
-        // 3) No targets at all
-        SetAnimMoving(false);
-    }
     public void HandleMoveToTarget()
     {
         if (!enemyRigidbody2D) return;
@@ -210,45 +182,53 @@ public class EnemyLocoMotion : MonoBehaviour
             return;
         }
 
-        // 2) If we have a player target -> move straight forward until we are in attack range
+        // 2) If we have a player target -> march down the lane until the hero is
+        //    close, then step round to our own spot BESIDE it.
         if (currentTarget != null && !currentTarget.playerIsdead)
         {
-            float dist = Vector2.Distance(currentTarget.transform.position, transform.position);
+            Vector2 targetPos = currentTarget.transform.position;
+            float dist = Vector2.Distance(targetPos, pos);
 
-            if (dist > stoppingDistance)
-            {
-                Vector2 laneDir = -(Vector2)transform.up;
-                Vector2 toPlayer = (Vector2)currentTarget.transform.position - pos;
-
-                bool isRealPlayer = currentTarget.CompareTag("Player"); // gate should be "PlayerGate"
-                bool withinFair = dist <= fairDistanceToPlayer;
-
-                // your rule: enemy tracks player only after it has passed the player in Y
-                bool enemyPassedPlayerInY = transform.position.y > currentTarget.transform.position.y;
-
-                bool shouldChasePlayer = isRealPlayer && withinFair/* && enemyPassedPlayerInY*/;
-
-                Vector2 moveDir = laneDir;
-
-                // IMPORTANT: when we chase, we move directly toward the player (diagonal)
-                if (shouldChasePlayer && toPlayer.sqrMagnitude > 0.0001f)
-                    moveDir = toPlayer.normalized;
-
-                Vector2 next = pos + moveDir * CurrentMoveSpeed * Time.deltaTime;
-
-                enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
-                enemyRigidbody2D.MovePosition(next);
-                SetAnimMoving(true);
-            }
-            else
+            // Already standing somewhere we can actually reach the hero from: stop.
+            //
+            // This used to be `dist <= stoppingDistance`, a plain radial test, and
+            // that is what parked enemies DIRECTLY ON TOP OF the hero they were
+            // fighting. Coming straight down a lane at a hero coming straight up
+            // it, "0.83 away" meant 0.83 ABOVE - inside range, sprites overlapping,
+            // and unable to land a single hit, because the enemy weapon hitbox is a
+            // wide flat box that only reaches sideways.
+            if (MeleeEngagement.InAttackPosition(pos, targetPos, stoppingDistance))
             {
                 enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
                 SetAnimMoving(false);
+                return;
             }
 
+            bool isRealPlayer = currentTarget.CompareTag("Player"); // gate should be "PlayerGate"
+            bool withinFair = dist <= fairDistanceToPlayer;
 
+            Vector2 moveDir = -(Vector2)transform.up;   // lane march, straight down
 
+            if (isRealPlayer && withinFair)
+            {
+                Vector2 stand = ResolveStandPoint(targetPos);
+                Vector2 toStand = stand - pos;
 
+                if (toStand.sqrMagnitude < 0.0025f)   // arrived, within 5cm
+                {
+                    enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
+                    SetAnimMoving(false);
+                    return;
+                }
+
+                moveDir = toStand.normalized;
+            }
+
+            Vector2 next = pos + moveDir * CurrentMoveSpeed * Time.fixedDeltaTime;
+
+            enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
+            enemyRigidbody2D.MovePosition(next);
+            SetAnimMoving(true);
             return;
         }
 
@@ -277,7 +257,7 @@ public class EnemyLocoMotion : MonoBehaviour
             if (!enemyManager.reachedGate)
             {
                 Vector2 dir = -(Vector2)transform.up;
-                Vector2 next = pos + dir * CurrentMoveSpeed * Time.deltaTime;
+                Vector2 next = pos + dir * CurrentMoveSpeed * Time.fixedDeltaTime;
 
                 enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
                 enemyRigidbody2D.MovePosition(next);
@@ -292,6 +272,51 @@ public class EnemyLocoMotion : MonoBehaviour
             return;
         }
 
+    }
+
+    /// <summary>
+    /// Where this enemy should stand to fight the hero at <paramref name="targetPos"/>:
+    /// beside it, at standoff distance, level enough for the weapon box to overlap.
+    ///
+    /// The side is re-derived from this enemy's OWN position every step, using the
+    /// same rule the hero runs against this enemy. That is what makes the two agree
+    /// instead of chasing each other's flank across the map - see MeleeEngagement.
+    ///
+    /// A slot is claimed once per target so two enemies on one hero take opposite
+    /// sides rather than the same one. Nobody is ever pushed: claiming a spot and
+    /// walking to it is the project's rule for spacing (see AttackSlotRegistry).
+    /// </summary>
+    Vector2 ResolveStandPoint(Vector2 targetPos)
+    {
+        Object target = currentTarget;
+
+        if (target != attackSlotTarget)
+        {
+            AttackSlotRegistry.Release(this);
+            attackSlotIndex = AttackSlotRegistry.Claim(target, this);
+            attackSlotTarget = target;
+            heldAttackSide = 0f;   // a new target means a fresh side decision
+        }
+
+        Vector2 pos = enemyRigidbody2D ? enemyRigidbody2D.position : (Vector2)transform.position;
+
+        heldAttackSide = MeleeEngagement.ChooseSide(
+            pos, targetPos, MeleeEngagement.EnemyPreferredSide, heldAttackSide);
+
+        return MeleeEngagement.StandPoint(targetPos, stoppingDistance, heldAttackSide, attackSlotIndex);
+    }
+
+    /// <summary>
+    /// TRUE when this enemy is standing somewhere its weapon can actually land on
+    /// its current hero target. EnemyManager gates its swing on this, so it cannot
+    /// start an attack animation while still walking round to the hero's flank.
+    /// </summary>
+    public bool IsInAttackPosition()
+    {
+        if (currentTarget == null) return false;
+
+        Vector2 pos = enemyRigidbody2D ? enemyRigidbody2D.position : (Vector2)transform.position;
+        return MeleeEngagement.InAttackPosition(pos, currentTarget.transform.position, stoppingDistance);
     }
 
 

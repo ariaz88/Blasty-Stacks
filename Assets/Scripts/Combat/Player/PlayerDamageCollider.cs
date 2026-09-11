@@ -124,6 +124,7 @@ public class PlayerDamageCollider : MonoBehaviour
                     true, dmg, before, Mathf.Max(0f, before - dmg));
             }
 
+            playerManager.GetComponent<MeleeContactRecovery>()?.ReportContact(enemyStats);
             enemyStats.ApplyDamageToEnemy(dmg);
             return;
         }

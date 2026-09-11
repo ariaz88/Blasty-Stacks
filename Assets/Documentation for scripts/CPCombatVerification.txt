@@ -1,0 +1,22 @@
+PURPOSE
+Editor-only integration verification using actual Level_1_Stage_1 through
+Level_1_Stage_5 scenes and their current New Characters prefab references.
+
+FLOW
+Tools > Combat Power > Verify Real Stages 1-5 runs 20 match-count scenarios.
+Starts from a clean saved scene, uses an empty bootstrap Play scene, supplies an
+inactive GameStartManager with a mixed upgraded roster, and loads real stages.
+The real GameStartManager Awake is NEVER activated: it currently resets saves.
+LevelGameManager is disabled only in the disposable runtime tests so gate events
+do not award/save progression. Actual unit movement/animation/weapon collisions
+and base damage run normally. Tests assert counts, CP totals, gate outcomes and
+at least four positive hits before every observed unit death. Results include
+casualties on both sides, not just the team that wins.
+Scene files and prefab assets are never saved or modified. The original scene
+is restored when returning to Edit mode. Results remain in Editor SessionState
+under CPCombatVerification.result. Background simulation is enabled during QA.
+
+NOTES
+This is a bounded seeded regression, not proof of every roster/geometry setup.
+No synthetic damage calls are used to advance the real combat integration cases.
+Save key and stage key equality are checked after successful completion.

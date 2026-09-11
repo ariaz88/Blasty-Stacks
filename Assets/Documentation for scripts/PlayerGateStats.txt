@@ -1,3 +1,6 @@
+CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+Stages 1-5 reject incoming hits while the gate's own registered defending heroes are alive. After defenders are defeated, ordinary weapon damage reduces gate HP and its existing destruction event ends the stage. No controller damages or destroys this gate. UI references are null-safe. Stages 6+ have no new gate protection.
+
 ================================================================================
   PlayerGateStats.cs
   Path : Assets/Scripts/Combat/Player/PlayerGateStats.cs

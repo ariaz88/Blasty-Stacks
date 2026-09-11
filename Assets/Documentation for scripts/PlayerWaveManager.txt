@@ -1,3 +1,6 @@
+CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+Stages 1-5 now use queued per-match deployments: [1,1,1], [1,1,2], [1,1,2,1], [1,1,2,4], [1,1,2,2,2,4]. Only the four permanent gates participate. Rapid matches are queued through throw/jump animation; the final match still spawns after board exhaustion. SealForBattle discards unearned preview units and waits for earned releases. Hero selection remains uniform among deployed definitions. ReleasedHeroes/MatchesCleared/MatchesReleased/DeploymentsReady expose actual state. SpawnUnitAt calibrates reference CP to 100/125 only in these stages. Stages 6+ use the original random WaveLoop.
+
 ================================================================================
   PlayerWaveManager.cs
   Path : Assets/Scripts/Combat/Spawning/PlayerWaveManager.cs

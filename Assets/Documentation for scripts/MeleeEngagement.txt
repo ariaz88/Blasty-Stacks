@@ -1,0 +1,122 @@
+================================================================================
+  MeleeEngagement.cs
+  Path : Assets/Scripts/Combat/Shared/MeleeEngagement.cs
+  Type : static class (plain C#, not a MonoBehaviour)
+  Layer: Combat / Shared
+================================================================================
+
+PURPOSE
+-------
+Defines WHERE a melee unit has to stand to be able to hit its target, and how to
+tell whether it is standing there yet. One rule, shared by heroes and enemies,
+so the two factions cannot hold different ideas of "close enough".
+
+Added 2026-09-11 to fix a reported bug: when an enemy and a hero lined up
+vertically, neither could damage the other, they sank into each other's sprites,
+and the enemy visibly slid forward into the hero's body.
+
+WHY IT IS NEEDED
+----------------
+Every melee weapon in the project is a WIDE, FLAT trigger on a hand or weapon
+bone. Player_Valkyrie's sword box is 7.68 x 1.29 local units offset +4.11 on X;
+at the visual's 0.19 scale that is ~1.46 wide by only ~0.24 TALL, reaching
+SIDEWAYS from its owner. Enemy weapon boxes have the same shape (Enemy_Orc:
+6.58 x 1.19 offset +2.79).
+
+A box like that can only touch something standing BESIDE its owner. Two units
+stacked vertically - the natural result of enemies marching straight down a lane
+into heroes walking straight up it - are inside each other's attack RANGE while
+being completely outside each other's attack BOX. Before this, both sides decided
+"I have arrived" from a plain radial distance:
+
+    PlayerPursueTargetState : distance <= pm.maxAttackRange        (0.85)
+    EnemyLocoMotion         : distance <= stoppingDistance         (0.83)
+
+Radial distance cannot tell "beside" from "on top of", so a unit approaching from
+directly below stopped directly below: in range, unable to hit, sprites merged.
+
+CONSTANTS
+---------
+  StandoffFactor      0.85   fraction of range to come to rest at. MUST stay
+                             below 1 - see the invariant below.
+  MinStandoff         0.2    floor, for a unit authored with a tiny range
+  BandFactor          0.3    half-height of the strip around the target's own Y
+                             where a hit can still land, as a fraction of range
+  MinBand             0.1    floor for that band, in world units
+  SideDeadZoneX       0.25   below this |dx| a unit cannot read its own position
+                             as "I am on this side"; the faction preference wins
+  ArrivalSlack        0.8    a unit closer than standoff * this has sunk INTO its
+                             target and is sent back out
+  PlayerPreferredSide -1     heroes settle on the target's LEFT when dead level
+  EnemyPreferredSide  +1     enemies settle on its RIGHT - opposite, ON PURPOSE
+
+  Resolved values for the live prefabs:
+    hero  (range 0.85): standoff 0.723, band 0.255, min accepted distance 0.578
+    orc   (range 0.83): standoff 0.706, band 0.249, min accepted distance 0.565
+
+METHODS
+-------
+  Standoff(range)                 -> max(MinStandoff, range * StandoffFactor)
+  Band(range)                     -> max(MinBand, range * BandFactor)
+
+  ChooseSide(self, target, preferredSide, heldSide) -> +1 (target's right) / -1
+      1. If |self.x - target.x| >= SideDeadZoneX, return the side the unit is
+         ALREADY on. This is the whole stability argument: A is on the opposite
+         side of B from where B is of A, so both halves of a fighting pair derive
+         the SAME arrangement and converge on it.
+      2. Inside the dead zone, keep heldSide if there is one (so a unit walking
+         round its target does not reverse when it crosses the centre line).
+      3. Otherwise take the faction preference. The two are deliberately
+         opposite - see NOTES.
+
+  StandPoint(target, range, side, slot) -> Vector2
+      The exact point to walk to. Always on the standoff circle, so
+      |point - target| == Standoff(range) for every slot.
+      slot fans attackers UP AND DOWN the same flank:
+         slot 0 -> dy 0, slot 1 -> +band, slot 2 -> -band,
+         slot 3 -> +band/2, slot 4 -> -band/2, ...
+      THE SLOT MUST NOT FLIP THE SIDE - see NOTES.
+
+  InAttackPosition(self, target, range) -> bool
+      TRUE when all three hold:
+         distance <= range                    (close enough)
+         distance >= Standoff(range) * 0.8     (not sunk into the target)
+         |dy| <= Band(range)                   (level enough to connect)
+      Every StandPoint satisfies all three with margin.
+
+THE INVARIANT - do not break it
+-------------------------------
+StandPoint must ALWAYS satisfy InAttackPosition. The movers walk to StandPoint
+while the state machines decide with InAttackPosition. If the two can disagree,
+the mover reports "arrived" and stops while the state reports "not there yet" and
+keeps pursuing, and the unit freezes on the spot playing its walk animation. That
+has happened before in this project (PlayerManager's old flat +1.80 sideways slot
+put a hero 2.45 from an enemy with a range of 0.85).
+
+HOW IT CONNECTS
+---------------
+  - PlayerManager.ResolveAttackDestination  - where a hero walks
+  - PlayerManager.IsInAttackPosition        - read by PlayerPursueTargetState
+                                              and PlayerCombatState
+  - EnemyLocoMotion.ResolveStandPoint       - where an enemy walks
+  - EnemyLocoMotion.IsInAttackPosition      - read by EnemyManager.HandleCurrentAction
+  - MeleeContactRecovery                    - its retry spots come from StandPoint
+  - AttackSlotRegistry                      - hands out the slot indices
+
+NOTES
+-----
+  - GIVING BOTH FACTIONS THE SAME PREFERRED SIDE IS THE ONE THING THAT MUST NEVER
+    BE DONE. Both would want to stand on their target's right, two demands with no
+    solution, and the pair would walk sideways together for the whole fight.
+  - The same trap is why slot no longer mirrors the side. It was tried: a
+    simulated 2-heroes-vs-1-enemy fight drifted 9 world units off the lane in 12
+    seconds and never landed a hit, because the slot-1 hero wanted the enemy's far
+    side while the enemy wanted that hero's far side.
+  - Attackers who genuinely approach from opposite sides get opposite sides for
+    free, from their own positions - no slot needed.
+  - Verified by simulation in the Editor (2026-09-11): 1v1 stacked, 2v1 split
+    lanes, 2v1 same side, 3v3 and 5v5 all settle with zero movement in the last
+    two seconds, every hero in a position it can hit from, and no lateral drift.
+  - A unit still stops the moment InAttackPosition turns true, which is usually
+    just BEFORE it reaches its exact stand point - in practice pairs settle around
+    |dy| 0.2 rather than 0. That is inside the band, so hits land.

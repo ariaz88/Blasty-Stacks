@@ -56,7 +56,7 @@ public class Wave
     public List<WaveEntry> entries = new();
 
     [Header("Optional: cap concurrency for this wave (0 = unlimited)")]
-    public int concurrencyCap = 0; // you can ignore this if you’re not using drip-spawn
+    public int concurrencyCap = 0; // you can ignore this if youâ€™re not using drip-spawn
 }
 
 public enum RowIndex { FrontRow = 0, BackRow = 1 }

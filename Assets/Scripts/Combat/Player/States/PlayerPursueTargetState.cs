@@ -56,16 +56,21 @@ public class PlayerPursueTargetState : PlayerState
               
 
  
-        float distanceFromTarget = Vector2.Distance(
-        pm.playerRigidbody ? pm.playerRigidbody.position : (Vector2)pm.transform.position,
-       (Vector2)pm.currentTarget.transform.position);
-
-
-
         pm.canMove = true;
 
-
-        if (distanceFromTarget > pm.maxAttackRange)
+        // "Arrived" is NOT a plain radial distance any more.
+        //
+        // It used to be `distance <= maxAttackRange`, and that is why a hero
+        // walking up a lane at an enemy coming down it stopped DIRECTLY BELOW its
+        // target: in range, sprites sunk into each other, and completely unable to
+        // land a hit, because every melee hitbox in this project is a wide flat box
+        // that only reaches sideways. The mover was already aiming for a spot beside
+        // the enemy - this test stopped the hero before it ever got there.
+        //
+        // IsInAttackPosition also fails when the hero is too far INSIDE the target,
+        // so a target that walks into a hero pushes it back out to its stand point
+        // instead of the two merging.
+        if (!pm.IsInAttackPosition())
         {
             // pursue
             if (pm.playerRigidbody) pm.playerRigidbody.bodyType = RigidbodyType2D.Dynamic;

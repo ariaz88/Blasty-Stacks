@@ -1,3 +1,6 @@
+CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+Stages 1-5 runtime overrides now live in LevelBattleRules, CPBattleController and EnemySpawner. No timer-driven CP fields are used. Authored enemy types/first-wave area are retained, but authored counts and later waves are replaced at runtime for these stages only. Stage 6+ reads the asset normally.
+
 ================================================================================
   LevelConfig.cs
   Path : Assets/Scripts/Combat/Spawning/LevelConfig.cs

@@ -232,6 +232,8 @@ public class BattleStartController : MonoBehaviour
     public void StartBattle()
     {
         if (BattleStarted) return;
+        var playerWaves = FindObjectOfType<PlayerWaveManager>();
+        if (playerWaves) playerWaves.SealForBattle();
         BattleStarted = true;
 
         if (hideButtonAfterBattleStarts && battleButton)

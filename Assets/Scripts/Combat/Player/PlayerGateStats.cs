@@ -24,20 +24,21 @@ public class PlayerGateStats : CharacterStats
             healthBar.SetCurrentHealth(currentHP, maxHealth);
 
         }
-        baseTxt.text = currentHP.ToString();
+        if (baseTxt) baseTxt.text = currentHP.ToString();
 
 
     }
 
     public void ApplyDamageToPlayerGate(float damageAmount)
     {
+        if (CPBattleController.HasLivingDefenders(this)) return;
         if (isPlayerGateDestroyed)
         {
             return;
         }
         currentHP = Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount));
-        baseTxt.text = Mathf.FloorToInt(currentHP).ToString();
-        healthBar.SetCurrentHealth(currentHP, maxHealth);
+        if (baseTxt) baseTxt.text = Mathf.FloorToInt(currentHP).ToString();
+        if (healthBar) healthBar.SetCurrentHealth(currentHP, maxHealth);
         if (currentHP <= 0)
         {
             DestroyGate();

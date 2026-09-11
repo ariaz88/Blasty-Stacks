@@ -53,7 +53,28 @@
 
 ## Open Threads
 
+- **2026-09-10 current CP implementation supersedes the timed-budget experiment:**
+  stages 1-5 use reference CP calibration and actual hit-only tutorial assistance.
+  No remote kills or automatic gate destruction. Fixed enemy counts 1/2/3/4/5;
+  hero sequences and CP totals follow `Docs/cp-analysis/CP_LEVEL_BATTLE_RULES.md`.
+  Stage 6+ keeps the legacy spawners/formula. Exact timing labels remain pacing
+  targets, not timers. See the verification document for actual-scene test evidence.
+  The last winning survivor has a 1%-HP safety floor; bases are shielded while
+  their defending army lives. This is explicit tutorial design, not CP prediction.
+  Follow-up naturalness pass removes blanket winner armor and bonus damage against
+  losers. Unit damage is capped to 25% max HP per hit with a four-hit death minimum.
+  Stage 5/four heroes receive 60% damage for a slower loss. Tests now report casualties.
+
+
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
+
+- **[2026-09-11] The melee side-approach fix has never been played.** Heroes and enemies now walk to a
+  spot BESIDE their target instead of stacking above/below it (`MeleeEngagement`), enemy movement moved
+  from Update to FixedUpdate, and units get a Y-based draw depth (`UnitDepthSorter`). Verified by
+  compile + simulation only. Play `Level_1_Stage_1..5` and judge, in order: (1) do heroes and enemies
+  visibly stand side by side and land hits; (2) is the enemy "skating" gone; (3) does the lower unit
+  draw in front; (4) has enemy pacing shifted enough to matter, now that they move at their true
+  authored speed instead of a framerate-scaled ~0.83× of it.
 
 - **[2026-09-09] CP redesign is designed but BLOCKED on Arash's Excel.** Goal: higher CP must always
   win a 1v1. Four changes are specified and ready (`Docs/cp-analysis/CP_DISCUSSION_LOG.md`, section
@@ -413,6 +434,106 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ---
 
 ## Session Log
+
+### 2026-09-11 — Melee units now fight from the SIDE; enemy "slide into the hero" fixed
+
+- **Goal:** Arash reported that when a hero and an enemy line up vertically, some heroes
+  (e.g. `Player_Valkyrie`) cannot damage the enemy; the enemy "skates" forward into the hero's
+  body before arriving; and the two sprites overlap, usually with the enemy's head drawn over
+  the hero. Asked to verify it really happens, then fix it.
+- **Status:** done (code + docs). NOT yet played in the Editor — see Verified.
+- **Root causes, all confirmed in the source:**
+  1. **Every melee hitbox is a wide, FLAT trigger that reaches sideways only.**
+     `Player_Valkyrie` sword box 7.68×1.29 local, offset +4.11 X, on a visual scaled 0.19 →
+     ~1.46 wide × **0.24 tall** in world units. `Enemy_Orc` is the same shape. Two units stacked
+     vertically are inside each other's *range* and outside each other's *box*.
+  2. **Both sides decided "I have arrived" from a bare radial distance** —
+     `PlayerPursueTargetState` vs `maxAttackRange` (0.85), `EnemyLocoMotion` vs `stoppingDistance`
+     (0.83). Radial distance cannot tell "beside" from "on top of", so a unit approaching from
+     directly below stopped directly below. The hero's mover was *already* aiming for a spot beside
+     the enemy; this test stopped it before it ever got there.
+  3. **`EnemyLocoMotion` never yielded to `MeleeContactRecovery`.** `EnemyManager.FixedUpdate` and
+     `PlayerManager.FixedUpdate` both stand down while the recovery drives the body — but enemy
+     movement lives in `EnemyLocoMotion`, which did not. The recovery called `MovePosition` toward a
+     spot beside the hero in FixedUpdate while locomotion called `MovePosition` straight *at* the
+     hero in Update; Update runs after FixedUpdate, so locomotion won every time. **This asymmetry
+     is exactly why the weirdness was only ever visible on enemies.**
+  4. **Enemy movement ran `MovePosition` from `Update()` with `Time.deltaTime`** — framerate-dependent
+     step size: ~83% of stat speed at 60fps, ~167% in double-length steps at 30fps. That is the
+     "skating".
+  5. **`MeleeContactRecovery`'s retry destination was `target.position + (side*radius, 0)`** — the
+     target's *exact* Y, with a radius that shrank to 0.55×range every third attempt, i.e. it
+     deliberately walked the attacker deeper *into* the body it should have stood beside.
+  6. **No Y-based draw order.** Every character part is sorting layer Default, order 1; ties are
+     settled by Z, and all units sit at Z 0, so overlap order was arbitrary.
+- **Changed:**
+  - `Assets/Scripts/Combat/Shared/MeleeEngagement.cs` — **NEW.** One shared rule for where a melee
+    unit stands: `Standoff` (0.85×range), `Band` (0.3×range), `ChooseSide`, `StandPoint`,
+    `InAttackPosition`. Full rationale in the file and in its doc.
+  - `Assets/Scripts/Combat/Shared/UnitDepthSorter.cs` — **NEW.** Sets `z = y * 0.25` in LateUpdate so
+    the lower unit draws in front. Added at runtime by both managers; no prefab edits.
+  - `Assets/Scripts/Combat/Player/PlayerManager.cs` — `IsInAttackPosition()`; `ResolveAttackDestination`
+    rewritten to a lateral stand point (gate target still approached head-on); `EnsureDepthSorter()`;
+    the null-anchor bail-out in `HandleMoveToTarget` made conditional (it froze a hero that acquired a
+    dead-level target, because `UpdateFacingAndOffset` never assigns `chosenEnemyOffset` inside the
+    0.12 facing dead zone). Removed the now-unused `attackSlotAngleStep` / `attackStandoffFactor`.
+  - `Assets/Scripts/Combat/Player/States/PlayerPursueTargetState.cs`, `PlayerCombatState.cs` — both now
+    use `pm.IsInAttackPosition()` instead of a radial compare, so they cannot disagree.
+  - `Assets/Scripts/Combat/Enemy/EnemyLocoMotion.cs` — movement moved to `FixedUpdate`
+    (`Time.fixedDeltaTime`); yields while the recovery repositions (`BindContactRecovery` hand-off,
+    needed because `CPBattleController` adds the recovery at runtime); walks to a lateral
+    `ResolveStandPoint`; `IsInAttackPosition()`. Deleted the dead `Update1` / `HandleMoveToTarget1`.
+  - `Assets/Scripts/Combat/Enemy/EnemyManager.cs` — `HandleCurrentAction` gates the swing on
+    `IsInAttackPosition()`; `EnsureDepthSorter()`.
+  - `Assets/Scripts/Combat/Shared/MeleeContactRecovery.cs` — retries now go through
+    `MeleeEngagement.StandPoint` and vary the SLOT, never the side.
+  - Docs: new `MeleeEngagement.txt`, `UnitDepthSorter.txt`; updated `PlayerManager.txt` (its MOVEMENT
+    section was badly stale — still described `ApplyFriendlySeparation` / `ResolveHorizontalOverlap`,
+    deleted 2026-08-21), `PlayerCombatState.txt`, `PlayerPursueTargetState.txt`, `EnemyLocoMotion.txt`,
+    `EnemyManager.txt`, `MeleeContactRecovery.txt`.
+- **Scene/Prefab/SO edits:** none. Everything is code; `UnitDepthSorter` is added at runtime.
+- **Verified:** compiles clean in the live Editor (0 errors; the 40 warnings are all pre-existing).
+  Geometry and two-body dynamics verified by simulation run through the Unity MCP against the real
+  authored numbers (hero range 0.85 / orc 0.83): 1v1 stacked, 2v1 split lanes, 2v1 same side, 3v3 and
+  5v5 all settle with **zero movement in the final 2 s**, every hero in a position it can hit from, no
+  lateral drift. **Not yet played in Play mode** — Arash should confirm on `Level_1_Stage_N`.
+- **Gotchas:**
+  - **A slot must never flip the SIDE.** First attempt did, and the 2v1 sim drifted 9 world units off
+    the lane in 12 s without landing a hit: the slot-1 hero wanted the enemy's far side while the enemy
+    wanted that hero's far side — two demands with no solution. Slots now fan up/down the *same* flank;
+    the faction preferences (`PlayerPreferredSide -1`, `EnemyPreferredSide +1`) must stay OPPOSITE for
+    the same reason.
+  - **Enemies now move at their true authored speed.** Fixing the Update→FixedUpdate bug removes a
+    framerate-dependent ~0.83× at 60fps, so enemies are slightly faster than before. Pacing only — no
+    damage, HP, CP or gate logic was touched — but stage 1-5 timing labels may shift a little.
+  - Two ALLIES approaching one target from the same side can still come to rest close together: each
+    stops the moment `InAttackPosition` turns true, usually before reaching its own slot. Pre-existing
+    behaviour, not a regression, and it does not affect whether hits land.
+- **Next:** play `Level_1_Stage_1..5` and confirm. If `Player_Valkyrie` still misses, the next thing to
+  measure is the sword box's live world bounds during the swing, not the approach.
+
+### 2026-09-10 - Correct CP combat and tutorial spawning (Codex)
+
+- Rejected and removed the timer-driven CP budget after user reported untouched
+  enemies dying and victory without siege. Removed its obsolete budget/test scripts.
+- Implemented actual-attack-only mitigation/boosts, last-survivor safety floor,
+  defended-base protection and gate-destruction-only results for stages 1-5.
+- PlayerWaveManager queues all earned matches through throw/jump animations and
+  uses exact sequences 111 / 112 / 1121 / 1124 / 112224. Types remain selected
+  from the existing deployed roster. Stage 5 is six pairs, twelve heroes maximum.
+- EnemySpawner uses exactly 1/2/3/4/5 enemies, preserving authored current types;
+  runtime totals 80/100/115/400/650. Hero CP 100 in stage 1, 125 in stages 2-5.
+  No scene, shared prefab, or LevelConfig asset was changed. Stage 6+ excluded.
+- Added editor regression using the five actual Level_1_Stage_N scenes and only
+  Characters/New Characters prefab references. Boot reset and progression writes
+  are intentionally bypassed in QA; real movement, attacks and siege are exercised.
+- Final regression: PASS all 20 match-count scenarios, correct counts/CP/gate
+  outcomes, zero console errors, saved progress unchanged. Original StarterScene
+  restored clean in Edit mode. Evidence: CP_IMPLEMENTATION_VERIFICATION.md.
+- Updated per-script docs and CP design notes. Current limitations: nominal CP
+  excludes encounter assistance; Fast/Normal/Slow durations are not guaranteed;
+  inaccessible gates or broken AI must be fixed rather than auto-resolved.
+
 
 _Newest first._
 

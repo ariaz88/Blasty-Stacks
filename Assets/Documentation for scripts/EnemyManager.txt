@@ -8,6 +8,9 @@
 
 PURPOSE
 -------
+Stage 1-5 addition: FixedUpdate temporarily defers attack actions while the runtime
+MeleeContactRecovery component is repositioning after missed weapon contact.
+
 The BRAIN of one enemy: it owns the live stats (via CP/stat rebuild), the target
 detection, facing, gate-attack vs player-attack decision, the attack cooldown,
 and the death/revive lifecycle. It is the enemy-side counterpart to PlayerManager
@@ -100,7 +103,15 @@ LIFECYCLE
       always has SOMETHING to swing with even before targeting logic runs),
       finds "PlayerCastle" by NAME if currentGateTarget is unassigned (logs an
       error if not found), and remembers the starting Rigidbody2D body type for
-      later restoration on revive.
+      later restoration on revive. Finally calls EnsureDepthSorter().
+
+  EnsureDepthSorter()   [added 2026-09-11]
+      Adds a UnitDepthSorter if the object has none, giving the enemy a Y-driven
+      draw depth. Every character part in the game sits on sorting layer Default
+      at order 1, so without it the tie between two overlapping units resolves
+      arbitrarily - which is why an enemy's head could be painted over the hero it
+      was fighting. Done in code rather than on the six enemy prefabs so nothing
+      can ship without it, including anything the debug stage tools spawn.
 
   Start()
       Disables the damage collider, applies initial facing, then CACHES the
@@ -172,9 +183,18 @@ TARGETING
 ACTION DECISION
 ----------------
   HandleCurrentAction()   (the live version, called from FixedUpdate)
-      1. If there is a current player target within stoppingDistance, and
-         neither it nor this enemy is dead: AttackTarget() + UpdateFacing(),
-         then RETURN - player takes priority over the gate.
+      1. If there is a current player target AND
+         enemyLocoMotion.IsInAttackPosition(), and neither it nor this enemy is
+         dead: AttackTarget() + UpdateFacing(), then RETURN - player takes
+         priority over the gate.
+
+         CHANGED 2026-09-11. This used to be the radial
+         `enemyLocoMotion.distanceFromTarget <= enemyLocoMotion.stoppingDistance`,
+         which is TRUE for an enemy parked directly above its target. The enemy
+         then froze its locomotion and played swing after swing through a hero it
+         could not touch, because the weapon box only reaches sideways. Gating on
+         the POSITION instead lets it finish walking round to the flank first.
+         See MeleeEngagement and EnemyLocoMotion.
       2. Else, if attackPlayerGate is set and the gate is alive: on cooldown
          expiry, sets IsAttacking + isPerformingAction, resets
          currentRecoveryTimer from AttackCadence(currentAttack.recoveryTime),

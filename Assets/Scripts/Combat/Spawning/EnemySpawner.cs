@@ -35,6 +35,7 @@ public class EnemySpawner : MonoBehaviour
     int _alive;
 
     bool _battleStarted;
+    private CPBattleController cpBattle;
 
     /// <summary>True once the wave loop has actually been kicked off.</summary>
     public bool BattleStarted => _battleStarted;
@@ -167,7 +168,77 @@ public class EnemySpawner : MonoBehaviour
         }
 
         _battleStarted = true;
-        StartCoroutine(RunLevel());
+        StartCoroutine(StartPreparedBattle());
+    }
+
+    private IEnumerator StartPreparedBattle()
+    {
+        int stage = LevelBattleRules.ResolveLevel(gameObject, levelConfig);
+        if (LevelBattleRules.AppliesTo(stage))
+        {
+            var heroes = FindObjectOfType<PlayerWaveManager>();
+            if (!heroes)
+            {
+                Debug.LogError("[EnemySpawner] CP battle requires a PlayerWaveManager.", this);
+                yield break;
+            }
+            heroes.SealForBattle();
+            while (!heroes.DeploymentsReady && !heroes.DeploymentFailed) yield return null;
+            if (heroes.DeploymentFailed) yield break;
+            cpBattle = gameObject.AddComponent<CPBattleController>();
+            if (!cpBattle.Prepare(this, heroes)) yield break;
+        }
+        yield return RunLevel();
+    }
+
+    public double PlannedEnemyCP()
+    {
+        double total = 0;
+        int stage = LevelBattleRules.ResolveLevel(gameObject, levelConfig);
+        foreach (var entry in ReferenceEntries(stage))
+        {
+            if (entry == null || !entry.enemyPrefab || !entry.statsBase || entry.count <= 0)
+                throw new System.ArgumentException("Invalid enemy wave entry.");
+            var enemy = entry.enemyPrefab.GetComponent<EnemyManager>();
+            if (!enemy || !entry.enemyPrefab.GetComponent<EnemyStats>())
+                throw new System.ArgumentException("Enemy prefab needs EnemyManager and EnemyStats.");
+            var stats = new UnitStatsRuntime();
+            stats.FromSO(entry.statsBase);
+            var growth = ProgressionMath.GetGrowthMultipliers(stage, enemy.progression);
+            stats.attack *= growth.gA;
+            stats.defense *= growth.gD;
+            stats.maxHP *= growth.gH;
+            stats.attackSpeed *= growth.gAS;
+            double cp = CPCalculator.UnitPower(stats);
+            if (!(cp > 0)) throw new System.ArgumentException("Every enemy needs positive CP.");
+            total += cp;
+        }
+        return total;
+    }
+
+    // Stages 1-5 have exactly stage-number enemies, spread across authored types.
+    // Do not mutate shared LevelConfig assets (later stages may also reference them).
+    private List<WaveEntry> ReferenceEntries(int stage)
+    {
+        var types = new List<WaveEntry>();
+        foreach (var wave in levelConfig.waves)
+            foreach (var entry in wave.entries)
+                if (entry != null && ValidateEntry(entry) && !types.Exists(x => x.enemyPrefab == entry.enemyPrefab)) types.Add(entry);
+        if (types.Count == 0) throw new System.ArgumentException("No valid enemy prefabs in level config.");
+        var result = new List<WaveEntry>();
+        for (int i = 0; i < stage; i++) result.Add(types[i % types.Count]);
+        return result;
+    }
+
+    private IEnumerator RunReferenceLevel(int stage)
+    {
+        var entries = ReferenceEntries(stage);
+        var wave = levelConfig.waves[0];
+        yield return WaitForSecondsGameplay(levelConfig.startDelay + wave.delayBeforeWave);
+        ResolveSpawnArea(wave, out var min, out var max);
+        var positions = GenerateGridPositions(min, max, entries.Count, wave.gridColumns, wave.minSlotSpacing);
+        for (int i = 0; i < entries.Count; i++) SpawnOne(entries[i], positions[i], stage);
+        AllWavesDispatched = true;
     }
     bool IsGameplayPaused()
     {
@@ -222,6 +293,11 @@ public class EnemySpawner : MonoBehaviour
     }
     IEnumerator RunLevel()
     {
+        if (cpBattle)
+        {
+            yield return RunReferenceLevel(LevelBattleRules.ResolveLevel(gameObject, levelConfig));
+            yield break;
+        }
         // Use LevelManager�s global additive stage index as the stage/CP level.
         // Fallback to levelConfig.levelNumber if LevelManager is not present
         // (e.g. when testing the scene directly).
@@ -409,6 +485,7 @@ public class EnemySpawner : MonoBehaviour
             em.stageLevel = stageLevel;              // CP weights stage
             em.cpWeights = cpWeights;               // optional
             em.Initialize(stageLevel);               // builds stats, sets HP, computes CP
+            if (cpBattle) cpBattle.RegisterEnemy(em);
         }
 
         var eh = go.GetComponent<EnemyStats>();

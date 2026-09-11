@@ -1,0 +1,76 @@
+================================================================================
+  UnitDepthSorter.cs
+  Path : Assets/Scripts/Combat/Shared/UnitDepthSorter.cs
+  Type : MonoBehaviour  [DefaultExecutionOrder(1000)]
+  Layer: Combat / Shared
+================================================================================
+
+PURPOSE
+-------
+Makes the unit standing LOWER on the screen draw IN FRONT of the one behind it,
+by giving the whole unit a world Z derived from its world Y.
+
+Added 2026-09-11 alongside MeleeEngagement, for the second half of the same
+report: when a hero and an enemy overlapped, the ENEMY's head was painted on top
+of the hero even when the hero was in front.
+
+THE PROBLEM
+-----------
+Every body part of every character in this project is a SpriteRenderer on sorting
+layer Default (ID 0) with sorting order 1 - heroes and enemies alike. Within one
+character the parts are separated by tiny Z offsets: the Valkyrie visual prefab's
+parts span local Z -0.011 .. 0, which at the visual's 0.19 scale is about 0.002 of
+world Z. The camera is orthographic (StarterScene, size 5) and Transparency Sort
+Mode is Default, so Unity settles equal-order ties along the view axis, i.e. by Z.
+
+That works beautifully INSIDE a character and not at all BETWEEN two of them: two
+units with equal sorting order and equal Z sort arbitrarily.
+
+THE FIX
+-------
+Give the unit root a Z = y * DepthPerY, so the existing Z tie-break has a
+meaningful answer. Larger Z is further from the camera, so a unit further UP the
+screen is drawn BEHIND - which is what a top-down-ish 2D battlefield wants.
+
+CONSTANTS
+---------
+  DepthPerY   0.25   world Z per world Y.
+                     Sized against the ~0.002 Z spread inside one character: at
+                     0.25 two units only 1 cm apart in Y already separate
+                     cleanly, and a battlefield spanning y -6..6 stays inside
+                     Z -1.5..1.5, nowhere near the camera's 0.3 near plane.
+
+FLOW
+----
+  LateUpdate()
+     1. Read transform.position.
+     2. Compute z = y * DepthPerY.
+     3. Write it back only if it actually changed.
+
+  LateUpdate on purpose: it runs after physics and after every mover, so nothing
+  can overwrite the depth in the same frame it is rendered.
+
+HOW IT CONNECTS
+---------------
+  - Added automatically at runtime, not authored on prefabs:
+        PlayerManager.Awake  -> EnsureDepthSorter()  (skipped for the PlayerGate)
+        EnemyManager.Awake   -> EnsureDepthSorter()
+    Code rather than prefabs because units are spawned from several places
+    (PlayerWaveManager, EnemySpawner, DebugStageManager, the test scenes) and
+    nothing may ship without it.
+
+NOTES
+-----
+  - SAFE FOR EVERY EXISTING SORTING DECISION, because sorting order is compared
+    before Z ever is:
+        HP bar canvases       order 500  (HealthBar.onTopSortingOrder) - stay on top
+        PlayerCastle pieces   orders 4, 5 - heroes still stand behind the parapet
+        castle/background     orders -5..-1 - still behind everyone
+  - WHY NOT A SortingGroup: a SortingGroup on the unit root would swallow the
+    world-space HP-bar Canvas parented under it and drag it into the body's
+    sorting layer, so bars would stop being reliably on top. Z leaves every
+    sorting layer exactly as authored.
+  - Rigidbody2D never writes Z (MovePosition and the .position setter are both
+    Vector2), so this cannot fight the physics engine, and the unit's own
+    Shadow child at local z +2.75 keeps its relative place because the root moves
+    every child together.

@@ -212,7 +212,28 @@ public class PlayerManager : MonoBehaviour
         PlayerStats = GetComponent<PlayerStats>();
         enemyStats = FindAnyObjectByType<EnemyStats>();
 
+        EnsureDepthSorter();
+    }
 
+    /// <summary>
+    /// Gives this unit a Y-driven draw depth, so a hero standing in front of an
+    /// enemy is actually PAINTED in front of it. Every character part in the game
+    /// sits on sorting layer Default at order 1, so without this the tie between
+    /// two overlapping units is resolved arbitrarily and an enemy's head can end up
+    /// on top of the hero it is fighting.
+    ///
+    /// Added in code rather than on the prefabs deliberately: heroes are spawned
+    /// from several places (PlayerWaveManager, the debug stage tools, the test
+    /// scenes) and a component every unit must have is more reliably guaranteed
+    /// here than re-authored into each prefab by hand.
+    ///
+    /// Skipped for the castle, which carries a PlayerManager but is not a unit.
+    /// </summary>
+    private void EnsureDepthSorter()
+    {
+        if (CompareTag("PlayerGate")) return;
+        if (GetComponent<UnitDepthSorter>() == null)
+            gameObject.AddComponent<UnitDepthSorter>();
     }
     private void Start()
     {
@@ -615,34 +636,56 @@ public class PlayerManager : MonoBehaviour
         return transform.position; // fallback
     }
 
-    [Header("Attack Spacing")]
-    [Tooltip("Degrees between neighbouring attackers, measured AROUND the target. " +
-             "Attackers fan out along an arc inside attack range - they are never " +
-             "pushed further away from the target, which would deadlock the pursue " +
-             "state (mover says 'arrived', state says 'too far').")]
-    [SerializeField, Range(0f, 60f)] private float attackSlotAngleStep = 28f;
-
-    [Tooltip("Fraction of maxAttackRange to stand at. Must stay below 1 so that " +
-             "reaching the slot ALWAYS means being inside attack range.")]
-    [SerializeField, Range(0.3f, 0.95f)] private float attackStandoffFactor = 0.8f;
+    // NOTE: the serialized "attackSlotAngleStep" / "attackStandoffFactor" fields
+    // were REMOVED when attack spacing moved into MeleeEngagement. The arc they
+    // tuned fanned attackers AROUND the target, which let a hero come to rest
+    // directly above or below it - inside range and unable to land a hit, because
+    // the weapon hitboxes only reach sideways. Spacing is now defined once, for
+    // both factions, in MeleeEngagement.
 
     // The target we currently hold an attack slot on, and which slot it is.
     private Object attackSlotTarget;
     private int attackSlotIndex;
 
+    // Side of the target this hero committed to, +1/-1 (0 = not chosen yet).
+    // Held so crossing the target's centre line does not reverse the approach.
+    private float heldAttackSide;
+
     /// <summary>
-    /// This unit's own attack spot: a point on an arc AROUND the target, inside
-    /// attack range, fanned away from the anchor the targeting code picked.
+    /// TRUE when this hero is standing somewhere its weapon can actually land on
+    /// its current enemy target - beside it, not stacked above or below it.
+    ///
+    /// The states used to decide this with a bare radial distance, which cannot
+    /// tell "beside" from "on top of". See MeleeEngagement for why that matters:
+    /// the melee hitboxes are wide, flat boxes that reach sideways only.
+    /// </summary>
+    public bool IsInAttackPosition()
+    {
+        if (currentTarget == null) return false;
+
+        Vector2 self = playerRigidbody ? playerRigidbody.position : (Vector2)transform.position;
+        return MeleeEngagement.InAttackPosition(self, currentTarget.transform.position, maxAttackRange);
+    }
+
+    /// <summary>
+    /// This unit's own attack spot: BESIDE the target, at standoff distance, inside
+    /// the vertical band where its weapon can reach. Multiple attackers on one
+    /// target take different slots and never push each other.
     ///
     /// CRITICAL INVARIANT - do not break this again:
-    /// the returned point must ALWAYS be within maxAttackRange of the target.
-    /// PlayerPursueTargetState decides pursue-vs-combat by measuring the distance
-    /// to the TARGET, while this method decides where the mover walks. If a slot
-    /// sits outside attack range the two disagree forever: the mover reports
-    /// "arrived" and stops, the state reports "too far" and stays in pursue, and
-    /// the unit freezes on the spot. That is exactly what happened when slots were
-    /// a flat sideways offset - a +1.80 slot put a hero 2.45 away from an enemy
-    /// with a range of 0.85.
+    /// the returned point must ALWAYS satisfy MeleeEngagement.InAttackPosition.
+    /// The pursue state decides pursue-vs-combat with that predicate while this
+    /// method decides where the mover walks. If the two can disagree, the mover
+    /// reports "arrived" and stops, the state reports "not there yet" and stays in
+    /// pursue, and the unit freezes on the spot. That is exactly what happened when
+    /// slots were a flat sideways offset - a +1.80 slot put a hero 2.45 away from an
+    /// enemy with a range of 0.85. MeleeEngagement.StandPoint keeps the point on the
+    /// standoff circle and inside the band precisely so this cannot recur.
+    ///
+    /// <paramref name="anchor"/> is the side marker the targeting code picked
+    /// (EnemyOffsetLeft/Right). It is only a hint now: the side is re-derived from
+    /// the hero's own position so that the ENEMY walking toward this hero arrives at
+    /// a compatible spot instead of the two circling each other.
     /// </summary>
     private Vector2 ResolveAttackDestination(Vector2 anchor)
     {
@@ -654,6 +697,7 @@ public class PlayerManager : MonoBehaviour
             {
                 AttackSlotRegistry.Release(this);
                 attackSlotTarget = null;
+                heldAttackSide = 0f;
             }
             return anchor;
         }
@@ -663,32 +707,25 @@ public class PlayerManager : MonoBehaviour
             AttackSlotRegistry.Release(this);
             attackSlotIndex = AttackSlotRegistry.Claim(target, this);
             attackSlotTarget = target;
+            heldAttackSide = 0f;   // a new target means a fresh side decision
         }
 
         Transform targetTf = currentTarget != null ? currentTarget.transform
                                                   : (currentGateTarget != null ? currentGateTarget.transform : null);
         if (targetTf == null) return anchor;
 
+        // The gate is a wide building, not a duellist: walking to one of its flanks
+        // would march heroes off the side of it. Keep the old head-on approach.
+        if (currentTarget == null)
+            return anchor;
+
         Vector2 targetPos = targetTf.position;
-        Vector2 fromTarget = anchor - targetPos;
+        Vector2 self = playerRigidbody ? playerRigidbody.position : (Vector2)transform.position;
 
-        float anchorDistance = fromTarget.magnitude;
-        if (anchorDistance < 0.0001f)
-        {
-            fromTarget = Vector2.down;   // degenerate anchor: approach from below
-            anchorDistance = 1f;
-        }
-        else fromTarget /= anchorDistance;
+        heldAttackSide = MeleeEngagement.ChooseSide(
+            self, targetPos, MeleeEngagement.PlayerPreferredSide, heldAttackSide);
 
-        // Stand no further out than the anchor already is, and never beyond
-        // attack range - that is what guarantees the invariant above.
-        float radius = Mathf.Min(anchorDistance, maxAttackRange * attackStandoffFactor);
-
-        // Fan around the target by slot: 0, +step, -step, +2*step, ...
-        float angle = AttackSlotRegistry.OffsetForSlot(attackSlotIndex, attackSlotAngleStep);
-        Vector2 fanned = Quaternion.Euler(0f, 0f, angle) * fromTarget;
-
-        return targetPos + fanned * radius;
+        return MeleeEngagement.StandPoint(targetPos, maxAttackRange, heldAttackSide, attackSlotIndex);
     }
 
     /// <summary>
@@ -732,7 +769,15 @@ public class PlayerManager : MonoBehaviour
     if (playerRigidbody == null)
         return;
 
-    if (chosenEnemyOffset == null)
+    // An ENEMY target needs no anchor: the stand point is derived from the two
+    // positions. Only the gate march still needs one.
+    //
+    // Bailing out on a null anchor used to be unconditional, and that was a real
+    // freeze: UpdateFacingAndOffset only assigns chosenEnemyOffset once the target
+    // is at least facingDeadZoneX off-centre, so a hero that acquired a target
+    // sitting DEAD LEVEL above it never got an anchor at all - and then never moved
+    // a step. Which is exactly the situation this whole fix is about.
+    if (currentTarget == null && chosenEnemyOffset == null)
         return;
 
     // Keep a little personal space while closing in, so two heroes converging on
@@ -747,7 +792,11 @@ public class PlayerManager : MonoBehaviour
     // everyone converging on one point. The slot is claimed once and kept while
     // the target does not change, so nobody drifts mid-fight - and no unit ever
     // pushes another to make room.
-    Vector2 destination = ResolveAttackDestination(chosenEnemyOffset.position);
+    Vector2 anchor = chosenEnemyOffset != null
+        ? (Vector2)chosenEnemyOffset.position
+        : (Vector2)transform.position;
+
+    Vector2 destination = ResolveAttackDestination(anchor);
 
     Vector2 toTarget = destination - (Vector2)transform.position;
     float dist = toTarget.magnitude;
@@ -810,7 +859,8 @@ public class PlayerManager : MonoBehaviour
 
 
  void FixedUpdate()
-{
+ {
+        if (GetComponent<MeleeContactRecovery>() is { IsRepositioning: true }) return;
     HandleStateMachine();
 
     // Spacing used to be forced here every physics step via
