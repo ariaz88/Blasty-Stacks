@@ -53,6 +53,12 @@
 
 ## Open Threads
 
+- 2026-09-11 focused enemy sliding correction: EnemyLocoMotion holds position
+  while a nearby hero targets it; enemy MeleeContactRecovery also yields to that
+  hero. Verified only stage 1, vertically aligned Valkyrie versus one Reaper, at
+  normal speed. Both sides hit; enemy stayed planted through alignment/combat.
+
+
 - **2026-09-10 current CP implementation supersedes the timed-budget experiment:**
   stages 1-5 use reference CP calibration and actual hit-only tutorial assistance.
   No remote kills or automatic gate destruction. Fixed enemy counts 1/2/3/4/5;
@@ -434,6 +440,27 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ---
 
 ## Session Log
+
+### 2026-09-11 - Stop enemy following Valkyrie's sidestep (Codex)
+
+- User scoped this task to the remaining magnetic slide and a single Valkyrie
+  duel. No full campaign regression or CP/spawn balancing changes were made.
+- The first locomotion correction still let MeleeContactRecovery move the enemy
+  about half a unit; user observed it live and the recorded trace confirmed it.
+- Enemy now holds its world position when a nearby hero commits to attacking it.
+  Recovery yields to that hero too. Stop clears velocity; approach clamps steps.
+- Enemy accepts a 0.02-unit vertical alignment margin for an engaged hero already
+  in its legal attack position, retaining its own radial reach/minimum spacing.
+  This addresses Valkyrie's 0.85 versus Reaper's 0.83 alignment discrepancy.
+- Focused final test PASS: Valkyrie versus one current Reaper in stage 1, vertical
+  setup, speed 1. Enemy remained at (-1.66,13.25) through the hero's sidestep and
+  attacks; measured attack movement 0.000. Both sides landed physical hits,
+  enemy died after at least four hits, and the gate was destroyed normally.
+- Added a reusable duel-only mode to CPCombatVerification with trace and two-way
+  damage check. Initial baseline reported a save-change failure; subsequent duel
+  runs snapshot/restore save and stage keys on exiting Play mode. Final restoration
+  verified true. Original baseline save contents were not retained by old harness.
+
 
 ### 2026-09-11 — Melee units now fight from the SIDE; enemy "slide into the hero" fixed
 

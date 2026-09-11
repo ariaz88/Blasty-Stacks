@@ -189,6 +189,20 @@ public class EnemyLocoMotion : MonoBehaviour
             Vector2 targetPos = currentTarget.transform.position;
             float dist = Vector2.Distance(targetPos, pos);
 
+            // A hero already closing on this enemy owns the final sidestep.
+            // Chasing a stand point relative to that moving hero makes the enemy
+            // follow the sidestep like a magnet. Hold this world position while
+            // the hero lines up; pursue again if it leaves the engagement area.
+            var approachingHero = currentTarget.PlayerManager;
+            float engagementRange = Mathf.Max(stoppingDistance, approachingHero ? approachingHero.maxAttackRange : stoppingDistance);
+            bool heroIsEngagingUs = approachingHero && approachingHero.isUnlocked &&
+                approachingHero.currentTarget && approachingHero.currentTarget.enemyManager == enemyManager;
+            if (heroIsEngagingUs && dist <= engagementRange + 0.35f)
+            {
+                StopAtCurrentPosition();
+                return;
+            }
+
             // Already standing somewhere we can actually reach the hero from: stop.
             //
             // This used to be `dist <= stoppingDistance`, a plain radial test, and
@@ -199,8 +213,7 @@ public class EnemyLocoMotion : MonoBehaviour
             // wide flat box that only reaches sideways.
             if (MeleeEngagement.InAttackPosition(pos, targetPos, stoppingDistance))
             {
-                enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
-                SetAnimMoving(false);
+                StopAtCurrentPosition();
                 return;
             }
 
@@ -216,8 +229,7 @@ public class EnemyLocoMotion : MonoBehaviour
 
                 if (toStand.sqrMagnitude < 0.0025f)   // arrived, within 5cm
                 {
-                    enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
-                    SetAnimMoving(false);
+                    StopAtCurrentPosition();
                     return;
                 }
 
@@ -225,6 +237,8 @@ public class EnemyLocoMotion : MonoBehaviour
             }
 
             Vector2 next = pos + moveDir * CurrentMoveSpeed * Time.fixedDeltaTime;
+            if (isRealPlayer && withinFair)
+                next = Vector2.MoveTowards(pos, ResolveStandPoint(targetPos), CurrentMoveSpeed * Time.fixedDeltaTime);
 
             enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
             enemyRigidbody2D.MovePosition(next);
@@ -274,6 +288,14 @@ public class EnemyLocoMotion : MonoBehaviour
 
     }
 
+    void StopAtCurrentPosition()
+    {
+        enemyRigidbody2D.linearVelocity = Vector2.zero;
+        enemyRigidbody2D.angularVelocity = 0f;
+        enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
+        SetAnimMoving(false);
+    }
+
     /// <summary>
     /// Where this enemy should stand to fight the hero at <paramref name="targetPos"/>:
     /// beside it, at standoff distance, level enough for the weapon box to overlap.
@@ -316,7 +338,15 @@ public class EnemyLocoMotion : MonoBehaviour
         if (currentTarget == null) return false;
 
         Vector2 pos = enemyRigidbody2D ? enemyRigidbody2D.position : (Vector2)transform.position;
-        return MeleeEngagement.InAttackPosition(pos, currentTarget.transform.position, stoppingDistance);
+        if (MeleeEngagement.InAttackPosition(pos, currentTarget.transform.position, stoppingDistance)) return true;
+        // Valkyrie uses a slightly wider alignment band than this enemy (0.85
+        // versus 0.83 range). Accept that tiny alignment difference while still
+        // requiring actual melee range, rather than sliding a planted enemy.
+        var hero = currentTarget.PlayerManager;
+        Vector2 offset = (Vector2)currentTarget.transform.position - pos;
+        return hero && hero.currentTarget && hero.currentTarget.enemyManager == enemyManager && hero.IsInAttackPosition() &&
+            offset.magnitude <= stoppingDistance && offset.magnitude >= MeleeEngagement.Standoff(stoppingDistance) * MeleeEngagement.ArrivalSlack &&
+            Mathf.Abs(offset.y) <= MeleeEngagement.Band(stoppingDistance) + 0.02f;
     }
 
 

@@ -1,4 +1,8 @@
 PURPOSE
+2026-09-11: an enemy yields recovery positioning to a hero currently targeting it.
+Normal locomotion and recovery therefore agree that the enemy stays planted;
+the recovery mover can no longer pull it toward the hero after locomotion stops.
+
 Stage 1-5 melee contact recovery for current player/enemy prefabs. Added at runtime
 by CPBattleController; does not modify shared prefab assets or later stages.
 

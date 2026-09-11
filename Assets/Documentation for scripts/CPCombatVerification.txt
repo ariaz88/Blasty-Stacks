@@ -1,4 +1,9 @@
 PURPOSE
+2026-09-11: Verify Valkyrie Duel Only runs just stage 1, one Valkyrie and one
+current enemy, at normal time scale with an explicitly vertical starting layout.
+Records position/attack telemetry, checks both sides land hits, and snapshots
+the save/stage preference keys for restoration after exiting Play mode.
+
 Editor-only integration verification using actual Level_1_Stage_1 through
 Level_1_Stage_5 scenes and their current New Characters prefab references.
 

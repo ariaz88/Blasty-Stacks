@@ -8,6 +8,14 @@
 
 PURPOSE
 -------
+2026-09-11 focused Valkyrie correction: when a nearby hero has committed to this
+enemy, hold the enemy's world position while that hero lines up. Stop explicitly
+clears linear/angular velocity. Approach steps clamp to the destination to avoid
+overshoot. IsInAttackPosition accepts up to 0.02 extra vertical alignment tolerance
+when that same hero has reached its legal attack position, while still requiring
+the enemy's own radial reach and minimum spacing. This covers the 0.85/0.83
+Valkyrie/enemy range mismatch without enlarging any physical weapon hitbox.
+
 The LIVE 2D enemy movement driver. Enemies march down the lane toward the
 player's gate, optionally divert to chase a nearby player unit, and stop
 permanently once they reach the gate. (The older 3D EnemyLocomotionManager is

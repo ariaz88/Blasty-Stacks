@@ -42,6 +42,18 @@ public sealed class MeleeContactRecovery : MonoBehaviour
             trackedTarget = target; lastContact = Time.time; attempts = 0; Stop();
         }
         float range = player ? player.maxAttackRange : enemyMotion.stoppingDistance;
+        // Let the hero complete its approach or recovery while the enemy holds
+        // position. Two recovery movers following each other recreate the pull
+        // even when EnemyLocoMotion itself has correctly stopped.
+        if (enemy && target is PlayerStats heroHealth)
+        {
+            var hero = heroHealth.PlayerManager;
+            bool engagingUs = hero && hero.currentTarget && hero.currentTarget.enemyManager == enemy;
+            if (engagingUs)
+            {
+                Stop(); lastContact = Time.time; return;
+            }
+        }
         if (IsRepositioning)
         {
             if (Vector2.Distance(body.position, destination) < 0.06f || Time.time - attemptStarted > 1.1f)
