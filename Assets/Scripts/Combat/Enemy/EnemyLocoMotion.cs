@@ -189,19 +189,15 @@ public class EnemyLocoMotion : MonoBehaviour
             Vector2 targetPos = currentTarget.transform.position;
             float dist = Vector2.Distance(targetPos, pos);
 
-            // A hero already closing on this enemy owns the final sidestep.
-            // Chasing a stand point relative to that moving hero makes the enemy
-            // follow the sidestep like a magnet. Hold this world position while
-            // the hero lines up; pursue again if it leaves the engagement area.
-            var approachingHero = currentTarget.PlayerManager;
-            float engagementRange = Mathf.Max(stoppingDistance, approachingHero ? approachingHero.maxAttackRange : stoppingDistance);
-            bool heroIsEngagingUs = approachingHero && approachingHero.isUnlocked &&
-                approachingHero.currentTarget && approachingHero.currentTarget.enemyManager == enemyManager;
-            if (heroIsEngagingUs && dist <= engagementRange + 0.35f)
-            {
-                StopAtCurrentPosition();
-                return;
-            }
+            // NOTE (2026-09-11): there used to be a "hold position while a hero is
+            // engaging us" branch here, which stopped the enemy dead as soon as a
+            // committed hero came within maxAttackRange + 0.35 - i.e. up to 1.20
+            // world units away, well outside this enemy's own 0.71 stand point. It
+            // was added to kill a magnetic pull, but the pull came from
+            // MeleeContactRecovery, not from here, and that is where it is now
+            // handled. The branch made the enemy freeze visibly early, BEFORE the
+            // hero had arrived, which is not wanted: an enemy walks until it is in
+            // a position it can actually strike from, and only then stops.
 
             // Already standing somewhere we can actually reach the hero from: stop.
             //

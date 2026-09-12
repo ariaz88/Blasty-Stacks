@@ -91,7 +91,21 @@ public sealed class MeleeContactRecovery : MonoBehaviour
     }
     void Stop()
     {
-        if (IsRepositioning && body) body.linearVelocity = Vector2.zero;
+        // Only on the frame we actually hand the body back, and that guard matters
+        // for more than tidiness. While IsRepositioning is set, PlayerManager and
+        // EnemyLocoMotion BOTH skip their FixedUpdate entirely, so this component
+        // is the only thing writing the walk animation - and it only ever writes
+        // TRUE (above). Handing control back without clearing it left the unit
+        // standing still playing its walk cycle. Clearing it unguarded would be
+        // worse: this runs at execution order 500, after the movers at -100 and 0,
+        // so it would stamp "idle" over a unit that had just decided to walk.
+        if (IsRepositioning)
+        {
+            if (body) body.linearVelocity = Vector2.zero;
+            if (player) player.SetAnimMoving(false);
+            else if (enemyMotion) enemyMotion.SetAnimMoving(false);
+        }
+
         IsRepositioning = false;
     }
 }

@@ -9,6 +9,10 @@ public class EnemyStats : CharacterStats
     public Transform EnemyOffsetLeft;   // enemy's left side (negative local X)
     public Transform EnemyOffsetRight;  // enemy's right side (positive local X)
 
+    /// <summary>Live defence, so the toughness band follows stage growth.</summary>
+    protected override float Defense =>
+        enemyManager != null && enemyManager.unitStats != null ? enemyManager.unitStats.defense : 0f;
+
     private void Awake()
     {
         enemyManager = GetComponent<EnemyManager>();
@@ -40,9 +44,19 @@ public class EnemyStats : CharacterStats
        
         return this.transform;
     }
-    public void ApplyDamageToEnemy(float damageAmount)
+    /// <summary>
+    /// <paramref name="attacker"/> is the hero that swung. Needed because the
+    /// stage 1-5 model lets a lone, outnumbered protected hero kill in two hits,
+    /// and that boost must apply to THAT hero's blows only - never to its allies',
+    /// which stay completely unassisted. Optional, so any older call still compiles.
+    /// </summary>
+    public void ApplyDamageToEnemy(float damageAmount, PlayerManager attacker = null)
     {
-        damageAmount = CPBattleController.AdjustIncomingDamage(this, damageAmount);
+        damageAmount = CPBattleController.AdjustIncomingDamage(this, damageAmount, attacker);
+        // LAST, and outside the CP battle on purpose: the four-hit rule must hold
+        // even when no battle is prepared or this enemy never reached the
+        // controller's registered set. See CharacterStats.ClampIncomingBlow.
+        damageAmount = ClampIncomingBlow(damageAmount, attacker);
         SetResolvedHealth(Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount)));
     }
 
@@ -53,6 +67,7 @@ public class EnemyStats : CharacterStats
 
         if (currentHP <= 0)
         {
+            if (!enemyIsdead) ReportDeath();
             enemyIsdead = true;
             currentHP = 0;
         }

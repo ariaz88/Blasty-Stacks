@@ -53,10 +53,15 @@
 
 ## Open Threads
 
-- 2026-09-11 focused enemy sliding correction: EnemyLocoMotion holds position
-  while a nearby hero targets it; enemy MeleeContactRecovery also yields to that
-  hero. Verified only stage 1, vertically aligned Valkyrie versus one Reaper, at
-  normal speed. Both sides hit; enemy stayed planted through alignment/combat.
+- **[2026-09-11] Two enemy animator controllers had a DEGENERATE locomotion blend
+  tree, and it has never been played since the fix.** `Reaper_Man_01.controller` and
+  `Zombie_Villager 1.controller` had BOTH blend-tree children ('Idle' and 'Walking')
+  authored at position (0,0) on a FreeformCartesian2D tree, so the Vertical parameter
+  could not change the blend and the walk clip played permanently - no code could stop
+  it. The other 20 controllers in the project all use (0,0)/(0,1) correctly. Both are
+  now fixed to match. ASSET EDIT - it will not read clearly in the diff. Also removed
+  the enemy's early "hold position" freeze. Play stage 1-5 and confirm: enemy walks
+  all the way in, stops, idles, then swings.
 
 
 - **2026-09-10 current CP implementation supersedes the timed-budget experiment:**
@@ -73,6 +78,18 @@
 
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
+
+- **[2026-09-11] The rebuilt guaranteed-win model has never been played.** Stages 1-5 now
+  protect exactly ONE hero (the strongest) via a per-enemy damage budget; every other hero
+  is fully unassisted. Four global assistance rules were DELETED - do not restore them.
+  Hero normalisation is now team-TOTAL, so individual heroes vary around the reference.
+  Enemy CP for levels 1-3 is authored per-unit (35 / 35+35 / 35+40+40). Verified by
+  compile and rule-check only. LEVELS 1-3 ARE A SCRIPTED EXCEPTION: enemies die on the
+  4th hit, heroes lose a flat 7% per hit, enemy speed x0.6. Levels 4-5 use real combat
+  plus the champion model. Play stages 1-5 and judge: (1) in levels 1-3, do enemies take
+  four visible hits and does the last enemy stay away from the base; (2) in levels 4-5,
+  do non-champion heroes visibly die normally; (3) does the champion survive with roughly
+  its reserve left (20% at 4 enemies, 25% at 5); (4) do the losing matches still lose.
 
 - **[2026-09-11] The melee side-approach fix has never been played.** Heroes and enemies now walk to a
   spot BESIDE their target instead of stacking above/below it (`MeleeEngagement`), enemy movement moved
@@ -440,6 +457,211 @@ _Durable choices with their reasons, so no session reopens them blindly._
 ---
 
 ## Session Log
+
+### 2026-09-11 (4th pass) - Guaranteed-win model rebuilt around ONE protected hero
+
+- **Goal:** Arash: the old model felt fake. Replace it so combat is fully natural
+  while the required outcome still holds. His rules, generalised from worked examples.
+- **Status:** implemented, compiles clean, rules verified. NOT played yet.
+- **FINDING - the workbook is one formula, not ten level designs.** Parsed
+  `Assets/Documentation for scripts/Wittle_Defender_Levels_6-10_Balance.xlsx`
+  (4 sheets, levels 1-10). Every recorded Battle Result is a pure function of
+  `R = PlayerCP / EnemyCP`: `R<0.75` Fast Loss, `<1.00` Slow Loss, `<1.15` Normal
+  Win, else Fast Win. **51 rows, 0 mismatches**, with clean empty gaps at every
+  boundary (Fast Loss maxes at 0.735, Slow Loss starts 0.769; Normal Win maxes
+  1.125, Fast Win starts 1.154). The win line is exactly R = 1.00, so
+  `FirstWinningMatch` is a cached copy of "first match where R crosses 1".
+  Charted: <https://claude.ai/code/artifact/396a631b-2c43-4be0-830e-92022f033fe5>
+- **The new model:** exactly ONE hero is assisted - the strongest, chosen at
+  Prepare. Every other hero is completely untouched (wins, loses, dies naturally).
+  The champion is not invulnerable: each INDIVIDUAL enemy gets a lifetime allowance
+  of `(100/E) - 5` rounded UP to the nearest 5, spread over at least 4 hits. At
+  E=3 that is 30% total, 7.5% per hit - Arash's own worked numbers. Alone and
+  outnumbered, the champion kills in 2 hits. Losing battles get NO assistance.
+- **Changed:**
+  - `Assets/Scripts/Data/CombatPower/LevelBattleRules.cs` - `PerHeroCP`,
+    `EnemyUnitCPs`, `DamageBudgetPerEnemy`, `MinHitsToSpendBudget`,
+    `SoloRushHitsToKill`; `ReferenceEnemyCP` now derives from the per-unit list.
+  - `Assets/Scripts/Combat/Spawning/CPBattleController.cs` - rewritten.
+    **Team-TOTAL normalisation replaces per-hero** (this was mandatory: flattening
+    every hero to an identical CP left the roster mathematically tied, so "the
+    strongest" did not exist). Champion selection, per-enemy budget, rush kill.
+  - `PlayerStats.cs` / `EnemyStats.cs` - damage entry points now take the attacker;
+    `EnemyDamageCollider.cs` / `PlayerDamageCollider.cs` pass it. Required: budgets
+    are per individual enemy, so identical blows must be accounted separately.
+  - Docs rewritten for both scripts.
+- **DELETED global rules - do not restore:** the 25%-of-max-HP cap on every hit in
+  the game; "nothing dies before its 4th hit" (blocked the 2-hit rush); the
+  last-survivor 1%-HP floor; the damage reduction hard-coded to stage 5 with
+  exactly 4 heroes (now just the Slow Loss band).
+- **New enemy CP, per Arash (per-unit, not team totals):** L1 `[35]`,
+  L2 `[35,35]`, L3 `[35,40,40]`. L1/L2 are deliberately below the workbook totals
+  (80/100); outcomes unchanged, both were already clear wins. L4/L5 keep 400/650.
+- **Scene/Prefab/SO edits:** none.
+- **Verified:** 0 compile errors. All 20 stage 1-5 matches re-checked: the outcome
+  law and `FirstWinningMatch` agree on every one, so the `Prepare()` assert cannot
+  trip. Budget table confirmed at E=1..5 (95/45/30/20/15%).
+- **Gotchas:**
+  - Individual heroes now VARY around the per-hero reference instead of sitting on
+    it. `heroCount x PerHeroCP` is a team figure, not a per-unit promise.
+  - `CalibrateHero` is still called outside any try/catch from
+    `PlayerWaveManager.cs:783`. It no longer scales there unless a battle is
+    already prepared, so the throw is much harder to reach, but not impossible.
+- **AMENDED same day - levels 1-3 are now a SCRIPTED tutorial exchange.** Arash
+  played it: deleting the global 4-hit floor meant a level 1 enemy died in ONE hit
+  (hero CP 100 vs enemy CP 35 - real combat simply deletes it). Levels 1-3 are an
+  explicit exception now, scripted for appearance:
+  - enemies lose exactly 1/4 of max HP per hit and die on the **4th** swing
+    (`TutorialHitsToKillEnemy = 4`);
+  - heroes lose a flat **7%** per hit (`TutorialHeroDamagePerHit`);
+  - both are SET, not capped, so the exchange reads the same whatever the units
+    were authored at; the killing blow is taken from `currentHP` so float drift
+    cannot leave a sliver behind;
+  - enemy `moveSpeed` x **0.6** in these levels (`TutorialEnemySpeedScale`), so the
+    last enemy cannot stroll past the fight and reach the player's base.
+  - `RushKill` / `SoloRushHitsToKill = 2` **REMOVED** - superseded. It only ever
+    applied to levels 2-3 match 1, exactly what the 4-hit script now covers, and
+    the pressure it relieved is handled by the speed reduction instead.
+  Levels 4-5 are untouched: real combat plus the champion model.
+- **Simulated exchange** (1 hero, worst case where every enemy engages from the
+  first round): L1 four swings, hero ends 79%. L2 eight swings, ends 34%. L3
+  twelve swings, ends 19% (reserve floor 10%). Real play should be gentler than
+  this because the slowed enemies arrive staggered rather than all at once.
+- **AMENDED again - the four-hit floor is now UNIVERSAL, not just levels 1-3.**
+  Arash played level 4 and saw an enemy die in two hits with four heroes on the
+  field. The requirement is "nobody, hero or enemy, ever dies in under four hits",
+  and it had only been implemented inside the levels 1-3 script.
+  `LevelBattleRules.MinHitsToKillAnyone = 4`, enforced in `AdjustIncomingDamage`
+  as a CEILING of `maxHealth/4` on every blow to every unit on both sides.
+  - It is a ceiling, never a floor. A blow already gentler than a quarter passes
+    untouched, which is what keeps Arash's other requirement: a tankier character
+    dies in 5 or 6, not always exactly 4.
+  - Measured on the live roster, both directions, 240 pairings per level:
+    L4 -> 4 hits x146, 5 x52, 6 x26, 7 x13, 8 x3.  L5 -> 4 x148, 5 x49, 6 x32,
+    7 x10, 8 x1. Fastest kill anywhere is 4. ~40% run longer than the floor.
+  - **Arash suggested raising HP instead; that would have been wrong and it is
+    worth recording why.** maxHP is a CP input, so raising it raises that unit's
+    CP, moves the Player/Enemy ratio, and changes the result the workbook requires
+    for that match. The damage ceiling gives identical pacing at zero CP cost.
+  - Ordering matters: the ceiling runs BEFORE the levels 1-3 script, because that
+    script's killing blow is taken from `currentHP` and clipping it to maxHP/4
+    would leave the enemy alive on a sliver.
+- **AMENDED a third time - the four-hit rule MOVED to where it cannot be bypassed.**
+  Arash recorded stage 4 (`Assets/Arts/Reference videos/ScreenRecorderProject511_1.mp4`,
+  seconds 12-18) AFTER the ceiling was added and three enemies still died on the
+  second hit, apparently together.
+  - Ruled out by inspection: enemies ARE registered (every spawn path goes through
+    `EnemySpawner.SpawnOne` -> `RegisterEnemy`); each enemy prefab has exactly ONE
+    collider carrying `EnemyStats`, so no double-counted triggers; no bulk-kill or
+    AoE path exists; and the video postdates the fix by 9 minutes, so the build had
+    it. With the ceiling reached, death in two hits is arithmetically impossible.
+  - Therefore the ceiling was NOT being reached. `AdjustIncomingDamage` returns the
+    damage untouched on four paths that are invisible at runtime: no battle
+    prepared, unit missing from the registered hero/enemy sets, a stale static
+    `Instance` from a previous battle, or a scene mismatch.
+  - **Fix: the rule now lives in `CharacterStats.ClampIncomingBlow`**, applied by
+    `PlayerStats`/`EnemyStats` AFTER the controller call. A unit clamps its own
+    incoming damage, so the rule holds with no CP battle in the scene at all - and
+    is therefore true for stage 6+ as well. Two mechanisms: a ceiling of maxHP/4,
+    and a lethality guard that cannot be crossed before the 4th blow.
+  - Verified: one-shot attempt (500 dmg on 100 HP) dies on hit 4; a gentle 10-dmg
+    blow still takes its natural 10 hits (the ceiling never shortens a long fight);
+    the levels 1-3 script still kills on exactly hit 4; four different heroes
+    landing one blow each kill on the 4th, which Arash confirmed is allowed.
+  - **STILL OPEN:** three enemies dying at the same moment. The hero weapon box is
+    wide (~1.46 x 0.24 world units) and hits every enemy overlapping it, so a
+    cluster advances together and reaches its 4th hit on the same swing. The
+    four-hit floor now applies per enemy, but simultaneous deaths will persist
+    until a swing is restricted to one target. NOT changed - needs Arash's call.
+- **SUPERSEDED the same day - the rule is now 8-11 hits, level-irrelevant.** Arash
+  ran stage 5 (4 heroes vs 5 enemies) and enemies still died in 2-4 hits. New
+  standing rule, in his words: "level does not matter at all, no enemy and no hero
+  dies under 8 hits", each blow at most ~10-15% of max HP, tougher characters
+  running to 9/10/11, and upgrades at high levels topping out around 10-11.
+  - `MinHitsToKillAnyone` 4 -> **8**, plus `MaxHitsToKillAnyone` = **11** and
+    `DefenseForMaxHits` = 80, with `HitsToKill(defense)` interpolating the band.
+  - **A single fixed ceiling does NOT work and this was measured.** With one
+    maxHP/8 ceiling for everyone, 240 of 240 roster matchups landed on EXACTLY 8
+    hits - after CP normalisation every attacker clears a flat 12.5% blow, so the
+    ceiling binds every time and all variety collapses. The ceiling is therefore
+    sized from the DEFENDER's own defence.
+  - Result on the live roster: defence 10 -> 8 hits, 25 -> 9, 40/52/65 -> 10,
+    78 -> 11. Blows land between 9.1% and 12.5% of max HP, inside Arash's 10-15%.
+  - `TutorialHitsToKillEnemy` is now an ALIAS of `MinHitsToKillAnyone`, and
+    `ScriptTutorialBlow` uses `target.HitsToKillMe`. A fixed divisor there would
+    fight the clamp: a defence-65 enemy is capped at maxHP/10, so a scripted
+    maxHP/8 blow and its currentHP kill would both be clipped.
+  - **Base `moveSpeed` set to 0.5** on all 23 unit stats assets (GateBase left at
+    0). ASSET EDIT. moveSpeed is not a CP input, so no battle ratio moved.
+  - **Hero variety is limited by the ROSTER, not the code:** every deployed hero is
+    authored at defence 25, so all heroes land on 9 hits. Give them distinct
+    defence values and they spread across the band with no code change.
+- **Follow-up: "level 4 enemies still die in 4 hits, not 8".** Audited and NOT a
+  rule break. Every deployed hero prefab was checked: all five apply exactly ONE
+  damage application per swing (no duplicate PlayerDamageCollider, one weapon
+  collider each), and every enemy damage path goes through ClampIncomingBlow.
+  The arithmetic is simply that the band counts TOTAL blows: with 4 heroes on 4
+  enemies two heroes converge on one target, it absorbs its full 8-9, and each
+  hero only swings 4 times. Measured: 8 total, 4 per hero, rule satisfied.
+  - Added `CharacterStats.ReportDeath()` - one unconditional console line per
+    death giving total blows, number of distinct attackers, the required minimum
+    and OK / RULE BROKEN. Next report of this kind can be settled from the console
+    instead of from a video.
+  - **OPEN QUESTION for Arash:** should eight be TOTAL blows (current) or should a
+    fight last eight EXCHANGES regardless of how many heroes pile on?
+  - Base `moveSpeed` 0.5 -> **0.6** on all 23 unit stats assets. ASSET EDIT.
+- **Next:** play stage 1-5. Levels 1-3: confirm enemies take four visible hits,
+  the hero chips down ~7% a time, and the last enemy never reaches the base.
+  Levels 4-5: confirm non-champion heroes really do die normally and the champion
+  never drops below its reserve (20% at E=4, 25% at E=5).
+
+### 2026-09-11 (3rd pass) - Enemy froze early with its walk cycle still running
+
+- **Goal:** Arash: "the enemy stops a little before the hero reaches it, but the walk
+  animation is still playing". Required behaviour, in his words: the enemy keeps moving
+  toward the hero until it reaches attack position; the instant it does it must
+  (1) stop, (2) stop the walk animation, (3) play the attack animation. (3) already
+  worked; (1) and (2) were broken.
+- **Status:** done. Compiles clean, verified by simulation. NOT played yet.
+- **Cause 1 - stops early (code).** The previous pass added a "hold position while a
+  hero is engaging us" branch to `EnemyLocoMotion.HandleMoveToTarget`. Its trigger was
+  `dist <= max(stoppingDistance, hero.maxAttackRange) + 0.35`, i.e. **up to 1.20 world
+  units**, while the enemy's own stand point is at **0.71**. So the enemy stopped up to
+  0.49 units short, before the hero had arrived. REMOVED. It had been added to kill a
+  magnetic pull that actually originates in `MeleeContactRecovery`, and that component
+  already yields to an engaging hero - which is the correct place for it.
+- **Cause 2 - walk animation never stops (ASSET, not code).**
+  `Reaper_Man_01.controller` and `Zombie_Villager 1.controller` have a
+  FreeformCartesian2D locomotion blend tree whose TWO children - 'Idle' and 'Walking' -
+  were both authored at position **(0,0)**. With every child on the same blend point the
+  weights are fixed no matter what `Vertical` is, so `SetAnimMoving(false)` was
+  physically incapable of stopping the walk clip. Swept all 22 controllers in the
+  project: these two were the only broken ones; the other 20 all use (0,0)/(0,1).
+  Both now set to (0,0)/(0,1) via the AnimatorController API.
+  **This is why the bug looked enemy-specific and why no amount of code fixing helped -
+  and note the duel test that "passed" used the Reaper, i.e. one of the two broken ones.**
+- **Cause 3 - one-frame stale walk parameter (code).** `MeleeContactRecovery.Stop()`
+  handed the body back without clearing the walk animation, and it is the ONLY writer of
+  that parameter while repositioning (both movers skip FixedUpdate then). Now cleared,
+  guarded by `IsRepositioning` - unguarded would be worse, since this runs at execution
+  order 500, after the movers, and would stamp idle over a unit that just chose to walk.
+- **Changed:** `Assets/Scripts/Combat/Enemy/EnemyLocoMotion.cs`,
+  `Assets/Scripts/Combat/Shared/MeleeContactRecovery.cs`,
+  `Assets/Impoted Assets/New Assets/EnemyAssets/Vector Parts_Enemy_Reaper_Man/Reaper_Man_01.controller`,
+  `Assets/Impoted Assets/New Assets/EnemyAssets/Vector Parts_Enemy_Zombie_villager/Zombie_Villager 1.controller`,
+  plus the two matching docs.
+- **Scene/Prefab/SO edits:** the two `.controller` assets above, edited through the
+  AnimatorController API. Nothing else.
+- **Verified:** 0 compile errors. Simulation of the reported setup (vertically aligned,
+  hero 0.85 / enemy 0.83): the enemy now walks continuously for 1.92 s and comes to rest
+  at **0.694** - its real attack position - stopping at the same instant as the hero,
+  both `InAttackPosition == true`. Under the old branch it would have frozen at up to
+  1.20. Controller sweep re-run after the fix: zero degenerate blend trees remain.
+- **Gotchas:** when a unit "won't stop animating", check the blend tree child POSITIONS
+  before touching any code. A 2D blend tree with all children on one point is silently
+  unresponsive to its parameters - no warning, no error, and it looks exactly like a
+  code bug.
+- **Next:** play stage 1-5. Watch the Reaper and the Zombie Villager specifically.
 
 ### 2026-09-11 - Stop enemy following Valkyrie's sidestep (Codex)
 

@@ -1,4 +1,12 @@
 PURPOSE
+2026-09-11: Stop() now also clears the walk animation, but ONLY on the frame it
+hands the body back. While IsRepositioning is set, PlayerManager and EnemyLocoMotion
+both skip their FixedUpdate, so this component is the only thing writing the walk
+parameter - and it only ever writes TRUE. Releasing control without clearing it left
+a unit standing still playing its walk cycle. The guard is not cosmetic: this runs at
+execution order 500, AFTER the movers at -100 and 0, so an unguarded clear would
+stamp "idle" over a unit that had just decided to walk.
+
 2026-09-11: an enemy yields recovery positioning to a hero currently targeting it.
 Normal locomotion and recovery therefore agree that the enemy stays planted;
 the recovery mover can no longer pull it toward the hero after locomotion stops.

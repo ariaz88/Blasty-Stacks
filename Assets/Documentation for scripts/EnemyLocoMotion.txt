@@ -8,13 +8,21 @@
 
 PURPOSE
 -------
-2026-09-11 focused Valkyrie correction: when a nearby hero has committed to this
-enemy, hold the enemy's world position while that hero lines up. Stop explicitly
-clears linear/angular velocity. Approach steps clamp to the destination to avoid
-overshoot. IsInAttackPosition accepts up to 0.02 extra vertical alignment tolerance
-when that same hero has reached its legal attack position, while still requiring
-the enemy's own radial reach and minimum spacing. This covers the 0.85/0.83
-Valkyrie/enemy range mismatch without enlarging any physical weapon hitbox.
+2026-09-11 (later same day) the "hold position while a hero is engaging us" branch
+was REMOVED. It stopped the enemy as soon as a committed hero came within
+maxAttackRange + 0.35 - up to 1.20 world units, while this enemy's own stand point
+is at 0.71 - so the enemy visibly froze BEFORE the hero arrived and stood there with
+its walk cycle running. It had been added to kill a magnetic pull that actually came
+from MeleeContactRecovery, and that is where it is handled now (the recovery yields
+to a hero engaging this enemy). Required behaviour, confirmed by simulation: the
+enemy walks until MeleeEngagement.InAttackPosition is TRUE, then stops, then swings.
+
+Retained from that same day: StopAtCurrentPosition explicitly clears linear/angular
+velocity; approach steps clamp to the destination with MoveTowards to avoid
+overshoot; IsInAttackPosition accepts up to 0.02 extra vertical alignment tolerance
+when the engaged hero has reached its own legal attack position, while still
+requiring the enemy's own radial reach and minimum spacing. That covers the
+0.85/0.83 Valkyrie/enemy range mismatch without enlarging any weapon hitbox.
 
 The LIVE 2D enemy movement driver. Enemies march down the lane toward the
 player's gate, optionally divert to chase a nearby player unit, and stop

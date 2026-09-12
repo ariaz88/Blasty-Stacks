@@ -1,31 +1,122 @@
 PURPOSE
-Stage 1-5 runtime CP calibration and hit-only tutorial assistance. Replaces the
-rejected timed-budget implementation. Never updates HP on a timer, remotely
-kills units, stops waves, or calls a gate damage/destruction method.
+Stages 1-5 referee: reference CP calibration plus the guaranteed-win model.
+Added at runtime by EnemySpawner. Never ticks HP, kills units remotely, stops
+waves, or destroys a gate - only real weapon hits ever deal damage.
+
+THE MODEL  (Arash, 2026-09-11)
+Exactly ONE hero is assisted: the strongest on the field, chosen when the battle
+is prepared. It carries the guarantee alone. Every other hero fights with NO
+assistance at all - it wins, loses or dies exactly as it would with this component
+absent, and the damage it deals on the way is real. That is what makes the fight
+read as genuine rather than staged.
+
+The protected hero is not invulnerable and has no blanket HP floor. Each
+INDIVIDUAL enemy instead gets a lifetime allowance of how much of that hero it may
+ever remove, spread over at least four hits.
 
 FIELDS
-Instance is scene-scoped and cleared on destruction. PlayerCP/EnemyCP report
-reference totals. PlayerShouldWin is the required match-count outcome, not an
-observed result. BattleResult is labeled Expected. HeroCount and Level determine
-outnumbered assistance; registered health components determine membership.
+  Instance / IsPrepared        scene-scoped singleton and readiness flag
+  PlayerCP / EnemyCP           reference totals for this battle
+  PlayerShouldWin              matches cleared vs LevelBattleRules.FirstWinningMatch
+  BattleResult / Level / HeroCount
+  Champion                     the protected hero; null when the player should lose
+  HeroDeaths / EnemyDeaths / FewestHitsBeforeDeath
+                               telemetry read by the Editor verification harness
+  teamFactor                   team normalisation factor, reused by reinforcements
+  budgetPerEnemy / perHitCap   the guarantee, from LevelBattleRules
+  plannedEnemyCount            enemies this stage fields (= level number)
+  tutorialExchange             levels 1-3: the scripted presentation is active
+  spentByEnemy                 per-attacker lifetime damage against the champion
 
 FLOW
-PlayerWaveManager calibrates each hero to 100 CP at stage 1 or 125 at stages 2-5.
-EnemySpawner waits for releases, then Prepare validates totals and computes the
-enemy normalization. RegisterEnemy scales ATK and HP by sqrt(target/rawCP),
-preserving archetype differences. Enemy totals: 80,100,115,400,650.
-Physical PlayerStats/EnemyStats damage calls AdjustIncomingDamage. Blanket winner
-armor and the boosted damage against losers have been removed. Both armies take
-ordinary damage, capped at 25% of the struck unit's maximum health per hit.
-A hit counter also prevents death before the fourth positive hit. Only the winning
-side's LAST living unit has a 1% HP safety floor. For stage 5's four-hero Slow Loss,
-heroes take 60% incoming damage to give them time to inflict casualties.
-No other target's HP changes on that hit. HeroDeaths/EnemyDeaths and
-FewestHitsBeforeDeath expose casualty/hit telemetry for real-scene verification.
-HasLivingDefenders shields a base until its defending army has been defeated.
-Afterward weapon hits damage the base normally. Gate events decide results.
+  Prepare(spawner, waves)
+    1. Resolve level; bail unless stages 1-5 and deployments have settled.
+    2. TEAM-TOTAL normalisation. Sum the roster's raw CP, then scale every hero by
+       one shared factor so the TOTAL lands on heroCount x PerHeroCP. Preserves
+       each hero's share, so a genuinely strongest hero exists - see NOTES.
+    3. Enemy budget, EnemyScale, PlayerShouldWin, and the assert that reference CP
+       and the deployment outcome agree.
+    4. ChooseChampion.
+
+  ChooseChampion(roster)
+    Highest CP after normalisation, instance-id tie-break so the choice does not
+    depend on spawn order. Returns without choosing when the player is meant to
+    LOSE: a lost battle runs completely unassisted, which is what lets a Slow Loss
+    earn its length from near-matched armies rather than a damage multiplier.
+
+  RegisterEnemy(enemy)
+    Per-unit CP where LevelBattleRules authored it (levels 1-3), otherwise the team
+    budget shared out in proportion to each type's authored strength. In levels 1-3
+    it also multiplies the enemy's moveSpeed by TutorialEnemySpeedScale (0.6).
+
+  CalibrateHero(hero, level)                                            [static]
+    Ensures MeleeContactRecovery, and applies teamFactor to a hero that arrived
+    AFTER Prepare (a mid-battle reinforcement). Heroes present at Prepare are
+    scaled there instead, in one pass, because team normalisation needs to see the
+    whole roster at once.
+
+  AdjustIncomingDamage(target, damage, attacker)                        [static]
+    Called only when a weapon actually hits. `attacker` is REQUIRED by the model:
+    budgets are per individual enemy, so identical blows from two enemies have to
+    be accounted separately. Order: count the hit; ScriptTutorialBlow in levels
+    1-3; then LimitDamageToChampion for the protected hero.
+
+    THE FOUR-HIT CEILING IS NO LONGER HERE. It was, and it did not hold in play -
+    a level 4 enemy still died in two hits, because every early return above skips
+    it silently (no battle prepared, unit missing from the registered sets, stale
+    static Instance, scene mismatch). It now lives in
+    CharacterStats.ClampIncomingBlow, which PlayerStats/EnemyStats apply AFTER
+    this call, where nothing can bypass it. Do not re-add it here.
+
+  LimitDamageToChampion(attacker, damage)
+    1. no single blow above budget / 4 of maximum HP;
+    2. each enemy has a lifetime allowance and stops mattering once spent;
+    3. a hard reserve that all the budgets together still leave standing
+       (belt-and-braces: with 1 and 2 honoured it cannot bind).
+
+  ScriptTutorialBlow(target, isEnemy, hits)
+    LEVELS 1-3 ONLY. The exchange is scripted so it LOOKS like a fight: an enemy
+    loses exactly a quarter of its maximum per hit and dies on the fourth, and a
+    hero loses a flat 7%. Both are SET, not capped, so the tutorial reads the same
+    whatever the units were authored at. The killing blow is taken from currentHP
+    so float drift can never leave a sliver of health behind.
+    The champion's budget still applies on top, so it can never be worn past its
+    reserve however long the fight runs.
+
+    (RushKill, which let a lone outnumbered hero kill in two, was REMOVED the same
+    day - superseded by the four-hit script plus the enemy speed reduction.)
+
+  HasLivingDefenders(gate)                                              [static]
+    A defended base cannot be bypassed by an attacker walking past the battle.
+
+HOW IT CONNECTS
+  - EnemySpawner             creates it, calls Prepare and RegisterEnemy
+  - PlayerWaveManager        calls CalibrateHero per spawned hero
+  - PlayerStats/EnemyStats   route damage through AdjustIncomingDamage, passing the
+                             attacker (EnemyManager / PlayerManager respectively)
+  - PlayerGateStats/EnemyGateStats   call HasLivingDefenders
+  - LevelGameManager         skips mutual-wipe auto-defeat while IsPrepared
 
 NOTES
-Tutorial assistance is separate from nominal CP, not a claimed predictive formula.
-Dead/missing attackers or stuck AI can still stall siege; never auto-resolve.
-No new mechanics apply at stage 6 onward. Shared prefab/SO stats are not modified.
+  - REPLACED 2026-09-11 and must not come back: a last-survivor 1%-HP floor that
+    triggered at the end of a fight instead of being budgeted before it, and a
+    damage reduction hard-coded to one specific level and hero count.
+  - The universal 25%-of-max-HP ceiling was briefly removed the same day, restored
+    here as MinHitsToKillAnyone, found STILL not to hold in play, and finally moved
+    down into CharacterStats where it cannot be bypassed. It was never the thing
+    that made the game feel staged - the forced outcome and the last-survivor floor
+    were. Do not remove it and do not move it back up here.
+  - WHY TEAM-TOTAL NORMALISATION. Scaling every hero to an identical CP made the
+    roster mathematically tied, so "the strongest hero" did not exist and this
+    model had nothing to protect. Normalising the total keeps Player CP exactly on
+    the workbook figure AND preserves each hero's share of it, so upgrades and
+    archetypes still rank against each other.
+  - Individual heroes now VARY around the per-hero reference rather than sitting on
+    it. heroCount x PerHeroCP is a team figure, not a per-unit promise.
+  - The champion fights whoever it is nearest, exactly like any other hero - there
+    is no assigned duel. The budget is sized against the TOTAL enemy count, so it
+    survives no matter which enemies it ends up facing or in what order.
+  - Prepare throws ArgumentException internally and catches it; CalibrateHero does
+    NOT, and PlayerWaveManager calls it outside any try. It no longer scales on
+    that path unless a battle is already prepared, so the throw is much harder to
+    reach, but a hero with zero CP reaching ScaleToCP would still surface there.

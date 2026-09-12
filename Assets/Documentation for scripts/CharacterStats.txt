@@ -1,41 +1,96 @@
 ================================================================================
   CharacterStats.cs
   Path : Assets/Scripts/Combat/Shared/CharacterStats.cs
-  Type : MonoBehaviour  (base class)
+  Type : MonoBehaviour  (base class of PlayerStats and EnemyStats)
   Layer: Combat / Shared
 ================================================================================
 
 PURPOSE
 -------
-The shared health base class for everything that can be damaged: player units,
-enemies, and both gates. It holds the two health numbers and nothing else, so
-each subclass can add its own damage rules and death behaviour.
+The health a unit carries, and - since 2026-09-11 - the single place the FOUR-HIT
+RULE is enforced: nobody, hero or enemy, at any stage, dies in fewer than four
+weapon blows.
 
 FIELDS
 ------
-  currentHP   (float)  live health
-  maxHealth   (float, default 100)
+  currentHP     current health
+  maxHealth     maximum health (default 100; spawners overwrite it from unitStats)
+  IsAlive       currentHP > 0
+  hitsTaken     private, [NonSerialized]. Blows this unit has actually absorbed.
+  HitsTaken     read-only view of the above
 
 METHODS
 -------
-  Init(float maxHP)
-      Sets currentHP to at least 1, so a unit can never spawn already dead.
-      Note it sets currentHP, NOT maxHealth - the caller must set maxHealth
-      separately if it differs from the default.
-  IsAlive => currentHP > 0f
+  Init(maxHP)
+      Sets currentHP, floored at 1.
 
-SUBCLASSES
-----------
-  PlayerStats      + healthBar, playerIsdead, ApplyDamageToPlayer
-  EnemyStats       + enemyIsdead, ApplyDamageToEnemy
-  PlayerGateStats  + OnGateDestroyed event, ApplyDamageToPlayerGate
-  EnemyGateStats   + OnGateDestroyed event, ApplyDamageToEnemy
+  ClampIncomingBlow(damage) -> float
+      Call LAST on every damage path. Three mechanisms:
+        1. CEILING of maxHealth / HitsToKillMe. The divisor is THIS unit's own
+           number from the toughness band, not a constant - see HitsToKillMe.
+        2. FLOOR of maxHealth / MaxHitsToKillAnyone, so a very soft blow is lifted
+           and no duel drags past about eleven exchanges.
+        3. LETHALITY GUARD - before the eighth blow the unit cannot be reduced past
+           a sliver (0.1% of max). Catches float drift and damage arriving outside
+           the normal weapon path.
+      Increments hitsTaken only when damage is actually positive, so a blow
+      zeroed upstream (pause, battle not running) does not consume a hit.
+
+  Defense                                                          [protected]
+      Overridden by PlayerStats and EnemyStats to read the LIVE stat block, so an
+      upgrade that raises defence immediately moves the unit up the band.
+
+  HitsToKillMe -> int
+      LevelBattleRules.HitsToKill(Defense): 8 blows at no defence, rising to 11 at
+      defence 80+. Measured on the current roster: defence 10 -> 8, 25 -> 9,
+      40/52/65 -> 10, 78 -> 11.
+
+  ResetHitHistory()
+      Clears hitsTaken and the attacker set, for a revived or re-pooled unit.
+
+  ReportDeath()
+      Logs ONE line per death: total blows absorbed, how many DIFFERENT attackers
+      landed them, the number the band required, and OK / RULE BROKEN.
+      Unconditional on purpose. It exists to settle "it died in four hits" with
+      data instead of another round of guessing from a video - and the usual
+      answer is that several heroes shared the kill, so each one only swung four
+      times while the unit really did absorb eight.
+
+HOW IT CONNECTS
+---------------
+  - PlayerStats.ApplyDamageToPlayer and EnemyStats.ApplyDamageToEnemy both call
+    ClampIncomingBlow AFTER CPBattleController.AdjustIncomingDamage.
+  - LevelBattleRules.HitsToKill / MinHitsToKillAnyone / MaxHitsToKillAnyone /
+    DefenseForMaxHits supply the band.
+  - CPBattleController still owns the CHAMPION budget and the levels 1-3 script;
+    this class owns only the universal floor.
 
 NOTES
 -----
-  - The file lives in "Combat/Shared" but previously sat in a folder whose name
-    contained an invisible Arabic diacritic (U+064F), which made it hard to find
-    by path. That folder is gone as of the 2026-08-20 reorganisation.
-  - IsAlive is available to all subclasses but most of them track their own
-    separate boolean (playerIsdead, enemyIsdead, isPlayerGateDestroyed) instead.
-    Two sources of truth for "is it dead" is a small inconsistency to watch.
+  - WHY THE RULE LIVES HERE AND NOT IN CPBattleController. It was implemented
+    there first and DID NOT HOLD in play - a level 4 enemy still died in two hits.
+    AdjustIncomingDamage returns the damage untouched on several paths that are
+    invisible at runtime: no battle prepared, the unit missing from the registered
+    hero/enemy sets, a stale static Instance left by a previous battle, or a scene
+    mismatch. Every one of those silently skipped the ceiling. Down here the unit
+    clamps its own incoming damage, so the rule holds with no CP battle in the
+    scene at all - which is also what makes it true for stage 6+.
+  - ORDER MATTERS. The levels 1-3 script takes its killing blow from currentHP on
+    the defender's final hit; the guard only binds while hitsTaken < 8, and that
+    script now uses target.HitsToKillMe rather than its own constant, so the kill
+    passes through instead of being clipped to a sliver.
+  - This is a UNIVERSAL rule now, not a stages 1-5 one. If a later design wants
+    fast kills somewhere, gate it here rather than reintroducing a bypass upstream.
+  - WHY THE CEILING IS PER-DEFENDER. A single fixed ceiling (maxHealth/8) was tried
+    and measured over the whole roster: 240 of 240 matchups landed on EXACTLY 8
+    hits. After CP normalisation every attacker comfortably clears a flat 12.5%
+    blow, so the ceiling bound every time and all variety collapsed. Sizing it from
+    the defender's own defence is what restores 8/9/10/11.
+  - Hero variety is currently limited by the ROSTER, not by this code: every
+    deployed hero is authored at defence 25, so they all land on 9. Give heroes
+    distinct defence values and they spread across the band immediately.
+  - THE BAND COUNTS TOTAL BLOWS, NOT BLOWS PER ATTACKER. Two heroes on one enemy
+    still kill it in eight, so each of them swings only four times - which looks
+    exactly like a broken rule when you watch a single hero. Measured: 8 total /
+    4 per hero / rule satisfied. If the intent is that a fight should last eight
+    EXCHANGES no matter how many heroes join, this is the line to change.
