@@ -212,6 +212,33 @@ public class EnemyManager : MonoBehaviour
     [SerializeField] private float facingDeadZoneX = 0.05f; // prevents micro jitter
     private bool facingLockedToPlayer;
 
+    [Header("Live speed readout (debug, read-only)")]
+    [Tooltip("What this enemy is ACTUALLY travelling at right now, measured from how " +
+             "far it really moved last physics step. Measured rather than read off " +
+             "the Rigidbody2D because enemies move with MovePosition, where " +
+             "linearVelocity stays near zero and would read as a false 0.")]
+    public float actualMoveSpeed;
+
+    [Tooltip("What it is TRYING to travel at - unitStats.moveSpeed.")]
+    public float intendedMoveSpeed;
+
+    Vector2 speedProbeLastPos;
+    bool speedProbeStarted;
+
+    /// <summary>Measures real movement. Runs before every early return in FixedUpdate.</summary>
+    private void MeasureSpeed()
+    {
+        var body = enemyLocoMotion ? enemyLocoMotion.enemyRigidbody2D : null;
+        Vector2 now = body ? body.position : (Vector2)transform.position;
+
+        if (speedProbeStarted && Time.fixedDeltaTime > 0f)
+            actualMoveSpeed = Vector2.Distance(now, speedProbeLastPos) / Time.fixedDeltaTime;
+
+        intendedMoveSpeed = enemyLocoMotion ? enemyLocoMotion.CurrentMoveSpeed : 0f;
+        speedProbeLastPos = now;
+        speedProbeStarted = true;
+    }
+
 
     private void OnEnable()
     {
@@ -475,6 +502,7 @@ public class EnemyManager : MonoBehaviour
     }
     void FixedUpdate()
     {
+        MeasureSpeed();   // before every early return, so the readout never stalls
         if (GetComponent<MeleeContactRecovery>() is { IsRepositioning: true }) return;
         if (GameplayPause.IsPaused)
             return;
@@ -483,6 +511,30 @@ public class EnemyManager : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Picks the hero this enemy fights - and then KEEPS IT.
+    ///
+    /// THE BUG THIS FIXES (reported 2026-09-12, 4v4 and 5v5). This runs in Update, so
+    /// it ran EVERY FRAME and every frame it overwrote currentTarget with whatever was
+    /// nearest. An enemy in the middle of a crowded line has heroes on both sides at
+    /// almost exactly equal range, so the winner of that comparison changed frame to
+    /// frame. Each swap flips which side of the target the enemy walks to
+    /// (MeleeEngagement.ChooseSide) and flips its facing with it, and the result on
+    /// screen is a unit spinning in place instead of fighting.
+    ///
+    /// THE FIX IS A HARD LOCK, NOT A MARGIN. The hero side solved the same problem with
+    /// hysteresis - PlayerManager only retargets when a new enemy is CLEARLY closer -
+    /// but Arash asked for the stronger rule here: once an enemy has locked onto a
+    /// hero it does not retarget at all while that hero can still be fought.
+    ///
+    /// CONSEQUENCE, ACCEPTED: an enemy will walk past a hero standing right next to it
+    /// to reach the one it locked onto. In this game's lane layout the two armies meet
+    /// as a group, so that is rare; the alternative is the spinning.
+    ///
+    /// The lock never blocks a re-acquire that matters: ResetAfterRevive clears
+    /// currentTarget before calling this, and a dead, despawned or undeployed hero
+    /// releases it below.
+    /// </summary>
     void DetectPlayerTargets()
     {
         if (enemyLocoMotion == null) return;
@@ -493,6 +545,9 @@ public class EnemyManager : MonoBehaviour
             enemyLocoMotion.currentTarget = null;
             return;
         }
+
+        // THE LOCK. A nearer hero does not take the target away.
+        if (StillFightable(enemyLocoMotion.currentTarget, radius)) return;
 
         LayerMask mask = enemyLocoMotion.playerDetectionLayer;
 
@@ -516,6 +571,27 @@ public class EnemyManager : MonoBehaviour
         }
 
         enemyLocoMotion.currentTarget = best;
+    }
+
+    /// <summary>
+    /// Whether a locked target is still a hero this enemy can actually fight. These are
+    /// the ONLY three things that release the lock.
+    /// </summary>
+    bool StillFightable(PlayerStats hero, float radius)
+    {
+        // Dead, or the object is gone - Unity's null check covers a destroyed hero.
+        if (!hero || hero.playerIsdead) return false;
+
+        // An undeployed hero in the lock state is not a valid target: EnemyDamageCollider
+        // refuses to hit one, so an enemy that stayed locked onto it would stand there
+        // swinging at something it can never damage.
+        var pm = hero.PlayerManager;
+        if (pm && pm.currentState == pm.PlayerLockState) return false;
+
+        // Out of detection entirely. Falling back to the ordinary search here is also
+        // what lets an enemy give up on a hero and walk on the base instead.
+        return ((Vector2)hero.transform.position - (Vector2)transform.position).sqrMagnitude
+               <= radius * radius;
     }
 
 

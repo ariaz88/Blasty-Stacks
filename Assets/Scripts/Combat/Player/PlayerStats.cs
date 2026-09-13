@@ -32,7 +32,10 @@ public class PlayerStats : CharacterStats
         // LAST, and outside the CP battle on purpose: the four-hit rule must hold
         // even when no battle is prepared or this hero never reached the
         // controller's registered set. See CharacterStats.ClampIncomingBlow.
-        damageAmount = ClampIncomingBlow(damageAmount, attacker);
+        // The floor must not undo the champion's budget - see CPBattleController
+        // .IsProtected. Every other hero keeps the normal floor.
+        damageAmount = ClampIncomingBlow(damageAmount, attacker,
+                                         !CPBattleController.IsProtected(this));
         SetResolvedHealth(Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount)));
     }
 

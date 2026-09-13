@@ -86,11 +86,89 @@ public static class LevelBattleRules
     }
 
     /// <summary>
-    /// Minimum number of hits an enemy needs to spend its whole budget on the
-    /// protected hero. Arash: "if it is going to lose 30%, not in fewer than 4 hits"
-    /// - so 30% / 4 = 7.5% per hit.
+    /// Minimum hits an enemy needs to spend its whole budget on the protected
+    /// hero. Raised 4 -> 8 with the universal eight-hit rule, so the two agree:
+    /// an enemy that dies in eight blows also needs eight to spend its allowance.
+    ///     level 2, budget 45%  ->  45/8 = 5.6% per hit
+    ///     level 3, budget 30%  ->  30/8 = 3.8% per hit
     /// </summary>
-    public const int MinHitsToSpendBudget = 4;
+    public const int MinHitsToSpendBudget = 8;
+
+    /// <summary>
+    /// Damage multiplier applied to the protected hero while it is FLANKED - living
+    /// enemies engaging it from the left AND the right at the same time.
+    ///
+    /// A hero facing two enemies on the same side can answer both: it strikes one,
+    /// steps to the next, and every blow it takes is paid for. Caught between two,
+    /// it can only ever face one of them, so the other hits it for free. Halving the
+    /// incoming damage is what makes that position survivable rather than a tax on
+    /// being surrounded.
+    ///
+    /// Level 2: 5.6% per blow becomes 2.8%.   Level 3: 3.8% becomes 1.9%.
+    /// </summary>
+    public const float FlankedDamageScale = 0.5f;
+
+    /// <summary>
+    /// How close a living enemy must be to the protected hero to count as engaging
+    /// it for the flank test. Enemies walking past on their way to the base are
+    /// further out than this and do not make the hero "surrounded".
+    /// </summary>
+    public const float FlankEngageRange = 1.2f;
+
+    /// <summary>
+    /// Enemies engaging the champion from BOTH sides at which the fight stops being a
+    /// flank and becomes a pile-on. Arash, 2026-09-12, from a level 3 playthrough:
+    /// one enemy on one side of the hero and TWO on the other, all three landing
+    /// blows. Halving is the answer to being caught between two; three is a different
+    /// situation and gets its own number below.
+    /// </summary>
+    public const int SurroundedEnemyCount = 3;
+
+    /// <summary>
+    /// What ONE blow may take from the protected hero while
+    /// <see cref="SurroundedEnemyCount"/> or more enemies fight it from both sides,
+    /// as a fraction of its maximum HP. Arash's number: "make it 1% instead of 3.75%".
+    ///
+    ///     level 3 unflanked  3.75%  ->  flanked by two  1.88%  ->  surrounded  1.00%
+    ///
+    /// APPLIED AS A CEILING, NEVER AS A SET VALUE. At level 5 the halved blow is
+    /// already 0.94%, and "set it to 1%" would make being surrounded by five enemies
+    /// HURT MORE than being caught between two. Taking the smaller of the two keeps
+    /// the progression in one direction: the more enemies pile on, the less each blow
+    /// takes.
+    ///
+    /// The LIFETIME allowance is deliberately not touched, exactly as with the flank
+    /// halving - an enemy still gets its full 30%, it simply needs 30 blows to spend
+    /// it instead of 8. Being surrounded buys the hero TIME; it does not make the
+    /// enemies weaker overall.
+    /// </summary>
+    public const float SurroundedDamagePerHit = 0.01f;
+
+    /// <summary>
+    /// What ONE blow takes off the PLAYER's base while the battle is one the player
+    /// is meant to WIN, as a fraction of the base's maximum health.
+    ///
+    /// The base used to take literally nothing in that case, which read as a bug: an
+    /// enemy that walked past the duel and hammered the castle produced no reaction
+    /// at all. One percent is visible feedback without deciding anything - a hundred
+    /// connected blows to fell a base, far longer than any battle here lasts.
+    ///
+    /// IT IS GATED ON THE INTENDED OUTCOME, not on whether any hero is still alive
+    /// (Arash, 2026-09-12). In a battle the player is meant to LOSE the base takes
+    /// its NORMAL damage, because that loss is the point and damping it would leave
+    /// the match unable to end the way the workbook says it must. The old condition -
+    /// "while the base still has living defenders" - answered the wrong question: it
+    /// damped the losing battles right up until the last hero fell, then let the base
+    /// fall at full speed in the battles that were never in danger anyway.
+    /// See CPBattleController.BattleIsAnExpectedWin.
+    ///
+    /// Applied to the PLAYER's base only, deliberately. Letting heroes chip the
+    /// ENEMY base the same way would be an outcome bug, not cosmetic: destroying
+    /// that gate ends the level in a win, so a stray hero could finish a match the
+    /// workbook says must be a loss. The enemy gate keeps full immunity while its
+    /// own defenders live - CPBattleController.HasLivingDefenders.
+    /// </summary>
+    public const float BaseChipPerBlow = 0.01f;
 
     /// <summary>
     /// NOBODY dies in fewer than this many hits - hero or enemy, every stage this
@@ -184,12 +262,12 @@ public static class LevelBattleRules
     /// </summary>
     public const float TutorialHeroDamagePerHit = 0.07f;
 
-    /// <summary>
-    /// Enemy movement in levels 1-3, as a fraction of the authored speed. 40%
-    /// slower, so that while the hero is working through the first enemies the
-    /// remaining one cannot walk past the fight and reach the player's base.
-    /// </summary>
-    public const float TutorialEnemySpeedScale = 0.6f;
+    // REMOVED 2026-09-12: "TutorialEnemySpeedScale = 0.6f", a 40% enemy slow-down
+    // in levels 1-3. Arash replaced it with one uniform speed for every unit at
+    // every level, authored on the stat assets (0.5). The reason it existed - a
+    // spare enemy reaching the player's base while the hero was busy - is now
+    // accepted; the base also takes real chip damage, so that is visible rather
+    // than silent. Do not reintroduce a per-level speed multiplier.
 
     // NOTE: "SoloRushHitsToKill = 2" was REMOVED on 2026-09-11. It let a lone,
     // outnumbered hero kill in two, which only ever applied to levels 2 and 3 -

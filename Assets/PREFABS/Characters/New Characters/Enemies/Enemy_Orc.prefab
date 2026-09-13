@@ -155,8 +155,8 @@ CapsuleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 2.7900136, y: -0.674514}
-  m_Size: {x: 6.580109, y: 1.1921188}
+  m_Offset: {x: 2.711374, y: -0.7472999}
+  m_Size: {x: 4.053269, y: 1.3376931}
   m_Direction: 1
 --- !u!1 &916826524694302967
 GameObject:
@@ -368,6 +368,8 @@ MonoBehaviour:
   gateStopPosition: {x: 0, y: 0}
   gateStopDistance: 0.6
   facingDeadZoneX: 0.05
+  actualMoveSpeed: 0
+  intendedMoveSpeed: 0
 --- !u!114 &966779520026459043
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -387,7 +389,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 128
   detectionRadius: 20
-  moveSpeed: 0.2
+  moveSpeed: 0.5
   stoppingDistance: 0.83
   fairDistanceToPlayer: 1.9
 --- !u!114 &203565177393775015

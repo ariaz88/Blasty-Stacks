@@ -46,8 +46,14 @@ FLOW
 
   RegisterEnemy(enemy)
     Per-unit CP where LevelBattleRules authored it (levels 1-3), otherwise the team
-    budget shared out in proportion to each type's authored strength. In levels 1-3
-    it also multiplies the enemy's moveSpeed by TutorialEnemySpeedScale (0.6).
+    budget shared out in proportion to each type's authored strength. It no longer
+    touches moveSpeed - the levels 1-3 slow-down was removed on 2026-09-12 in
+    favour of one uniform authored speed.
+
+  IsTutorialExchange                                                    [static]
+    TRUE while levels 1-3 run their scripted exchange. CharacterStats reads it so
+    those levels use a FLAT eight blows for every unit instead of the 8-11 defence
+    band, which is what levels 4-5 use.
 
   CalibrateHero(hero, level)                                            [static]
     Ensures MeleeContactRecovery, and applies teamFactor to a hero that arrived
@@ -68,11 +74,70 @@ FLOW
     CharacterStats.ClampIncomingBlow, which PlayerStats/EnemyStats apply AFTER
     this call, where nothing can bypass it. Do not re-add it here.
 
+  CountEngagedFlankers(out left, out right)                             [private]
+    Counts the enemies genuinely fighting the champion on EACH side of it.
+    BEING NEARBY IS NOT ENOUGH - an enemy counts only if ALL of these hold:
+      1. alive;
+      2. within LevelBattleRules.FlankEngageRange (1.2)   - cheap reject first;
+      3. clearly to one side, |dx| >= MeleeEngagement.SideDeadZoneX (0.25), so
+         directly above or below counts as NEITHER;
+      4. its OWN currentTarget is this hero - it is fighting IT, not some other
+         hero it happens to be standing beside;
+      5. IsInAttackPosition() - close and level enough that its weapon really lands.
+    Two enemies standing either side while one of them is busy with somebody else
+    is not a flank: the hero only takes free hits when both are hitting IT.
+    IT COUNTS RATHER THAN STOPPING AT ONE PER SIDE. The earlier version returned as
+    soon as it had a left and a right, which is all a yes/no flank needs - but it
+    cannot tell 1-and-1 from 1-and-2, and since 2026-09-12 those are different
+    rules. Bounded by the stage's enemy count, 5 at most.
+
+  ChampionIsFlanked                                                    [property]
+    left > 0 && right > 0. Public, for on-screen debugging.
+
+  ChampionIsSurrounded                                                 [property]
+    Flanked AND left + right >= LevelBattleRules.SurroundedEnemyCount (3) - the
+    hero is not merely caught between two but PILED ON, one enemy on one side and
+    two on the other. Reported from a level 3 playthrough (Arash, 2026-09-12).
+    Public, for on-screen debugging.
+
   LimitDamageToChampion(attacker, damage)
-    1. no single blow above budget / 4 of maximum HP;
+    0. FLANK HALVING. While flanked, the blow AND the cap are both multiplied by
+       LevelBattleRules.FlankedDamageScale (0.5) - level 2 drops 5.63% -> 2.81%,
+       level 3 3.75% -> 1.88%. A hero facing two enemies on the SAME side can
+       answer both; caught between two it can only face one, so the other hits it
+       for free. The lifetime allowance is deliberately NOT scaled: an enemy still
+       gets its full 45%/30%, it just needs twice the blows to spend it. Being
+       surrounded buys time, it does not weaken the enemies.
+    0b. SURROUNDED CEILING. While 3+ enemies fight it from both sides, the blow is
+       additionally capped at LevelBattleRules.SurroundedDamagePerHit (1% of max).
+       Level 3: 3.75% normal -> 1.88% flanked -> 1.00% surrounded.
+       A CEILING, NOT A SET VALUE. At level 5 the halved blow is already 0.94%, and
+       setting 1% there would make five attackers hurt MORE than two. Taking the
+       smaller keeps the progression in one direction.
+       It reads the count ONCE and shares it with the halving above - reading both
+       properties here would repeat the whole walk per blow and could disagree if a
+       unit moved between the two reads.
+    1. no single blow above budget / 8 of maximum HP (level 2: 5.63%, level 3: 3.75%);
     2. each enemy has a lifetime allowance and stops mattering once spent;
-    3. a hard reserve that all the budgets together still leave standing
-       (belt-and-braces: with 1 and 2 honoured it cannot bind).
+    3. the END-OF-BATTLE reserve only: 1 - budget x enemyCount (10% at two or
+       three enemies). It exists so a fully-spent army cannot kill the protected
+       hero, nothing more.
+
+    PER-BLOW TABLE, computed from the live constants 2026-09-12:
+       level 1 (1 enemy, 95%)  11.88% normal   5.94% flanked      n/a surrounded
+       level 2 (2, 45%)         5.63%          2.81%              n/a
+       level 3 (3, 30%)         3.75%          1.88%           1.00%   (31 blows)
+       level 4 (4, 20%)         2.50%          1.25%           1.00%   (20 blows)
+       level 5 (5, 15%)         1.88%          0.94%           0.94%   (16 blows)
+    The last column is how many blows ONE enemy then needs to spend its lifetime
+    allowance - the deliberate consequence of not scaling the allowance.
+
+    IT IS DELIBERATELY NOT STAGED. A staged version was tried - unlocking one
+    enemy's budget per enemy still standing, so the hero would still be above half
+    when the first died. Arash rejected it: each enemy's allowance is ITS OWN, and
+    two enemies striking at once may spend both. In level 3 that is 30% + 30% =
+    60%, taking the hero to 40% while the third walks on the base, rather than
+    freezing it at a 70% floor. The per-enemy allowance is the real limit.
 
   ScriptTutorialBlow(target, isEnemy, hits)
     LEVELS 1-3 ONLY. The exchange is scripted so it LOOKS like a fight: an enemy

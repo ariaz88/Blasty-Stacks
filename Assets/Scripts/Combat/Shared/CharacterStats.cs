@@ -49,17 +49,36 @@ public class CharacterStats : MonoBehaviour
     /// Neither bound applies to a blow that was already zero: damage cancelled
     /// upstream (pause, battle over, a spent budget) stays cancelled.
     /// </summary>
-    public float ClampIncomingBlow(float damage, Object attacker = null)
+    public float ClampIncomingBlow(float damage, Object attacker = null, bool allowFloor = true)
     {
         damage = Mathf.Max(0f, damage);
         if (damage <= 0f || maxHealth <= 0f) return damage;
 
         hitsTaken++;
-        if (attacker) attackers.Add(attacker);
+        if (attacker)
+        {
+            attackers.TryGetValue(attacker, out int landed);
+            attackers[attacker] = landed + 1;
+        }
 
         float ceiling = maxHealth / HitsToKillMe;
-        float floor = maxHealth / LevelBattleRules.MaxHitsToKillAnyone;
-        damage = Mathf.Clamp(damage, Mathf.Min(floor, ceiling), ceiling);
+        damage = Mathf.Min(damage, ceiling);
+
+        // The floor lifts blows that are weak because of STATS. It must never lift
+        // one that a design budget deliberately lowered, which is what `allowFloor`
+        // is for.
+        //
+        // THE BUG THIS FIXES. The protected hero's budget works out at 45%/8 = 5.6%
+        // per blow at two enemies, but the floor is maxHP/11 = 9.1%, so every one of
+        // those blows was raised back up to 9.1%. The hero then spent its whole 45%
+        // allowance in five blows instead of eight and froze on the reserve for the
+        // rest of the fight - reported from a level 2 playthrough as "it takes 10%
+        // per hit, not 5%".
+        if (allowFloor)
+        {
+            float floor = maxHealth / LevelBattleRules.MaxHitsToKillAnyone;
+            damage = Mathf.Max(damage, Mathf.Min(floor, ceiling));
+        }
 
         if (hitsTaken < LevelBattleRules.MinHitsToKillAnyone)
             damage = Mathf.Min(damage, Mathf.Max(0f, currentHP - maxHealth * 0.001f));
@@ -74,20 +93,39 @@ public class CharacterStats : MonoBehaviour
     /// </summary>
     protected virtual float Defense => 0f;
 
-    /// <summary>Blows this unit takes to die: 8 at no defence, up to 11 at 80+.</summary>
-    public int HitsToKillMe => LevelBattleRules.HitsToKill(Defense);
+    /// <summary>
+    /// Blows this unit takes to die: 8 at no defence, up to 11 at defence 80+.
+    ///
+    /// LEVELS 1-3 ARE FLAT AT EIGHT. Those levels run a scripted exchange and the
+    /// design calls for the kill to land on the eighth blow every time; letting the
+    /// defence band apply there made a defence-65 enemy take 10 and a defence-78 one
+    /// take 11, which is what was reported. The band is for levels 4 and up.
+    /// </summary>
+    public int HitsToKillMe =>
+        CPBattleController.IsTutorialExchange
+            ? LevelBattleRules.MinHitsToKillAnyone
+            : LevelBattleRules.HitsToKill(Defense);
 
     /// <summary>Clears the hit history, for a revived or re-pooled unit.</summary>
     public void ResetHitHistory() { hitsTaken = 0; attackers.Clear(); }
 
-    // Who has actually landed a blow on this unit. Needed to tell a genuine rule
-    // break from the ordinary case of several attackers sharing one kill.
-    [System.NonSerialized] private readonly HashSet<Object> attackers = new HashSet<Object>();
+    // Who has landed a blow on this unit, and HOW MANY each landed. The count per
+    // attacker is the number a player watching one duel actually sees: a unit that
+    // dies "after four hits" on screen has usually taken its full eight, half of
+    // them from a neighbour whose weapon box happened to overlap it.
+    [System.NonSerialized] private readonly Dictionary<Object, int> attackers = new Dictionary<Object, int>();
 
     /// <summary>
     /// One line per death, so "it died in four hits" can be checked instead of
-    /// argued about. Prints the TOTAL blows the unit absorbed, how many different
-    /// attackers landed them, and the number the band required.
+    /// argued about. Prints the TOTAL blows the unit absorbed, the breakdown per
+    /// attacker, and the number the band required.
+    ///
+    /// THE BREAKDOWN IS THE POINT. The rule counts blows per VICTIM; a player counts
+    /// swings in the one duel being watched. Those are the same number only while a
+    /// single attacker is landing everything. A level 4 recording (2026-09-12) showed
+    /// an enemy "dying in four blows" that the log recorded as ten from two
+    /// attackers - the second being a hero fighting somebody else whose weapon box
+    /// reached across. Without the per-attacker split that reads as a broken clamp.
     ///
     /// Deliberately unconditional: a handful of lines per battle is nothing, and
     /// the alternative is another round of guessing from a video.
@@ -96,7 +134,21 @@ public class CharacterStats : MonoBehaviour
     {
         int required = HitsToKillMe;
         string verdict = hitsTaken >= required ? "OK" : "<<< RULE BROKEN";
-        Debug.Log($"[HITS] '{name}' died after {hitsTaken} blow(s) from {attackers.Count} attacker(s). " +
-                  $"Required at least {required} (defence {Defense:F0}). {verdict}", this);
+
+        int fewest = int.MaxValue;
+        var split = new System.Text.StringBuilder();
+        foreach (var pair in attackers)
+        {
+            if (split.Length > 0) split.Append(", ");
+            split.Append($"{(pair.Key ? pair.Key.name : "<gone>")} x{pair.Value}");
+            if (pair.Value < fewest) fewest = pair.Value;
+        }
+        if (attackers.Count == 0) { split.Append("none"); fewest = 0; }
+
+        Debug.Log($"[HITS] '{name}' died after {hitsTaken} blow(s) from {attackers.Count} attacker(s) " +
+                  $"[{split}]. Required at least {required} (defence {Defense:F0}). {verdict}" +
+                  (attackers.Count > 1
+                      ? $"  (a viewer watching only one of them would have counted {fewest})"
+                      : ""), this);
     }
 }

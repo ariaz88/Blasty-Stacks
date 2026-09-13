@@ -104,6 +104,77 @@ public class PlayerManager : MonoBehaviour
     public bool isUnlocked = false;
     private float damageAppling;
 
+    [Header("TEMPORARY - march speed boost")]
+    [Tooltip("TEMPORARY WORKAROUND, NOT A DESIGN RULE. Multiplies walking speed " +
+             "ONLY after every enemy is dead - the march on the enemy base. Set to " +
+             "1 to switch it off entirely. " +
+             "WHY IT IS HERE: the march was reported as feeling slower than the " +
+             "pre-battle approach. It is NOT - both were measured at a steady 0.6, " +
+             "with no damping anywhere and linearDamping 0 on every prefab. The " +
+             "difference is distance and the total absence of course changes: the " +
+             "approach covers 1-3 units with visible micro-corrections, the march " +
+             "covers the whole lane in a dead-straight line. This boost papers over " +
+             "that until the real cause of the PERCEPTION is understood. " +
+             "Safe to leave on meanwhile: moveSpeed is not a CP input, and by the " +
+             "time it applies there is no enemy left for it to affect.")]
+    [SerializeField, Range(1f, 3f)] private float marchSpeedBoost = 1.3f;
+
+    /// <summary>
+    /// Speed for the march on the enemy base, once the field is clear.
+    /// See <see cref="marchSpeedBoost"/> - this is a temporary measure.
+    /// </summary>
+    public float MarchSpeed => CurrentMoveSpeed * Mathf.Max(1f, marchSpeedBoost);
+
+    [Header("Live speed readout (debug, read-only)")]
+    [Tooltip("What this hero is ACTUALLY travelling at right now, measured from how " +
+             "far it really moved last physics step. Compare it with Intended below.")]
+    public float actualMoveSpeed;
+
+    [Tooltip("What it is TRYING to travel at - unitStats.moveSpeed. If Actual matches " +
+             "this but the unit still looks slow, it is not losing speed: ally " +
+             "avoidance is bending its DIRECTION, so it covers less ground toward " +
+             "where you are watching. See forwardProgress.")]
+    public float intendedMoveSpeed;
+
+    [Tooltip("How fast it is closing on the thing it is heading for - its target, or " +
+             "straight up the lane when marching on the enemy base. This is the one " +
+             "that drops when a hero is weaving around its allies.")]
+    public float forwardProgress;
+
+    Vector2 speedProbeLastPos;
+    bool speedProbeStarted;
+
+    /// <summary>
+    /// Measures real movement instead of trusting the velocity we asked for.
+    ///
+    /// Runs BEFORE every early return in FixedUpdate, so it keeps reading during a
+    /// MeleeContactRecovery sidestep too - that one drives the body with
+    /// MovePosition, where linearVelocity stays near zero and would lie.
+    /// </summary>
+    private void MeasureSpeed()
+    {
+        Vector2 now = playerRigidbody ? playerRigidbody.position : (Vector2)transform.position;
+
+        if (speedProbeStarted && Time.fixedDeltaTime > 0f)
+        {
+            Vector2 step = now - speedProbeLastPos;
+            actualMoveSpeed = step.magnitude / Time.fixedDeltaTime;
+
+            Vector2 heading = currentTarget
+                ? ((Vector2)currentTarget.transform.position - now)
+                : (Vector2)transform.up;
+            forwardProgress = heading.sqrMagnitude > 0.000001f
+                ? Vector2.Dot(step, heading.normalized) / Time.fixedDeltaTime
+                : 0f;
+        }
+
+        // Report what this hero is CURRENTLY asking for, so actual-vs-intended stays
+        // a valid comparison while the march boost is applied.
+        intendedMoveSpeed = currentTarget ? CurrentMoveSpeed : MarchSpeed;
+        speedProbeLastPos = now;
+        speedProbeStarted = true;
+    }
+
     /// <summary>
     /// TRUE while FormationGapFiller is walking this hero into a gap during the
     /// PRE-BATTLE phase. The hero is still in PlayerLockState at that point, and
@@ -757,7 +828,9 @@ public class PlayerManager : MonoBehaviour
             transform.position += (Vector3)CrowdSeparation2D.Instance.ResolveOverlap(transform);
         }
 
-        playerRigidbody.linearVelocity = dir * CurrentMoveSpeed;
+        // MarchSpeed, not CurrentMoveSpeed: the temporary boost above applies only
+        // here, on the walk to the enemy base with no enemies left alive.
+        playerRigidbody.linearVelocity = dir * MarchSpeed;
         SetAnimMoving(true);
     }
 
@@ -824,11 +897,15 @@ public class PlayerManager : MonoBehaviour
     if (CrowdSeparation2D.Instance != null)
         dir = CrowdSeparation2D.Instance.SteerAroundBlockers(transform, dir);
 
-    // NEW: Use velocity for smooth movement (no tunneling)
+    // Velocity, not MovePosition, so there is no tunnelling.
+    //
+    // NO DAMPING. There used to be a "linearVelocity *= 0.7f when inside
+    // maxAttackRange" here, meant to give a cleaner stop. It made a hero visibly
+    // decelerate on its final approach - at the authored 0.6 that is 0.42 - which
+    // was reported as "the hero slows down". A hero moves at its stat speed at
+    // every moment; the stop is already clean because the mover halts within 5cm
+    // of its stand point (see the arrival check above).
     playerRigidbody.linearVelocity = dir * CurrentMoveSpeed;
-    // Optional: Dampen if too far (for precision near target)
-    if (dist < maxAttackRange)
-        playerRigidbody.linearVelocity *= 0.7f;  // Slow down for attack
 }
 
     // ApplyFriendlySeparation() and ResolveHorizontalOverlap() were DELETED on
@@ -860,6 +937,7 @@ public class PlayerManager : MonoBehaviour
 
  void FixedUpdate()
  {
+        MeasureSpeed();   // before every early return, so the readout never stalls
         if (GetComponent<MeleeContactRecovery>() is { IsRepositioning: true }) return;
     HandleStateMachine();
 

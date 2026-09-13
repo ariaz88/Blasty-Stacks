@@ -29,7 +29,13 @@ METHODS
         1. CEILING of maxHealth / HitsToKillMe. The divisor is THIS unit's own
            number from the toughness band, not a constant - see HitsToKillMe.
         2. FLOOR of maxHealth / MaxHitsToKillAnyone, so a very soft blow is lifted
-           and no duel drags past about eleven exchanges.
+           and no duel drags past about eleven exchanges. Suppressed by passing
+           allowFloor:false - PlayerStats does this for the PROTECTED hero.
+           The floor exists to lift blows that are weak because of STATS; it must
+           never lift one a design budget deliberately lowered. It did, and the
+           champion's 45%/8 = 5.6% blows were raised to maxHP/11 = 9.1%, spending
+           the whole allowance in five hits instead of eight, then freezing on the
+           reserve. Reported from a level 2 playthrough as "10% per hit, not 5%".
         3. LETHALITY GUARD - before the eighth blow the unit cannot be reduced past
            a sliver (0.1% of max). Catches float drift and damage arriving outside
            the normal weapon path.
@@ -41,20 +47,29 @@ METHODS
       upgrade that raises defence immediately moves the unit up the band.
 
   HitsToKillMe -> int
-      LevelBattleRules.HitsToKill(Defense): 8 blows at no defence, rising to 11 at
-      defence 80+. Measured on the current roster: defence 10 -> 8, 25 -> 9,
-      40/52/65 -> 10, 78 -> 11.
+      LEVELS 1-3: a FLAT MinHitsToKillAnyone (8) for everyone, whatever its
+      defence, because those levels run a scripted exchange whose kill must land
+      on the eighth blow. Letting the band apply there made a defence-65 enemy
+      take 10 and a defence-78 one take 11 - reported from play.
+      LEVELS 4-5: LevelBattleRules.HitsToKill(Defense) - 8 at no defence rising to
+      11 at defence 80+. On the current roster: 25 -> 9, 52/65 -> 10, 78 -> 11.
+      The switch is CPBattleController.IsTutorialExchange.
 
   ResetHitHistory()
-      Clears hitsTaken and the attacker set, for a revived or re-pooled unit.
+      Clears hitsTaken and the attacker table, for a revived or re-pooled unit.
 
   ReportDeath()
-      Logs ONE line per death: total blows absorbed, how many DIFFERENT attackers
-      landed them, the number the band required, and OK / RULE BROKEN.
+      Logs ONE line per death: total blows absorbed, the PER-ATTACKER breakdown
+      (name x count), the number the band required, and OK / RULE BROKEN. When
+      more than one attacker landed blows it also prints the smallest of those
+      counts - the number a viewer watching only one duel would have counted.
       Unconditional on purpose. It exists to settle "it died in four hits" with
       data instead of another round of guessing from a video - and the usual
-      answer is that several heroes shared the kill, so each one only swung four
-      times while the unit really did absorb eight.
+      answer is that several attackers shared the kill, so each one only swung
+      four times while the unit really did absorb eight.
+      The breakdown was added 2026-09-12 after a level 4 recording: the enemy
+      that "died in four blows" is logged as ten from two attackers, the second
+      being a hero fighting a DIFFERENT enemy whose weapon box reached across.
 
 HOW IT CONNECTS
 ---------------
@@ -94,3 +109,11 @@ NOTES
     exactly like a broken rule when you watch a single hero. Measured: 8 total /
     4 per hero / rule satisfied. If the intent is that a fight should last eight
     EXCHANGES no matter how many heroes join, this is the line to change.
+  - THE SECOND ATTACKER IS OFTEN NOT FIGHTING THE VICTIM AT ALL. Weapon boxes used
+    to be ~1.5 world units wide against a 0.45-wide body, and PlayerDamageCollider
+    / EnemyDamageCollider damage EVERY unit they overlap with no check against the
+    attacker's currentTarget. In a packed 4v4 line a hero therefore hit its own
+    target AND its neighbours. Narrowed to 0.8 across 17 prefabs on 2026-09-12,
+    which makes the extra victim much rarer but is NOT a guarantee - only filtering
+    a swing to currentTarget would be. Check the ReportDeath breakdown before
+    concluding the clamp is at fault.

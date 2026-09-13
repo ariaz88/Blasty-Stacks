@@ -1,0 +1,144 @@
+================================================================================
+  DirectPlayBootstrap.cs
+  Path : Assets/Scripts/Core/Boot/DirectPlayBootstrap.cs
+  Type : static class - EDITOR ONLY (whole file inside #if UNITY_EDITOR)
+  Layer: Core / Boot
+  Scene: none (no component, no GameObject - pure [RuntimeInitializeOnLoadMethod])
+================================================================================
+
+PURPOSE
+-------
+Runtime half of the "press Play on any scene" testing workflow added 2026-09-12.
+Editor half is DirectPlayMenu.cs (Assets/Scripts/Editor/) - see DirectPlayMenu.txt.
+
+THE PROBLEM IT SOLVES
+---------------------
+The DontDestroyOnLoad managers that gameplay scenes depend on only exist in the
+two boot scenes:
+
+  StarterScene -> GameStartManager, CurrencyManager, AdManager, MenuLoader
+  MenuScene    -> LevelManager
+
+so opening e.g. Level_1_Stage_5 and pressing Play used to give a broken run:
+  - PlayerWaveManager.Awake() logs "PlayerWaveManager: GameStartManager not
+    found." and returns early, so _unitsDb stays null and NO player unit ever
+    spawns - the visible symptom the whole feature exists to fix;
+  - PlayerStatsApplier logs an error for the same reason;
+  - EnemySpawner falls back to stage 1 scaling because LevelManager.Instance is
+    null, so a late stage plays with stage-1 enemies;
+  - HudCurrencyView / HeroStatsPanel / the win panel read null-guarded fallbacks.
+
+HOW IT WORKS  (flow)
+--------------------
+1. Edit mode: DirectPlayMenu points EditorSceneManager.playModeStartScene at
+   StarterScene and, on ExitingEditMode, writes the scene you actually had open
+   into SessionState under TargetScenePathKey.
+2. Play starts in StarterScene, so GameStartManager / CurrencyManager / AdManager
+   Awake and build themselves exactly like a real boot.
+3. RouteToRequestedScene() runs at RuntimeInitializeLoadType.AfterSceneLoad -
+   after every Awake() in StarterScene, before any Start(). That window matters:
+   it is the last moment MenuLoader can be cancelled and the earliest LevelManager
+   can be created.
+   It then:
+     a. reads + ERASES the SessionState request (one shot, so a mid-session scene
+        reload cannot re-trigger routing);
+     b. returns early if the request is empty, or is StarterScene itself - in
+        that case the normal StarterScene -> MenuLoader -> MenuScene boot runs
+        completely untouched;
+     c. returns early if the active scene is NOT StarterScene (guards against
+        playModeStartScene having failed to apply - without this it would reload
+        the scene you are already in);
+     d. destroys every MenuLoader component, cancelling its Start() coroutine
+        before it runs, which is what skips the 8-second fake loading bar and
+        the route to MenuScene;
+     e. creates LevelManager if missing (see EnsureLevelManager below);
+     f. parses "Level_<L>_Stage_<S>" out of the scene path and calls
+        PrepareProgressionForStage;
+     g. loads the target scene.
+
+CONSTANTS
+---------
+  TargetScenePathKey  "BlastyStacks.DirectPlay.TargetScenePath"
+                      SessionState key shared with DirectPlayMenu. SessionState
+                      (not EditorPrefs) because the request must die with the
+                      editor session, never persist to the next launch.
+  StarterScenePath    "Assets/Scenes/StarterScene.unity"
+  MenuScenePath       "Assets/Scenes/MenuScene.unity"
+  LevelStagePattern   regex @"Level_(\d+)_Stage_(\d+)", IgnoreCase. Tolerates the
+                      duplicated "Level_1_Stage_1 1.unity" that sits in the
+                      GamePlay Scenes folder.
+
+METHODS
+-------
+  RouteToRequestedScene()   [private, RuntimeInitializeOnLoadMethod(AfterSceneLoad)]
+      The flow above. Logs one "[DirectPlay] Booted managers from StarterScene,
+      now loading '<path>'." line so a direct run is obvious in the console.
+
+  EnsureLevelManager()      [private]
+      No-op when LevelManager.Instance already exists. Otherwise creates a
+      GameObject "LevelManager (DirectPlay)" and AddComponent<LevelManager>() -
+      AddComponent on an ACTIVE GameObject runs Awake() synchronously, which is
+      what sets Instance and marks it DontDestroyOnLoad, in time for
+      GameStartManager's WaitForLevelManager() coroutine to find it.
+      Safe to fabricate because MenuScene's LevelManager carries no authored
+      data - its serialized values are all defaults (stagesPerLevel 20,
+      startingStage 1, maxStage 999, stageSceneNames empty). If that ever stops
+      being true, this method must copy the real values instead.
+      SKIPPED when the target IS MenuScene, so that scene's own instance stays
+      authoritative (and LevelManager's guard-and-destroy Awake handles the rest).
+
+  PrepareProgressionForStage(levelId, stage1Based)   [private]
+      Mirrors what HomeManager.LoadSelectedStage() does just before it loads a
+      stage scene, so gameplay, enemy scaling and WinPanel all agree on which
+      stage this is:
+        - HomeManager.CurrentLevelId / CurrentStage1Based  (WinPanel reads these)
+        - SaveSystem.EnsureLevel(...).highestUnlocked raised to stage1Based - 1
+          (0-based), then Save(). Needed because GameStartManager wipes the save
+          on every boot (resetBool is hard-coded true in its Awake), so without
+          this a direct run of stage 12 would sit on a save that says "stage 1 is
+          as far as you got". Only ever RAISES the value, never lowers it.
+        - LevelManager.Instance.SetStage(globalStage, loadScene: false).
+          loadScene MUST stay false - true would make LevelManager load a scene
+          itself and fight the load at the end of RouteToRequestedScene.
+
+  TryParseLevelStage(scenePath, out levelId, out stage1Based)   [private]
+      Regex parse. Returns false for non-stage scenes (Tutorial_Board_01,
+      "Test Scene", ...), in which case no progression is touched at all and the
+      scene just gets the managers.
+
+HOW IT CONNECTS
+---------------
+  DirectPlayMenu        the editor half; owns the toggle, playModeStartScene and
+                        the SessionState write.
+  MenuLoader            destroyed by this class during a direct run.
+  LevelManager          created here when MenuScene is not in the picture.
+  GameStartManager      not touched - it boots normally in StarterScene. Its
+                        WaitForLevelManager() coroutine resolves against the
+                        LevelManager this class creates.
+  HomeManager           statics written here (its CurrentLevelId setter was
+                        widened from private to public for exactly this).
+  SaveSystem            EnsureLevel/Save used to unlock up to the target stage.
+
+NOTES
+-----
+- SHIPPING IS UNAFFECTED. The entire file is inside #if UNITY_EDITOR, so it does
+  not exist in an Android/iOS build. The built game keeps the strict sequential
+  StarterScene -> MenuScene -> stage-by-stage progression.
+- Playing StarterScene itself is also unaffected: the request equals
+  StarterScenePath and the method returns before touching anything, so the real
+  boot (including the loading bar) can still be tested.
+- Uses EditorSceneManager.LoadSceneInPlayMode, NOT SceneManager.LoadScene:
+  the real Level_1_Stage_8..20 scenes are NOT in Build Settings at all. The rows
+  that look like them are orphans pointing at "Assets/Scenes/Level_1_Stage_N.unity"
+  with GUIDs of deleted scenes; the live files are under
+  "Assets/Scenes/TestScenes/GamePlay Scenes/" with different GUIDs. Stages 1-7 are
+  correct. LoadSceneInPlayMode ignores Build Settings entirely, so direct play
+  reaches every stage regardless. (Winning such a stage and ADVANCING still goes
+  through SceneManager, so see the "Enable All Level Scenes In Build Settings"
+  menu item in DirectPlayMenu.txt if you need to play onwards from stage 7.)
+- Verified 2026-09-12 by direct-playing Level_1_Stage_5: 0 errors, 0 warnings,
+  active scene Level_1_Stage_5, GameStartManager/CurrencyManager/LevelManager all
+  non-null, LevelManager.CurrentStage 5 (-> 1-5), HomeManager 1-5,
+  highestUnlocked 4, MenuLoader count 0.
+- Does NOT award stars for earlier stages, only unlocks them. Use
+  DebugStageManager for a star plan.

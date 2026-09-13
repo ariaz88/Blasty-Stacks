@@ -19,6 +19,11 @@ STATIC STATE  (globally readable)
 --------------------------------------
   CurrentLevelId          (int, default 1)
   CurrentStage1Based       (int, default 1)
+      Both have PUBLIC setters. Gameplay only ever writes them from
+      LoadSelectedStage() / the pager handlers below, but the setter on
+      CurrentLevelId was widened from private on 2026-09-12 so the editor-only
+      DirectPlayBootstrap can point them at the stage you pressed Play on when
+      launching a gameplay scene directly. See DirectPlayBootstrap.txt.
   PendingSelectStage1Based (int, default -1, "none queued")
   SharedRewardConfig       (StageRewardConfig)  made available globally so the
                            gameplay scene's WinPanel can use the SAME config

@@ -1,0 +1,122 @@
+================================================================================
+  DirectPlayMenu.cs
+  Path : Assets/Scripts/Editor/DirectPlayMenu.cs
+  Type : static class - EDITOR ONLY (lives in an Editor folder)
+  Layer: Editor / Testing
+  Scene: none
+================================================================================
+
+PURPOSE
+-------
+Editor half of the "press Play on any scene" testing workflow added 2026-09-12.
+Runtime half is DirectPlayBootstrap.cs (Assets/Scripts/Core/Boot/) - read
+DirectPlayBootstrap.txt first, it explains WHY the workflow exists.
+
+This class does two things while enabled:
+  1. points EditorSceneManager.playModeStartScene at StarterScene, so entering
+     Play mode always boots the managers first, whatever scene is open;
+  2. records the scene you actually had open into SessionState, for the runtime
+     half to load once the managers are up.
+
+MENU ITEMS
+----------
+  Tools/Testing/Play Any Scene Directly            (checkable toggle, ON by default)
+      Turns the workflow on/off. Disabled while entering/in Play mode.
+      When OFF: playModeStartScene is cleared and the SessionState request is
+      erased, i.e. Unity behaves exactly as it did before this feature existed.
+
+  Tools/Testing/Enable All Level Scenes In Build Settings   (one-shot action)
+      Repairs the Level_* rows in Build Settings. See EnableAllLevelScenes below
+      for what is actually wrong with them - it is NOT just an unticked checkbox.
+      Direct play itself does NOT need this (it uses
+      EditorSceneManager.LoadSceneInPlayMode, which ignores Build Settings);
+      playing ONWARDS from stage 7 via SceneManager.LoadScene does.
+      MANUAL ONLY - nothing calls it automatically, because it edits
+      EditorBuildSettings and therefore affects what a real build contains.
+
+FIELDS / STATE
+--------------
+  ToggleMenuPath       "Tools/Testing/Play Any Scene Directly"
+  BuildScenesMenuPath  "Tools/Testing/Enable All Level Scenes In Build Settings"
+  EnabledPrefKey       "BlastyStacks.DirectPlay.Enabled"
+  LevelScenePattern    regex @"Level_(\d+)_Stage_(\d+)\.unity$", IgnoreCase.
+      Anchored on ".unity" ON PURPOSE, so the stray duplicate
+      "Level_1_Stage_1 1.unity" sitting in the GamePlay Scenes folder is not
+      mistaken for a real stage and added to the build.
+  Enabled  (public static bool, EditorPrefs-backed, defaults TRUE)
+      EditorPrefs, not ProjectSettings: the choice is per-developer and must not
+      travel with the repo. Its setter re-applies playModeStartScene immediately.
+
+METHODS
+-------
+  Initialize()   [private, [InitializeOnLoadMethod]]
+      Re-subscribes OnPlayModeStateChanged (unsubscribe-then-subscribe, so a
+      domain reload cannot double-register) and calls ApplyPlayModeStartScene.
+      MUST re-run on every domain reload: playModeStartScene is a non-serialized
+      editor field that resets to null every time scripts recompile.
+      Applied INLINE, not via EditorApplication.delayCall - delayCall was tried
+      first and was observed still not to have fired well after a reload, leaving
+      playModeStartScene null and making direct play silently do nothing.
+
+  Toggle() / ToggleValidate()   [private, MenuItem]
+      Flip the pref; the validator draws the checkmark and greys the item out
+      during a play-mode transition.
+
+  ApplyPlayModeStartScene()   [private]
+      Enabled -> load StarterScene as a SceneAsset and assign it.
+      Not enabled, or the asset is missing -> assign null and (in the missing
+      case) warn that the path in DirectPlayBootstrap needs fixing.
+
+  OnPlayModeStateChanged(state)   [private]
+      ExitingEditMode -> write SceneManager.GetActiveScene().path into
+          SessionState[DirectPlayBootstrap.TargetScenePathKey] (or erase it when
+          disabled). This callback fires while STILL IN EDIT MODE, so the active
+          scene is genuinely the one the user pressed Play on -
+          playModeStartScene has not swapped it out yet. That ordering is the
+          load-bearing assumption of the whole feature.
+      EnteredEditMode -> erase the key, so a stale request cannot leak into the
+          next Play press.
+
+  EnableAllLevelScenes()   [private, MenuItem]
+      WHY IT IS NOT JUST "tick the checkbox":
+      Stages 8-20 are not disabled rows, they are ORPHANS. Their rows read
+        path: Assets/Scenes/Level_1_Stage_8.unity   guid: 988d22a6eb969b34eaa25b91af14cfe5
+      but no file exists at that path, and the live scene is
+        Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_8.unity
+        guid: 51d160192dcb2ac44b4dcc747573a644
+      - a completely different GUID. So these rows point at scenes that were
+      deleted or replaced; the real stage 8-20 scenes were NEVER added to Build
+      Settings. Unity auto-unticks a row whose asset is missing, which is the only
+      reason they look merely "disabled". Re-ticking them would achieve nothing.
+      Stages 1-7 are fine - correct path AND correct GUID.
+
+      So the method does three passes:
+        1. drop every row whose SceneAsset cannot be loaded (the orphans);
+        2. add every real Level_*_Stage_* scene on disk that is not listed,
+           sorted by (level, stage) because AssetDatabase.FindAssets returns no
+           meaningful order;
+        3. tick any real stage scene that is listed but unchecked.
+      Logs each drop/add and a final summary; writes nothing when there is
+      nothing to do.
+      Measured 2026-09-12 (dry run): 14 dead rows (stages 8-20 plus SampleScene)
+      and 13 real stage scenes missing.
+
+HOW IT CONNECTS
+---------------
+  DirectPlayBootstrap   consumes TargetScenePathKey and StarterScenePath from
+                        here; both constants are OWNED by DirectPlayBootstrap and
+                        merely read by this class, so there is one source of truth.
+  EditorBuildSettings   only touched by the explicit menu action above.
+
+NOTES
+-----
+- SHIPPING IS UNAFFECTED. Editor-folder scripts are not compiled into a player
+  build, and playModeStartScene is an editor-only concept. The built game keeps
+  the strict sequential StarterScene -> MenuScene -> stage-by-stage progression.
+- DirectPlayBootstrap is reachable from this Editor-assembly class because its
+  #if UNITY_EDITOR body IS compiled into Assembly-CSharp while in the editor, and
+  the editor assembly references it.
+- Exiting Play mode restores whichever scene was open before, so the
+  playModeStartScene redirect is invisible in the hierarchy.
+- Verified 2026-09-12: after EditorUtility.RequestScriptReload(),
+  EditorSceneManager.playModeStartScene came back as StarterScene on its own.

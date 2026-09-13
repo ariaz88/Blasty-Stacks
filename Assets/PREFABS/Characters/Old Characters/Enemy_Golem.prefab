@@ -1397,6 +1397,8 @@ MonoBehaviour:
   gateStopPosition: {x: 0, y: 0}
   gateStopDistance: 0.6
   facingDeadZoneX: 0.05
+  actualMoveSpeed: 0
+  intendedMoveSpeed: 0
 --- !u!114 &5955165513587185670
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1416,7 +1418,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 128
   detectionRadius: 20
-  moveSpeed: 0.2
+  moveSpeed: 0.5
   stoppingDistance: 1.25
   fairDistanceToPlayer: 1.6
 --- !u!114 &8418991042279574181

@@ -63,3 +63,37 @@ NOTES
   - Because it is a STATIC event, a subscriber that fails to unsubscribe will
     leak across scene loads. LevelGameManager correctly unsubscribes in
     OnDisable.
+
+CHANGED 2026-09-12 - a base in a WINNING battle is DAMPED, not immune
+---------------------------------------------------------------------
+ApplyDamageToPlayerGate no longer returns early, and no longer asks whether the
+base still has living defenders. It asks CPBattleController.BattleIsAnExpectedWin,
+and while that is true it takes LevelBattleRules.BaseChipPerBlow (1%) of its
+MAXIMUM health per connected blow.
+
+    battle the player is meant to WIN     ->  1% of max per blow
+    battle the player is meant to LOSE    ->  NORMAL weapon damage
+    no prepared battle (stage 6+, or a    ->  NORMAL weapon damage
+      scene entered directly)
+
+Why damped at all: an enemy that walked past the duel and hammered the castle
+produced no health drop and no bar movement, which reads as a broken game rather
+than as a rule - reported in levels 2 and 3, where one enemy peels off while the
+hero is busy. One percent is visible feedback that decides nothing: felling a base
+that way needs a hundred blows, far longer than these battles run.
+
+Why gated on the OUTCOME (Arash, 2026-09-12): in a battle the player is meant to
+lose, that loss is the point, and damping the base leaves the match unable to end
+the way the workbook says it must. The previous condition - "while the base still
+has living defenders" - answered the wrong question. It damped the LOSING battles
+right up until the last hero fell, then let the base fall at full speed in exactly
+the battles that were never in danger anyway.
+
+It cannot strand a battle. The champion cannot die in a prepared win - its reserve
+floor in CPBattleController.LimitDamageToChampion sees to that - so a "should win"
+battle always still has a hero standing to finish it.
+
+The ENEMY gate deliberately keeps full immunity while its own defenders live
+(CPBattleController.HasLivingDefenders, now its only caller). Destroying it ends the
+level in a WIN, so letting a stray hero chip it would be an outcome bug rather than
+cosmetic - it could finish a match the workbook says must be a loss.

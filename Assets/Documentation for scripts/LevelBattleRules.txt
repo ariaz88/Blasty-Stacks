@@ -33,9 +33,40 @@ THE DAMAGE BUDGET
       Sized so E enemies together always leave the hero standing, even if every
       ally falls and it ends up facing the whole army alone.
 
-  MinHitsToSpendBudget = 4
-      An enemy needs at least four hits to spend its allowance, so no single blow
-      takes a visible chunk. At E=3 that is 30% / 4 = 7.5% per hit.
+  MinHitsToSpendBudget = 8
+      An enemy needs at least eight hits to spend its allowance, so no single blow
+      takes a visible chunk. At E=3 that is 30% / 8 = 3.75% per hit.
+      RAISED 4 -> 8 with the universal eight-hit rule, so the two agree: an enemy
+      that dies in eight blows also needs eight to spend its allowance.
+      (The doc previously said 4 here, with 7.5% per hit. Stale - it is 8.)
+
+BEING OUTNUMBERED - applies to the PROTECTED hero only
+  FlankEngageRange = 1.2
+      How close a living enemy must be to count as engaging the hero. Enemies
+      walking past on their way to the base are further out and do not surround it.
+
+  FlankedDamageScale = 0.5
+      Caught between two enemies - at least one each side, both genuinely fighting
+      IT - the hero can only ever face one, so the other strikes for free. The blow
+      AND the cap are halved. Two enemies on the SAME side is not a flank: the hero
+      can answer both, so they land full damage.
+
+  SurroundedEnemyCount = 3
+  SurroundedDamagePerHit = 0.01
+      THREE OR MORE from both sides is a different situation again - Arash,
+      2026-09-12, from a level 3 playthrough: one enemy on one side and two on the
+      other, all three landing blows. Each blow is then capped at 1% of the hero's
+      maximum HP.
+          level 3:  3.75% normal  ->  1.88% flanked  ->  1.00% surrounded
+      A CEILING, NOT A SET VALUE. At level 5 the halved blow is already 0.94%, and
+      setting 1% there would make five attackers hurt MORE than two; taking the
+      smaller keeps the progression in one direction.
+
+      NEITHER RULE TOUCHES THE LIFETIME ALLOWANCE. An enemy still gets its full
+      30%; at 1% a blow it simply needs 31 blows to spend it instead of 8. Being
+      surrounded buys the hero TIME, it does not make the enemies weaker overall.
+      Evaluated in CPBattleController.LimitDamageToChampion via
+      CountEngagedFlankers, which counts per side rather than answering yes/no.
 
 MINIMUM HITS TO KILL - every stage, level is irrelevant
   MinHitsToKillAnyone = 8
@@ -77,13 +108,41 @@ TUTORIAL PRESENTATION - levels 1-3 only
   is scripted for appearance, while levels 4-5 keep real combat.
 
   IsTutorialPresentation(level)   true for 1, 2, 3
-  TutorialHitsToKillEnemy  = 4    each blow removes exactly a quarter of the enemy
-                                  and the kill lands on the fourth swing
+  TutorialHitsToKillEnemy         an ALIAS of MinHitsToKillAnyone (8), deliberately
+                                  not its own constant: "nobody dies under eight" is
+                                  universal, and a separate number here is exactly
+                                  how the tutorial and the rest of the game drifted
+                                  apart last time. Each blow removes 1/8 of the
+                                  enemy and the kill lands on the eighth swing.
+                                  (This doc said 4 / "a quarter" - stale.)
   TutorialHeroDamagePerHit = 0.07 every enemy blow removes a flat 7% of a hero's
                                   maximum - set in BOTH directions, not capped
-  TutorialEnemySpeedScale  = 0.6  enemies walk 40% slower in these levels, so the
-                                  last one cannot stroll past the fight and reach
-                                  the player's base while the hero is still busy
+  REMOVED 2026-09-12: TutorialEnemySpeedScale (a 40% enemy slow-down in levels
+  1-3). Replaced by ONE uniform speed for every unit at every level, authored on
+  the stat assets (currently 0.5). The reason it existed - a spare enemy reaching
+  the player's base while the hero was busy - is now accepted, and that base takes
+  real chip damage (BaseChipPerBlow) so it is visible rather than silent.
+  Do NOT reintroduce a per-level speed multiplier: change the stat block instead,
+  so the Inspector keeps telling the truth.
+
+THE PLAYER'S BASE
+  BaseChipPerBlow = 0.01
+      What one connected blow takes off the PLAYER's base while the battle is one
+      the player is meant to WIN - 1% of the base's maximum.
+
+          meant to WIN   ->  1% a blow (a hundred blows to fell it)
+          meant to LOSE  ->  NORMAL weapon damage
+          no prepared battle (stage 6+) -> NORMAL weapon damage
+
+      GATED ON THE INTENDED OUTCOME, not on whether defenders are alive (Arash,
+      2026-09-12). A stray enemy must not decide a match the player is supposed to
+      win; but in a match the player is supposed to lose, that loss is the point and
+      damping it would leave the battle unable to end as the workbook requires.
+      Read through CPBattleController.BattleIsAnExpectedWin.
+
+      The ENEMY gate is NOT chipped - it keeps full immunity while its own defenders
+      live (CPBattleController.HasLivingDefenders). Destroying it ends the level in a
+      win, so a stray hero chipping it would be an outcome bug, not cosmetic.
 
   REMOVED: "SoloRushHitsToKill = 2" (2026-09-11). It let a lone, outnumbered hero
   kill in two, which only ever applied to levels 2 and 3 - exactly the levels the

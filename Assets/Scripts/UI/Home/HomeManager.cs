@@ -8,7 +8,10 @@ using DG.Tweening;
 public class HomeManager : MonoBehaviour
 {
     // Static info about the last selected level/stage
-    public static int CurrentLevelId { get; private set; } = 1;
+    // Setters are public (not private) so the editor-only DirectPlayBootstrap can
+    // point these at the stage you pressed Play on. Gameplay still only ever sets
+    // them from LoadSelectedStage()/the pager below.
+    public static int CurrentLevelId { get; set; } = 1;
     public static int CurrentStage1Based { get;  set; } = 1;
     public static int PendingSelectStage1Based { get; private set; } = -1;
 

@@ -555,8 +555,8 @@ CapsuleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 2.8182778, y: -0.50700784}
-  m_Size: {x: 5.6452203, y: 1.134853}
+  m_Offset: {x: 1.8935308, y: -0.40640715}
+  m_Size: {x: 2.4500365, y: 0.6228165}
   m_Direction: 1
 --- !u!114 &3397659945058357071
 MonoBehaviour:
@@ -757,9 +757,13 @@ MonoBehaviour:
   currentRecoveryTimer: 0
   maxAttackRange: 0.85
   distanceFromTarget: 0
-  moveSpeed: 0.5
+  moveSpeed: 0.6
   canMove: 1
   isUnlocked: 0
+  marchSpeedBoost: 1.3
+  actualMoveSpeed: 0
+  intendedMoveSpeed: 0
+  forwardProgress: 0
   isFormationStepping: 0
   faceCenterOnStart: 1
   retargetHysteresis: 0.2
@@ -769,8 +773,6 @@ MonoBehaviour:
   chosenEnemyOffset: {fileID: 0}
   attackPlayerGate: 0
   visualRoot: {fileID: 1406496011515820992}
-  attackSlotAngleStep: 28
-  attackStandoffFactor: 0.8
 --- !u!114 &5828143136938700476
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -176,9 +176,46 @@ TARGETING
       picks the NEAREST live (non-dead) PlayerStats, and writes it into
       enemyLocoMotion.currentTarget - this is the single source of truth for
       "who is this enemy fighting", read by EnemyLocoMotion's movement.
-      !! PERFORMANCE: this allocates a new Collider2D[] array EVERY FRAME for
-      EVERY enemy (OverlapCircleAll, not the NonAlloc variant). With a wave of
-      enemies this is one of the larger recurring GC sources in combat.
+
+      SINCE 2026-09-12 IT ONLY RUNS THAT SEARCH WHEN THE ENEMY HAS NO TARGET.
+      Once an enemy has locked onto a hero it keeps it: a nearer hero does not
+      take the target away. StillFightable() below is the only thing that
+      releases the lock.
+
+      THE BUG THAT CAUSED THE LOCK. This is called every frame from Update, and
+      it used to overwrite currentTarget unconditionally. An enemy in the middle
+      of a crowded 4v4 or 5v5 line has heroes on both sides at almost exactly
+      equal range, so the nearest-comparison changed winner frame to frame. Every
+      swap flips which side of the target the enemy walks to
+      (MeleeEngagement.ChooseSide) and flips its facing with it - on screen, a
+      unit spinning in place instead of fighting. Reported by Arash from play.
+
+      A HARD LOCK, NOT HYSTERESIS. The hero side has the same hazard and solved it
+      with a margin instead: PlayerManager.retargetHysteresis (0.2) makes a new
+      enemy have to be ~20% closer before a hero switches. Arash asked for the
+      stronger rule on the enemy side. The two are deliberately different; if the
+      hero side ever needs the same treatment, it is the same change.
+
+      CONSEQUENCE, ACCEPTED: a locked enemy will walk past a hero standing right
+      beside it to reach the one it locked onto. The armies meet as a group in
+      this layout, so it is rare - and the alternative is the spinning.
+
+      !! PERFORMANCE: the search allocates a new Collider2D[] (OverlapCircleAll,
+      not the NonAlloc variant). It used to do that EVERY FRAME for EVERY enemy
+      and was one of the larger recurring GC sources in combat; the lock now skips
+      it for any enemy that already has a target, which is most of them for most
+      of a battle.
+
+  StillFightable(hero, radius)
+      The ONLY three things that release the lock:
+        1. the hero is dead, or its object is gone (Unity null check);
+        2. the hero is in PlayerLockState - an undeployed unit that
+           EnemyDamageCollider refuses to hit, so staying locked on it would leave
+           the enemy swinging at something it can never damage;
+        3. the hero has left detectionRadius entirely - which is also what lets an
+           enemy give up and walk on the base instead.
+      ResetAfterRevive() clears currentTarget before calling DetectPlayerTargets,
+      so a revive still re-acquires normally.
 
 ACTION DECISION
 ----------------

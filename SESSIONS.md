@@ -53,6 +53,19 @@
 
 ## Open Threads
 
+- **[2026-09-12] Stages 8-20 are MISSING from Build Settings — a real build almost certainly
+  cannot load them.** The rows that look like stages 8-20 are orphans: they point at
+  `Assets/Scenes/Level_1_Stage_N.unity` (no such file) with GUIDs of scenes since deleted or
+  replaced, while the live scenes sit in `Assets/Scenes/TestScenes/GamePlay Scenes/` with
+  different GUIDs and are listed nowhere. Stages 1-7 are correct. Unity auto-unticks a row whose
+  asset is missing, which is why this reads as "disabled" rather than "broken". Consequence:
+  `SceneManager.LoadScene` — the call the game uses to advance after a win — cannot reach stage
+  8+, so **progression past stage 7 is expected to fail in the Android build**. Not yet
+  reproduced on device; verify before treating it as confirmed. `Tools/Testing/Enable All Level
+  Scenes In Build Settings` (added 2026-09-12) drops the dead rows and adds the real scenes in
+  stage order; it has NOT been run, because it changes what a build contains. Editor direct play
+  is unaffected either way (it bypasses Build Settings).
+
 - **[2026-09-11] Two enemy animator controllers had a DEGENERATE locomotion blend
   tree, and it has never been played since the fix.** `Reaper_Man_01.controller` and
   `Zombie_Villager 1.controller` had BOTH blend-tree children ('Idle' and 'Walking')
@@ -78,6 +91,44 @@
 
 
 _Unfinished work any session may pick up. Delete a line when it is genuinely closed._
+
+- **[2026-09-12] The re-tuned weapon hitboxes have never been played, and they are a
+  MITIGATION, not the fix.** Arash hand-tuned all 15 live characters (heroes 0.597-0.902 world
+  units, enemies 0.665-0.770); that state is captured as the default in
+  `Assets/Scripts/Editor/WeaponHitboxDefaults.json`. Narrower boxes make it rarer for one
+  swing to also hit a unit's neighbours - the thing that made a level 4 enemy appear to die in
+  4 blows when the log says it absorbed 10 from two attackers - but units standing close
+  enough can still share a swing. Replay level 4 and read the `[HITS]` lines: they now print a
+  per-attacker breakdown. **If kills still show two attackers**, width was not enough and the
+  real fix is filtering a swing to the attacker's `currentTarget` (`Docs/Fight Editing.txt`
+  Part 11 #2) - a combat-feel change Arash has not approved. Also judge whether units now MISS
+  more than before. Undo in one click: `Tools/Blasty/Weapon Hitboxes/Restore default widths`;
+  re-capture after any further tuning, or the default goes stale.
+
+- **[2026-09-12] The "surrounded" damage ceiling has never been played.** 3+ enemies engaging
+  the protected hero from both sides now cap each blow at 1% of its max HP
+  (`LevelBattleRules.SurroundedDamagePerHit`). Verified by compile and by computing the table
+  off the live constants, not in play. Play **level 3** and judge the case Arash reported - one
+  enemy on one side, two on the other, all three fighting: the hero should now lose about 1% a
+  blow instead of 3.75%. Watch for the side effect: an enemy needs 31 blows to spend its 30%
+  allowance at that rate, so a pile-on fight lasts a lot longer. `ChampionIsSurrounded` is
+  public if you want it on screen while judging.
+
+- **[2026-09-12] The enemy target LOCK has never been played.** Enemies no longer retarget to a
+  nearer hero once they have one - the fix for the spinning middle enemy in 4v4/5v5. Play a
+  crowded stage (4 or 5) and judge two things: (1) is the spinning gone; (2) does the lock look
+  stupid anywhere - a locked enemy will walk past a hero standing right beside it to reach the
+  one it chose. If (2) is worse than (1) was, the middle ground is the hero side's approach,
+  `PlayerManager.retargetHysteresis`, a margin instead of a lock.
+
+- **[2026-09-12] The outcome-gated base damage has never been played.** The player's castle now
+  chips at 1% a blow only in battles the player is meant to WIN, and takes normal damage in the
+  ones it is meant to lose. The levels to judge are **4 and 5**, where this actually changed
+  something: L4 matches 1-2 and L5 matches 1-3 are designed losses and the base is no longer
+  damped there. Confirm those matches still lose at a reasonable pace and do not suddenly lose
+  FASTER than intended - if an enemy reaching the base now ends a designed loss early, the
+  match may be decided by the castle rather than by the fight, and the chip may need to apply
+  to losses too at a higher rate. L1-3 should be unchanged.
 
 - **[2026-09-11] The rebuilt guaranteed-win model has never been played.** Stages 1-5 now
   protect exactly ONE hero (the strongest) via a per-enemy damage budget; every other hero
@@ -458,6 +509,200 @@ _Durable choices with their reasons, so no session reopens them blindly._
 
 ## Session Log
 
+### 2026-09-12 — Any scene can now be played directly in the Editor (testing only; the build is untouched)
+
+- **Goal:** Arash: a level opened on its own errors out, the game can only be started from
+  `StarterScene`. Make any level playable directly **in the Unity Editor, for testing**.
+  He then clarified: the normal sequential progression (as in the Android build) must stay
+  exactly as it is — direct play is a test affordance only.
+- **Status:** done, verified in Play mode.
+- **Root cause:** the `DontDestroyOnLoad` managers a gameplay scene needs are split across the
+  two boot scenes and exist nowhere else — `StarterScene` carries `GameStartManager`,
+  `CurrencyManager`, `AdManager`, `MenuLoader`; `MenuScene` carries `LevelManager` (that split
+  is why passing through the menu was mandatory). The loud symptom was
+  `Assets/Scripts/Combat/Spawning/PlayerWaveManager.cs:146` logging
+  "PlayerWaveManager: GameStartManager not found." and returning early, so `_unitsDb` stayed
+  null and **no player unit ever spawned**. `EnemySpawner` also silently fell back to stage-1
+  scaling because `LevelManager.Instance` was null.
+- **Changed:** `Assets/Scripts/Core/Boot/DirectPlayBootstrap.cs` — NEW, entire file inside
+  `#if UNITY_EDITOR`. A `[RuntimeInitializeOnLoadMethod(AfterSceneLoad)]` that, when a direct-play
+  request is pending, destroys `MenuLoader` before its `Start()` coroutine runs (skipping the
+  route to the menu *and* its 8-second fake loading bar), creates `LevelManager` if absent,
+  mirrors `HomeManager.LoadSelectedStage()`'s progression setup for the requested stage, then
+  loads the scene. `AfterSceneLoad` is the load-bearing choice: after every `Awake()` in
+  StarterScene, before any `Start()`.
+- **Changed:** `Assets/Scripts/Editor/DirectPlayMenu.cs` — NEW. Points
+  `EditorSceneManager.playModeStartScene` at StarterScene and records the scene you actually
+  had open (`SessionState`, written during `ExitingEditMode` while still in edit mode). Adds
+  `Tools/Testing/Play Any Scene Directly` (checkable, ON by default, EditorPrefs-backed) and a
+  manual `Tools/Testing/Enable All Level Scenes In Build Settings`.
+- **Changed:** `Assets/Scripts/UI/Home/HomeManager.cs:11` — `CurrentLevelId`'s setter widened
+  from `private` to `public` (now symmetric with `CurrentStage1Based`, which was already public)
+  so the bootstrap can point it at the stage under test. Gameplay still only writes it from
+  `LoadSelectedStage()`/the pager.
+- **Docs:** new `DirectPlayBootstrap.txt` and `DirectPlayMenu.txt`; `HomeManager.txt` updated
+  for the setter change.
+- **Scene/Prefab/SO edits:** none.
+- **Verified:** opened `Level_1_Stage_5` and entered Play mode. Console: **0 errors, 0 warnings**.
+  Runtime state: active scene `Level_1_Stage_5`; `GameStartManager`/`CurrencyManager`/`LevelManager`
+  all non-null; `LevelManager.CurrentStage` 5 → 1-5; `HomeManager` 1-5; `highestUnlocked` 4;
+  `MenuLoader` count 0. Camera capture showed the stage playing normally (both gates, HP bars,
+  populated board). Editor was restored to StarterScene afterwards.
+- **Gotchas:**
+  - `EditorSceneManager.playModeStartScene` is **not serialized** — it resets to null on every
+    domain reload, so it must be re-applied from `[InitializeOnLoadMethod]`. Applying it via
+    `EditorApplication.delayCall` was tried first and was observed still not to have fired well
+    after a reload, leaving the feature silently dead. Apply it inline.
+  - **The stage 8-20 rows in Build Settings are ORPHANS, not merely unticked.** They read
+    `path: Assets/Scenes/Level_1_Stage_8.unity` / `guid: 988d22a6…`, but no file exists there —
+    the live scene is `Assets/Scenes/TestScenes/GamePlay Scenes/Level_1_Stage_8.unity` with
+    GUID `51d16019…`, a completely different asset. So the real stage 8-20 scenes were **never
+    added to Build Settings**; those rows point at scenes since deleted or replaced, and Unity
+    auto-unticks a row whose asset is missing, which is the only reason they look "disabled".
+    Stages 1-7 are correct (right path *and* right GUID). Measured by dry run: 14 dead rows
+    (8-20 plus `SampleScene`), 13 real stage scenes missing. `Tools/Testing/Enable All Level
+    Scenes In Build Settings` now drops the dead rows and adds the real scenes in stage order —
+    it is **not run automatically** and has **not been run**, since it changes build contents.
+    The bootstrap itself is unaffected: `EditorSceneManager.LoadSceneInPlayMode` ignores Build
+    Settings, so direct play reaches every stage today. Advancing *onwards* after a win goes
+    through `SceneManager.LoadScene` and does not.
+  - Faking `LevelManager` is only safe because MenuScene's instance carries **no authored data**
+    (20 / 1 / 999 / empty). If anyone authors values on it, the bootstrap must copy them.
+  - `GameStartManager.Awake` hard-codes `resetBool = true`, so **every** boot wipes the save.
+    That is pre-existing, not introduced here, but it is why the bootstrap has to re-unlock
+    stages up to the one under test.
+- **Next:** decide whether to run `Tools/Testing/Enable All Level Scenes In Build Settings` —
+  see the new Open Thread about stages 8-20 being absent from Build Settings. Direct play
+  itself is finished; turn the toggle off to get the old behaviour back verbatim.
+
+### 2026-09-12 - "The enemy died in 4 blows" traced to weapon SPLASH, not to the clamp
+
+- **Goal:** Arash recorded two level 4 fights (`Assets/Arts/Reference videos/ScreenRecorderProject512.mkv`).
+  In fight 1 the enemy died after 8-9 visible blows; in fight 2, same level, after 4 - with,
+  he said, only one hero engaging it. Find out why the 8-blow rule held once and not twice.
+- **Status:** diagnosed from data; hitbox mitigation applied; full fix still open by Arash's choice.
+- **THE RULE NEVER BROKE.** `CharacterStats.ClampIncomingBlow` cannot let anything die before
+  the 8th blow - the lethality guard pins `currentHP` at 0.1% of max while `hitsTaken < 8`.
+  The Editor log (`%LOCALAPPDATA%/Unity/Editor/Editor.log`) for the last two Stage 4 battles,
+  which are the two in the video, proves it: every death reads `OK`, 9-10 blows.
+  What differed is the ATTACKER COUNT - fight 1's watched enemy: `10 blows / 1 attacker`;
+  fight 2: **every** enemy `10 blows / 2 attackers`. Half the blows came from a hero the
+  player never saw fighting it.
+- **ROOT CAUSE - splash.** Weapon boxes were ~1.5 world units wide against a 0.45-wide body
+  (`Player_Valkyrie` 7.68 local x 0.19 bone scale = 1.46), and
+  `PlayerDamageCollider.cs:114` / `EnemyDamageCollider.cs:77` damage EVERY unit they overlap
+  with no check against the attacker's `currentTarget`. Video frames at 18.5-24.5s show all
+  8 units packed shoulder to shoulder, so each hero hit its target AND its neighbours.
+- **Changed:** `Assets/Scripts/Combat/Shared/CharacterStats.cs` - the attacker set became a
+  `Dictionary<Object,int>`, and `ReportDeath()` now prints the per-attacker breakdown plus
+  the smallest count ("a viewer watching only one of them would have counted N"). That is
+  what makes the next recording settle this in one line instead of another video argument.
+- **Changed:** `Assets/Scripts/Editor/WeaponHitboxWidth.cs` - NEW. Arash asked that the
+  narrowing not be irreversible, so it is a menu switch, not a one-way edit:
+  `Tools/Blasty/Weapon Hitboxes/` → *Capture current widths as default* / *Restore default
+  widths* / *Report current widths*.
+- **THEN ARASH RE-TUNED EVERY COLLIDER BY HAND, same day.** The blanket 0.8 was only a first
+  pass; he tuned all 15 live characters himself in the Inspector - size AND offset, per
+  character - and asked that this become the default. Heroes now measure 0.597-0.902 world
+  units, enemies 0.665-0.770, and every one still covers its own stand point.
+  `Player_Dark_Oracle_3` is the one live character left at exactly 0.800.
+- **CONSEQUENCE - the default is a captured SNAPSHOT, not a number in the source.** The first
+  version of the tool hardcoded the pre-narrowing sizes and was stale within hours. It now
+  writes size, offset and capsule direction to `Assets/Scripts/Editor/WeaponHitboxDefaults.json`
+  (24 boxes, captured 2026-09-12 14:49) and a capture keeps the file it replaces as
+  `.prev.json`, so the DEFAULT itself has one step of undo. **Do not put widths back into
+  source - capture them.** Verified: an immediate restore reported every box unchanged
+  (0.662 → 0.662, 0.733 → 0.733, ...). Restore applies WITHOUT a reach check on purpose -
+  the values are the user's own tuning; the report item is where reach is judged.
+- **Scene/Prefab/SO edits:** **17 character prefabs** - weapon `CapsuleCollider2D.size.x`
+  narrowed so every box over 1.0 world unit becomes **0.8** (Arash's number). Local values all
+  differ because the weapon bones are at 0.06-0.51 scale. Applied through the Editor
+  (`PrefabUtility.LoadPrefabContents` / `SaveAsPrefabAsset`), never by hand-editing YAML.
+  Deliberately NOT touched: `Player_Dark_Oracle_01` (0.984) and `Fallen_AngelsVS3` (0.886),
+  already under 1.0; the three vertical-capsule legacy prefabs; and
+  `Assets/Scripts/TowertDefenseScripts/Prefabs/Player_Satyr.prefab`, where 0.8 would put the
+  unit's own standoff (1.063, range 1.25) OUTSIDE its box and it could never land a hit.
+- **Verified:** every resize was reach-checked BEFORE applying - the unit's standoff
+  (0.85 x range) must stay inside the new span; margins are 0.18-0.39, tightest on
+  `Enemy_Skeleton_Crusader_1`. Re-measured after saving: all 17 read 0.800. Compiles clean.
+  **Not played yet.**
+- **Gotchas:**
+  - The Inspector number is a LIE here too, exactly like `moveSpeed` was: these colliders sit
+    on scaled weapon bones, so the only meaningful width is `size.x * lossyScale.x`. Read it
+    in the Editor, never off the prefab YAML.
+  - Narrowing to 0.8 makes shared swings rarer, NOT impossible. Two units closer than ~1.2
+    apart can still be caught by one swing. Arash chose this over filtering a swing to
+    `currentTarget`, which is the only actual guarantee (`Docs/Fight Editing.txt` Part 11 #2).
+  - `ResetHitHistory()` still has zero call sites. Harmless today because enemies are always
+    freshly instantiated, but any future pooling makes the 8-blow guard useless on reuse.
+- **NEW RULE - being PILED ON is not the same as being flanked.** Arash, from a level 3 play:
+  one enemy on one side of the protected hero and TWO on the other, all three landing blows.
+  Halving (the existing flank rule) was not enough there. Now: **3+ enemies engaging from both
+  sides caps each blow at 1% of the hero's max HP.**
+  `LevelBattleRules.SurroundedEnemyCount = 3`, `SurroundedDamagePerHit = 0.01`.
+  Level 3 reads `3.75% normal → 1.88% flanked → 1.00% surrounded`.
+- **Changed:** `Assets/Scripts/Combat/Spawning/CPBattleController.cs` - `ChampionIsFlanked`
+  stopped as soon as it found one enemy per side, which cannot tell 1-and-1 from 1-and-2. It is
+  now `CountEngagedFlankers(out left, out right)`, with `ChampionIsFlanked` and a new
+  `ChampionIsSurrounded` on top. `LimitDamageToChampion` reads the count ONCE and shares it
+  between the halving and the new ceiling - reading both properties would repeat the walk per
+  blow and could disagree if a unit moved between the two reads.
+- **IT IS A CEILING, NOT A SET VALUE - do not "simplify" it to an assignment.** At level 5 the
+  halved blow is already 0.94%, so setting 1% would make five attackers hurt MORE than two.
+  `Mathf.Min` keeps the progression one-directional. Verified against the live constants:
+  L3 1.00%, L4 1.00%, L5 0.94% (unchanged).
+- **Scope kept deliberate:** this applies to the PROTECTED hero only, like every other damage
+  rule here. An ordinary hero surrounded by three still takes full damage - that is the
+  one-protected-hero model (Part 4), not an oversight.
+- **NEW RULE - the player's base is damped by the battle's INTENDED OUTCOME.** Arash extended
+  the levels 1-3 chip rule to every level: a stray enemy that reaches the castle must not be
+  able to decide a match the player is supposed to win, but in a match the player is supposed
+  to LOSE it deals normal damage, because that loss is the point.
+  `PlayerGateStats.ApplyDamageToPlayerGate` now asks `CPBattleController.BattleIsAnExpectedWin`
+  instead of `HasLivingDefenders`:
+  - meant to WIN → 1% of the base's max per blow (a hundred blows to fell it);
+  - meant to LOSE → normal weapon damage;
+  - no prepared battle (stage 6+, or a scene entered directly) → normal damage, the only
+    sensible default when nothing has declared an outcome.
+  Verified off the live constants: **L1-3 chip on every match** (always scripted wins);
+  **L4 matches 1-2 normal, 3-4 chip; L5 matches 1-3 normal, 4-6 chip.**
+- **`HasLivingDefenders` asked the wrong question and is now enemy-gate only.** It damped the
+  LOSING battles right up until the last hero fell, then let the base fall at full speed in the
+  battles that were never in danger - backwards in both directions. It is still correct for the
+  ENEMY gate (full immunity while its defenders live) and that is now its only caller.
+  It cannot strand a battle: the champion cannot die in a prepared win (reserve floor in
+  `LimitDamageToChampion`), so a should-win battle always has a hero left to finish it.
+- **Renamed** `LevelBattleRules.BaseChipWhileDefended` → `BaseChipPerBlow`. The old name
+  described a condition that no longer exists and would have misled the next reader.
+- **FIXED - the "spinning enemy" in 4v4/5v5 was a TARGETING bug, not a rendering one.** Arash
+  reported enemies in the middle of the line whirling in place. `DetectPlayerTargets()` runs
+  every frame from `Update()` and overwrote `currentTarget` unconditionally with the nearest
+  hero; an enemy with a hero on each side compares two nearly identical distances, so the
+  winner changed frame to frame, and each swap flips the approach side
+  (`MeleeEngagement.ChooseSide`) and the facing with it.
+- **Changed:** `Assets/Scripts/Combat/Enemy/EnemyManager.cs` - a HARD LOCK, per Arash's
+  request: once an enemy has a hero it keeps it. New `StillFightable()` holds the only three
+  releases - the hero dies/despawns, the hero is in `PlayerLockState` (undeployed, and
+  `EnemyDamageCollider` refuses to hit one, so a locked enemy would swing at nothing forever),
+  or the hero leaves `detectionRadius` entirely (which is also what lets an enemy give up and
+  walk on the base). `ResetAfterRevive()` nulls the target before re-detecting, so revives
+  still re-acquire.
+- **The hero side is NOT the same and Arash should know it.** He assumed heroes already do
+  this; they use `PlayerManager.retargetHysteresis` (0.2) - a *margin*, so a hero still
+  retargets when something is ~20% closer, just not on a tie. That comment records the same
+  symptom being fixed there earlier. Left as-is; if heroes ever need the hard lock it is the
+  same change in PlayerManager's Phase B.
+- **Free performance:** the lock skips `OverlapCircleAll` (allocating, not the NonAlloc
+  variant) for any enemy that already has a target - it used to run every frame for every
+  enemy and the doc flagged it as one of the larger recurring GC sources in combat.
+- **Also fixed:** `Assets/Documentation for scripts/LevelBattleRules.txt` still documented
+  `MinHitsToSpendBudget = 4` and "7.5% per hit" (it has been 8 / 3.75% since the eight-blow
+  rule), and `TutorialHitsToKillEnemy = 4` / "a quarter per blow" (it is an alias of
+  `MinHitsToKillAnyone`, so 8).
+- **Next:** replay level 4 and read the `[HITS]` lines. If kills still show two attackers,
+  the hitbox width was not enough and the `currentTarget` filter is the remaining fix.
+  Also replay level 3 and confirm the three-enemy pile-on now reads as ~1% a blow.
+
 ### 2026-09-11 (4th pass) - Guaranteed-win model rebuilt around ONE protected hero
 
 - **Goal:** Arash: the old model felt fake. Replace it so combat is fully natural
@@ -610,6 +855,136 @@ _Durable choices with their reasons, so no session reopens them blindly._
   - **OPEN QUESTION for Arash:** should eight be TOTAL blows (current) or should a
     fight last eight EXCHANGES regardless of how many heroes pile on?
   - Base `moveSpeed` 0.5 -> **0.6** on all 23 unit stats assets. ASSET EDIT.
+- **2026-09-12 - two real bugs fixed in levels 2 and 3.**
+  1. **Hero HP froze mid-battle.** The champion's reserve was the FINAL figure from
+     the first blow (10% at two or three enemies), and every enemy could spend its
+     budget at once - so the hero was ground to 10% while the FIRST enemy was still
+     alive, then stopped losing health entirely for the rest of the fight. The
+     reserve is now STAGED, unlocking one enemy's budget per enemy still standing:
+     level 2 -> 55% then 10%; level 3 -> 70%, 40%, 10%. Simulated worst case (every
+     living enemy swinging every round): level 2 first kill at **55%**, level 3 at
+     **70%** - both above half, as required.
+  2. **A defended base took literally no damage.** An enemy that peeled off to the
+     player's castle while the hero was busy produced no health drop at all.
+     `PlayerGateStats` now takes `BaseChipWhileDefended` = **1% of max per blow**
+     instead of being immune. The ENEMY gate keeps full immunity on purpose -
+     destroying it ends the level in a win, so chipping it would be an outcome bug.
+  - `MinHitsToSpendBudget` 4 -> **8**, so an enemy needs eight blows to spend its
+     allowance, matching the universal eight-hit rule. Level 2: 45%/8 = 5.6% per
+     hit. Level 3: 30%/8 = 3.75% per hit (Arash corrected his own 2.8 to 3.75).
+  - Base `moveSpeed` 0.5 -> **0.6** on all 23 unit stats assets. ASSET EDIT.
+- **2026-09-12 (later) - the damage FLOOR was cancelling the champion's budget.**
+  Arash tested level 2: the hero lost its whole 45% in ~4 blows and then froze,
+  i.e. ~10% per blow instead of the intended 5.6%. Cause was mine: the
+  `MaxHitsToKillAnyone` floor added earlier (maxHP/11 = 9.1%) was applied AFTER
+  `LimitDamageToChampion` had correctly reduced the blow to 45%/8 = 5.6%, and
+  raised it straight back up. Audited and ruled out first: every hero prefab
+  applies one damage event per swing, and so does every enemy prefab
+  (`EnemyDamageCollider` has no duplicate-delivery guard, but no enemy prefab
+  carries two copies, so it never doubled).
+  - `ClampIncomingBlow` gained `allowFloor`; `PlayerStats` passes false when
+    `CPBattleController.IsProtected(this)`. The floor lifts blows that are weak
+    because of STATS, never one a budget deliberately lowered.
+  - Verified: level 2 now 5.63% per blow -> 8 blows to spend 45%; level 3 3.75%
+    -> 8 blows to spend 30%. An ordinary (unprotected) hero still has its floor,
+    so no fight drags past 11, and enemies are untouched.
+- **2026-09-12 - levels 1-3 killed in 11 blows instead of 8.** The defence band
+  (8-11) was being applied there as well as in levels 4-5, so Golem_01 (defence 65)
+  took 10 and Golem_02 (defence 78) took 11. Those three levels run a SCRIPTED
+  exchange whose kill must land on the eighth blow every time.
+  `CharacterStats.HitsToKillMe` now returns a flat `MinHitsToKillAnyone` while
+  `CPBattleController.IsTutorialExchange` is true, and the band applies only from
+  level 4 up. Verified: a 275 HP enemy now dies on blow 8.
+- **moveSpeed Inspector fields were misleading, now synced.** `EnemyLocoMotion
+  .moveSpeed` (0.2) and `PlayerManager.moveSpeed` (0.5) are FALLBACK fields, used
+  only until `unitStats` is built - the live speed is `CurrentMoveSpeed` ->
+  `unitStats.moveSpeed` = 0.6. Both were set to 0.6 across 23 character prefabs so
+  the Inspector stops disagreeing with the stat block. PREFAB EDIT.
+  NOTE: levels 1-3 still multiply enemy speed by `TutorialEnemySpeedScale` (0.6),
+  so enemies walk at 0.36 there - Arash asked for that 40% reduction earlier so the
+  spare enemy could not reach the base while the hero was busy. Levels 4-5 use 0.6.
+- **2026-09-12 - one uniform speed, tutorial slow-down removed.** Arash chose to
+  drop the levels 1-3 40% enemy reduction and set EVERY unit to **0.5** instead.
+  - `TutorialEnemySpeedScale` deleted, along with its use in `RegisterEnemy` and
+    the battle log line. No per-level speed multiplier exists any more - change the
+    stat block instead, so the Inspector stays truthful.
+  - `UnitStatsSO.moveSpeed` = 0.5 on 23 assets; prefab FALLBACK fields
+    (`EnemyLocoMotion.moveSpeed`, `PlayerManager.moveSpeed`) set to 0.5 on 23
+    prefabs so the Inspector agrees with what actually runs. ASSET + PREFAB EDIT.
+  - Consequence Arash accepted: in level 3 the spare enemy now reaches the player's
+    base sooner. It is visible rather than silent because that base takes 1% chip
+    damage per blow.
+  - A transient compile error (`TutorialEnemySpeedScale` missing) appeared between
+    the two edits and is resolved; Assembly-CSharp rebuilds clean.
+- **2026-09-12 - budgets now STACK, and hero speed is never damped.**
+  1. **Staged reserve REVERTED.** Arash: each enemy's allowance is its own, so two
+     striking at once may spend both - level 3 is 30% + 30% = 60%, hero to 40%,
+     instead of freezing at the 70% staged floor. `LimitDamageToChampion` is back
+     to the end-of-battle reserve only (1 - budget x enemyCount = 10%), which now
+     exists purely so a fully-spent army cannot kill the protected hero.
+     TRADE-OFF ARASH ACCEPTED: the earlier level 2 guarantee ("hero still above
+     half when the first enemy dies") no longer holds when both attack at once.
+  2. **Hero slowed on its final approach.** `PlayerManager.HandleMoveToTarget` had
+     `linearVelocity *= 0.7f` inside maxAttackRange - at the authored 0.6 that is
+     0.42, which is what Arash saw. REMOVED; a hero now moves at its stat speed at
+     every moment. The stop is still clean because the mover halts within 5cm of
+     its stand point.
+  - **Speeds are NOT uniform any more, by Arash's own edit:** the 8 hero stat
+    assets are at **0.6**, every enemy asset is at **0.5**. Prefab fallback fields
+    were re-synced to each unit's OWN stat asset (9 prefabs) rather than to one
+    global number, so the Inspector matches whatever each side is authored at.
+- **2026-09-12 - live speed readouts added; the march slowdown is DIRECTION, not speed.**
+  Arash still saw heroes slow on the march to the enemy base after the `* 0.7f`
+  damping was removed. Audited every remaining cause of lost speed and found none:
+  `linearDamping` is 0.00 on all 15 character prefabs, gravity 0, and nothing else
+  scales `linearVelocity`. `SteerAroundBlockers` returns a NORMALISED vector, so it
+  changes heading without touching magnitude - which is the likely answer: heroes
+  marching together weave around each other and cover less ground up the lane while
+  still travelling at full speed.
+  - Added read-only Inspector readouts, measured from REAL positional movement
+    rather than `linearVelocity` (enemies move with MovePosition, where velocity
+    reads a false ~0): `PlayerManager.actualMoveSpeed` / `intendedMoveSpeed` /
+    `forwardProgress`, and `EnemyManager.actualMoveSpeed` / `intendedMoveSpeed`.
+    `MeasureSpeed()` runs BEFORE every early return in both FixedUpdates, so it
+    keeps reading during a MeleeContactRecovery sidestep too.
+  - How to read it: actual ~= intended with a low forwardProgress means direction
+    bending, not speed loss; actual < intended means something really is damping;
+    actual == 0 while the walk cycle plays means it is stopped.
+- **2026-09-12 - TEMPORARY march speed boost (+30%), and it is marked as temporary.**
+  `PlayerManager.marchSpeedBoost` = 1.3, serialized and Range(1,3); 1 switches it
+  off. Applied in `HandleRoamForward` ONLY - the branch taken when currentTarget is
+  null, i.e. every enemy is dead. Combat movement and the approach to an enemy are
+  untouched. 0.60 -> 0.78 on the march; a ~10 unit lane drops from 16.7 s to 12.8 s.
+  - **THIS IS A WORKAROUND, NOT A RULE, and Arash said so explicitly.** The measured
+    evidence says there is NO speed loss: with the readouts in place he reported
+    0.59-0.60 fluctuating during the approach and a steady 0.60 on the march. Every
+    prefab has linearDamping 0, nothing scales linearVelocity any more, and
+    `SteerAroundBlockers` returns a normalised vector so it cannot reduce magnitude.
+  - **STILL UNEXPLAINED - do not close this.** Why does a steady 0.60 in a straight
+    line READ as slower than a fluctuating 0.60 over a short distance? Current best
+    guess is distance plus the complete absence of course changes (~17 s of uniform
+    motion vs ~3 s with visible micro-corrections), but that is a hypothesis, not a
+    measurement. When the real cause is found, remove the boost rather than tuning it.
+  - `intendedMoveSpeed` reports MarchSpeed while marching, so actual-vs-intended
+    stays a valid comparison with the boost on.
+- **2026-09-12 - FLANK rule: half damage when the protected hero is surrounded.**
+  Arash: two enemies on the SAME side is fair (the hero can answer both), but one
+  left and one right with the hero between them is not - it can only face one, so
+  the other hits it for free. Halve the incoming damage in that case.
+  - `LevelBattleRules.FlankedDamageScale` = 0.5, `FlankEngageRange` = 1.2.
+  - `CPBattleController.ChampionIsFlanked`. Arash corrected the first version:
+    BEING ON BOTH SIDES IS NOT THE TEST - both enemies must actually be DAMAGING
+    this hero. An enemy counts only if it is alive, within 1.2, clearly to one side
+    (|dx| >= `MeleeEngagement.SideDeadZoneX`, so above/below counts as neither),
+    its OWN `currentTarget` is this hero, AND `IsInAttackPosition()` is true. Two
+    enemies either side while one is busy with a different hero is not a flank.
+  - Result: level 2 per blow 5.6% -> **2.8%**; level 3 3.8% -> **1.9%**. Arash's
+    own figures were 5->2.5 and 3.5->1.8, i.e. the same halving.
+  - The lifetime allowance is deliberately NOT scaled - an enemy still gets its
+    full 45%/30% and simply needs 16 blows instead of 8. Being surrounded buys the
+    hero time; it does not make the enemies weaker overall.
+  - Applies wherever the champion is flanked, which includes levels 4-5. If that is
+    unwanted there, gate it on `LevelBattleRules.IsTutorialPresentation`.
 - **Next:** play stage 1-5. Levels 1-3: confirm enemies take four visible hits,
   the hero chips down ~7% a time, and the last enemy never reaches the base.
   Levels 4-5: confirm non-champion heroes really do die normally and the champion

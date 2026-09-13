@@ -31,7 +31,26 @@ public class PlayerGateStats : CharacterStats
 
     public void ApplyDamageToPlayerGate(float damageAmount)
     {
-        if (CPBattleController.HasLivingDefenders(this)) return;
+        // WHAT DECIDES THIS IS THE BATTLE'S INTENDED OUTCOME, not who is still alive.
+        //
+        // In a battle the player is meant to WIN, an enemy that slips past the fight
+        // and reaches the castle must not be able to decide the match: it loses 1% of
+        // its maximum per connected blow. That is visible feedback that settles
+        // nothing - felling a base that way needs a hundred blows, far longer than
+        // these battles run. The base used to take literally NOTHING in that case,
+        // which read as a broken game rather than as a rule.
+        //
+        // In a battle the player is meant to LOSE, the same enemy deals its normal
+        // damage. Damping it there would leave the match unable to end the way the
+        // workbook says it must (Arash, 2026-09-12).
+        //
+        // THIS USED TO KEY OFF `HasLivingDefenders`, which tied the damping to whether
+        // any hero was still standing. That is the wrong question: it damped the
+        // losing battles too, right up until the last hero fell, and then let the base
+        // fall at full speed in the battles that were never in danger anyway.
+        if (CPBattleController.BattleIsAnExpectedWin(this))
+            damageAmount = maxHealth * LevelBattleRules.BaseChipPerBlow;
+
         if (isPlayerGateDestroyed)
         {
             return;

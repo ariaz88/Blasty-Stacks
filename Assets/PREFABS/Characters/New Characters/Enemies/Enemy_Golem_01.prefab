@@ -61,7 +61,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: -1, y: 1, z: 1}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5332037462563598370}
@@ -113,8 +113,8 @@ CapsuleCollider2D:
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
-  m_Offset: {x: 2.7900136, y: -0.674514}
-  m_Size: {x: 6.580109, y: 1.1921188}
+  m_Offset: {x: 2.8799953, y: -0.6307251}
+  m_Size: {x: 3.4999998, y: 1.0714501}
   m_Direction: 1
 --- !u!1 &801459049232594273
 GameObject:
@@ -386,6 +386,8 @@ MonoBehaviour:
   gateStopPosition: {x: 0, y: 0}
   gateStopDistance: 0.6
   facingDeadZoneX: 0.05
+  actualMoveSpeed: 0
+  intendedMoveSpeed: 0
 --- !u!114 &544427844556424272
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -405,7 +407,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 128
   detectionRadius: 20
-  moveSpeed: 0.2
+  moveSpeed: 0.5
   stoppingDistance: 0.83
   fairDistanceToPlayer: 1.9
 --- !u!114 &4366931480462928380

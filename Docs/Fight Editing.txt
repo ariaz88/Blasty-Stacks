@@ -1,0 +1,685 @@
+================================================================================
+  FIGHT EDITING - everything changed in the combat layer, 2026-09-11 / 09-12
+  Project: Blasty-Stacks (Stacky Warriors 2D)
+================================================================================
+
+Read this before touching combat. It records WHAT changed, WHY, what was measured,
+what was tried and rejected, and what is still unexplained. Several items here were
+implemented one way, found wrong in play, and redone - those are marked, because
+repeating them is the main risk.
+
+
+================================================================================
+  PART 1 - MELEE ENGAGEMENT: units now fight from the SIDE
+================================================================================
+
+THE PROBLEM
+  When a hero and an enemy lined up vertically, neither could damage the other,
+  their sprites sank into each other, and the enemy visibly "skated" into the hero.
+
+ROOT CAUSE (confirmed in the assets, not guessed)
+  Every melee weapon is a WIDE, FLAT trigger on a weapon bone. Player_Valkyrie's
+  sword box is 7.68 x 1.29 local units offset +4.11 on X; at the visual's 0.19
+  scale that is ~1.46 wide by only ~0.24 TALL, reaching SIDEWAYS. Enemy weapons are
+  the same shape. Two units stacked vertically are inside each other's attack RANGE
+  and completely outside each other's attack BOX.
+
+  Both sides decided "I have arrived" from a plain RADIAL distance, which cannot
+  tell "beside" from "on top of".
+
+THE FIX
+  NEW  Assets/Scripts/Combat/Shared/MeleeEngagement.cs
+       One shared rule for where a melee unit stands:
+         Standoff     = 0.85 x range      (where it comes to rest)
+         Band         = 0.30 x range      (how far off the target's height it may be)
+         ChooseSide   - stand on the side of the target you are ALREADY on
+         StandPoint   - the exact spot, always on the standoff circle
+         InAttackPosition - close enough, not sunk in, level enough
+
+  THE SIDE RULE IS SELF-CONSISTENT ON PURPOSE. Both halves of a fight run the same
+  code, so they must agree or they chase each other sideways forever. "The side I am
+  already on" works because A is on the opposite side of B from where B is of A.
+  The one ambiguous case is a dead-level approach, and PlayerPreferredSide (-1) /
+  EnemyPreferredSide (+1) break it. THEY MUST STAY OPPOSITE.
+
+  DO NOT LET A SLOT FLIP THE SIDE. It was tried. A simulated 2-heroes-vs-1-enemy
+  fight drifted 9 world units off the lane in 12 seconds and never landed a hit,
+  because the slot-1 hero wanted the enemy's far side while the enemy wanted that
+  hero's far side - two demands with no solution. Slots fan UP AND DOWN the same
+  flank instead.
+
+  Changed with it: PlayerManager (ResolveAttackDestination, IsInAttackPosition),
+  PlayerPursueTargetState, PlayerCombatState, EnemyLocoMotion, EnemyManager,
+  MeleeContactRecovery.
+
+VERIFIED
+  Simulation against the real authored numbers (hero range 0.85 / enemy 0.83):
+  1v1 stacked, 2v1 split lanes, 2v1 same side, 3v3 and 5v5 all settle with ZERO
+  movement in the final 2 seconds, every hero in a position it can hit from, and no
+  lateral drift.
+
+
+================================================================================
+  PART 2 - THE ENEMY THAT FROZE WITH ITS WALK CYCLE RUNNING
+================================================================================
+
+TWO SEPARATE CAUSES, both found by audit.
+
+(a) CODE - the enemy stopped too early
+    A "hold position while a hero is engaging us" branch stopped the enemy as soon
+    as a committed hero came within maxAttackRange + 0.35 - up to 1.20 world units,
+    while the enemy's own stand point is at 0.71. So it froze BEFORE the hero
+    arrived. REMOVED. An enemy now walks until InAttackPosition is true, then stops,
+    then swings.
+
+(b) ASSET - the walk animation could not be stopped by any code
+    Reaper_Man_01.controller and "Zombie_Villager 1.controller" had a
+    FreeformCartesian2D locomotion blend tree whose TWO children - 'Idle' and
+    'Walking' - were BOTH authored at position (0,0). With every child on the same
+    blend point the weights never change, so SetAnimMoving(false) was physically
+    incapable of stopping the walk clip.
+    Swept all 22 controllers in the project: these two were the only broken ones,
+    the other 20 use (0,0)/(0,1) correctly. Both fixed to match. ASSET EDIT.
+
+    LESSON: when a unit "will not stop animating", check the blend tree child
+    POSITIONS before touching any code. A 2D blend tree with all children on one
+    point is silently unresponsive to its parameters - no warning, no error, and it
+    looks exactly like a code bug.
+
+(c) MeleeContactRecovery.Stop() now clears the walk animation, but ONLY on the frame
+    it hands the body back. While IsRepositioning is set, both movers skip their
+    FixedUpdate, so it is the only thing writing that parameter - and it only ever
+    wrote TRUE. Clearing it unguarded would be worse: it runs at execution order
+    500, after the movers, and would stamp "idle" over a unit that just chose to walk.
+
+ALSO: enemy movement moved from Update() to FixedUpdate(). MovePosition driven from
+the frame clock made step size frame-rate dependent - ~83% of stat speed at 60fps
+and ~167% in double-length steps at 30fps. Those oversized steps were the "skating".
+
+NEW  Assets/Scripts/Combat/Shared/UnitDepthSorter.cs
+     Y-driven draw depth (z = y * 0.25) so the lower unit is painted in front.
+     Every character part sits on sorting layer Default at order 1, so without it
+     the tie between two overlapping units resolved arbitrarily and an enemy's head
+     could be drawn over the hero. Added in code by both managers, no prefab edit.
+     Not a SortingGroup on purpose - that would swallow the world-space HP-bar
+     Canvas and drag it into the body's sorting layer.
+
+
+================================================================================
+  PART 3 - THE BATTLE OUTCOME LAW  (a finding, not a change)
+================================================================================
+
+The balance workbook (Assets/Documentation for scripts/
+Wittle_Defender_Levels_6-10_Balance.xlsx - four sheets, levels 1-10) looks like ten
+separate level designs. IT IS ONE FORMULA.
+
+        R = Player CP / Enemy CP
+
+        R <  0.75          ->  Fast Loss
+        0.75 <= R < 1.00   ->  Slow Loss
+        1.00 <= R < 1.15   ->  Normal Win
+        R >= 1.15          ->  Fast Win
+
+  51 scenarios tested across all 10 levels. ZERO mismatches.
+  The tiers separate with clean gaps - Fast Loss tops out at 0.735 and Slow Loss
+  starts at 0.769; Normal Win tops out at 1.125 and Fast Win starts at 1.154 - so
+  the thresholds are read off the data, not fitted to it.
+
+  The win line is exactly R = 1.00. "The player must win" was never a decree
+  needing enforcement; it is the statement that this army out-powers that one.
+
+  Charted version: https://claude.ai/code/artifact/396a631b-2c43-4be0-830e-92022f033fe5
+
+WHAT THIS MAKES DERIVABLE (currently still hand-authored)
+  - the first winning match per level
+  - the win/loss verdict
+  - the Slow Loss case (one hard-coded exception naming a level AND a hero count -
+    it is just the band 0.75 <= R < 1.00)
+  - levels 11+ need only an enemy CP budget and a deployment sequence
+
+
+================================================================================
+  PART 4 - THE COMBAT MODEL: one protected hero
+================================================================================
+
+  Exactly ONE hero is assisted: the STRONGEST on the field, chosen when the battle
+  is prepared. Every other hero fights with NO assistance whatsoever - it wins,
+  loses or dies exactly as it would with the system switched off, and the damage it
+  deals on the way is real. That is what makes the fight read as genuine.
+
+  TEAM-TOTAL NORMALISATION replaced per-hero normalisation.
+    Scaling every hero to an identical CP made the roster mathematically tied, so
+    "the strongest hero" did not exist and the model had nothing to protect.
+    Normalising the TOTAL to heroCount x PerHeroCP preserves each hero's share, so
+    Player CP still matches the workbook AND a genuine strongest hero exists.
+    Individual heroes now VARY around the reference rather than sitting on it.
+
+  The champion is NOT invulnerable and has NO blanket HP floor. Each INDIVIDUAL
+  enemy gets a lifetime allowance of how much of it that enemy may ever remove:
+
+        budget per enemy = roundUpTo5( (100 / E) - 5 )%
+        E=1 95%   E=2 45%   E=3 30%   E=4 20%   E=5 15%
+
+    Sized so the hero survives even if every ally falls and it faces the whole army
+    alone. Spread over at least MinHitsToSpendBudget (8) blows.
+
+  The champion fights whoever is NEAREST, like any other hero - there is no
+  assigned duel. The budget is sized against the TOTAL enemy count, so it survives
+  whichever enemies it ends up facing, in any order.
+
+  PER-UNIT ENEMY CP for levels 1-3 (authored, not a team budget):
+        level 1: 35
+        level 2: 35, 35
+        level 3: 35, 40, 40
+    Hero reference CP: 100 at level 1, 125 from level 2.
+    Checked against the law: L1 all Fast Win, L2 all Fast Win, L3 match 1 Normal
+    Win then Fast Win - matching the workbook exactly.
+
+  REMOVED and MUST NOT COME BACK:
+    - a last-survivor 1%-HP floor that triggered at the END of a fight instead of
+      being budgeted before it
+    - a damage reduction hard-coded to one specific level and hero count
+
+
+================================================================================
+  PART 5 - HOW MANY BLOWS ANYTHING TAKES TO DIE
+================================================================================
+
+  THE RULE: nobody - hero or enemy, any level - dies in fewer than 8 blows, and no
+  duel runs past about 11. Each blow lands between 9.1% and 12.5% of the target's
+  maximum HP.
+
+  WHERE IT LIVES: CharacterStats.ClampIncomingBlow, applied by PlayerStats and
+  EnemyStats AFTER the CP controller has had its say.
+
+  >> IT WAS IMPLEMENTED IN CPBattleController FIRST AND DID NOT HOLD. <<
+  A level 4 enemy still died in two hits. AdjustIncomingDamage returns the damage
+  UNTOUCHED on four paths that are invisible at runtime: no battle prepared, the
+  unit missing from the registered hero/enemy sets, a stale static Instance left by
+  a previous battle, or a scene mismatch. Every one silently skipped the ceiling.
+  Down in CharacterStats the unit clamps its own incoming damage, so the rule holds
+  with no CP battle in the scene at all - which is also what makes it true for
+  stage 6+. DO NOT MOVE IT BACK UP.
+
+  Before blaming the clamp, these were audited and ruled out: every hero prefab and
+  every enemy prefab applies exactly ONE damage event per swing (one collider
+  carrying stats, no duplicate components), there is no bulk-kill or AoE path, and
+  the reported video postdated the fix.
+
+  THREE MECHANISMS
+    1. CEILING of maxHealth / HitsToKillMe - the divisor is the DEFENDER's own
+       number, from its defence.
+    2. FLOOR of maxHealth / 11, so a very soft blow is lifted and no duel drags on.
+       Suppressed for the protected hero - see the warning below.
+    3. LETHALITY GUARD - before the 8th blow the unit cannot be reduced past a
+       sliver. Catches float drift and damage arriving outside the weapon path.
+
+  A SINGLE FIXED CEILING DOES NOT WORK, AND THIS WAS MEASURED. With one maxHP/8
+  ceiling for everyone, 240 of 240 roster matchups landed on EXACTLY 8 hits - after
+  CP normalisation every attacker clears a flat 12.5% blow, so the ceiling binds
+  every time and ALL variety collapses. The ceiling is therefore sized from the
+  defender's own defence:
+
+        defence 10 -> 8 blows      defence 25 -> 9
+        defence 40/52/65 -> 10     defence 78 -> 11
+
+  An upgrade that raises defence walks a character up the band, capped at 11.
+
+  >> THE FLOOR MUST NEVER UNDO A BUDGET. <<
+  The floor exists to lift blows that are weak because of STATS. It was applied to
+  the champion too, and raised its carefully budgeted 45%/8 = 5.6% blows back up to
+  maxHP/11 = 9.1% - so an enemy spent its entire allowance in five blows instead of
+  eight and the hero then froze on its reserve. Reported from play as "10% per hit,
+  not 5%". ClampIncomingBlow now takes allowFloor, and PlayerStats passes false when
+  CPBattleController.IsProtected(this).
+
+  HERO VARIETY IS LIMITED BY THE ROSTER, NOT THE CODE. Every deployed hero is
+  authored at defence 25, so they all land on 9. Give them distinct defence values
+  and they spread across the band with no code change.
+
+  NOTE ON COUNTING: the band counts TOTAL blows, not blows per attacker. Two heroes
+  on one enemy still kill it in eight, so each swings only four times - which looks
+  exactly like a broken rule when you watch a single hero. Measured: 8 total, 4 per
+  hero, rule satisfied. CharacterStats.ReportDeath() logs one line per death giving
+  total blows, the per-attacker breakdown, and the required minimum, so this can be
+  settled from the console rather than from a video.
+
+  >> THIS IS WHAT THE 2026-09-12 "DIED IN FOUR BLOWS" REPORT TURNED OUT TO BE. <<
+  A level 4 recording showed one enemy taking 8-9 visible blows and another, the
+  same level, dying after 4. The Editor log for those exact two battles:
+
+        battle 1:  Enemy_Zombie_villager  10 blows / 1 attacker   <- the one watched
+        battle 2:  every enemy            10 blows / 2 attackers
+
+  Nothing was broken. The clamp cannot let anything die before the 8th blow - the
+  lethality guard pins currentHP at 0.1% of max until then, and every death in the
+  log reads OK. What differed was how many attackers the blows came from.
+
+  THE SECOND ATTACKER WAS NOT FIGHTING THAT ENEMY. Weapon boxes were ~1.5 world
+  units wide against a 0.45-wide body, and PlayerDamageCollider / EnemyDamageCollider
+  damage EVERY unit they overlap with no check against the attacker's currentTarget.
+  In a packed 4v4 line - which is exactly what the recording shows, 8 units shoulder
+  to shoulder - a hero hit its own target AND the enemies standing beside it. So the
+  victim really did absorb 10, while the hero being watched only landed 4.
+
+  MITIGATION APPLIED 2026-09-12: every weapon box wider than 1.0 world unit was
+  narrowed to 0.8 - see Part 12. That makes the extra victim much rarer. It is NOT a
+  guarantee, and nobody should treat it as one: two units that end up closer than
+  ~1.2 apart can still share a swing. The only guarantee is filtering a swing to the
+  attacker's currentTarget, which is still open (Part 11 item 2).
+
+
+================================================================================
+  PART 6 - LEVELS 1-3 ARE A SCRIPTED TUTORIAL EXCHANGE
+================================================================================
+
+  These three levels are guaranteed wins fought by one or very few heroes, and at
+  those CP ratios real combat reads badly - a level 1 hero at CP 100 against a CP 35
+  enemy deletes it in a single blow. So the exchange is SCRIPTED for appearance,
+  while levels 4-5 keep real combat and the champion model.
+
+        enemies die on the 8th blow, FLAT, whatever their defence
+        heroes lose a flat 7% of maximum per blow
+        both are SET, not capped, so it reads the same however units are authored
+        the killing blow is taken from currentHP, so float drift cannot leave a
+          sliver of health behind
+
+  The flat 8 matters: letting the defence band apply here made a defence-65 enemy
+  take 10 and a defence-78 one take 11, which was reported from play. The switch is
+  CPBattleController.IsTutorialExchange.
+
+  REMOVED: a "kill in two blows while alone and outnumbered" rule. It only ever
+  applied to levels 2-3 match 1 - exactly what the 8-blow script now covers.
+
+  REMOVED: TutorialEnemySpeedScale, a 40% enemy slow-down in these levels. Replaced
+  by one uniform authored speed. DO NOT reintroduce a per-level speed multiplier -
+  change the stat block instead, so the Inspector keeps telling the truth.
+
+
+================================================================================
+  PART 7 - DAMAGE BUDGETS IN PRACTICE, AND FLANKING
+================================================================================
+
+  PER BLOW against the protected hero = budget / 8:
+        level 2 (45% budget):  5.63% per blow
+        level 3 (30% budget):  3.75% per blow
+
+  BUDGETS STACK. Each enemy's allowance is ITS OWN, and two striking at once may
+  spend both. In level 3 that is 30% + 30% = 60%, so the hero drops to 40% while
+  the third walks on the base.
+
+  >> A STAGED RESERVE WAS TRIED AND REJECTED. << It unlocked one enemy's budget per
+  enemy still standing (level 2: 55% then 10%; level 3: 70%, 40%, 10%) so the hero
+  would still be above half when the first enemy died. It froze the hero at that
+  floor while the others were alive. The reserve is now the END-OF-BATTLE floor
+  only - 1 - budget x enemyCount = 10% - and exists purely so a fully-spent army
+  cannot kill the protected hero.
+  CONSEQUENCE ACCEPTED: the earlier level 2 guarantee ("hero above half when the
+  first enemy dies") no longer holds when both attack at once.
+
+  FLANKING - half damage when genuinely surrounded
+        FlankedDamageScale = 0.5      FlankEngageRange = 1.2
+        level 2:  5.63% -> 2.81%
+        level 3:  3.75% -> 1.88%
+
+    Two enemies on the SAME side is fair - the hero can answer both. Caught between
+    two it can only ever face one, so the other hits it for free.
+
+  PILED ON - three or more from both sides  (Arash, 2026-09-12, from a level 3 play)
+        SurroundedEnemyCount = 3      SurroundedDamagePerHit = 1% of max HP
+
+    The case that prompted it: ONE enemy on one side of the hero and TWO on the
+    other, all three fighting it. Halving is the answer to being caught between two;
+    three is a different situation and gets its own number.
+
+        level 3:  3.75% normal  ->  1.88% flanked  ->  1.00% surrounded
+
+    IT IS A CEILING, NOT A SET VALUE, and that distinction matters. At level 5 the
+    halved blow is already 0.94%, so "set it to 1%" would make being surrounded by
+    five enemies HURT MORE than being caught between two. The code takes the smaller
+    of the two, which keeps the progression in one direction - the more enemies pile
+    on, the less each blow takes.
+
+        level 4 (4 enemies, 20% budget):  2.50% -> 1.25% -> 1.00%
+        level 5 (5 enemies, 15% budget):  1.88% -> 0.94% -> 0.94%  (unchanged)
+
+    The counting is the same five-part test as the flank - alive, in range, clearly
+    to one side, its OWN currentTarget is this hero, and in attack position - except
+    that it now COUNTS per side instead of stopping at one each. The old test
+    returned the moment it had a left and a right, which cannot tell 1-and-1 from
+    1-and-2.
+
+    IT APPLIES TO THE PROTECTED HERO ONLY, like every other line in this part. Every
+    other hero fights unassisted by design (Part 4), so an ordinary hero surrounded
+    by three enemies still takes full damage. That is the model, not an oversight -
+    if it should change, it changes in Part 4 first.
+
+    BEING ON BOTH SIDES IS NOT THE TEST. An enemy counts only if ALL of these hold:
+      1. alive
+      2. within FlankEngageRange (1.2) of the hero
+      3. clearly to one side, |dx| >= MeleeEngagement.SideDeadZoneX (0.25), so
+         directly above or below counts as NEITHER
+      4. its OWN currentTarget is this hero - fighting IT, not another hero it
+         happens to stand beside
+      5. IsInAttackPosition() - close and level enough to really land a blow
+
+    The LIFETIME allowance is deliberately NOT halved: an enemy still gets its full
+    45%/30% and simply needs 16 blows instead of 8 - or 31 at the surrounded 1%.
+    Being surrounded buys the hero TIME; it does not make the enemies weaker overall.
+
+    Exposed as CPBattleController.ChampionIsFlanked and .ChampionIsSurrounded if you
+    want either on screen.
+    Applies wherever the champion is flanked, INCLUDING levels 4-5. If that is
+    unwanted there, gate it on LevelBattleRules.IsTutorialPresentation.
+
+
+================================================================================
+  PART 8 - BASES
+================================================================================
+
+  A defended base used to take LITERALLY NOTHING while its own units lived, so an
+  enemy that walked past the duel and hammered the player's castle produced no
+  health drop and no bar movement - which reads as a broken game, not a rule.
+
+        PlayerGateStats takes BaseChipPerBlow = 1% of MAX per connected blow.
+
+  Visible feedback that decides nothing: felling a base that way needs a hundred
+  connected blows, far longer than these battles run.
+
+  WHAT DECIDES IT IS THE INTENDED OUTCOME, NOT WHO IS STILL ALIVE
+  (Arash, 2026-09-12 - extended from levels 1-3 to every level the system governs)
+
+        battle the player is meant to WIN      ->  1% a blow
+        battle the player is meant to LOSE     ->  NORMAL weapon damage
+        no prepared battle (stage 6+, or a     ->  NORMAL weapon damage
+          gameplay scene entered directly)
+
+    Levels 1-3 are always a scripted win, so they always chip - which is what was
+    already asked for and already true. What changed is levels 4-5, where the early
+    matches are LOSSES by design: there the base now takes real damage, because that
+    loss is the point of the match and damping it would leave the battle unable to
+    end the way the workbook says it must. From the first winning match onward, the
+    same level chips instead.
+
+        level 4: matches 1-2 normal damage, matches 3-4 chip
+        level 5: matches 1-3 normal damage, matches 4-6 chip
+
+    IT REPLACED `HasLivingDefenders`, which asked the wrong question. That damped the
+    LOSING battles right up until the last hero fell, and then let the base fall at
+    full speed in exactly the battles that were never in danger anyway - backwards in
+    both directions. HasLivingDefenders still exists and is still correct for the
+    ENEMY gate, which is now its only caller.
+
+    IT CANNOT STRAND A BATTLE. The champion cannot die in a prepared win - the
+    reserve floor in LimitDamageToChampion sees to that - so a "should win" battle
+    always still has a hero standing to finish it. The chip can never be the only
+    thing left running.
+
+  THE ENEMY GATE DELIBERATELY KEEPS FULL IMMUNITY while its defenders live.
+  Destroying it ends the level in a WIN, so letting a stray hero chip it would be an
+  OUTCOME bug rather than cosmetic - it could finish a match the workbook says must
+  be a loss.
+
+
+================================================================================
+  PART 8b - THE SPINNING ENEMY  (2026-09-12)
+================================================================================
+
+THE REPORT
+  In 4v4 and 5v5, an enemy in the MIDDLE of the line - heroes on both sides of it -
+  spins rapidly in place instead of fighting. It looks like a rendering bug.
+
+THE CAUSE - IT IS NOT A RENDERING BUG
+  EnemyManager.DetectPlayerTargets runs EVERY FRAME from Update, and it overwrote
+  currentTarget unconditionally with whatever was nearest. An enemy with a hero on
+  each side is comparing two almost identical distances, so the winner changed frame
+  to frame. Each swap flips which side of the target the enemy walks to
+  (MeleeEngagement.ChooseSide) and flips its facing with it. What you see is the
+  facing flag being rewritten every frame.
+
+THE FIX - A HARD LOCK ON THE ENEMY SIDE
+  Once an enemy has a hero it keeps it. A nearer hero does not take it away.
+  Released by exactly three things:
+        1. the hero dies or its object is gone
+        2. the hero is in PlayerLockState (undeployed - the damage collider refuses
+           to hit one, so an enemy locked on it would swing at nothing forever)
+        3. the hero leaves detectionRadius entirely - which is also what lets an
+           enemy give up and walk on the base
+
+  CONSEQUENCE, ACCEPTED: a locked enemy walks past a hero standing right beside it
+  to reach the one it locked onto. The two armies meet as a group here, so it is
+  rare, and the alternative is the spinning.
+
+THE HERO SIDE ALREADY HAD A WEAKER VERSION OF THIS FIX, AND IT IS STILL WEAKER.
+  PlayerManager.retargetHysteresis (0.2) makes a new enemy have to be about 20%
+  closer before a hero switches - a margin, not a lock. Its comment records the same
+  symptom being fixed there earlier. So a hero CAN still retarget mid-fight, just not
+  on a tie. The two sides are deliberately different; if heroes ever need the hard
+  lock too, it is the same change in PlayerManager's Phase B.
+
+FREE PERFORMANCE. The search uses OverlapCircleAll, which allocates an array - it
+was doing that every frame for every enemy and was one of the larger recurring GC
+sources in combat. The lock skips it entirely for any enemy that already has a
+target, which is most of them for most of a battle.
+
+
+================================================================================
+  PART 9 - MOVEMENT SPEED
+================================================================================
+
+  THE INSPECTOR WAS LYING, AND THIS CAUSED REAL CONFUSION.
+    EnemyLocoMotion.moveSpeed and PlayerManager.moveSpeed are FALLBACK fields, used
+    only until unitStats is built. The live speed is CurrentMoveSpeed ->
+    unitStats.moveSpeed, i.e. the UnitStatsSO. The prefabs showed 0.2 and 0.5 while
+    units actually walked at the SO value. All fallbacks are now synced to each
+    unit's OWN stat asset so the Inspector agrees with what runs.
+
+  CURRENT AUTHORED SPEEDS (not uniform - set this way deliberately):
+        heroes  0.6
+        enemies 0.5
+        castle  0     (it does not walk)
+
+  REMOVED: a "linearVelocity *= 0.7f when inside maxAttackRange" damping in
+  PlayerManager.HandleMoveToTarget. At 0.6 that is 0.42, and it made heroes visibly
+  decelerate on their final approach. The stop is still clean because the mover
+  halts within 5 cm of its stand point.
+
+  TEMPORARY - PlayerManager.marchSpeedBoost = 1.3
+    Multiplies speed ONLY after every enemy is dead - the march on the enemy base.
+    0.60 -> 0.78; a ~10 unit lane drops from 16.7 s to 12.8 s. Serialized,
+    Range(1,3); set to 1 to switch it off.
+    THIS IS A WORKAROUND, NOT A RULE - see Part 11.
+
+
+================================================================================
+  PART 10 - DIAGNOSTICS ADDED (keep these)
+================================================================================
+
+  PlayerManager.actualMoveSpeed / intendedMoveSpeed / forwardProgress
+  EnemyManager.actualMoveSpeed / intendedMoveSpeed
+    Measured from REAL positional movement, not linearVelocity - enemies move with
+    MovePosition, where velocity reads a false ~0 and would lie. MeasureSpeed() runs
+    BEFORE every early return in both FixedUpdates, so the readout never stalls,
+    even during a MeleeContactRecovery sidestep.
+
+    HOW TO READ THEM
+      actual ~= intended, forwardProgress much lower
+            -> not a speed loss; ally avoidance is bending the DIRECTION
+      actual < intended
+            -> a genuine speed loss; something is damping it
+      actual == 0 while the walk cycle plays
+            -> it is stopped and only the animation is running
+
+  CharacterStats.ReportDeath()
+    One unconditional console line per death: total blows absorbed, how many
+    DIFFERENT attackers landed them, the required minimum, and OK / RULE BROKEN.
+    It exists so "it died in four hits" is settled with data.
+
+  CPBattleController.ChampionIsFlanked - public, for on-screen debugging.
+
+
+================================================================================
+  PART 11 - STILL OPEN / UNEXPLAINED
+================================================================================
+
+  1. WHY DOES THE MARCH FEEL SLOW? Measured evidence says there is NO speed loss:
+     0.59-0.60 fluctuating during the approach, a steady 0.60 on the march. Every
+     prefab has linearDamping 0, nothing scales linearVelocity any more, and
+     SteerAroundBlockers returns a NORMALISED vector so it cannot reduce magnitude.
+     Current best guess is distance plus the total absence of course changes
+     (~17 s of uniform straight-line motion vs ~3 s with visible micro-corrections),
+     but that is a hypothesis, not a measurement.
+     WHEN THE REAL CAUSE IS FOUND, REMOVE marchSpeedBoost RATHER THAN TUNING IT.
+
+  2. SPLASH: ONE SWING STILL DAMAGES EVERY UNIT IT OVERLAPS. Neither damage collider
+     checks the attacker's currentTarget, so a swing aimed at one enemy also lands on
+     whatever else is inside the box. Two consequences: a cluster advances in lockstep
+     and dies on the same swing, and - the one reported from play - a unit's eight
+     blows can arrive from a neighbour nobody saw fighting it, so on screen it looks
+     like it died in four. See Part 5.
+     PARTLY MITIGATED 2026-09-12 by narrowing every box over 1.0 world unit to 0.8
+     (Part 12). Units closer than ~1.2 apart can still share a swing.
+     THE FULL FIX is restricting a swing to the attacker's currentTarget, which
+     removes incidental splash from the whole game - a real combat-feel change, so it
+     still needs a decision. Arash chose the hitbox narrowing over it on 2026-09-12;
+     revisit only if the ReportDeath breakdown still shows two attackers per kill.
+
+  3. AN UNCAUGHT EXCEPTION PATH. PlayerWaveManager calls CPBattleController
+     .CalibrateHero outside any try. ScaleToCP throws ArgumentException when CP <= 0
+     and ResetHealth throws when PlayerStats is missing. Playing a gameplay scene
+     directly, rather than booting through StarterScene, is the way to hit it.
+
+  4. EnemyDamageCollider has NO duplicate-delivery guard, unlike
+     PlayerDamageCollider. No enemy prefab currently carries two copies, so it never
+     doubles in practice - but adding one later would silently halve every enemy's
+     effective hit count.
+
+  5. Levels 4-5 have not been replayed since the 8-blow band, the flank rule and the
+     un-staged reserve landed. Verified by compile and simulation only.
+
+
+================================================================================
+  PART 12 - WEAPON HITBOX WIDTHS  (2026-09-12)
+================================================================================
+
+  THE RULE ARASH SET: any weapon box longer than 1.0 world unit becomes 0.8.
+
+  Measured in the Editor rather than read off the Inspector, because these boxes
+  live on weapon bones at 0.06-0.51 scale - the authored m_Size.x of 7.68 on
+  Player_Valkyrie is 1.46 in the world. The number that matters is
+  size.x * transform.lossyScale.x.
+
+  17 prefabs changed; the local size each needed differs because the bone scales
+  differ (7.68 -> 4.21 at 0.19 scale, 5.65 -> 2.96 at 0.27, 16.31 -> 8.89 at 0.09).
+
+        Deployed heroes   CowMinotaur_02, Minotaur_02, Pref, Valkyrie
+        Undeployed heroes Dark_Oracle_3, Fallen_Angels_02, Golem_3, Minotaur_01
+        Enemies           Golem_01, Golem_02, Orc, Reaper_Man_01,
+                          Skeleton_Crusader_1, Zombie_villager
+        Old characters    Player_ReaperVS2, Player_Satyr, Player_Satyr_Jumper
+
+  LEFT ALONE, deliberately:
+    Player_Dark_Oracle_01 (0.984) and Fallen_AngelsVS3 (0.886) were already under
+      1.0, so the rule does not reach them.
+    Assets/Scripts/TowertDefenseScripts/Prefabs/Player_Satyr.prefab - 0.8 would put
+      its own target OUTSIDE its box. Its attack range is 1.25, so it stands off at
+      1.063 while a 0.8-wide box centred at 0.621 only reaches 1.021. Legacy prefab;
+      narrowing it would make it unable to hit anything.
+    The vertical-capsule legacy prefabs (Enemy, Enemy2, Enemy_Golem) - their long
+      axis is Y, and they are ~0.2 wide already.
+
+  EVERY CHANGE WAS CHECKED AGAINST REACH before it was applied: the unit's own
+  standoff (0.85 x attack range) must still fall inside the new span. Margins after
+  the change are 0.18-0.39 world units; the tightest is Enemy_Skeleton_Crusader_1.
+  IF A NEW CHARACTER IS AUTHORED WITH A LONGER RANGE, RE-RUN THAT CHECK - a box
+  narrower than the unit's own standoff makes it swing at nothing, silently.
+
+  >> SUPERSEDED THE SAME DAY: ARASH RE-TUNED EVERY COLLIDER BY HAND. <<
+  The blanket 0.8 was a first pass. On 2026-09-12 Arash tuned all 15 live characters
+  himself in the Inspector - size AND offset, per character - and asked that this
+  hand-tuned state become the default. It is now the captured one:
+
+        heroes   0.597 - 0.902 world units   (Pref 0.597, Dark_Oracle_01 0.902)
+        enemies  0.665 - 0.770               (Golem_01 0.665, Orc 0.770)
+
+  Every one still covers its own stand point. Player_Dark_Oracle_3 is the one live
+  character left at exactly 0.800 - untouched by the hand pass.
+
+  THE DEFAULT IS NOW A CAPTURED SNAPSHOT, NOT A NUMBER IN THE SOURCE. The first
+  version of the tool hardcoded the pre-narrowing sizes, and the hand pass made that
+  table stale within hours. Do not put widths back into source - capture them.
+
+  IT IS REVERSIBLE, BY MENU  (Arash asked for this explicitly)
+        Tools/Blasty/Weapon Hitboxes/Capture current widths as default
+        Tools/Blasty/Weapon Hitboxes/Restore default widths
+        Tools/Blasty/Weapon Hitboxes/Report current widths
+
+    Assets/Scripts/Editor/WeaponHitboxWidth.cs writes size, offset and capsule
+    direction to Assets/Scripts/Editor/WeaponHitboxDefaults.json and puts them back
+    through PrefabUtility. A capture keeps the file it replaces as
+    WeaponHitboxDefaults.prev.json, so the DEFAULT itself has one step of undo.
+    Verified 2026-09-12: 24 boxes captured, and an immediate restore reported every
+    one unchanged (0.662 -> 0.662, 0.733 -> 0.733, ...).
+
+    Restore deliberately applies WITHOUT a reach check - the values are somebody's
+    own tuning, and refusing part of a snapshot would leave the project in a state
+    that was never captured. The REPORT item is where reach is judged: it flags any
+    unit whose stand point has fallen outside its own box, which is the silent
+    failure of narrowing too far. Run it after a tuning pass and after adding a
+    character - a new character is not in the file until it is captured.
+
+================================================================================
+  FILES
+================================================================================
+
+  NEW
+    Assets/Scripts/Editor/WeaponHitboxWidth.cs               (2026-09-12, the width switch)
+    Assets/Scripts/Combat/Shared/MeleeEngagement.cs
+    Assets/Scripts/Combat/Shared/UnitDepthSorter.cs
+    Assets/Scripts/Combat/Shared/MeleeContactRecovery.cs      (earlier session)
+    Assets/Scripts/Combat/Spawning/CPBattleController.cs      (earlier session)
+    Assets/Scripts/Data/CombatPower/LevelBattleRules.cs       (earlier session)
+
+  CHANGED - code
+    Assets/Scripts/Combat/Shared/CharacterStats.cs            (the 8-blow rule)
+    Assets/Scripts/Combat/Enemy/EnemyLocoMotion.cs
+    Assets/Scripts/Combat/Enemy/EnemyManager.cs
+    Assets/Scripts/Combat/Enemy/EnemyStats.cs
+    Assets/Scripts/Combat/Player/PlayerManager.cs
+    Assets/Scripts/Combat/Player/PlayerStats.cs
+    Assets/Scripts/Combat/Player/PlayerGateStats.cs
+    Assets/Scripts/Combat/Player/States/PlayerPursueTargetState.cs
+    Assets/Scripts/Combat/Player/States/PlayerCombatState.cs
+    Assets/Scripts/Combat/Spawning/CPBattleController.cs
+    Assets/Scripts/Data/CombatPower/LevelBattleRules.cs
+    Assets/Scripts/Data/CombatPower/CPCalculator.cs
+
+  CHANGED - assets (these do NOT read clearly in a git diff)
+    Reaper_Man_01.controller           blend tree Idle/Walking (0,0)/(0,0) -> (0,0)/(0,1)
+    Zombie_Villager 1.controller       same
+    23 x UnitStatsSO                   moveSpeed
+    23 x character prefabs             fallback moveSpeed fields
+    17 x character prefabs             weapon CapsuleCollider2D m_Size.x -> 0.8 world
+                                       (2026-09-12, see Part 12; the local numbers
+                                       all differ because the bone scales differ)
+
+  DOCS
+    Assets/Documentation for scripts/*.txt   per-script references, kept in sync
+    Docs/cp-analysis/CP_LEVEL_BATTLE_RULES.md
+    SESSIONS.md                              chronological log of this work
+
+
+================================================================================
+  THINGS THAT MUST NOT BE REINTRODUCED
+================================================================================
+
+  1. A slot that flips which SIDE of a target a unit stands on.
+  2. The four-hit / eight-hit rule living in CPBattleController instead of
+     CharacterStats.
+  3. The damage FLOOR applied to the protected hero - it cancels the budget.
+  4. A STAGED reserve on the champion.
+  5. A last-survivor HP floor that triggers at the end of a fight.
+  6. A damage rule hard-coded to one specific level and hero count.
+  7. A per-level movement speed multiplier.
+  8. Chip damage on the ENEMY gate while its defenders live.
+  9. Two children of a 2D blend tree sharing one position.

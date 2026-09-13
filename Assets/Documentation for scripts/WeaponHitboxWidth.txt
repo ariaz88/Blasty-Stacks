@@ -1,0 +1,104 @@
+================================================================================
+  WeaponHitboxWidth.cs
+  Path : Assets/Scripts/Editor/WeaponHitboxWidth.cs
+  Type : static class, EDITOR ONLY (must stay in a folder named `Editor`)
+  Layer: Editor / tooling
+  Data : Assets/Scripts/Editor/WeaponHitboxDefaults.json      (the captured default)
+         Assets/Scripts/Editor/WeaponHitboxDefaults.prev.json (the one before it)
+================================================================================
+
+PURPOSE
+-------
+A save/restore point for the melee weapon hitboxes, so tuning them is never a
+one-way edit.
+
+WHY IT EXISTS. A swing damages EVERY unit its box overlaps - neither
+PlayerDamageCollider nor EnemyDamageCollider checks the attacker's currentTarget -
+so an over-wide box makes a unit's eight blows arrive from two attackers, and on
+screen it looks like it died in four. Traced from a level 4 recording on 2026-09-12;
+full account in `Docs/Fight Editing.txt`, Parts 5 and 12.
+
+THE BOXES ARE TUNED BY HAND, IN THE INSPECTOR. This class does not compute a width
+and never has an opinion about one. It only remembers the result and puts it back.
+
+MENU ITEMS
+----------
+  Tools/Blasty/Weapon Hitboxes/Capture current widths as default
+      Writes the CURRENT size, offset and capsule direction of every weapon box in
+      the project to WeaponHitboxDefaults.json. Run it after a tuning pass worth
+      keeping. The file it replaces is kept as WeaponHitboxDefaults.prev.json.
+
+  Tools/Blasty/Weapon Hitboxes/Restore default widths
+      Puts every box back to that captured state. This is the undo.
+
+  Tools/Blasty/Weapon Hitboxes/Report current widths
+      Logs each box's live WORLD width next to the captured default, its distance
+      from the unit's origin, and that unit's stand point - and flags any unit whose
+      stand point has fallen OUTSIDE its own box.
+
+FIELDS
+------
+  DefaultsAsset   "Assets/Scripts/Editor/WeaponHitboxDefaults.json"
+  PreviousAsset   the same name with .prev.json - one step of undo for the DEFAULT
+                  itself, so a capture run after an experiment instead of after a
+                  good tuning pass is recoverable by renaming the file.
+  Entry           path, unit, sizeX/sizeY, offsetX/offsetY, horizontal, worldWidth.
+                  worldWidth is informational only - what the box measured when it
+                  was captured - so the file can be read without Unity.
+  Snapshot        captured (timestamp) + the list of entries.
+
+FLOW
+----
+  Capture()
+      Walks every prefab, takes the weapon box its manager actually holds, records
+      size/offset/direction, copies the old defaults aside, writes the JSON.
+
+  Restore()
+      Loads the JSON and writes each entry back through
+      PrefabUtility.LoadPrefabContents / SaveAsPrefabAsset - never by hand-editing
+      prefab YAML. Applies WITHOUT a reach check ON PURPOSE: the values are somebody's
+      own tuning, and refusing part of a snapshot would leave the project in a state
+      that was never captured and never tuned. Report is where reach is judged.
+
+  Report()
+      Compares live widths against the captured ones and flags reach failures.
+
+  WeaponBox(root, out standoff)                                       [private]
+      Returns the collider the unit actually swings with - the one its PlayerManager
+      or EnemyManager holds, not any collider that happens to be on the prefab - plus
+      MeleeEngagement.Standoff(range), the distance that unit comes to rest at.
+
+  BoxCentre(root, cap)                                                [private]
+      How far the box sits from the unit's origin along the direction it faces.
+      ABSOLUTE on purpose: a prefab authored facing left carries a negative scale, and
+      comparing a positive standoff against its mirrored span reports every such unit
+      as broken.
+
+HOW IT CONNECTS
+---------------
+  - Reads PlayerManager.playerDamageCollider / maxAttackRange and
+    EnemyManager.enemyDamageCollider / EnemyLocoMotion.stoppingDistance.
+  - Uses MeleeEngagement.Standoff, so the reach check and the movement code cannot
+    drift apart.
+  - Changes only assets. Nothing at runtime reads this class or the JSON.
+
+NOTES
+-----
+  - THE AUTHORED NUMBER IS NOT THE WIDTH YOU SEE. These colliders sit on weapon bones
+    scaled between 0.06 and 0.51, so Player_Valkyrie's authored 3.86 is 0.73 in the
+    world. The only meaningful figure is `size.x * transform.lossyScale.x`. Same trap
+    the `moveSpeed` fallback fields set, and it has cost a session once already.
+  - THE DEFAULT IS A SNAPSHOT, NOT A NUMBER IN THE SOURCE. An earlier version of this
+    class hardcoded the pre-narrowing sizes. Arash re-tuned every collider by hand on
+    2026-09-12 and that table was stale immediately. Do not put widths back into the
+    source - capture them.
+  - CAPTURED 2026-09-12: 24 boxes, the 15 live characters at 0.60-0.90 world units,
+    all reaching their stand point. The legacy vertical-capsule prefabs (Enemy,
+    Enemy2, Enemy_Golem) are in the file too and report as unable to reach - they were
+    like that before any of this work and are not part of it.
+  - A NEW CHARACTER IS NOT COVERED UNTIL IT IS CAPTURED. Capture walks the project, so
+    adding one and re-capturing is enough; but until then, Restore will not touch it.
+  - Narrowing a box reduces shared swings, it does not abolish them: two units closer
+    than about their combined reach can still be caught by one box. The only guarantee
+    is filtering a swing to the attacker's currentTarget - still open,
+    `Docs/Fight Editing.txt` Part 11 item 2.
