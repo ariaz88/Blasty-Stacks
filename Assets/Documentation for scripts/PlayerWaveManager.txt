@@ -1,3 +1,33 @@
+CURRENT UPDATE - 2026-09-14  PHASE 2: NO HERO IS SPAWNED ONTO A GATE ANY MORE
+(supersedes every "spawn"/"gate"/"release jump" note below while the flag is ON)
+
+New Inspector flag `suppressStageSpawning`, DEFAULT ON. While it is on:
+  - NO hero is instantiated at level start and NONE after a match. The gate
+    platforms stay empty for the whole stage. The release jump never happens.
+  - The per-match COUNTS are unchanged (LevelBattleRules.Deployments - stage 4 is
+    still 1,1,2,4) and the hero SELECTION is unchanged: AwardHeroesForMatch draws
+    from the SAME plannedHeroes list the old gate path drew from.
+  - Each cleared match instead appends its heroes to `earnedHeroes` and raises the
+    static event `HeroesEarned(IReadOnlyList<UnitDefinitionSO>, Vector3)`, which
+    HeroCardRevealDirector renders as a card deal. The Vector3 is
+    ResolveCardAnchorWorld() - the average of gatePoints, i.e. the centre of the
+    player base; the cards are drawn ABOVE it, never on it.
+  - BeginWaves starts PlannedWaveLoop for stages 1-5 and NO LOOP AT ALL for
+    stages 6+ (there is nothing to spawn or unlock); HandleBlast awards directly
+    there instead.
+  - New public surface: EarnedHeroes (the roster earned so far this stage - the
+    later deployment step will draw from it, NOTHING consumes it yet) and
+    CardRewardsActive.
+Turning the flag OFF restores the entire pre-PHASE-2 spawn-and-leap path
+unchanged - every code path below still exists.
+
+!! CONSEQUENCE, NOT YET ADDRESSED: with nothing spawned, releasedHeroes stays
+empty, so ReleasedPlayerCP is 0 and no hero ever fights. This is expected for
+this intermediate step - how earned heroes reach the battlefield is a separate,
+still-undesigned process (the user's explicit instruction was that they will NOT
+all enter together). Do not "fix" this by re-enabling spawning.
+
+--------------------------------------------------------------------------------
 CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
 Stages 1-5 now use queued per-match deployments: [1,1,1], [1,1,2], [1,1,2,1], [1,1,2,4], [1,1,2,2,2,4]. Only the four permanent gates participate. Rapid matches are queued through throw/jump animation; the final match still spawns after board exhaustion. SealForBattle discards unearned preview units and waits for earned releases. Hero selection remains uniform among deployed definitions. ReleasedHeroes/MatchesCleared/MatchesReleased/DeploymentsReady expose actual state. SpawnUnitAt calibrates reference CP to 100/125 only in these stages. Stages 6+ use the original random WaveLoop.
 

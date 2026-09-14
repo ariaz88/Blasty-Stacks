@@ -1,0 +1,186 @@
+================================================================================
+  HeroCardRevealDirector.cs
+  Path : Assets/Scripts/Combat/VFX/HeroCardRevealDirector.cs
+  Type : MonoBehaviour (self-bootstrapping, DontDestroyOnLoad)
+  Layer: Combat / VFX
+  Added: 2026-09-14  (PHASE 2)
+================================================================================
+
+PURPOSE
+-------
+Plays the "you earned these heroes" CARD animation that REPLACED heroes spawning
+onto the gate platforms.
+
+Before PHASE 2 every puzzle match instantiated heroes on the four gate platforms
+and made them leap into the battlefield. Three or four matches filled the field,
+which made the scene unreadable and the stage far too easy - and no amount of CP
+tuning fixed it, because it is a RATE problem, not a stat problem.
+
+The heroes are still earned at exactly the same rate
+(LevelBattleRules.Deployments - stage 4 is still 1,1,2,4). They are now held in
+data by PlayerWaveManager and ANNOUNCED by this card deal instead of being
+instantiated.
+
+This script is PRESENTATION ONLY. It owns no roster state and never decides how
+many heroes anything gets - it renders whatever PlayerWaveManager.HeroesEarned
+hands it. Getting those heroes into the battle is a separate, still-undesigned
+step.
+
+REFERENCE
+---------
+Assets/Arts/Reference videos/Ref1.MP4 (1.11s, 66 frames, 592x1280).
+Frames pulled at 20fps; beats below cite them as fr.N.
+
+  fr.1  0.00  one face-down card near centre, already in motion
+  fr.3  0.10  slides LEFT and rotates CCW, leading the arc
+  fr.5  0.20  3 cards overlapped at the left, sweeping right
+  fr.7  0.30  4 cards fanned on a shallow arc, leftmost tilted left
+  fr.9  0.40  fan holds and settles
+  fr.11 0.50  cards converge back inward into a stack
+  fr.12 0.55  collapsed to one position, blown to pure white (one frame)
+  fr.13 0.60  flash resolves into a cyan card with a wide soft halo
+  fr.15+ 0.70 halo tightens, holds - the clip ENDS here (its fade is past the end)
+
+THE BEATS AS BUILT (seconds)
+----------------------------
+  0.00-0.18  cards fly in from above and gather, FACE DOWN, at the left  [fr.1-3]
+  0.18-0.34  each card flips to its real hero portrait (0.035s stagger)
+  0.34-0.62  they fan out along a shallow arc to centre, face up         [fr.3-9]
+  0.62-0.86  the fan HOLDS - the beat the player actually reads
+  0.86-1.00  cards collapse back into one stack at centre                [fr.9-11]
+  1.00-1.06  white flash                                                 [fr.12]
+  1.06-1.20  resolves to ONE teal-glowing card, back to "?"              [fr.13]
+  1.20-1.55  the glow holds                                              [fr.15-22]
+  1.55-1.80  fade out
+
+The flip and the read-hold are ADDITIONS, not in Ref1: unlike the reference,
+these cards have to tell the player WHICH heroes were earned. Order confirmed
+with the user 2026-09-14 ("first all backs, then real portraits, and when it
+turns blue the '?' again") and flagged as possibly changing later.
+
+CONSTANTS (all authored at the top of the file)
+------------------------------------------------
+  Timeline    TFlyIn .18 / TFlipDur .16 / TFlipStagger .035 / TFanDur .28 /
+              THoldEnd .86 / TCollapseDur .14 / TFlashDur .06 / TGlowIn .14 /
+              TGlowHold .35 / TFadeOut .25
+  CardWidthFraction      0.20   card width as a fraction of screen width
+                                (measured off Ref1)
+  CardAspect             256/358  matches the baked sprites; playing-card 2.5:3.5
+  ClearanceInCardHeights 2.0    how far ABOVE the player base the deal sits
+  FanStepInCardWidths    0.62   <1 so fanned cards overlap like a held hand
+  FanTiltDegrees         13     tilt of the OUTERMOST cards
+  FanArcInCardHeights    0.10   how high the fan's middle arcs above its ends
+  TealGlow  #38E1F0    TealCard #7CEC F7
+
+FLOW
+----
+  Bootstrap()  [RuntimeInitializeOnLoadMethod, AfterSceneLoad]
+      Creates "[HeroCardRevealDirector]". Nothing to wire in a scene - same
+      pattern as ShardBurst. DontDestroyOnLoad only when Application.isPlaying;
+      in edit mode it sets HideFlags.DontSave instead, because DontDestroyOnLoad
+      THROWS outright from an editor script.
+
+  OnEnable / OnDisable
+      Subscribe / unsubscribe PlayerWaveManager.HeroesEarned. The event is static
+      and PlayerWaveManager never clears it, so the unsubscribe is MANDATORY.
+
+  HandleHeroesEarned(heroes, anchorWorld)
+      Restarts the coroutine if one is already running rather than overlapping two
+      fans. Queued matches already arrive one at a time, so this is a safety net.
+
+  PlayDeal(heroes, anchorWorld)  [coroutine]
+      Runs the beats above. Uses Time.unscaledDeltaTime and
+      WaitForSecondsRealtime throughout, so the deal still plays if the game is
+      paused (Time.timeScale = 0) during the presentation.
+
+  MeasureLayout(anchorWorld, out cardW, out cardH, out anchor)
+      Forces a canvas layout pass, THEN measures. See NOTES !! - this is not
+      optional.
+
+  ComputeFan(n, anchor, cardW, cardH, out pos, out rot)
+      u runs -1 (leftmost) .. +1 (rightmost); a single card sits dead centre with
+      no tilt. The (1 - u*u) term lifts the MIDDLE of the fan, which is what makes
+      it read as a held hand rather than a straight row. Shared by the runtime
+      deal and the editor preview so the two can never drift.
+
+  ResolveAnchor(anchorWorld, cardH)
+      WorldToScreenPoint -> canvas local, then + ClearanceInCardHeights * cardH,
+      then clamped to keep the fan on screen on a short phone.
+
+  EnsureCanvas()
+      Builds a ScreenSpaceOverlay Canvas at sortingOrder 900 with a
+      ScaleWithScreenSize scaler (1080x1920, match 0.5), a CanvasGroup with
+      blocksRaycasts = false, a "Stage" child and the white "Flash" image.
+
+  CardView.Build(parent)  [nested class]
+      Card = Glow (behind) + Face + cloned "Cell Active" avatar frame + Back.
+
+EDITOR-ONLY API  (#if UNITY_EDITOR)
+-----------------------------------
+  EditorPreviewFan(count, faceUp, anchorWorld) -> string
+      Builds the canvas and poses N cards at the fan's REST pose so the layout can
+      be screenshotted and tuned WITHOUT Play mode. Returns the measured canvas
+      size, card size, anchor, fan width and fan top for checking against the
+      authored targets. Exists because the coroutine needs a real deltaTime, which
+      edit mode does not provide - stepping it manually would hang.
+  EditorPreviewCanvas   the live preview canvas, for screenshot tooling
+  EditorPreviewCleanup() destroys EVERY edit-mode preview object - see NOTES !!
+  EditorInstallPreviewGuard()  [InitializeOnLoadMethod] registers that cleanup on
+      assembly reload and on play-mode transitions, and sweeps immediately.
+
+HOW IT CONNECTS
+---------------
+  - Subscribes to PlayerWaveManager.HeroesEarned (static) - the ONLY inbound
+    coupling. It does not reference the wave manager otherwise.
+  - Clones the authored "Cell Active" frame found on any HeroStatCell in the scene
+    (INCLUDING INACTIVE ONES - HeroStatsPanel switches its template off on Start,
+    and that switched-off template is exactly the object wanted here).
+  - Reads UnitDefinitionSO.portrait, the same sprite HeroStatCell.Bind writes.
+  - Sprites come from Assets/Arts/VFX/HeroCard{Back,Face,Glow}.png, baked by
+    CardBackSpriteBaker.
+
+NOTES / RISKS
+-------------
+  - !! CANVAS RECT IS STALE ON THE FRAME IT IS CREATED. Measuring
+    canvasRect.rect straight after building the canvas returned 1125 wide on the
+    first deal and 979 on every one after, which sized the cards differently each
+    time and put the second deal COMPLETELY OFF SCREEN (verified: an empty
+    capture). EnsureCanvas and MeasureLayout both call Canvas.ForceUpdateCanvases
+    before any measurement. Do not remove either call.
+  - !! Object.Destroy DOES NOT WORK IN EDIT MODE - it is deferred to end of frame,
+    which edit mode never reaches, so it logs an error and the object survives.
+    SafeDestroy picks DestroyImmediate when not playing. The editor preview hits
+    this path while stripping Buttons off the cloned template.
+  - !! This is uGUI, NOT a ParticleSystem, so none of the URP-2D particle
+    constraints in the VFX Playbook apply here. A ScreenSpaceOverlay canvas is
+    also INVISIBLE to Unity_Camera_Capture - to screenshot it, temporarily switch
+    renderMode to ScreenSpaceCamera and render a camera into a RenderTexture whose
+    ASPECT MATCHES THE CANVAS, or the capture silently crops.
+  - !! THE EDITOR PREVIEW CAN ORPHAN ITSELF, AND THE ORPHAN IS VISIBLE IN EVERY
+    SCENE. EditorPreviewCleanup originally destroyed the object through the static
+    `instance`. A domain reload - which EVERY script compile causes - resets that
+    static to null while the GameObject lives on, so nothing could clean it up.
+    HideFlags.DontSave keeps such an orphan out of the scene file (it never shows
+    in a diff or a build) but it KEEPS RENDERING in the Game view over every
+    scene, which looks exactly like a gameplay bug. Happened 2026-09-14: two blank
+    face-up cards sat over the HUD in every scene with isPlaying == false.
+    Cleanup now sweeps by TYPE (Resources.FindObjectsOfTypeAll) and is registered
+    on beforeAssemblyReload and playModeStateChanged. Never route it through a
+    static handle again.
+  - The avatar frame template is cached statically and cleared in OnDestroy, since
+    a scene change invalidates whatever object was found in the old scene.
+  - A null UnitDefinitionSO (or one with no portrait) deals a card with a blank
+    face rather than throwing. This is what the editor preview shows in a scene
+    with no GameStartManager.
+  - Budget: at most TotalHeroes cards alive (4 on stage 4), pooled and reused
+    across deals. No particles, no overdraw beyond a handful of quads.
+
+NOT VERIFIED (as of 2026-09-14)
+--------------------------------
+  Compiles clean, and the fan REST pose was screenshotted and measured in edit
+  mode (card 195.7x273.7, anchor (-7.0, 733.5), fan width 559.8 - stable across
+  three consecutive runs after the ForceUpdateCanvases fix).
+
+  NOT play-tested. The following have never run: the fly-in, the flip, the
+  collapse, the white flash, the teal glow, the fade, the timing of any of them,
+  and the anchor's real position relative to the player base in a live stage.

@@ -123,6 +123,94 @@ public class PlayerWaveManager : MonoBehaviour
         }
     }
 
+    // ======================================================================
+    //  PHASE 2 - heroes are EARNED into a roster, not spawned onto the gates
+    // ======================================================================
+
+    [Header("PHASE 2 - Card Rewards")]
+    [Tooltip("ON (the PHASE 2 default): no hero is ever instantiated onto a gate " +
+             "platform - not at level start and not after a match. The per-match " +
+             "counts are unchanged; the heroes are recorded in EarnedHeroes and " +
+             "announced by the card animation instead. OFF restores the old " +
+             "spawn-and-leap behaviour.")]
+    [SerializeField] private bool suppressStageSpawning = true;
+
+    private readonly List<UnitDefinitionSO> earnedHeroes = new();
+
+    /// <summary>
+    /// Every hero earned so far this stage, in the order the matches awarded them.
+    /// This is the roster the (still to be designed) deployment step will draw
+    /// from - nothing consumes it yet.
+    /// </summary>
+    public IReadOnlyList<UnitDefinitionSO> EarnedHeroes => earnedHeroes;
+
+    /// <summary>True while PHASE 2 card rewards are in force instead of gate spawns.</summary>
+    public bool CardRewardsActive => suppressStageSpawning;
+
+    /// <summary>
+    /// Raised once per cleared match with the heroes that match earned and a world
+    /// position to anchor the presentation to (the centre of the player base).
+    ///
+    /// STATIC, and deliberately never cleared here - HeroCardRevealDirector
+    /// unsubscribes in its own OnDisable, the same contract MatchResolver.OnBlast
+    /// already has in this file.
+    /// </summary>
+    public static event System.Action<IReadOnlyList<UnitDefinitionSO>, Vector3> HeroesEarned;
+
+    /// <summary>
+    /// Takes the next <paramref name="count"/> heroes off the planned roster,
+    /// records them as earned and announces them.
+    ///
+    /// Draws from plannedHeroes rather than re-rolling, so the heroes shown on the
+    /// cards are the SAME ones the old code would have put on the gates - the
+    /// selection logic is untouched, only its presentation changed.
+    /// </summary>
+    private void AwardHeroesForMatch(int count)
+    {
+        var batch = new List<UnitDefinitionSO>(Mathf.Max(0, count));
+
+        for (int i = 0; i < count; i++)
+        {
+            UnitDefinitionSO def = plannedSpawnIndex < plannedHeroes.Count
+                ? plannedHeroes[plannedSpawnIndex++]
+                : null;
+
+            // Falls back to a fresh draw only if the plan ran short, which can
+            // happen on stages 6+ where no plan is built at all.
+            if (!def)
+            {
+                var pool = GetDeployedUnitDefinitions();
+                if (pool.Count == 0) break;
+                def = pool[UnityEngine.Random.Range(0, pool.Count)];
+            }
+
+            batch.Add(def);
+        }
+
+        if (batch.Count == 0) return;
+
+        earnedHeroes.AddRange(batch);
+        MatchesReleased++;
+
+        HeroesEarned?.Invoke(batch, ResolveCardAnchorWorld());
+    }
+
+    /// <summary>
+    /// Centre of the player base - the average of the gate points. The card deal is
+    /// placed a couple of card heights ABOVE this, never on it.
+    /// </summary>
+    private Vector3 ResolveCardAnchorWorld()
+    {
+        Vector3 sum = Vector3.zero;
+        int n = 0;
+
+        if (gatePoints != null)
+            foreach (var g in gatePoints)
+                if (g) { sum += g.position; n++; }
+
+        return n > 0 ? sum / n : transform.position;
+    }
+
 
     private void OnEnable()
     {
@@ -187,6 +275,7 @@ public class PlayerWaveManager : MonoBehaviour
         sealedForBattle = DeploymentFailed = unlockAnimInProgress = false;
         plannedHeroes.Clear();
         releasedHeroes.Clear();
+        earnedHeroes.Clear();
 
         BeginWaves();   // uses WaveLoop that checks puzzle again
     }
@@ -196,7 +285,11 @@ public class PlayerWaveManager : MonoBehaviour
     {
         if (running) return;
         running = true;
-        StartCoroutine(UsesDeploymentRules ? PlannedWaveLoop() : WaveLoop());
+
+        if (UsesDeploymentRules) StartCoroutine(PlannedWaveLoop());
+        else if (!suppressStageSpawning) StartCoroutine(WaveLoop());
+        // else: stages 6+ under PHASE 2 need no wave loop at all - there is nothing
+        // to spawn or unlock, so HandleBlast awards the heroes directly.
     }
 
     private IEnumerator PlannedWaveLoop()
@@ -229,6 +322,24 @@ public class PlayerWaveManager : MonoBehaviour
         {
             if (sealedForBattle && match > MatchesCleared) break;
             int count = LevelBattleRules.HeroesForMatch(RuleLevel, match);
+
+            // PHASE 2: no gate spawn, no lock, no release jump. Wait for the match,
+            // award its heroes into the roster, let the card animation announce
+            // them. Everything below this block is the pre-PHASE-2 path.
+            if (suppressStageSpawning)
+            {
+                while (running && MatchesCleared < match && !sealedForBattle) yield return null;
+                if (!running) yield break;
+                if (MatchesCleared < match) break;
+
+                AwardHeroesForMatch(count);
+
+                if (match < LevelBattleRules.TotalPairs(RuleLevel))
+                    yield return new WaitForSeconds(nextWaveDelay);
+
+                continue;
+            }
+
             float waited = 0;
             while (running && GetFreeGateIndices().Count < count && waited < 5f)
             {
@@ -1001,6 +1112,17 @@ public class PlayerWaveManager : MonoBehaviour
             MatchesCleared = Mathf.Min(LevelBattleRules.TotalPairs(RuleLevel), MatchesCleared + Mathf.Max(0, _));
             return; // the planned loop drains every earned match, even during animation
         }
+
+        // PHASE 2, stages 6+: no wave was ever spawned, so there is nothing to
+        // unlock - the match awards its heroes straight into the roster. The size
+        // range is the same one the old random wave drew from.
+        if (suppressStageSpawning)
+        {
+            if (!running) return;
+            AwardHeroesForMatch(UnityEngine.Random.Range(minPerWave, maxPerWave + 1));
+            return;
+        }
+
         if (!running) return;
         if (!waveLocked) return; // already unlocked; ignore extra blasts
         if (unlockAnimInProgress) return; // ignore extra blasts while animation is running

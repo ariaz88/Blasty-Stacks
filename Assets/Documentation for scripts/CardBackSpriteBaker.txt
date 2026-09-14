@@ -1,0 +1,115 @@
+================================================================================
+  CardBackSpriteBaker.cs
+  Path : Assets/Scripts/Editor/CardBackSpriteBaker.cs
+  Type : static editor class (MenuItem)
+  Layer: Editor
+  Added: 2026-09-14  (PHASE 2)
+================================================================================
+
+PURPOSE
+-------
+Bakes the three sprites the hero-card reward animation needs, procedurally, into
+Assets/Arts/VFX/:
+
+  HeroCardBack.png   256x358  the face-DOWN card - silver frame, inset line,
+                              centre diamond and a "?" glyph
+  HeroCardFace.png   256x358  the SAME frame with no diamond and no glyph; a hero
+                              portrait is composited over it at runtime
+  HeroCardGlow.png   400x502  a soft card-shaped glow, baked WHITE so the director
+                              can tint it (the teal halo of Ref1 fr.13)
+
+Menu: Tools > Blasty > Bake Hero Card Sprites
+
+WHY A BAKED PNG AND NOT A RUNTIME TEXTURE
+  The card back is ART, not an effect. An asset shows up in the Project window,
+  can be swapped for hand-drawn art later without touching code, and is
+  reviewable. A Texture2D built at runtime is invisible to the artist and has to
+  be rebuilt on every load.
+
+WHY PROCEDURAL AND NOT AN IMPORTED IMAGE
+  The shape is a handful of primitives and every one is authored in pixels here,
+  so the whole look is a diff. Re-run the menu item after changing any constant.
+
+CONSTANTS
+---------
+  Size        W 256  H 358        (2.5:3.5, the playing-card ratio Ref1 uses -
+                                   measured ~0.70 w/h off the clip)
+  GlowPad     72                  padding on every side of the glow sprite
+  Palette     RimLight   #F4F6FA  bright rim just inside the silhouette
+              BodyTop    #CBD1DB  vertical gradient, lighter at the top
+              BodyBottom #A3ACBA
+              InsetLine  #E2E6EC
+              DiamondLine#DBDFE7
+              GlyphInk   #77808E
+  Frame       CornerRadius 30 / RimThickness 9 / InsetMargin 18 /
+              InsetRadius 20 / InsetStroke 5
+  Diamond     DiamondHalfW 88 / DiamondHalfH 126 / DiamondStroke 6
+  Glyph       HookRadius 42 / Stroke 15 / HookCenterY 154 (optically centred) /
+              HookStartDeg 200 -> HookEndDeg -10, swept CLOCKWISE
+
+FLOW
+----
+  Bake()  [MenuItem]
+      Calls BakeOne three times with a different shading function each.
+
+  BakeOne(path, w, h, shade)
+      Walks every pixel with y measured DOWNWARD (so the constants read the way
+      the card looks on screen), encodes a PNG, writes it, re-imports it and
+      configures the importer.
+
+  ConfigureImporter(path)
+      Sprite / Single / centre pivot / alphaIsTransparency / no mipmaps /
+      Bilinear / Clamp / Uncompressed / 100 PPU. Bilinear on purpose: the card is
+      scaled AND rotated all the way through the deal.
+
+  ShadeCardBack / ShadeCardFace -> ShadeCard(px, py, withBackArt)
+      Silhouette (rounded rect) -> body gradient -> rim -> inset frame, then the
+      diamond and the "?" only when withBackArt.
+
+  ShadeCardGlow(px, py)
+      Alpha only, white. Solid inside the card footprint, falling to zero across
+      the padding. The falloff is SQUARED so the halo is dense against the card
+      edge and thins fast - that is what reads as "glow" rather than as a grey
+      border.
+
+  SdQuestionMark(px, py)
+      The "?" as the union of four primitives: the hook (a ring segment), the
+      diagonal tail from the arc's end back to the centre line, the vertical stem,
+      and the dot.
+
+  InSweepClockwise(ang, startDeg, endDeg)
+      True when ang lies on the clockwise sweep from start to end.
+
+  SdRoundRect / SdDiamond / SdSegment / Coverage / Blend
+      Signed distance helpers - negative inside, positive outside, in PIXELS.
+      Coverage resolves a distance to antialiased alpha with a half-pixel
+      smoothstep, which is what keeps the curves clean at 256px without
+      supersampling.
+
+HOW IT CONNECTS
+---------------
+  - Nothing references this class at runtime. HeroCardRevealDirector loads the
+    three PNGs BY PATH (see its CardSprites constants); if those paths change,
+    change them in both places.
+  - Output lives in Assets/Arts/VFX/ alongside the other VFX art.
+
+NOTES / RISKS
+-------------
+  - !! SdDiamond normalises by the gradient. Without that the result is in units
+    of the implicit function rather than pixels and the stroke width VARIES along
+    the edge.
+  - !! InSweepClockwise folds both angles into [0,360) before comparing. The raw
+    atan2 angles disagree about sign either side of the -180/180 seam, and
+    comparing them directly puts a wedge of MISSING PIXELS on the left of the
+    hook - exactly where the arc starts.
+  - The glow sprite is 400x502 for a 256x358 card. HeroCardRevealDirector scales
+    it by that same 400/256, 502/358 ratio; changing GlowPad here without
+    changing those numbers there moves the halo relative to the card edge.
+  - These are PLACEHOLDER art, good enough to read correctly and to build the
+    animation against. Replacing HeroCardBack.png / HeroCardFace.png with drawn
+    art needs no code change as long as the aspect stays 256:358.
+
+VERIFIED
+--------
+  2026-09-14: all three bake without error and were read back as images. The
+  card back renders as intended - frame, diamond and a legible "?".
