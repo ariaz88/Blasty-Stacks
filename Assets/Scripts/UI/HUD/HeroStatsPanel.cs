@@ -47,6 +47,14 @@ public class HeroStatsPanel : MonoBehaviour
     [SerializeField, Min(0)] private int gemsPerHero = 50;
 
     [Header("Refs (left empty = found in the scene)")]
+    [Tooltip("PHASE 2. Present = the panel becomes the DEPLOYMENT QUEUE (portrait " +
+             "+ 'xN' + a cyan load bar) instead of the alive/total read-out. Left " +
+             "empty = found in the scene; absent from the scene = old behaviour.")]
+    [SerializeField] private HeroDeploymentSequencer deploymentSequencer;
+
+    /// <summary>Latches true when the panel built itself as a deployment queue.</summary>
+    private bool deploymentMode;
+
     [SerializeField] private PlayerWaveManager waveManager;
     [SerializeField] private GameStartManager gameStartManager;
 
@@ -108,6 +116,7 @@ public class HeroStatsPanel : MonoBehaviour
         }
 
         if (!waveManager) waveManager = FindObjectOfType<PlayerWaveManager>(true);
+        if (!deploymentSequencer) deploymentSequencer = FindObjectOfType<HeroDeploymentSequencer>(true);
 
         // Written out rather than with ??: GameStartManager.Instance can be a
         // destroyed-but-not-null Unity object, which ?? happily hands back.
@@ -151,6 +160,13 @@ public class HeroStatsPanel : MonoBehaviour
 
         if (CurrencyManager.Instance != null)
             CurrencyManager.Instance.OnCurrencyChanged -= HandleCurrencyChanged;
+
+        if (deploymentSequencer)
+        {
+            deploymentSequencer.LoadStarted -= HandleLoadStarted;
+            deploymentSequencer.LoadProgress -= HandleLoadProgress;
+            deploymentSequencer.AllLoadsCompleted -= HandleAllLoadsCompleted;
+        }
     }
 
     private void HandleBattleStarted()
@@ -158,10 +174,112 @@ public class HeroStatsPanel : MonoBehaviour
         if (built) return;
         built = true;
 
+        // PHASE 2: with a deployment sequencer in the scene the panel stops being
+        // a survival read-out and becomes the deployment queue. Nothing is on the
+        // field when BATTLE is pressed, so HeroRoster would build an EMPTY panel.
+        if (!deploymentSequencer) deploymentSequencer = FindObjectOfType<HeroDeploymentSequencer>(true);
+        if (deploymentSequencer)
+        {
+            deploymentMode = true;
+            BuildDeploymentCells();
+
+            deploymentSequencer.LoadStarted += HandleLoadStarted;
+            deploymentSequencer.LoadProgress += HandleLoadProgress;
+            deploymentSequencer.AllLoadsCompleted += HandleAllLoadsCompleted;
+            return;
+        }
+
         // Freeze the "/total" for every type standing on the field right now.
         HeroRoster.SnapshotStartingCounts();
         BuildCells();
         Refresh();
+    }
+
+    // ======================================================================
+    //  PHASE 2 - the deployment queue
+    // ======================================================================
+
+    /// <summary>
+    /// One cell per hero TYPE the player earned this stage, in database order.
+    ///
+    /// Built from PlayerWaveManager.EarnedBatches rather than from HeroRoster:
+    /// under PHASE 2 no hero is on the field when BATTLE is pressed, so the
+    /// roster is empty and the old path would build nothing.
+    /// </summary>
+    private void BuildDeploymentCells()
+    {
+        foreach (var cell in cells)
+            if (cell) Destroy(cell.gameObject);
+
+        cells.Clear();
+
+        if (!waveManager) return;
+
+        var ids = new List<int>();
+        foreach (var batch in waveManager.EarnedBatches)
+        {
+            if (batch == null) continue;
+            foreach (var def in batch)
+                if (def && !ids.Contains(def.unitId)) ids.Add(def.unitId);
+        }
+
+        if (ids.Count == 0)
+        {
+            Debug.LogWarning("[HeroStatsPanel] BATTLE started with no earned heroes - " +
+                             "the deployment panel stays empty.", this);
+            return;
+        }
+
+        ids.Sort(CompareByDatabaseOrder);
+
+        foreach (int unitId in ids)
+        {
+            var def = unitsDatabase ? unitsDatabase.GetById(unitId) : null;
+
+            var cell = Instantiate(cellTemplate, cellContainer);
+            cell.gameObject.SetActive(true);
+            cell.name = def ? $"Deploy_{def.displayName}" : $"Deploy_{unitId}";
+
+            // Count 0 = greyed with no label; the first LoadStarted fills it in.
+            cell.ConfigureAsDeploymentSlot(unitId, def, 0);
+
+            cells.Add(cell);
+        }
+    }
+
+    private void HandleLoadStarted(int index, IReadOnlyList<UnitDefinitionSO> batch)
+    {
+        foreach (var cell in cells)
+        {
+            if (!cell) continue;
+
+            int n = 0;
+            if (batch != null)
+                foreach (var def in batch)
+                    if (def && def.unitId == cell.UnitId) n++;
+
+            // A type not in THIS load greys out and shows no number - the brief is
+            // explicit that only the types being released are lit.
+            cell.SetLoadCount(n);
+            cell.SetDimmed(n == 0);
+            cell.SetLoadFill(0f);
+        }
+    }
+
+    private void HandleLoadProgress(int index, float t)
+    {
+        foreach (var cell in cells)
+            if (cell && cell.SquadSize > 0) cell.SetLoadFill(t);
+    }
+
+    private void HandleAllLoadsCompleted()
+    {
+        foreach (var cell in cells)
+        {
+            if (!cell) continue;
+            cell.SetLoadCount(0);
+            cell.SetDimmed(true);
+        }
     }
 
     private void BuildCells()
@@ -223,6 +341,12 @@ public class HeroStatsPanel : MonoBehaviour
 
     private void Refresh()
     {
+        // A deployment cell shows "xN for this load", not "N still alive". Refresh
+        // is driven by HeroRoster.OnRosterChanged, which fires on every hero death
+        // - letting it through would overwrite the load labels the moment the
+        // first hero died.
+        if (deploymentMode) return;
+
         int gems = CurrencyManager.Instance != null ? CurrencyManager.Instance.Gems : int.MaxValue;
 
         foreach (var cell in cells)

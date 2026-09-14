@@ -135,7 +135,25 @@ public class PlayerWaveManager : MonoBehaviour
              "spawn-and-leap behaviour.")]
     [SerializeField] private bool suppressStageSpawning = true;
 
+    [Tooltip("WHICH hero types each match awards. Optional - a level with no entry " +
+             "in this asset keeps the old behaviour (counts from LevelBattleRules, " +
+             "types drawn at random). Left empty = every level behaves that way.")]
+    [SerializeField] private StageDeploymentPlanSO deploymentPlan;
+
     private readonly List<UnitDefinitionSO> earnedHeroes = new();
+
+    /// <summary>
+    /// The heroes earned by EACH match, kept separate rather than flattened.
+    ///
+    /// HeroDeploymentSequencer releases them one BATCH at a time - one 6s load per
+    /// match - so which hero came from which match is load-bearing, not
+    /// bookkeeping. earnedHeroes stays as the flat roster for anything that only
+    /// needs the total.
+    /// </summary>
+    private readonly List<List<UnitDefinitionSO>> earnedBatches = new();
+
+    /// <summary>One list per cleared match, in the order the matches were cleared.</summary>
+    public IReadOnlyList<IReadOnlyList<UnitDefinitionSO>> EarnedBatches => earnedBatches;
 
     /// <summary>
     /// Every hero earned so far this stage, in the order the matches awarded them.
@@ -165,34 +183,126 @@ public class PlayerWaveManager : MonoBehaviour
     /// cards are the SAME ones the old code would have put on the gates - the
     /// selection logic is untouched, only its presentation changed.
     /// </summary>
-    private void AwardHeroesForMatch(int count)
+    private void AwardHeroesForMatch(int count) => AwardHeroesForMatch(count, MatchesReleased + 1);
+
+    /// <summary>
+    /// Takes this match's heroes and records + announces them.
+    ///
+    /// TYPES come from the authored StageDeploymentPlanSO when the level has one,
+    /// so a designer decides that match 3 gives an archer and a brute. Without a
+    /// plan it falls back to the pre-PHASE-2 behaviour unchanged: the pre-rolled
+    /// plannedHeroes list, then a fresh random draw if that runs short.
+    /// </summary>
+    private void AwardHeroesForMatch(int count, int matchNumber)
     {
         var batch = new List<UnitDefinitionSO>(Mathf.Max(0, count));
 
-        for (int i = 0; i < count; i++)
+        var authored = deploymentPlan ? deploymentPlan.EntriesFor(RuleLevel, matchNumber) : null;
+        if (authored != null)
         {
-            UnitDefinitionSO def = plannedSpawnIndex < plannedHeroes.Count
-                ? plannedHeroes[plannedSpawnIndex++]
-                : null;
-
-            // Falls back to a fresh draw only if the plan ran short, which can
-            // happen on stages 6+ where no plan is built at all.
-            if (!def)
+            // The plan's counts win outright - see StageDeploymentPlanSO. A unitId
+            // with no matching definition is skipped loudly rather than silently
+            // shrinking the wave.
+            foreach (var entry in authored)
             {
-                var pool = GetDeployedUnitDefinitions();
-                if (pool.Count == 0) break;
-                def = pool[UnityEngine.Random.Range(0, pool.Count)];
-            }
+                var def = FindUnitDefinition(entry.unitId);
+                if (!def)
+                {
+                    Debug.LogError($"[PlayerWaveManager] Deployment plan for level {RuleLevel} " +
+                                   $"match {matchNumber} names unitId {entry.unitId}, which is " +
+                                   "not in the units database. Skipped.", this);
+                    continue;
+                }
 
-            batch.Add(def);
+                for (int i = 0; i < Mathf.Max(1, entry.count); i++) batch.Add(def);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < count; i++)
+            {
+                UnitDefinitionSO def = plannedSpawnIndex < plannedHeroes.Count
+                    ? plannedHeroes[plannedSpawnIndex++]
+                    : null;
+
+                // Falls back to a fresh draw only if the plan ran short, which can
+                // happen on stages 6+ where no plan is built at all.
+                if (!def)
+                {
+                    var pool = GetDeployedUnitDefinitions();
+                    if (pool.Count == 0) break;
+                    def = pool[UnityEngine.Random.Range(0, pool.Count)];
+                }
+
+                batch.Add(def);
+            }
         }
 
         if (batch.Count == 0) return;
 
         earnedHeroes.AddRange(batch);
+        earnedBatches.Add(batch);
         MatchesReleased++;
 
         HeroesEarned?.Invoke(batch, ResolveCardAnchorWorld());
+    }
+
+    private UnitDefinitionSO FindUnitDefinition(int unitId)
+    {
+        if (_unitsDb == null) return null;
+
+        foreach (var def in _unitsDb.Units)
+            if (def && def.unitId == unitId) return def;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Puts ONE earned batch on the field: every hero spawns on a free gate, then
+    /// jumps to the REAR lane - the rank closest to the player base - rather than
+    /// walking forward one rank per wave the way pre-PHASE-2 waves did.
+    ///
+    /// Called by HeroDeploymentSequencer the moment that batch's 6s load finishes.
+    /// Deliberately does NOT touch waveLocked or currentWave: there is no lock
+    /// step any more, the load bar IS the wait.
+    /// </summary>
+    public void DeployBatch(IReadOnlyList<UnitDefinitionSO> batch)
+    {
+        if (batch == null || batch.Count == 0) return;
+
+        StartCoroutine(DeployBatchRoutine(batch));
+    }
+
+    private IEnumerator DeployBatchRoutine(IReadOnlyList<UnitDefinitionSO> batch)
+    {
+        float? laneY = GetRearLaneY();
+
+        for (int i = 0; i < batch.Count; i++)
+        {
+            var def = batch[i];
+            if (!def) continue;
+
+            // Random free gate, so two heroes of the same type do not stack on one
+            // platform. Falls back to round-robin when every gate is busy - a
+            // deployment must never silently drop a hero the player earned.
+            var free = GetFreeGateIndices();
+            Transform gate = free.Count > 0
+                ? gatePoints[free[UnityEngine.Random.Range(0, free.Count)]]
+                : gatePoints[i % gatePoints.Length];
+
+            if (!gate) continue;
+
+            var pm = SpawnUnitAt(def, gate.position, Quaternion.identity);
+            if (!pm) continue;
+
+            pm.isUnlocked = true;
+            releasedHeroes.Add(pm);
+            ApplyLock(pm, false);
+            StartCoroutine(JumpThenSwitch(pm, laneY));
+
+            if (i < batch.Count - 1)
+                yield return new WaitForSeconds(reinforcementStagger);
+        }
     }
 
     /// <summary>
@@ -276,6 +386,7 @@ public class PlayerWaveManager : MonoBehaviour
         plannedHeroes.Clear();
         releasedHeroes.Clear();
         earnedHeroes.Clear();
+        earnedBatches.Clear();
 
         BeginWaves();   // uses WaveLoop that checks puzzle again
     }

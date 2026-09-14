@@ -43,7 +43,7 @@ Frames pulled at 20fps; beats below cite them as fr.N.
 
 THE BEATS AS BUILT (seconds)
 ----------------------------
-  0.00-0.18  cards fly in from above and gather, FACE DOWN, at the left  [fr.1-3]
+  0.00-0.18  cards RISE IN FROM BELOW and gather, FACE DOWN, at the left [fr.1-3]
   0.18-0.34  each card flips to its real hero portrait (0.035s stagger)
   0.34-0.62  they fan out along a shallow arc to centre, face up         [fr.3-9]
   0.62-0.86  the fan HOLDS - the beat the player actually reads
@@ -60,17 +60,55 @@ turns blue the '?' again") and flagged as possibly changing later.
 
 CONSTANTS (all authored at the top of the file)
 ------------------------------------------------
-  Timeline    TFlyIn .18 / TFlipDur .16 / TFlipStagger .035 / TFanDur .28 /
-              THoldEnd .86 / TCollapseDur .14 / TFlashDur .06 / TGlowIn .14 /
-              TGlowHold .35 / TFadeOut .25
+  Tempo       1.0833 ONE dial for the whole pace; ABOVE 1 is SLOWER. Every beat is
+                     a multiple of it, so scaling it keeps the beats in proportion
+                     and keeps the absolute timestamp (THoldEnd) consistent with
+                     the durations. 1.0 = the Ref1 timing (1.80s single-card run).
+                     !! THE TOTAL IS REPORTED, NOT PINNED - see NOTES.
+                     A multi-card deal runs slightly longer: the flip is staggered
+                     per card, so add TFlipStagger * (cards - 1).
+                     MEASURED: 1 card 1.869s / 2 cards 1.907s / 4 cards 1.982s.
+  Timeline    base values, each multiplied by Tempo:
+              TFlyIn .18 / TFlipDur .16 / TFlipStagger .035 / TFanStart .34 /
+              TFanDur .28 / THoldEnd .86 / TCollapseDur .14 / TFlashDur .06 /
+              TGlowIn .14 / TGlowHold .35 / TFadeOut .25
   CardWidthFraction      0.20   card width as a fraction of screen width
                                 (measured off Ref1)
   CardAspect             256/358  matches the baked sprites; playing-card 2.5:3.5
-  ClearanceInCardHeights 2.0    how far ABOVE the player base the deal sits
+  ClearanceInCardHeights 1.55   how far ABOVE the player base the deal sits. THE
+                                ONLY knob that moves the presentation vertically -
+                                the gather point, the fan and the entry point are
+                                all relative to this anchor, so changing it
+                                translates the whole deal as one piece and leaves
+                                every internal distance intact.
   FanStepInCardWidths    0.62   <1 so fanned cards overlap like a held hand
   FanTiltDegrees         13     tilt of the OUTERMOST cards
   FanArcInCardHeights    0.10   how high the fan's middle arcs above its ends
-  TealGlow  #38E1F0    TealCard #7CEC F7
+  EntryRiseInCardHeights 2.4    how far BELOW the gather point the cards start
+  PortraitFillFraction   0.80   portrait size as a fraction of the card
+  TealGlow  #38E1F0    TealCard #7CECF7
+
+REVISION 2026-09-14 (after the first play-test recording,
+"Assets/Arts/Reference videos/Card Animation REcord.mkv")
+  1. CARDS NOW RISE FROM BELOW. The first build dropped them in from above the
+     screen; Ref1 deals from the LOWER part of the frame and the drop read as the
+     opposite gesture. They now start EntryRiseInCardHeights below the gather
+     point - roughly behind the player base, so the heroes come UP out of your own
+     base rather than flying the whole height of the screen across the board.
+  2. THE CARD SHOWS ONLY THE PORTRAIT. It used to clone the authored "Cell Active"
+     frame onto the face. On screen that read as a card INSIDE a card: the blue
+     panel competed with the card frame and buried the hero. The clone, and with
+     it the whole HeroStatCell dependency, is gone - the face now carries a single
+     Image holding UnitDefinitionSO.portrait, preserveAspect on.
+  3. RE-TIMED: Tempo 1.0833 (1.80s off Ref1 -> 2.07s -> 1.95s), then the FADE-OUT
+     alone cut 30% (base 0.25 -> 0.175, i.e. 0.271s -> 0.190s) because the teal
+     card's fade dragged against everything before it. Single-card run is now
+     1.869s.
+  4. THE WHOLE DEAL MOVED DOWN 0.45 card heights (ClearanceInCardHeights 2.00 ->
+     1.55): at 2.00 the cards sat against the top edge of the screen. Measured:
+     anchor y 733.5 -> 610.4, a drop of 123.1 canvas units = 0.45 * cardH, which
+     is 5.8% of screen height. Entry and fan distances are unchanged - the anchor
+     carries them.
 
 FLOW
 ----
@@ -123,6 +161,10 @@ EDITOR-ONLY API  (#if UNITY_EDITOR)
       size, card size, anchor, fan width and fan top for checking against the
       authored targets. Exists because the coroutine needs a real deltaTime, which
       edit mode does not provide - stepping it manually would hang.
+  EditorTimelineReport(cards) -> string
+      The real beat durations and the total run, summed from the SAME constants
+      PlayDeal uses. Check a re-timing against the intended total with this rather
+      than trusting the arithmetic by eye.
   EditorPreviewCanvas   the live preview canvas, for screenshot tooling
   EditorPreviewCleanup() destroys EVERY edit-mode preview object - see NOTES !!
   EditorInstallPreviewGuard()  [InitializeOnLoadMethod] registers that cleanup on
@@ -132,10 +174,9 @@ HOW IT CONNECTS
 ---------------
   - Subscribes to PlayerWaveManager.HeroesEarned (static) - the ONLY inbound
     coupling. It does not reference the wave manager otherwise.
-  - Clones the authored "Cell Active" frame found on any HeroStatCell in the scene
-    (INCLUDING INACTIVE ONES - HeroStatsPanel switches its template off on Start,
-    and that switched-off template is exactly the object wanted here).
   - Reads UnitDefinitionSO.portrait, the same sprite HeroStatCell.Bind writes.
+    That is now the ONLY thing it takes from the units data - as of the 2026-09-14
+    revision it does not touch HeroStatCell or HeroStatsPanel at all.
   - Sprites come from Assets/Arts/VFX/HeroCard{Back,Face,Glow}.png, baked by
     CardBackSpriteBaker.
 
@@ -167,8 +208,15 @@ NOTES / RISKS
     Cleanup now sweeps by TYPE (Resources.FindObjectsOfTypeAll) and is registered
     on beforeAssemblyReload and playModeStateChanged. Never route it through a
     static handle again.
-  - The avatar frame template is cached statically and cleared in OnDestroy, since
-    a scene change invalidates whatever object was found in the old scene.
+  - !! DO NOT DERIVE Tempo FROM A TARGET TOTAL. It briefly was
+    (Tempo = TargetRunSeconds / BaseRunSeconds), which meant shortening any ONE
+    beat silently STRETCHED every other beat to refill the target - the exact
+    opposite of what tuning a single beat is for. Tempo is now an explicit pace
+    dial, individual beats are tuned on their own, and the resulting total is read
+    back with EditorTimelineReport.
+  - !! AN IMAGE WITH A NULL SPRITE DRAWS A SOLID WHITE QUAD. The portrait Image is
+    built DISABLED and only enabled once a real sprite is assigned, so a hero with
+    no portrait shows an empty card rather than a white block.
   - A null UnitDefinitionSO (or one with no portrait) deals a card with a blank
     face rather than throwing. This is what the editor preview shows in a scene
     with no GameStartManager.

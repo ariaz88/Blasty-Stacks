@@ -1,3 +1,32 @@
+CURRENT UPDATE - 2026-09-14  PHASE 2: THE CELL HAS A SECOND MODE
+The alive/total path below is UNTOUCHED and still works. A cell built with the
+new ConfigureAsDeploymentSlot is a DEPLOYMENT SLOT instead: a portrait, the
+NUMBER of that type the running load releases ("x2" - NOT "2/3"), and a cyan bar
+filling from the bottom over the load's 6 seconds. Look taken from
+Assets/Arts/Reference videos/Ref2.MP4.
+
+  ConfigureAsDeploymentSlot(unitId, def, count)
+      Builds the slot. Writes the portrait into both frames as Bind does, forces
+      "Cost Gem" off and attaches NO buy-back listener, then starts dimmed with
+      an empty bar.
+  SetLoadCount(count)   the "xN" label; count <= 0 hides it entirely
+  SetDimmed(bool)       grey ("Cell DeActive") vs lit ("Cell Active"). Reuses the
+                        authored two-frame model rather than tinting - the
+                        DeActive sprite is ALREADY the greyed-out artwork.
+  SetLoadFill(0..1)     the cyan bar
+  EnsureLoadFill()      creates the fill Image on first use
+
+  !! THE FILL IS THE FIRST CHILD OF "Cell Active", and that is load-bearing. In
+  uGUI a child draws ABOVE its parent and later siblings above earlier ones, so
+  first-child puts the cyan above the cell background but BELOW "Mask/Avatar" -
+  the fill rises BEHIND the hero instead of painting over them. Moving it changes
+  what it covers.
+
+  A deployment cell is driven entirely by HeroStatsPanel from
+  HeroDeploymentSequencer's events. HeroStatsPanel.Refresh() early-returns in
+  deployment mode, because it is driven by HeroRoster.OnRosterChanged and would
+  overwrite the "xN" labels the moment the first hero died.
+
 ================================================================================
   HeroStatCell.cs
   Path : Assets/Scripts/UI/HUD/HeroStatCell.cs

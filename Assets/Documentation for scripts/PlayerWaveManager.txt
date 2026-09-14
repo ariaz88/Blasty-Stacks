@@ -21,11 +21,20 @@ New Inspector flag `suppressStageSpawning`, DEFAULT ON. While it is on:
 Turning the flag OFF restores the entire pre-PHASE-2 spawn-and-leap path
 unchanged - every code path below still exists.
 
-!! CONSEQUENCE, NOT YET ADDRESSED: with nothing spawned, releasedHeroes stays
-empty, so ReleasedPlayerCP is 0 and no hero ever fights. This is expected for
-this intermediate step - how earned heroes reach the battlefield is a separate,
-still-undesigned process (the user's explicit instruction was that they will NOT
-all enter together). Do not "fix" this by re-enabling spawning.
+PHASE 2 PART 2 (same day) - HEROES NOW REACH THE FIELD AGAIN, VIA LOADS
+  - `deploymentPlan` (StageDeploymentPlanSO, optional) decides WHICH types each
+    match awards. Unauthored level or null asset = the old random draw, unchanged.
+  - `EarnedBatches` keeps each match's heroes SEPARATE (earnedBatches), because
+    HeroDeploymentSequencer releases them one batch per 6s load. earnedHeroes
+    remains the flat roster for anything wanting only the total.
+  - `DeployBatch(batch)` [public] spawns one batch: each hero on a RANDOM free
+    gate (round-robin fallback when all gates are busy, so an earned hero is
+    never silently dropped), then jumps to the REAR lane via GetRearLaneY - the
+    rank closest to the player base. It deliberately does NOT touch waveLocked or
+    currentWave: there is no lock step any more, the load bar IS the wait.
+    Heroes are staggered by reinforcementStagger.
+  - So releasedHeroes and ReleasedPlayerCP fill up again as loads complete,
+    rather than staying at 0 as they did between the two halves of PHASE 2.
 
 --------------------------------------------------------------------------------
 CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)

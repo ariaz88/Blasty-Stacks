@@ -43,18 +43,36 @@ using UnityEngine.UI;
 public class HeroCardRevealDirector : MonoBehaviour
 {
     // ---------------------------------------------------------------- timeline
-    private const float TFlyIn = 0.18f;
-    private const float TFlipStart = 0.18f;
-    private const float TFlipDur = 0.16f;
-    private const float TFlipStagger = 0.035f;
-    private const float TFanStart = 0.34f;
-    private const float TFanDur = 0.28f;
-    private const float THoldEnd = 0.86f;
-    private const float TCollapseDur = 0.14f;
-    private const float TFlashDur = 0.06f;
-    private const float TGlowIn = 0.14f;
-    private const float TGlowHold = 0.35f;
-    private const float TFadeOut = 0.25f;
+    /// <summary>
+    /// One dial for the whole presentation's pace; ABOVE 1 is slower. Every beat
+    /// is a multiple of it, so scaling it keeps the beats in proportion and keeps
+    /// the absolute timestamp (THoldEnd) consistent with the durations.
+    ///
+    /// 1.0 is the timing taken straight off Ref1 (a 1.80s single-card run). 1.0833
+    /// is where the 1.95s run asked for after the first play-test put it.
+    ///
+    /// !! THE TOTAL RUN IS REPORTED, NOT PINNED. An earlier version derived Tempo
+    /// from a target total, which meant shortening any ONE beat silently STRETCHED
+    /// all the others to refill the target - the opposite of what tuning a single
+    /// beat is for. Individual beats are now tuned on their own and the resulting
+    /// total is read back with EditorTimelineReport.
+    /// </summary>
+    private const float Tempo = 1.0833f;
+
+    private const float TFlyIn = 0.18f * Tempo;
+    private const float TFlipDur = 0.16f * Tempo;
+    private const float TFlipStagger = 0.035f * Tempo;
+    private const float TFanStart = 0.34f * Tempo;
+    private const float TFanDur = 0.28f * Tempo;
+    private const float THoldEnd = 0.86f * Tempo;
+    private const float TCollapseDur = 0.14f * Tempo;
+    private const float TFlashDur = 0.06f * Tempo;
+    private const float TGlowIn = 0.14f * Tempo;
+    private const float TGlowHold = 0.35f * Tempo;
+    // 30% shorter than the 0.25 taken off Ref1: the teal card's fade read as
+    // dragging against the pace of everything before it. Only this beat changed -
+    // every other duration is untouched, so the total simply gets shorter.
+    private const float TFadeOut = 0.175f * Tempo;
 
     // ---------------------------------------------------------------- layout
     /// <summary>Card width as a fraction of screen width - measured off Ref1 (~20%).</summary>
@@ -64,11 +82,17 @@ public class HeroCardRevealDirector : MonoBehaviour
     private const float CardAspect = 256f / 358f;
 
     /// <summary>
-    /// How far above the player base the deal sits, in card heights. The brief was
-    /// "two of these cards stacked" of clearance - the animation must never land on
-    /// the base itself.
+    /// How far above the player base the deal sits, in card heights. The original
+    /// brief was "two of these cards stacked" of clearance; the animation must
+    /// never land on the base itself.
+    ///
+    /// Lowered from 2.00 to 1.55 after the first play-test - at 2.00 the cards sat
+    /// up against the top edge of the screen. This is the ONLY knob that moves the
+    /// presentation vertically: the gather point, the fan and the entry point are
+    /// all expressed relative to this anchor, so changing it translates the whole
+    /// deal as one piece and leaves every internal distance intact.
     /// </summary>
-    private const float ClearanceInCardHeights = 2.0f;
+    private const float ClearanceInCardHeights = 1.55f;
 
     /// <summary>Horizontal step between fanned cards, in card widths. Under 1 so they overlap.</summary>
     private const float FanStepInCardWidths = 0.62f;
@@ -78,6 +102,20 @@ public class HeroCardRevealDirector : MonoBehaviour
 
     /// <summary>How high the centre of the fan arcs above its ends, in card heights.</summary>
     private const float FanArcInCardHeights = 0.10f;
+
+    /// <summary>
+    /// How far BELOW the gather point the cards start, in card heights.
+    ///
+    /// They rise INTO frame, they do not drop into it. Ref1 deals from the lower
+    /// part of the screen; the first build had them falling from above, which
+    /// read as the opposite gesture. Starting them a couple of card heights down
+    /// puts the origin behind the player base - the heroes come UP out of your own
+    /// base - rather than flying the full height of the screen across the board.
+    /// </summary>
+    private const float EntryRiseInCardHeights = 2.4f;
+
+    /// <summary>Portrait size as a fraction of the card. Under 1 to leave the frame visible.</summary>
+    private const float PortraitFillFraction = 0.80f;
 
     private static readonly Color TealGlow = new Color32(0x38, 0xE1, 0xF0, 0xFF);
     private static readonly Color TealCard = new Color32(0x7C, 0xEC, 0xF7, 0xFF);
@@ -92,10 +130,6 @@ public class HeroCardRevealDirector : MonoBehaviour
     private readonly List<CardView> pool = new();
     private Image flash;
     private Coroutine playing;
-
-    /// <summary>Cached clone source for the avatar frame - see ResolveAvatarFrame.</summary>
-    private static GameObject avatarFrameTemplate;
-    private static bool avatarFrameSearched;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
@@ -128,11 +162,6 @@ public class HeroCardRevealDirector : MonoBehaviour
     private void OnDestroy()
     {
         if (instance == this) instance = null;
-
-        // A scene change invalidates whatever card template was found in the old
-        // scene; the next deal re-resolves against the new one.
-        avatarFrameTemplate = null;
-        avatarFrameSearched = false;
     }
 
     private void HandleHeroesEarned(IReadOnlyList<UnitDefinitionSO> heroes, Vector3 anchorWorld)
@@ -176,8 +205,8 @@ public class HeroCardRevealDirector : MonoBehaviour
 
         Vector2 gather = anchor + new Vector2(-cardW * 0.95f, 0f);
 
-        // --- fly in, face down ------------------------------------------------
-        Vector2 offscreen = gather + new Vector2(cardW * 0.55f, canvasRect.rect.height * 0.75f);
+        // --- rise in from below, face down -------------------------------------
+        Vector2 entry = gather + new Vector2(cardW * 0.45f, -cardH * EntryRiseInCardHeights);
         for (float t = 0f; t < TFlyIn; t += Time.unscaledDeltaTime)
         {
             float k = EaseOutCubic(t / TFlyIn);
@@ -186,8 +215,8 @@ public class HeroCardRevealDirector : MonoBehaviour
                 // A small per-card offset keeps the incoming stack from looking
                 // like one thick card.
                 Vector2 to = gather + new Vector2(i * cardW * 0.035f, -i * cardH * 0.012f);
-                cards[i].SetPose(Vector2.Lerp(offscreen, to, k),
-                                 Mathf.Lerp(-26f, -8f + i * 1.5f, k),
+                cards[i].SetPose(Vector2.Lerp(entry, to, k),
+                                 Mathf.Lerp(14f, -8f + i * 1.5f, k),
                                  Mathf.Lerp(0.82f, 1f, k));
                 cards[i].ShowFace(false);
             }
@@ -305,6 +334,25 @@ public class HeroCardRevealDirector : MonoBehaviour
     }
 
 #if UNITY_EDITOR
+    /// <summary>
+    /// EDITOR ONLY. The real beat durations and the total run for a deal of
+    /// <paramref name="cards"/> cards, summed from the SAME constants PlayDeal
+    /// uses. Lets a re-timing be checked against the intended total instead of
+    /// trusting the arithmetic by eye.
+    /// </summary>
+    public static string EditorTimelineReport(int cards)
+    {
+        float flip = TFlipDur + TFlipStagger * Mathf.Max(0, cards - 1);
+        float hold = THoldEnd - (TFanStart + TFanDur);
+        float total = TFlyIn + flip + TFanDur + hold +
+                      TCollapseDur + TFlashDur + TGlowIn + TGlowHold + TFadeOut;
+
+        return $"cards={cards} tempo={Tempo:0.0000} TOTAL={total:0.000}s " +
+               $"(rise {TFlyIn:0.000} / flip {flip:0.000} / fan {TFanDur:0.000} / " +
+               $"hold {hold:0.000} / collapse {TCollapseDur:0.000} / flash {TFlashDur:0.000} / " +
+               $"glow {TGlowIn:0.000}+{TGlowHold:0.000} / fade {TFadeOut:0.000})";
+    }
+
     /// <summary>EDITOR ONLY. The live preview canvas, for screenshot tooling.</summary>
     public static Canvas EditorPreviewCanvas => instance ? instance.canvas : null;
 
@@ -338,8 +386,6 @@ public class HeroCardRevealDirector : MonoBehaviour
         }
 
         instance = null;
-        avatarFrameTemplate = null;
-        avatarFrameSearched = false;
     }
 
     [UnityEditor.InitializeOnLoadMethod]
@@ -532,18 +578,6 @@ public class HeroCardRevealDirector : MonoBehaviour
     //  One card
     // ======================================================================
 
-    /// <summary>
-    /// Destroy that also works from the editor preview. Object.Destroy is deferred
-    /// to end-of-frame, which edit mode never reaches - it logs an error and the
-    /// object survives.
-    /// </summary>
-    private static void SafeDestroy(Object o)
-    {
-        if (!o) return;
-        if (Application.isPlaying) Destroy(o);
-        else DestroyImmediate(o);
-    }
-
     private static class CardSprites
     {
         public const string Back = "Assets/Arts/VFX/HeroCardBack.png";
@@ -579,32 +613,6 @@ public class HeroCardRevealDirector : MonoBehaviour
         return sp;
     }
 
-    /// <summary>
-    /// Finds the authored "Cell Active" avatar frame (mask + avatar) to clone onto
-    /// the card face, so the card carries the same portrait treatment as the
-    /// Heroes Stats panel rather than a bare sprite.
-    ///
-    /// Resolved from any HeroStatCell in the scene INCLUDING INACTIVE ONES: the
-    /// panel's template is switched off by HeroStatsPanel on Start, which is
-    /// exactly the object wanted here.
-    /// </summary>
-    private static GameObject ResolveAvatarFrame()
-    {
-        if (avatarFrameSearched) return avatarFrameTemplate;
-        avatarFrameSearched = true;
-
-        var cell = FindObjectOfType<HeroStatCell>(true);
-        if (!cell) return null;
-
-        foreach (var t in cell.GetComponentsInChildren<Transform>(true))
-        {
-            string n = t.name.Replace(" ", string.Empty).ToLowerInvariant();
-            if (n == "cellactive") { avatarFrameTemplate = t.gameObject; break; }
-        }
-
-        return avatarFrameTemplate;
-    }
-
     private class CardView
     {
         public RectTransform Root;
@@ -635,37 +643,20 @@ public class HeroCardRevealDirector : MonoBehaviour
             v.faceImg = NewImage("Face", v.Root, Load(CardSprites.Face));
             v.face = v.faceImg.rectTransform;
 
-            // The authored avatar frame, cloned onto the face. Null-safe: without
-            // the Heroes Stats panel in the scene the card still deals, it just
-            // shows a blank face.
-            var frame = ResolveAvatarFrame();
-            if (frame)
-            {
-                var clone = Instantiate(frame, v.face);
-                clone.name = "Avatar Frame";
-                clone.SetActive(true);
+            // JUST THE PORTRAIT, on the card face.
+            //
+            // This used to clone the authored "Cell Active" frame so the card
+            // carried the same treatment as the Heroes Stats panel. On screen that
+            // read as a card INSIDE a card - the blue panel competed with the card
+            // frame and buried the hero - so the frame is gone and only the avatar
+            // is drawn. preserveAspect keeps portraits of differing sizes from
+            // stretching to the slot.
+            v.avatar = NewImage("Avatar", v.face, null);
+            v.avatar.preserveAspect = true;
 
-                // Strip anything interactive the template carried in - the brief
-                // is explicit that these cards have no buttons and no text.
-                foreach (var b in clone.GetComponentsInChildren<Button>(true)) SafeDestroy(b);
-                foreach (var g in clone.GetComponentsInChildren<Graphic>(true)) g.raycastTarget = false;
-                foreach (var txt in clone.GetComponentsInChildren<TMPro.TMP_Text>(true))
-                    txt.gameObject.SetActive(false);
-
-                var rt = clone.GetComponent<RectTransform>();
-                if (rt)
-                {
-                    rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-                    rt.pivot = new Vector2(0.5f, 0.5f);
-                    rt.anchoredPosition = Vector2.zero;
-                }
-
-                foreach (var img in clone.GetComponentsInChildren<Image>(true))
-                {
-                    string n = img.name.Replace(" ", string.Empty).ToLowerInvariant();
-                    if (n == "avatar") { v.avatar = img; break; }
-                }
-            }
+            // An Image with a null sprite draws a solid WHITE QUAD. Configure
+            // re-enables it only once a real portrait is assigned.
+            v.avatar.enabled = false;
 
             v.backImg = NewImage("Back", v.Root, Load(CardSprites.Back));
             v.back = v.backImg.rectTransform;
@@ -702,10 +693,7 @@ public class HeroCardRevealDirector : MonoBehaviour
             {
                 avatar.sprite = def ? def.portrait : null;
                 avatar.enabled = def && def.portrait;
-
-                var rt = avatar.rectTransform;
-                if (rt && rt.parent is RectTransform holder)
-                    holder.sizeDelta = size * 0.74f;
+                avatar.rectTransform.sizeDelta = size * PortraitFillFraction;
             }
 
             glow.color = new Color(1f, 1f, 1f, 0f);

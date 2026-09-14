@@ -1,0 +1,76 @@
+================================================================================
+  StageDeploymentPlanSO.cs
+  Path : Assets/Scripts/Data/Units/StageDeploymentPlanSO.cs
+  Type : ScriptableObject   (Create > Blasty > Stage Deployment Plan)
+  Layer: Data / Units
+  Added: 2026-09-14  (PHASE 2, part 2)
+================================================================================
+
+PURPOSE
+-------
+Says WHICH hero types each match of each level awards, and how many of each.
+
+LevelBattleRules.Deployments already says HOW MANY heroes a match is worth
+(stage 4 is 1,1,2,4). It says nothing about WHICH types, and until now the types
+were drawn at random from the deployed roster. PHASE 2 needs them authorable:
+"match 1 gives one of type A, match 3 gives one A and one B" is a level-design
+decision, not a dice roll.
+
+OPTIONAL AND ADDITIVE - this is the important property:
+  - A level WITH an entry here uses it verbatim.
+  - A level WITHOUT one keeps the old behaviour exactly: counts from
+    LevelBattleRules, types drawn at random.
+Nothing breaks by leaving the asset empty, and levels can be converted one at a
+time.
+
+STRUCTURE
+---------
+  LevelPlan  { int level; List<MatchPlan> matches; }
+      level    1-based, the same number LevelBattleRules.ResolveLevel returns.
+      matches  ONE ENTRY PER MATCH, in clear order. Element 0 is the FIRST match.
+
+  MatchPlan  { List<Entry> entries; }        empty = that match awards nothing
+
+  Entry      { int unitId; int count; }
+      unitId   UnitDefinitionSO.unitId of the type.
+      count    how many of that type. The card deal shows ONE card per type with
+               this number under it; the panel shows ONE cell reading "xN"; the
+               spawn puts this many on the gates.
+
+API
+---
+  HasPlanFor(level)            -> bool
+  MatchCount(level)            -> int, 0 when unauthored
+  EntriesFor(level, match)     -> IReadOnlyList<Entry> or NULL. match is 1-BASED,
+                                  to line up with LevelBattleRules.HeroesForMatch.
+                                  Null = fall back to the random draw.
+  HeroCountFor(level, match)   -> total heroes that match awards
+  Validate()                   -> "" when consistent, otherwise a report
+
+HOW IT CONNECTS
+---------------
+  - PlayerWaveManager holds the reference (Inspector field `deploymentPlan`) and
+    consults it in AwardHeroesForMatch. A null asset, an unauthored level or an
+    unauthored match all fall through to the pre-PHASE-2 path.
+  - The batch it produces flows to HeroCardRevealDirector (the card deal) and to
+    HeroDeploymentSequencer (the 6s loads), so authoring here changes what the
+    player sees on the cards AND who arrives in each load.
+
+NOTES / RISKS
+-------------
+  - !! WHEN A LEVEL IS AUTHORED, THE PLAN'S COUNTS WIN over LevelBattleRules. A
+    match listing {A x2, B x1} awards three heroes whatever LevelBattleRules says.
+    This is deliberate: the two tables never have to be hand-synced. Validate()
+    REPORTS the disagreements as a design aid; it is not an error and does not
+    block anything.
+  - A unitId with no matching UnitDefinitionSO is skipped with a LogError rather
+    than silently shrinking the wave - a typo'd id must be loud.
+  - The asset itself does not exist yet. Create it via
+    Create > Blasty > Stage Deployment Plan and assign it on the
+    [PlayerWaveManager] object in LevelTemplate.prefab. Until then every level
+    uses the random fallback, which is the current behaviour.
+
+NOT VERIFIED (as of 2026-09-14)
+--------------------------------
+  Compiles. No asset has been authored, so the authored path has NEVER RUN -
+  only the fallback has. Validate() has never been called against real data.

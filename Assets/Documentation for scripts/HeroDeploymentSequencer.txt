@@ -1,0 +1,109 @@
+================================================================================
+  HeroDeploymentSequencer.cs
+  Path : Assets/Scripts/Combat/Spawning/HeroDeploymentSequencer.cs
+  Type : MonoBehaviour
+  Layer: Combat / Spawning
+  Added: 2026-09-14  (PHASE 2, part 2)
+  Lives: on the [PlayerWaveManager] GameObject inside
+         Assets/PREFABS/Level Template/LevelTemplate.prefab, so every stage has one
+================================================================================
+
+PURPOSE
+-------
+Runs the DEPLOYMENT QUEUE. Once BATTLE is pressed it plays one 6-second "load"
+per match the player cleared, back to back, and the instant a load's bar fills it
+puts that match's heroes on the field.
+
+This is the second half of PHASE 2. The first half stopped heroes spawning on
+every match and made each match deal CARDS instead (HeroCardRevealDirector); the
+heroes earned that way piled up in PlayerWaveManager.EarnedBatches with no route
+onto the battlefield. This is that route.
+
+It owns NO roster state. The batches, their order and their contents all come
+from PlayerWaveManager. It decides only WHEN, and asks PlayerWaveManager to spawn.
+
+WHY A SEQUENCER AND NOT A TIMER PER CELL
+  The loads are strictly serial, and how many there are is only known when BATTLE
+  is pressed (it equals the matches cleared). One owner walking a queue keeps
+  "which load is running" in a single place - which is what the panel renders and
+  what decides who spawns next. Per-cell timers would each have to re-derive it.
+
+INSPECTOR FIELDS
+----------------
+  Timing
+    loadDuration     (float, min .1, default 6)  how long ONE load takes. Ref2
+                     shows 6s. EVERY load is the same length no matter how many
+                     heroes it releases.
+    gapBetweenLoads  (float, min 0, default 0)  dead time between loads. 0 = the
+                     next bar starts on the same frame, which is what the brief
+                     asks for.
+
+  Refs (left empty = found in the scene at Awake)
+    waveManager      (PlayerWaveManager) does the spawning. Missing = logs an
+                     error, nothing can ever deploy.
+    battleStart      (BattleStartController) the trigger.
+
+PUBLIC STATE
+------------
+  CurrentLoadIndex    0-based index of the running load; -1 when idle
+  CurrentLoadProgress 0..1 of the running load; 0 when idle
+  TotalLoads          how many loads this battle will run - fixed at BATTLE
+  Running             true from the first load starting to the last releasing
+
+EVENTS
+------
+  LoadStarted(int index, IReadOnlyList<UnitDefinitionSO> batch)
+      A load began. Carries the heroes it WILL release, so the panel can light
+      exactly those cells and grey the rest.
+  LoadProgress(int index, float t)     0..1, once per frame
+  LoadCompleted(int index, batch)      released and handed to PlayerWaveManager
+  AllLoadsCompleted()                  every load has run
+
+FLOW
+----
+  Awake            resolves waveManager / battleStart by scene search.
+  OnEnable         subscribes BattleStartController.OnBattleStarted.
+  HandleBattleStarted
+      Restarts RunQueue. Safe because BattleStartController.StartBattle has
+      already called PlayerWaveManager.SealForBattle, so the batch list can no
+      longer grow and the queue length is final.
+  RunQueue()  [coroutine]
+      1. SNAPSHOTS the batches into a local list. The wave manager is sealed by
+         now so this cannot change under us - copying says so explicitly.
+      2. No batches -> fires AllLoadsCompleted immediately and exits.
+      3. Per batch: LoadStarted, then tick loadDuration firing LoadProgress every
+         frame, then DeployBatch, then LoadCompleted.
+      4. Releases FIRST and announces after, so a listener reacting to
+         LoadCompleted already sees the heroes on their way.
+  StopQueue()      halts where it stands; nothing further is released.
+
+HOW IT CONNECTS
+---------------
+  - BattleStartController.OnBattleStarted  -> starts the queue.
+  - PlayerWaveManager.EarnedBatches        -> what to release, in order.
+  - PlayerWaveManager.DeployBatch(batch)   -> spawns on free gates and jumps them
+    to the REAR lane (closest to the player base).
+  - HeroStatsPanel subscribes to all four events and renders the queue: portrait
+    + "xN" + a cyan bar filling from the bottom, greying the types not in the
+    running load.
+
+NOTES / RISKS
+-------------
+  - Uses Time.deltaTime, NOT unscaled: a paused game should pause the queue.
+    (HeroCardRevealDirector deliberately does the opposite - its deal should
+    still play while paused.)
+  - The queue length is the MATCH count, not the hero count. A match awarding 4
+    heroes is still ONE 6s load.
+  - Four matches = 24 seconds before the last hero arrives, with enemies already
+    on the field. That is a deliberate pacing decision from the brief, not an
+    oversight - but it is the number to revisit if early stages feel unwinnable.
+  - StopQueue is never called by anything yet. A level that ends mid-queue leaves
+    the coroutine running on a destroyed-soon object; harmless today because the
+    scene unloads, but wire it to the win/lose flow if deployment ever needs to
+    stop cleanly.
+
+NOT VERIFIED (as of 2026-09-14)
+--------------------------------
+  Compiles clean and the component is on the LevelTemplate prefab. NOT play-tested:
+  the 6s cadence, the back-to-back transition, the spawn-on-completion, the rear
+  lane landing and the panel's reaction have never run.

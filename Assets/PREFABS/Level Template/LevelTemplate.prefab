@@ -5241,6 +5241,8 @@ MonoBehaviour:
   gateStopPosition: {x: 0, y: 0}
   gateStopDistance: 0.6
   facingDeadZoneX: 0.05
+  actualMoveSpeed: 0
+  intendedMoveSpeed: 0
 --- !u!1 &1548057531367247494
 GameObject:
   m_ObjectHideFlags: 0
@@ -5801,6 +5803,7 @@ MonoBehaviour:
   cellTemplate: {fileID: 354399039598435580}
   forceCenterAlignment: 1
   gemsPerHero: 5
+  deploymentSequencer: {fileID: 0}
   waveManager: {fileID: 6089626260945787698}
   gameStartManager: {fileID: 0}
 --- !u!1 &1720783683399205692
@@ -18462,6 +18465,7 @@ GameObject:
   - component: {fileID: 6019326200218869209}
   - component: {fileID: 6089626260945787698}
   - component: {fileID: 7351843336487089692}
+  - component: {fileID: 6157078916869821417}
   m_Layer: 0
   m_Name: PlayerWaveManager
   m_TagString: Untagged
@@ -18526,6 +18530,8 @@ MonoBehaviour:
   reuseLastLane: 1
   holdUntilFirstEnemySpawns: 1
   enemySpawner: {fileID: 1079043511634868343}
+  suppressStageSpawning: 1
+  deploymentPlan: {fileID: 0}
   reinforcementStagger: 0.12
   reinforcementGateHold: 0.75
 --- !u!114 &7351843336487089692
@@ -18557,6 +18563,22 @@ MonoBehaviour:
   arriveEpsilon: 0.05
   moveTimeout: 6
   logCompaction: 0
+--- !u!114 &6157078916869821417
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6260461941568399284}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74b26b04128c1e549b28242ee80a4895, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HeroDeploymentSequencer
+  loadDuration: 6
+  gapBetweenLoads: 0
+  waveManager: {fileID: 0}
+  battleStart: {fileID: 0}
 --- !u!1 &6269681375194019561
 GameObject:
   m_ObjectHideFlags: 0
@@ -24099,6 +24121,10 @@ MonoBehaviour:
   moveSpeed: 0.5
   canMove: 0
   isUnlocked: 0
+  marchSpeedBoost: 1.3
+  actualMoveSpeed: 0
+  intendedMoveSpeed: 0
+  forwardProgress: 0
   isFormationStepping: 0
   faceCenterOnStart: 1
   retargetHysteresis: 0.2
@@ -24108,8 +24134,6 @@ MonoBehaviour:
   chosenEnemyOffset: {fileID: 0}
   attackPlayerGate: 0
   visualRoot: {fileID: 0}
-  attackSlotAngleStep: 28
-  attackStandoffFactor: 0.8
 --- !u!114 &3638395018391487190
 MonoBehaviour:
   m_ObjectHideFlags: 0

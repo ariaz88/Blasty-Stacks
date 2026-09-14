@@ -77,9 +77,12 @@ _Each of these compiles clean and has NEVER been in Play mode. Detail + what to 
 - **[2026-09-14] PHASE 2 card rewards — the whole animation is unplayed.** Only the fan's REST pose
   was posed and screenshotted in edit mode. The fly-in, flip, collapse, white flash, teal glow, fade,
   all timings, and the anchor's real position above the player base have never run. `HeroCardRevealDirector`.
-- **[2026-09-14] PHASE 2 leaves nobody fighting.** With `suppressStageSpawning` ON, `releasedHeroes`
-  stays empty, `ReleasedPlayerCP` is 0 and no hero reaches the battlefield. EXPECTED for this step —
-  how earned heroes deploy is the next design task, and they must NOT all enter together.
+- **[2026-09-14] PHASE 2 deployment queue is unplayed.** After BATTLE, `HeroDeploymentSequencer` runs
+  one 6s load per match, then spawns that batch to the rear lane; `HeroStatsPanel` became the queue
+  (portrait + "xN" + cyan fill). None of it has run. 4 matches = 24s before the last hero lands.
+- **[2026-09-14] `StageDeploymentPlanSO` asset does not exist yet.** Until one is created
+  (Create ▸ Blasty ▸ Stage Deployment Plan) and assigned on `[PlayerWaveManager]` in
+  `LevelTemplate.prefab`, every level uses the random-type fallback. The authored path has never run.
 - **[2026-09-12] Re-tuned weapon hitboxes** (all 15 characters, default in `Assets/Scripts/Editor/WeaponHitboxDefaults.json`).
   A MITIGATION for splash-kills, not the fix. Replay level 4, read `[HITS]`; if kills still show two
   attackers, the real fix is filtering a swing to `currentTarget` — a combat-feel change Arash has not approved.
@@ -249,6 +252,7 @@ Reasoning in full: `SESSIONS-ARCHIVE.md`._
 
 _Newest first, **one line each**. Full write-up of any entry: search `SESSIONS-ARCHIVE.md` for its date._
 
+- **2026-09-14** — PHASE 2 part 2: after BATTLE, one 6s "load" per cleared match releases that match's heroes to the rear lane; Heroes Stats panel became the deployment queue (portrait + "xN" + cyan fill, per Ref2), no more alive/total. New `HeroDeploymentSequencer` (on LevelTemplate.prefab) + `StageDeploymentPlanSO` (authorable types per match, random fallback) + `PlayerWaveManager.DeployBatch`. Compiles; NOT play-tested.
 - **2026-09-14** — PHASE 2 part 1: heroes no longer spawn on the gates at all; each match now deals hero CARDS (Ref1) above the player base. `PlayerWaveManager` (`suppressStageSpawning`, `HeroesEarned`, `EarnedHeroes`), new `HeroCardRevealDirector` + `CardBackSpriteBaker` + 3 baked sprites. Compiles; fan pose screenshotted; NOT play-tested.
 - **2026-09-14** — SESSIONS.md restructured: 2814 lines → this file; all long-form text moved verbatim to `SESSIONS-ARCHIVE.md` (not injected). Hard size caps added to the Protocol. No code touched.
 - **2026-09-12** — Any scene can now be played directly in the Editor (testing only; the build is untouched).

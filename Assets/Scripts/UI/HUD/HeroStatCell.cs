@@ -95,6 +95,117 @@ public class HeroStatCell : MonoBehaviour
 
     private Action<HeroStatCell> onBuyPressed;
 
+    // ======================================================================
+    //  PHASE 2 - deployment slot
+    // ======================================================================
+    //
+    // In PHASE 2 this cell stops being a survival read-out ("2/3 still alive")
+    // and becomes a DEPLOYMENT SLOT: a portrait, the NUMBER of that type this
+    // load releases ("x2"), and a cyan bar that fills from the bottom over the
+    // load's 6 seconds - the look from Reference videos/Ref2.MP4.
+    //
+    // The alive/total path below is untouched and still works; a cell is in one
+    // mode or the other depending on which Configure call built it.
+
+    private Image loadFill;
+
+    /// <summary>Ref2's fill colour - a bright cyan against the cell's own blue.</summary>
+    private static readonly Color LoadCyan = new Color32(0x5B, 0xE8, 0xF5, 0xC8);
+
+    /// <summary>
+    /// Builds this cell as a deployment slot for one hero type.
+    ///
+    /// <paramref name="count"/> is how many of that type the load releases, shown
+    /// as "xN" - NOT "alive/total". A match awarding two archers is ONE cell
+    /// reading "x2", not two cells.
+    /// </summary>
+    public void ConfigureAsDeploymentSlot(int unitId, UnitDefinitionSO def, int count)
+    {
+        UnitId = unitId;
+        SquadSize = Mathf.Max(0, count);
+        IsSpent = false;
+        onBuyPressed = null;
+
+        if (def && def.portrait)
+        {
+            if (activeAvatar) activeAvatar.sprite = def.portrait;
+            if (deactiveAvatar) deactiveAvatar.sprite = def.portrait;
+        }
+
+        // No buy-back in a deployment slot: the listener is never attached, so a
+        // button that somehow ends up on screen still cannot spend a gem.
+        if (costRoot) costRoot.SetActive(false);
+        if (buyButton)
+        {
+            buyButton.onClick.RemoveAllListeners();
+            buyButton.interactable = false;
+        }
+
+        EnsureLoadFill();
+        SetLoadCount(count);
+        SetLoadFill(0f);
+        SetDimmed(true);
+    }
+
+    /// <summary>The "xN" under the portrait. N &lt;= 0 hides the label entirely.</summary>
+    public void SetLoadCount(int count)
+    {
+        bool show = count > 0;
+        ShowCount(show);
+
+        if (show && countText) countText.text = "x" + count;
+    }
+
+    /// <summary>
+    /// Grey (not part of the running load) versus lit (part of it). Reuses the
+    /// authored two-frame model rather than tinting: "Cell DeActive" is already
+    /// grey artwork, which is exactly the greyed-out look the brief asks for.
+    /// </summary>
+    public void SetDimmed(bool dimmed)
+    {
+        ShowFrame(dimmed);
+        if (dimmed) SetLoadFill(0f);
+    }
+
+    /// <summary>Fill level of the cyan bar, 0..1. Rises from the BOTTOM.</summary>
+    public void SetLoadFill(float t)
+    {
+        if (loadFill) loadFill.fillAmount = Mathf.Clamp01(t);
+    }
+
+    /// <summary>
+    /// Creates the cyan fill inside "Cell Active", as its FIRST child.
+    ///
+    /// First child matters: in uGUI a child draws ABOVE its parent, and later
+    /// siblings draw above earlier ones. First child therefore puts the fill above
+    /// the cell's own background but BELOW "Mask/Avatar" - so the cyan rises
+    /// behind the hero instead of painting over them.
+    /// </summary>
+    private void EnsureLoadFill()
+    {
+        if (loadFill || !activeRoot) return;
+
+        var source = activeRoot.GetComponent<Image>();
+
+        var go = new GameObject("Load Fill", typeof(RectTransform), typeof(Image));
+        var rt = go.GetComponent<RectTransform>();
+        rt.SetParent(activeRoot.transform, false);
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        rt.SetAsFirstSibling();
+
+        loadFill = go.GetComponent<Image>();
+        loadFill.sprite = source ? source.sprite : null;
+        loadFill.type = Image.Type.Filled;
+        loadFill.fillMethod = Image.FillMethod.Vertical;
+        loadFill.fillOrigin = (int)Image.OriginVertical.Bottom;
+        loadFill.fillAmount = 0f;
+        loadFill.color = LoadCyan;
+        loadFill.raycastTarget = false;
+    }
+
     private void Awake()
     {
         AutoWire();

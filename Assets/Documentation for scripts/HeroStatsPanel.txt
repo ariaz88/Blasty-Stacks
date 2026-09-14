@@ -1,3 +1,26 @@
+CURRENT UPDATE - 2026-09-14  PHASE 2: THE PANEL IS NOW A DEPLOYMENT QUEUE
+(supersedes the alive/total description below whenever a sequencer is present)
+
+If a HeroDeploymentSequencer exists in the scene (it is on the [PlayerWaveManager]
+object in LevelTemplate.prefab, so normally yes), HandleBattleStarted takes a new
+path and `deploymentMode` latches true:
+
+  - Cells are built from PlayerWaveManager.EarnedBatches, NOT from HeroRoster.
+    Under PHASE 2 nothing is on the field when BATTLE is pressed, so the old path
+    would build an EMPTY panel.
+  - ONE cell per hero TYPE earned this stage, database order, via
+    HeroStatCell.ConfigureAsDeploymentSlot.
+  - LoadStarted   -> each cell shows "xN" for its count in THAT load and lights;
+                     a type not in the load greys out and shows no number.
+  - LoadProgress  -> the cyan bar fills on the lit cells.
+  - AllLoadsCompleted -> every cell greys out, labels cleared.
+  - !! Refresh() EARLY-RETURNS in deployment mode. It is driven by
+    HeroRoster.OnRosterChanged, which fires on every hero death, and would
+    overwrite the load labels the moment the first hero died.
+
+No alive/total, no buy-back, in this mode. With no sequencer in the scene the
+panel behaves exactly as documented below.
+
 ================================================================================
   HeroStatsPanel.cs
   Path : Assets/Scripts/UI/HUD/HeroStatsPanel.cs
