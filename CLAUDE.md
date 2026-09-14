@@ -12,6 +12,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **End of a session, or after any meaningful change:** append an entry to the top of its Session
   Log and update its Open Threads, following the protocol written in that file. The `/wrap`
   command does exactly this.
+- **`SESSIONS.md` is injected in full into every session, so its size is a per-session context
+  tax — keep it under ~400 lines / 40 KB.** Entries there are ONE LINE; Open Threads are max
+  three. The long-form write-up goes in `SESSIONS-ARCHIVE.md`, which is **not** injected — grep
+  it for a date or title when a one-liner isn't enough, never read it whole. The hook prints a
+  loud warning when `SESSIONS.md` crosses the cap; when you see it, trim the file as part of that
+  session. (It was restructured on 2026-09-14 from 2814 lines / 233 KB, which cost roughly 60k
+  tokens of context on every single run.)
 
 ## Per-script documentation — keep it in sync
 
