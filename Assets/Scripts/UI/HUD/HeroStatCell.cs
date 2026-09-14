@@ -109,8 +109,35 @@ public class HeroStatCell : MonoBehaviour
 
     private Image loadFill;
 
-    /// <summary>Ref2's fill colour - a bright cyan against the cell's own blue.</summary>
-    private static readonly Color LoadCyan = new Color32(0x5B, 0xE8, 0xF5, 0xC8);
+    /// <summary>
+    /// Ref2's fill colour - a bright cyan against the cell's own dark teal.
+    /// Fully opaque: it sits BEHIND the portrait, so it never hides the hero.
+    /// </summary>
+    private static readonly Color LoadCyan = new Color32(0x5B, 0xE8, 0xF5, 0xFF);
+
+    private static Sprite whiteSprite;
+
+    /// <summary>
+    /// A 1x1 opaque sprite, built once and shared. Fallback for a cell whose mask
+    /// carries no sprite of its own - see EnsureLoadFill: a Filled Image MUST have
+    /// one or it silently renders full.
+    /// </summary>
+    private static Sprite WhiteSprite
+    {
+        get
+        {
+            if (whiteSprite) return whiteSprite;
+
+            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            tex.SetPixel(0, 0, Color.white);
+            tex.Apply();
+            tex.hideFlags = HideFlags.HideAndDontSave;
+
+            whiteSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+            whiteSprite.hideFlags = HideFlags.HideAndDontSave;
+            return whiteSprite;
+        }
+    }
 
     /// <summary>
     /// Builds this cell as a deployment slot for one hero type.
@@ -147,13 +174,26 @@ public class HeroStatCell : MonoBehaviour
         SetDimmed(true);
     }
 
+    /// <summary>
+    /// How many heroes of this type the RUNNING load releases. 0 = this type is
+    /// not in the running load.
+    ///
+    /// Separate from SquadSize on purpose. SquadSize is the alive/total mode's
+    /// "/total" and is written once at build time; this changes on every load.
+    /// Reusing SquadSize for it is exactly the bug that made the cyan fill never
+    /// appear - see NOTES in the doc.
+    /// </summary>
+    public int LoadCount { get; private set; }
+
     /// <summary>The "xN" under the portrait. N &lt;= 0 hides the label entirely.</summary>
     public void SetLoadCount(int count)
     {
-        bool show = count > 0;
+        LoadCount = Mathf.Max(0, count);
+
+        bool show = LoadCount > 0;
         ShowCount(show);
 
-        if (show && countText) countText.text = "x" + count;
+        if (show && countText) countText.text = "x" + LoadCount;
     }
 
     /// <summary>
@@ -174,30 +214,65 @@ public class HeroStatCell : MonoBehaviour
     }
 
     /// <summary>
-    /// Creates the cyan fill inside "Cell Active", as its FIRST child.
+    /// Creates the cyan fill INSIDE THE MASK - the same object that holds the
+    /// portrait - as its FIRST child.
     ///
-    /// First child matters: in uGUI a child draws ABOVE its parent, and later
-    /// siblings draw above earlier ones. First child therefore puts the fill above
-    /// the cell's own background but BELOW "Mask/Avatar" - so the cyan rises
-    /// behind the hero instead of painting over them.
+    /// !! THE HOST IS THE MASK, NOT "Cell Active". Ref2 fills the PORTRAIT AREA
+    /// from the bottom up, behind the character. Hosting this on "Cell Active"
+    /// instead washed the entire card, frame and all, which is not the effect at
+    /// all. The mask also clips the fill to the cell's rounded shape for free.
+    ///
+    /// Reached through activeAvatar.transform.parent rather than by searching for
+    /// a child called "Mask": the avatar is already resolved by AutoWire and is
+    /// by definition inside the right object, so there is no second magic name to
+    /// keep in sync.
+    ///
+    /// First child matters: in uGUI later siblings draw above earlier ones, so
+    /// first-child puts the cyan BELOW the Avatar - it rises behind the hero
+    /// rather than painting over them.
+    ///
+    /// The Image gets NO SPRITE on purpose. A null-sprite Image draws a plain
+    /// quad, which is exactly the flat colour wanted, and the mask gives it its
+    /// shape.
     /// </summary>
     private void EnsureLoadFill()
     {
-        if (loadFill || !activeRoot) return;
+        if (loadFill) return;
 
-        var source = activeRoot.GetComponent<Image>();
+        // The OLD cell layouts in LevelTemplate.prefab ("Hero 1", "OfferCell")
+        // have no "Cell Active"/Mask at all, so there is nowhere to put the fill.
+        // Warn rather than return silently - a deployment cell with no bar looks
+        // like a broken sequencer, and the real cause is the wrong template.
+        Transform host = activeAvatar ? activeAvatar.transform.parent : null;
+        if (!host && activeRoot) host = activeRoot.transform;
+        if (!host)
+        {
+            Debug.LogWarning($"[HeroStatCell] '{name}' has no Cell Active/Mask/Avatar, so the " +
+                             "deployment load bar cannot be created. HeroStatsPanel.cellTemplate " +
+                             "is probably pointing at an old cell layout ('Hero 1' / 'OfferCell') " +
+                             "instead of 'Hero Card'.", this);
+            return;
+        }
 
         var go = new GameObject("Load Fill", typeof(RectTransform), typeof(Image));
         var rt = go.GetComponent<RectTransform>();
-        rt.SetParent(activeRoot.transform, false);
+        rt.SetParent(host, false);
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
+        rt.localScale = Vector3.one;
         rt.SetAsFirstSibling();
 
         loadFill = go.GetComponent<Image>();
-        loadFill.sprite = source ? source.sprite : null;
+
+        // !! A FILLED IMAGE NEEDS A SPRITE. With sprite == null an Image draws a
+        // plain quad and IGNORES type/fillAmount completely, so the bar rendered
+        // permanently full and the cell just flicked from dark to solid cyan.
+        // Prefers the mask's own sprite so the fill matches the cell's shape.
+        var hostImage = host.GetComponent<Image>();
+        loadFill.sprite = hostImage && hostImage.sprite ? hostImage.sprite : WhiteSprite;
+
         loadFill.type = Image.Type.Filled;
         loadFill.fillMethod = Image.FillMethod.Vertical;
         loadFill.fillOrigin = (int)Image.OriginVertical.Bottom;

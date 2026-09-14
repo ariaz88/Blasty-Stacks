@@ -539,19 +539,40 @@ public class EnemyManager : MonoBehaviour
     {
         if (enemyLocoMotion == null) return;
 
-        float radius = enemyLocoMotion.detectionRadius;
-        if (radius <= 0f)
+        // TWO DIFFERENT DISTANCES, and confusing them is what caused the
+        // 2026-09-14 "the enemy ignores the hero beside it" report:
+        //
+        //   detectionRadius (20)        how far this enemy can SEE. Sight only.
+        //   fairDistanceToPlayer (4)    how close a hero must be before the enemy
+        //                               COMMITS to it - the engage distance.
+        //
+        // Targeting used detectionRadius for BOTH, so an enemy locked onto a hero
+        // most of a map away and then walked past the one standing next to it.
+        // An enemy with no hero inside the engage distance has NO hero target at
+        // all, and marches on the base - which is the intended behaviour.
+        float engage = enemyLocoMotion.fairDistanceToPlayer;
+        if (engage <= 0f)
         {
             enemyLocoMotion.currentTarget = null;
             return;
         }
 
-        // THE LOCK. A nearer hero does not take the target away.
-        if (StillFightable(enemyLocoMotion.currentTarget, radius)) return;
+        // THE LOCK holds only while the locked hero is still inside the engage
+        // distance. Outside it the lock drops and the search below re-picks, so a
+        // hero that walks right up to this enemy takes the target.
+        if (StillFightable(enemyLocoMotion.currentTarget, engage))
+        {
+            float lockedDist = Vector2.Distance(
+                enemyLocoMotion.currentTarget.transform.position, transform.position);
+
+            if (lockedDist <= engage) return;
+        }
 
         LayerMask mask = enemyLocoMotion.playerDetectionLayer;
 
-        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, radius, mask);
+        // Search the ENGAGE distance, not detectionRadius. A hero further away than
+        // this is seen but not committed to, so the enemy keeps walking on the base.
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, engage, mask);
 
         float bestDist = float.MaxValue;
         PlayerStats best = null;
@@ -665,7 +686,26 @@ public class EnemyManager : MonoBehaviour
         }
 
         // 2) Otherwise, if we are at the gate and no player in range -> attack gate
-        if (attackPlayerGate && currentGateTarget != null && !currentGateTarget.isPlayerGateDestroyed)
+        //
+        // !! A HERO NEARBY CANCELS THE GATE ATTACK. Without this an enemy that had
+        // already started swinging at the castle kept swinging forever: the branch
+        // below sets isPerformingAction every cycle, which re-pins the body, so
+        // EnemyLocoMotion could never walk it over to the hero - and the hero was
+        // left hitting an enemy that never hit back. Verified live 2026-09-14: a
+        // gate-locked enemy sat at (2.96,4.02) with a hero targeted 1.36 away and
+        // isPerformingAction permanently true.
+        //
+        // Same distance the locomotion uses to decide to break off, so "close
+        // enough to walk to" and "close enough to stop hitting the gate" can never
+        // disagree and leave the enemy oscillating.
+        bool heroNearby =
+            enemyLocoMotion != null &&
+            enemyLocoMotion.currentTarget != null &&
+            !enemyLocoMotion.currentTarget.playerIsdead &&
+            Vector2.Distance(enemyLocoMotion.currentTarget.transform.position, transform.position)
+                <= enemyLocoMotion.fairDistanceToPlayer;
+
+        if (!heroNearby && attackPlayerGate && currentGateTarget != null && !currentGateTarget.isPlayerGateDestroyed)
         {
             if (currentRecoveryTimer <= 0 && !isPerformingAction)
             {

@@ -183,10 +183,29 @@ public class EnemySpawner : MonoBehaviour
                 yield break;
             }
             heroes.SealForBattle();
-            while (!heroes.DeploymentsReady && !heroes.DeploymentFailed) yield return null;
-            if (heroes.DeploymentFailed) yield break;
-            cpBattle = gameObject.AddComponent<CPBattleController>();
-            if (!cpBattle.Prepare(this, heroes)) yield break;
+
+            // !! PHASE 2: the CP layer CANNOT run here, and skipping it is not an
+            // optimisation - it is the only way enemies spawn at all.
+            //
+            // CPBattleController.Prepare needs the WHOLE hero roster at battle
+            // start: it normalises team CP and throws "No heroes were released for
+            // this battle" on an empty one. Under PHASE 2 the roster IS empty when
+            // BATTLE is pressed - heroes now arrive progressively through
+            // HeroDeploymentSequencer's 6s loads. Prepare therefore returned false
+            // and the `yield break` below it aborted StartPreparedBattle BEFORE
+            // RunLevel, so not one enemy ever spawned - which in turn froze every
+            // hero, because holdUntilFirstEnemySpawns waits on HasSpawnedFirstEnemy.
+            //
+            // Deliberately gated on CardRewardsActive rather than deleted: turning
+            // suppressStageSpawning off restores the old spawn path AND this one
+            // together.
+            if (!heroes.CardRewardsActive)
+            {
+                while (!heroes.DeploymentsReady && !heroes.DeploymentFailed) yield return null;
+                if (heroes.DeploymentFailed) yield break;
+                cpBattle = gameObject.AddComponent<CPBattleController>();
+                if (!cpBattle.Prepare(this, heroes)) yield break;
+            }
         }
         yield return RunLevel();
     }
@@ -305,16 +324,22 @@ public class EnemySpawner : MonoBehaviour
             ? LevelManager.CurrentStage
             : levelConfig.levelNumber;
 
+        // LevelBattleRules.EnemyWaves is the authority on HOW MANY enemies arrive
+        // and in how many waves (Arash, 2026-09-14). The LevelConfig asset still
+        // supplies everything else - formation, spawn area, enemy types, delays -
+        // so this reshapes the authored waves rather than replacing them.
+        var waveList = BuildWavesFromRules(stageLevel);
+
         // A level with no waves authored has, trivially, already sent everything it has.
-        if (levelConfig.waves.Count == 0)
+        if (waveList.Count == 0)
             AllWavesDispatched = true;
 
         // Initial delay before first wave (respects pause)
         yield return WaitForSecondsGameplay(levelConfig.startDelay);
 
-        for (int i = 0; i < levelConfig.waves.Count; i++)
+        for (int i = 0; i < waveList.Count; i++)
         {
-            var wave = levelConfig.waves[i];
+            var wave = waveList[i];
 
             if (wave.delayBeforeWave > 0f)
                 yield return WaitForSecondsGameplay(wave.delayBeforeWave);
@@ -335,7 +360,7 @@ public class EnemySpawner : MonoBehaviour
             // WaitUntil below and only falls through once the field is clear, so waiting
             // for the loop to end would make this useless to anyone asking "can more
             // enemies still arrive?" while the final wave is alive.
-            if (i == levelConfig.waves.Count - 1)
+            if (i == waveList.Count - 1)
                 AllWavesDispatched = true;
 
             // Wait for wave clear (optional)
@@ -347,6 +372,138 @@ public class EnemySpawner : MonoBehaviour
         // (Right now WinPanel handles it after the player presses Claim.)
     }
 
+
+    // ---------- WAVE SHAPING (LevelBattleRules.EnemyWaves) ----------
+
+    /// <summary>
+    /// The waves this stage will actually run: as many waves, with as many enemies
+    /// each, as LevelBattleRules.EnemyWaves says - built from the LevelConfig's own
+    /// authored waves so formation, spawn area, enemy types, delays and per-entry
+    /// unit levels all survive.
+    ///
+    /// Returns the asset's waves UNCHANGED for any level past the authored range,
+    /// so stages beyond the table keep working exactly as before.
+    ///
+    /// !! NEVER MUTATES THE ASSET. LevelConfig assets are SHARED between stages;
+    /// writing counts into one would corrupt every stage using it, and would
+    /// persist into the project file. Every wave here is a fresh copy.
+    /// </summary>
+    private List<Wave> BuildWavesFromRules(int stageLevel)
+    {
+        var counts = LevelBattleRules.EnemyWaveCounts(stageLevel);
+        if (counts == null || counts.Length == 0 || levelConfig.waves.Count == 0)
+            return levelConfig.waves;
+
+        var built = new List<Wave>(counts.Length);
+
+        for (int i = 0; i < counts.Length; i++)
+        {
+            // Template: the authored wave at the same index when there is one,
+            // otherwise the last authored wave - so a two-wave level built from a
+            // one-wave asset reuses that wave's look for its second wave.
+            var template = levelConfig.waves[Mathf.Min(i, levelConfig.waves.Count - 1)];
+            built.Add(CopyWaveWithTotal(template, counts[i], i));
+        }
+
+        return built;
+    }
+
+    /// <summary>
+    /// A copy of <paramref name="template"/> whose entry counts sum to exactly
+    /// <paramref name="total"/>.
+    ///
+    /// The total is spread across the template's entries as evenly as possible,
+    /// remainder to the earliest ones, so a wave authored with two enemy types
+    /// keeps both instead of collapsing to the first. An entry that rounds down to
+    /// zero is DROPPED rather than kept at zero, because WaveEntry.count is
+    /// [Min(1)] and a zero would be clamped back up to one and overshoot the total.
+    /// </summary>
+    private static Wave CopyWaveWithTotal(Wave template, int total, int waveIndex)
+    {
+        var copy = new Wave
+        {
+            name = $"{template.name} (rules {waveIndex + 1})",
+            delayBeforeWave = template.delayBeforeWave,
+            formation = template.formation,
+            spawnMin = template.spawnMin,
+            spawnMax = template.spawnMax,
+            gridColumns = template.gridColumns,
+            minSlotSpacing = template.minSlotSpacing,
+            frontAnchor = template.frontAnchor,
+            rowYOffset = template.rowYOffset,
+            secondRowDelay = template.secondRowDelay,
+            concurrencyCap = template.concurrencyCap,
+            entries = new List<WaveEntry>()
+        };
+
+        var sources = new List<WaveEntry>();
+        foreach (var e in template.entries)
+            if (e != null && e.enemyPrefab) sources.Add(e);
+
+        if (sources.Count == 0 || total <= 0) return copy;
+
+        int each = total / sources.Count;
+        int remainder = total % sources.Count;
+
+        for (int i = 0; i < sources.Count; i++)
+        {
+            int n = each + (i < remainder ? 1 : 0);
+            if (n <= 0) continue;
+
+            var src = sources[i];
+            copy.entries.Add(new WaveEntry
+            {
+                enemyPrefab = src.enemyPrefab,
+                statsBase = src.statsBase,
+                count = n,
+                row = src.row,
+                unitLevel = src.unitLevel
+            });
+        }
+
+        return copy;
+    }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// EDITOR ONLY. What BuildWavesFromRules would produce for one level against a
+    /// given LevelConfig - wave by wave, entry by entry, with the totals - so the
+    /// reshaping can be checked against the authored counts without entering Play
+    /// mode.
+    /// </summary>
+    public static string EditorDescribeWaves(LevelConfig config, int stageLevel)
+    {
+        if (!config) return "no LevelConfig";
+
+        var counts = LevelBattleRules.EnemyWaveCounts(stageLevel);
+        if (counts == null || counts.Length == 0 || config.waves.Count == 0)
+            return $"L{stageLevel}: unauthored - uses the asset's own {config.waves.Count} wave(s)";
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"L{stageLevel} from '{config.name}' ({config.waves.Count} authored wave(s)): ");
+
+        int grand = 0;
+        for (int i = 0; i < counts.Length; i++)
+        {
+            var template = config.waves[Mathf.Min(i, config.waves.Count - 1)];
+            var copy = CopyWaveWithTotal(template, counts[i], i);
+
+            int sum = 0;
+            var parts = new List<string>();
+            foreach (var e in copy.entries)
+            {
+                sum += e.count;
+                parts.Add($"{(e.enemyPrefab ? e.enemyPrefab.name : "?")}x{e.count}");
+            }
+
+            grand += sum;
+            sb.Append($"[wave{i + 1} want {counts[i]} got {sum}: {string.Join(",", parts)}] ");
+        }
+
+        sb.Append($"TOTAL want {LevelBattleRules.TotalEnemies(stageLevel)} got {grand}");
+        return sb.ToString();
+    }
+#endif
 
     // ---------- FORMATION HELPERS ----------
 

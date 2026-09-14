@@ -140,6 +140,12 @@ public class PlayerWaveManager : MonoBehaviour
              "types drawn at random). Left empty = every level behaves that way.")]
     [SerializeField] private StageDeploymentPlanSO deploymentPlan;
 
+    [Tooltip("How long a deployed hero STANDS ON THE GATE before it leaps into the " +
+             "battlefield, in seconds. Separate from reinforcementGateHold (0.75) " +
+             "which belongs to the gem buy-back: 1.20 is that beat +60%, asked for " +
+             "after the first deployment play-test because the leap read as instant.")]
+    [SerializeField, Min(0f)] private float deployGateHold = 1.2f;
+
     private readonly List<UnitDefinitionSO> earnedHeroes = new();
 
     /// <summary>
@@ -266,6 +272,43 @@ public class PlayerWaveManager : MonoBehaviour
     /// Deliberately does NOT touch waveLocked or currentWave: there is no lock
     /// step any more, the load bar IS the wait.
     /// </summary>
+    /// <summary>One hero posed on a gate, waiting for its leap.</summary>
+    private class PendingDeploy
+    {
+        public PlayerManager hero;
+        public float releaseAt;
+        public float? laneY;
+    }
+
+    private readonly List<PendingDeploy> pendingDeploys = new();
+
+    /// <summary>
+    /// Releases every deployed hero whose gate pose has expired.
+    ///
+    /// Deliberately in Update and NOT in a coroutine: a coroutine here can be
+    /// killed by any StopAllCoroutines on this component, and a hero killed
+    /// mid-hold stays locked on the platform for the rest of the battle because
+    /// PlayerLockState re-asserts a Static body every FixedUpdate. This loop has
+    /// no such failure mode - the worst case is a late release, never a permanent
+    /// one.
+    /// </summary>
+    private void Update()
+    {
+        for (int i = pendingDeploys.Count - 1; i >= 0; i--)
+        {
+            var d = pendingDeploys[i];
+
+            if (d == null || d.hero == null) { pendingDeploys.RemoveAt(i); continue; }
+            if (Time.time < d.releaseAt) continue;
+
+            pendingDeploys.RemoveAt(i);
+
+            ApplyLock(d.hero, false);
+            SetHealthBarsHiddenOnGate(d.hero, false);
+            StartCoroutine(JumpThenSwitch(d.hero, d.laneY));
+        }
+    }
+
     public void DeployBatch(IReadOnlyList<UnitDefinitionSO> batch)
     {
         if (batch == null || batch.Count == 0) return;
@@ -297,8 +340,31 @@ public class PlayerWaveManager : MonoBehaviour
 
             pm.isUnlocked = true;
             releasedHeroes.Add(pm);
-            ApplyLock(pm, false);
-            StartCoroutine(JumpThenSwitch(pm, laneY));
+
+            // STAND ON THE GATE FIRST, then leap. The first version jumped on the
+            // spawn frame, which read as the hero teleporting past the platform
+            // entirely. The lock here is the same one a normal wave sits in
+            // (Lock state + Static body), so the hero cannot drift while it poses.
+            ApplyLock(pm, true);
+            SetHealthBarsHiddenOnGate(pm, true);
+
+            // !! THE HOLD IS A WATCHDOG ENTRY, NOT A COROUTINE. It used to be
+            // StartCoroutine(HoldOnGateThenJump(...)), and ANY StopAllCoroutines on
+            // this component during that 1.2s wait left the hero locked on the
+            // platform FOREVER - PlayerLockState re-asserts a Static body every
+            // FixedUpdate, so it can never recover by itself. Measured 2026-09-14:
+            // 4 heroes released, only 2 reached the field; the other 2 sat on the
+            // deploy stages at y=3.21 for the rest of the battle, which is what
+            // "the hero only spawned once" looked like on screen.
+            //
+            // ReleaseDueDeployments in Update owns the wait instead, so there is no
+            // coroutine to interrupt and a stranded hero cannot happen.
+            pendingDeploys.Add(new PendingDeploy
+            {
+                hero = pm,
+                releaseAt = Time.time + deployGateHold,
+                laneY = laneY
+            });
 
             if (i < batch.Count - 1)
                 yield return new WaitForSeconds(reinforcementStagger);
@@ -387,6 +453,7 @@ public class PlayerWaveManager : MonoBehaviour
         releasedHeroes.Clear();
         earnedHeroes.Clear();
         earnedBatches.Clear();
+        pendingDeploys.Clear();
 
         BeginWaves();   // uses WaveLoop that checks puzzle again
     }
@@ -1095,7 +1162,7 @@ public class PlayerWaveManager : MonoBehaviour
             // Per-hero coroutine rather than an inline wait: the hold has to run
             // ALONGSIDE the stagger, otherwise a squad of four takes
             // 4 * (hold + stagger) to walk out instead of overlapping.
-            StartCoroutine(HoldOnGateThenJump(pm, laneY));
+            StartCoroutine(HoldOnGateThenJump(pm, laneY, reinforcementGateHold));
 
             if (reinforcementStagger > 0f && i < count - 1)
                 yield return new WaitForSeconds(reinforcementStagger);
@@ -1106,16 +1173,16 @@ public class PlayerWaveManager : MonoBehaviour
     /// Keeps one bought hero standing on the gate for <see cref="reinforcementGateHold"/>
     /// seconds, then releases it into the normal jump-and-pursue flow.
     /// </summary>
-    private IEnumerator HoldOnGateThenJump(PlayerManager pm, float? laneY)
+    private IEnumerator HoldOnGateThenJump(PlayerManager pm, float? laneY, float hold)
     {
         // On the gate the hero is scenery, not a combatant - no HP bar. The
         // prefab's own hideUntilBattleStarts cannot do this for reinforcements:
         // it keys off the FIRST ENEMY, which appeared long before the purchase.
         SetHealthBarsHiddenOnGate(pm, true);
 
-        if (reinforcementGateHold > 0f)
+        if (hold > 0f)
         {
-            yield return new WaitForSeconds(reinforcementGateHold);
+            yield return new WaitForSeconds(hold);
 
             // Destroyed while it waited (stage cleared, revive reset, ...).
             if (pm == null) yield break;

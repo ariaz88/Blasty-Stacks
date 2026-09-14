@@ -80,7 +80,16 @@ public class BoardInputController : MonoBehaviour
 
     private void Update()
     {
+        // Pieces already in flight keep settling - freezing that would strand a
+        // stack mid-slide.
         TickSettle();
+
+        // No board input while the match-reward cards are on screen. A match is
+        // what triggers the deal, so without this the player can immediately drag
+        // another stack and start a second match underneath the cards, which both
+        // hides the reward and stacks two deals on top of each other. Input
+        // resumes the frame the fade finishes.
+        if (HeroCardRevealDirector.IsDealing) return;
 
 #if UNITY_EDITOR || UNITY_STANDALONE
         MouseUpdate();

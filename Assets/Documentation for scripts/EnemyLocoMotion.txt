@@ -1,3 +1,33 @@
+CURRENT UPDATE - 2026-09-14  A GATE-LOCKED ENEMY NO LONGER IGNORES HEROES
+HandleMoveToTarget's first branch used to pin the enemy Kinematic on
+gateStopPosition and RETURN, before the hero-target branch ran at all. So the
+moment an enemy touched the gate trigger it stopped seeing heroes ENTIRELY - it
+walked to the base and stood there while a hero circled it. Reported three times
+running as "near the base the enemy doesn't see the hero at all".
+
+It now breaks off the gate line for a live hero within `fairDistanceToPlayer`
+(1.90 on every enemy prefab) - the SAME distance the mid-field branch uses, so
+behaviour by the base matches behaviour anywhere else - and re-forms on the line
+when that hero is gone or dead. It WALKS back to the line rather than snapping,
+because an enemy that chased a hero a metre off it would otherwise teleport.
+
+WHAT THIS BUG WAS NOT (all measured 2026-09-14, so nobody re-checks them):
+  - not speeds: hero and enemy moveSpeed are both 0.60 by design
+  - not detection: detectionRadius 20, playerDetectionLayer = PlayerLayer, and
+    there is NO field of view (EnemyManager's +-60 angles are declared and never
+    read by any code)
+  - not tags: every hero prefab is tagged "Player", so CompareTag passes
+  - not ranges: enemy attackRange 0.83 / stoppingDistance 0.83, hero 0.85
+  - not target PRIORITY: EnemyManager's live HandleCurrentAction already checks
+    the hero target before the gate
+
+!! THE REAL CONSTRAINT TO REMEMBER IS fairDistanceToPlayer = 1.90. Outside it an
+enemy marches straight down its lane (moveDir = -transform.up) EVEN WHEN IT HAS A
+HERO TARGETED. With both sides at 0.60 moveSpeed a hero approaching from the side
+cannot force its way inside 1.90 on its own, so this value - not detection - is
+what decides whether a fight starts. Raise it if enemies still walk past heroes.
+
+--------------------------------------------------------------------------------
 ================================================================================
   EnemyLocoMotion.cs
   Path : Assets/Scripts/Combat/Enemy/EnemyLocoMotion.cs

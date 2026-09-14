@@ -153,6 +153,22 @@ FLOW
   CardView.Build(parent)  [nested class]
       Card = Glow (behind) + Face + cloned "Cell Active" avatar frame + Back.
 
+BOARD INPUT GATE
+----------------
+  IsDealing  [public static]  true from the first card rising to the last frame
+  of the fade. BoardInputController.Update early-returns on it, so no piece can be
+  picked up while the cards are on screen. Without it the player can start a
+  SECOND match underneath the cards the moment the first one resolves, which hides
+  the reward and overlaps two deals.
+
+  !! IT IS CLEARED IN OnDisable AS WELL AS AT THE END OF THE DEAL. The flag is
+  static and gates input: a deal interrupted by a scene change, a level ending or
+  the object being destroyed mid-animation would otherwise leave it true forever
+  and the board could never be touched again.
+
+  TickSettle() still runs while the gate is closed - freezing it would strand a
+  stack mid-slide.
+
 EDITOR-ONLY API  (#if UNITY_EDITOR)
 -----------------------------------
   EditorPreviewFan(count, faceUp, anchorWorld) -> string

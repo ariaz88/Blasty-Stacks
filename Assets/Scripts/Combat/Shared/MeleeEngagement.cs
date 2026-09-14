@@ -168,6 +168,35 @@ public static class MeleeEngagement
         if (distance > range) return false;
         if (distance < Standoff(range) * ArrivalSlack) return false;
 
-        return Mathf.Abs(d.y) <= Band(range);
+        return !RequireVerticalBand || Mathf.Abs(d.y) <= Band(range);
     }
+
+    /// <summary>
+    /// Whether <see cref="InAttackPosition"/> also demands the attacker be LEVEL
+    /// with its target (|dy| within <see cref="Band"/>).
+    ///
+    /// OFF since 2026-09-14, at Arash's request, because it was stopping fights
+    /// from ever starting. With range 0.85 the band is only 0.255 world units, so
+    /// a hero could stand well inside weapon range and still be refused for being
+    /// half a unit too high. Worse, the stand point tracks a target that is itself
+    /// MOVING DOWN the field, so a hero chasing from behind can never close the
+    /// vertical gap - the pair simply slide past each other and neither engages.
+    /// That became common once PHASE 2 started landing every deployment on the
+    /// REAR lane, behind enemies already advancing.
+    ///
+    /// Turning it off only RELAXES the predicate, so the invariant in
+    /// PlayerManager.ResolveAttackDestination still holds: StandPoint's point
+    /// satisfied the strict test, so it trivially satisfies the loose one, and the
+    /// "mover says arrived / state says not yet" freeze cannot be reintroduced
+    /// this way. StandPoint is deliberately UNCHANGED - units still walk to a
+    /// proper level position beside the target, they just no longer refuse to
+    /// swing while getting there.
+    ///
+    /// !! KNOWN COST. The band existed because every melee hitbox here is a wide,
+    /// flat box that reaches SIDEWAYS. A unit attacking from well above or below
+    /// its target can now enter the attack state and swing through empty air.
+    /// Watch for hits that animate but never land; if that shows up, the better
+    /// fix is a wider band (BandFactor) rather than restoring this gate outright.
+    /// </summary>
+    public const bool RequireVerticalBand = false;
 }

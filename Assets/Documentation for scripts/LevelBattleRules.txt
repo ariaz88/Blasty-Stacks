@@ -1,3 +1,31 @@
+CURRENT UPDATE - 2026-09-14  ENEMY WAVE COUNTS ADDED, COVERING LEVELS 1-10
+New table `EnemyWaves` - how many enemies each level fields, SPLIT INTO WAVES
+(Arash, 2026-09-14):
+
+    L1 [1]    L2 [2]    L3 [3]
+    L4 [2,3]  L5 [2,3]                    5 each, but in TWO waves, not one clump
+    L6 [3,3]  L7 [3,3]                    6 each
+    L8 [3,4]  L9 [3,4]  L10 [3,4]         7 each
+
+  EnemyWaveCounts(level) -> int[] per wave in spawn order, or null past level 10
+  TotalEnemies(level)    -> sum across waves, 0 when unauthored
+  MaxAuthoredEnemyLevel  -> 10
+
+Levels 4+ MUST arrive in two or more waves - that is the point of the table, not
+the totals. L4/L5 already fielded five enemies; what changed is that they no
+longer all appear at once. EnemySpawner.BuildWavesFromRules consumes this.
+
+!! THIS TABLE SPANS 1-10, BUT AppliesTo() IS STILL 1-5. The wave counts are
+independent of the CP/deployment rules on purpose, so levels 6-10 get their enemy
+counts without being pulled into the guaranteed-win model. Do not widen AppliesTo
+to match it without also authoring Deployments and EnemyUnits rows for 6-10.
+
+!! Per-enemy CP (EnemyUnits) was NOT re-derived from these counts. Arash asked for
+the counts ONLY, out of Wittle_Defender_Levels_6-10_Balance.xlsx, and explicitly
+to ignore the rest of that workbook. Note the workbook's Enemy CP column
+disagrees with the code for levels 1-2 (80/100 vs 35/70) and was left alone.
+
+--------------------------------------------------------------------------------
 PURPOSE
 Campaign stages 1-5 only. "Level" in the design workbook means stage, not chapter.
 Pure rules table - no MonoBehaviour, no runtime state. Everything the guaranteed-win

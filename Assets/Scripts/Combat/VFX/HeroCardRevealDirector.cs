@@ -122,6 +122,21 @@ public class HeroCardRevealDirector : MonoBehaviour
 
     private static HeroCardRevealDirector instance;
 
+    /// <summary>
+    /// True from the first card rising to the last frame of the fade.
+    ///
+    /// BoardInputController checks this and refuses to pick up a piece while it is
+    /// true: a match is what triggers the deal, so without the gate the player can
+    /// immediately drag another stack and start a second match underneath the
+    /// cards - which both hides the reward and stacks two deals on top of each
+    /// other.
+    ///
+    /// Static because the board has no reason to hold a reference to a VFX object,
+    /// and it is set in a finally-equivalent path so an interrupted deal can never
+    /// leave the board permanently frozen.
+    /// </summary>
+    public static bool IsDealing { get; private set; }
+
     private Canvas canvas;
     private RectTransform canvasRect;
     private CanvasGroup group;
@@ -157,6 +172,13 @@ public class HeroCardRevealDirector : MonoBehaviour
         // unsubscribe here is mandatory - otherwise a destroyed director keeps
         // receiving deals across scene loads.
         PlayerWaveManager.HeroesEarned -= HandleHeroesEarned;
+
+        // !! MANDATORY. IsDealing is static and gates board input. A deal
+        // interrupted here - scene change, level end, the object being destroyed
+        // mid-animation - would otherwise leave it true forever and the player
+        // could never touch the board again.
+        playing = null;
+        IsDealing = false;
     }
 
     private void OnDestroy()
@@ -182,6 +204,7 @@ public class HeroCardRevealDirector : MonoBehaviour
 
     private IEnumerator PlayDeal(IReadOnlyList<UnitDefinitionSO> heroes, Vector3 anchorWorld)
     {
+        IsDealing = true;
         EnsureCanvas();
 
         int n = heroes.Count;
@@ -309,6 +332,7 @@ public class HeroCardRevealDirector : MonoBehaviour
         foreach (var c in cards) { c.SetGlow(0f, TealGlow, Color.white); c.Hide(); }
         stage.gameObject.SetActive(false);
         playing = null;
+        IsDealing = false;
     }
 
     /// <summary>

@@ -53,6 +53,17 @@ public class HeroDeploymentSequencer : MonoBehaviour
     public bool Running { get; private set; }
 
     /// <summary>
+    /// The heroes the RUNNING load will release; null when idle.
+    ///
+    /// Exposed so a listener that subscribed too late can catch up on the load
+    /// already in flight. HeroStatsPanel needs exactly that: the sequencer starts
+    /// its queue from BattleStartController.OnBattleStarted and fires
+    /// LoadStarted(0) inside that same call, before the panel has finished
+    /// building its cells - so load 1 would otherwise never be drawn.
+    /// </summary>
+    public IReadOnlyList<UnitDefinitionSO> CurrentBatch { get; private set; }
+
+    /// <summary>
     /// A load began. Carries its 0-based index and the heroes it will release, so
     /// the panel can light exactly those cells and grey the rest.
     /// </summary>
@@ -133,6 +144,7 @@ public class HeroDeploymentSequencer : MonoBehaviour
         {
             CurrentLoadIndex = i;
             CurrentLoadProgress = 0f;
+            CurrentBatch = batches[i];
             LoadStarted?.Invoke(i, batches[i]);
 
             for (float t = 0f; t < loadDuration; t += Time.deltaTime)
@@ -157,6 +169,7 @@ public class HeroDeploymentSequencer : MonoBehaviour
         Running = false;
         CurrentLoadIndex = -1;
         CurrentLoadProgress = 0f;
+        CurrentBatch = null;
         routine = null;
 
         AllLoadsCompleted?.Invoke();

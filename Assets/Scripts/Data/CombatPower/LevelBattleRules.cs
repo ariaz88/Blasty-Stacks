@@ -48,6 +48,63 @@ public static class LevelBattleRules
     /// <summary>Per-enemy CP targets for this level, or null if it uses a team budget.</summary>
     public static double[] EnemyUnitCPs(int level) => AppliesTo(level) ? EnemyUnits[level - 1] : null;
 
+    /// <summary>
+    /// HOW MANY ENEMIES EACH LEVEL FIELDS, SPLIT INTO WAVES. One int per wave, in
+    /// spawn order. Authored by Arash 2026-09-14.
+    ///
+    ///   L1 [1]     L2 [2]     L3 [3]
+    ///   L4 [2,3]   L5 [2,3]              5 each, but in TWO waves, not one clump
+    ///   L6 [3,3]   L7 [3,3]              6 each
+    ///   L8 [3,4]   L9 [3,4]   L10 [3,4]  7 each
+    ///
+    /// Levels 4 and up MUST arrive in two or more waves - that is the point of the
+    /// table, not the totals. Levels 4/5 already fielded five enemies; what
+    /// changes is that they no longer all appear at once.
+    ///
+    /// Deliberately a SEPARATE table from Deployments and EnemyUnits: it covers
+    /// levels 6-10, which the CP rules (AppliesTo) do not, and the counts are a
+    /// pacing decision that should be readable without decoding a CP budget.
+    ///
+    /// The per-enemy CPs in EnemyUnits above are NOT re-derived from this - Arash
+    /// asked for the counts ONLY, from the balance workbook, and explicitly to
+    /// leave the rest of that reference alone.
+    /// </summary>
+    private static readonly int[][] EnemyWaves =
+    {
+        new[] { 1 },        // level 1
+        new[] { 2 },        // level 2
+        new[] { 3 },        // level 3
+        new[] { 2, 3 },     // level 4
+        new[] { 2, 3 },     // level 5
+        new[] { 3, 3 },     // level 6
+        new[] { 3, 3 },     // level 7
+        new[] { 3, 4 },     // level 8
+        new[] { 3, 4 },     // level 9
+        new[] { 3, 4 },     // level 10
+    };
+
+    /// <summary>Highest level this wave table covers.</summary>
+    public static int MaxAuthoredEnemyLevel => EnemyWaves.Length;
+
+    /// <summary>
+    /// Enemy count per wave for this level, in spawn order - or null when the
+    /// level is past the authored range, in which case the LevelConfig asset's own
+    /// waves are used unchanged.
+    /// </summary>
+    public static int[] EnemyWaveCounts(int level) =>
+        level >= 1 && level <= EnemyWaves.Length ? EnemyWaves[level - 1] : null;
+
+    /// <summary>Total enemies this level fields across every wave. 0 when unauthored.</summary>
+    public static int TotalEnemies(int level)
+    {
+        var waves = EnemyWaveCounts(level);
+        if (waves == null) return 0;
+
+        int total = 0;
+        foreach (int n in waves) total += n;
+        return total;
+    }
+
     public static int FirstWinningMatch(int level) => !AppliesTo(level) ? 0 : level == 4 ? 3 : level == 5 ? 4 : 1;
 
     /// <summary>

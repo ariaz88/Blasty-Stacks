@@ -391,6 +391,14 @@ PrefabInstance:
       propertyPath: movesAllowed
       value: 7
       objectReference: {fileID: 0}
+    - target: {fileID: 3638395018391487190, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
+      propertyPath: currentHP
+      value: 3000
+      objectReference: {fileID: 0}
+    - target: {fileID: 3638395018391487190, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
+      propertyPath: maxHealth
+      value: 3000
+      objectReference: {fileID: 0}
     - target: {fileID: 5411853211264133090, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0

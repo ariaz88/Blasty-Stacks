@@ -186,6 +186,21 @@ public class HeroStatsPanel : MonoBehaviour
             deploymentSequencer.LoadStarted += HandleLoadStarted;
             deploymentSequencer.LoadProgress += HandleLoadProgress;
             deploymentSequencer.AllLoadsCompleted += HandleAllLoadsCompleted;
+
+            // !! CATCH UP ON THE LOAD ALREADY IN FLIGHT. The sequencer starts its
+            // queue from BattleStartController.OnBattleStarted and fires
+            // LoadStarted(0) inside that same call - before this panel has
+            // subscribed, and BuildAtEndOfFrame can put us a whole frame later
+            // still. Without this the FIRST load never draws and the bar appears
+            // to begin at load 2.
+            if (deploymentSequencer.Running)
+            {
+                HandleLoadStarted(deploymentSequencer.CurrentLoadIndex,
+                                  deploymentSequencer.CurrentBatch);
+                HandleLoadProgress(deploymentSequencer.CurrentLoadIndex,
+                                   deploymentSequencer.CurrentLoadProgress);
+            }
+
             return;
         }
 
@@ -268,8 +283,11 @@ public class HeroStatsPanel : MonoBehaviour
 
     private void HandleLoadProgress(int index, float t)
     {
+        // LoadCount, NOT SquadSize: SquadSize belongs to the alive/total mode and
+        // is 0 for every deployment cell, so gating on it meant SetLoadFill was
+        // never called and the cyan bar never appeared.
         foreach (var cell in cells)
-            if (cell && cell.SquadSize > 0) cell.SetLoadFill(t);
+            if (cell && cell.LoadCount > 0) cell.SetLoadFill(t);
     }
 
     private void HandleAllLoadsCompleted()

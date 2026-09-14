@@ -9,18 +9,56 @@ Assets/Arts/Reference videos/Ref2.MP4.
       Builds the slot. Writes the portrait into both frames as Bind does, forces
       "Cost Gem" off and attaches NO buy-back listener, then starts dimmed with
       an empty bar.
-  SetLoadCount(count)   the "xN" label; count <= 0 hides it entirely
+  SetLoadCount(count)   the "xN" label; count <= 0 hides it entirely. Also sets
+                        the LoadCount property.
+  LoadCount             how many of this type the RUNNING load releases; 0 = not
+                        in it. !! SEPARATE FROM SquadSize ON PURPOSE. SquadSize is
+                        the alive/total mode's "/total", written once at build
+                        time and left at 0 for deployment cells. HeroStatsPanel
+                        first gated the fill on SquadSize > 0, so SetLoadFill was
+                        never called and THE CYAN BAR NEVER APPEARED AT ALL.
   SetDimmed(bool)       grey ("Cell DeActive") vs lit ("Cell Active"). Reuses the
                         authored two-frame model rather than tinting - the
                         DeActive sprite is ALREADY the greyed-out artwork.
   SetLoadFill(0..1)     the cyan bar
   EnsureLoadFill()      creates the fill Image on first use
 
-  !! THE FILL IS THE FIRST CHILD OF "Cell Active", and that is load-bearing. In
-  uGUI a child draws ABOVE its parent and later siblings above earlier ones, so
-  first-child puts the cyan above the cell background but BELOW "Mask/Avatar" -
-  the fill rises BEHIND the hero instead of painting over them. Moving it changes
-  what it covers.
+  !! THE FILL IS THE FIRST CHILD OF **Mask**, not of "Cell Active". Ref2 fills
+  THE PORTRAIT AREA from the bottom up, behind the character. Hosting it on
+  "Cell Active" (the first attempt) washed the WHOLE CARD, frame and all, which
+  is not the effect - that was the "wrong object" report on 2026-09-14. Inside
+  the Mask it is also clipped to the cell's rounded shape for free.
+  First child is equally load-bearing: later siblings draw above earlier ones, so
+  index 0 puts the cyan BELOW "Avatar" and the hero stays readable on top of it.
+  !! A FILLED IMAGE MUST HAVE A SPRITE. An Image with sprite == null draws a plain
+  quad and IGNORES type and fillAmount completely. The first version set
+  sprite = null on purpose, expecting the mask to shape it - the bar then rendered
+  PERMANENTLY FULL and the cell just flicked from dark to solid cyan, which is
+  exactly what the 2026-09-14 "Card Loading Screen Record" showed. It now takes
+  the mask's own sprite (so the fill matches the cell shape), falling back to a
+  shared 1x1 WhiteSprite when the mask has none.
+
+  VERIFIED 2026-09-14 against the 'Hero Card' cell in LevelTemplate.prefab:
+    Load Fill parent='Mask' grandparent='Cell Active' siblingIndex=0
+    parent has Mask = True; sibling[0]=Load Fill, sibling[1]=Avatar
+    sprite=Gameplay_Features_Buttons_mask_0 type=Filled fillMethod=Vertical
+    origin=0(Bottom)
+  RENDERED AND MEASURED (cyan pixels, rows counted from the BOTTOM):
+    fill 0.00 ->    0 px
+    fill 0.25 -> 2131 px, rows 103..142
+    fill 0.50 -> 3685 px, rows 103..181
+    fill 1.00 -> 8054 px, rows 103..261
+  The bottom edge stays at row 103 while the top climbs - i.e. it really does
+  rise from the bottom, rather than scaling or appearing whole.
+
+  !! THE HOST IS FOUND VIA activeAvatar.transform.parent, not by searching for a
+  child named "Mask" - the avatar is already resolved by AutoWire and is by
+  definition inside the right object, so there is no second magic name to keep in
+  sync. LevelTemplate.prefab contains THREE HeroStatCell layouts: 'Hero Card'
+  (the live one, has Cell Active/Mask/Avatar) plus the older 'Hero 1' and
+  'OfferCell', which have NO Cell Active at all. A deployment cell built from one
+  of those cannot have a bar; EnsureLoadFill now logs a warning naming the likely
+  cause instead of silently doing nothing.
 
   A deployment cell is driven entirely by HeroStatsPanel from
   HeroDeploymentSequencer's events. HeroStatsPanel.Refresh() early-returns in

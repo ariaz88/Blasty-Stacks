@@ -173,13 +173,52 @@ public class EnemyLocoMotion : MonoBehaviour
 
         Vector2 pos = enemyRigidbody2D.position;
 
-        // 1) If we already reached the gate once, never move past that point
+        // 1) Gate reached: hold the line - but NOT at the cost of ignoring a hero.
+        //
+        // This branch used to pin the enemy Kinematic on gateStopPosition and
+        // RETURN, before the hero-target branch below ever ran. Once an enemy
+        // touched the gate trigger it therefore stopped seeing heroes entirely:
+        // it walked to the base and stood there while a hero circled it, which is
+        // exactly the "near the base the enemy doesn't see the hero at all"
+        // report (2026-09-14). A gate-locked enemy now breaks off for a hero that
+        // is as close as it would react to MID-FIELD - the same
+        // fairDistanceToPlayer the branch below uses - and re-forms on the line
+        // once that hero is gone.
         if (enemyManager != null && enemyManager.reachedGate)
         {
-            enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
-            enemyRigidbody2D.position = enemyManager.gateStopPosition;
-            SetAnimMoving(false);
-            return;
+            bool heroInReach =
+                currentTarget != null &&
+                !currentTarget.playerIsdead &&
+                Vector2.Distance((Vector2)currentTarget.transform.position, pos) <= fairDistanceToPlayer;
+
+            if (!heroInReach)
+            {
+                Vector2 stop = enemyManager.gateStopPosition;
+
+                // WALK back, never snap: an enemy that just chased a hero a metre
+                // off the line would otherwise teleport back onto it.
+                if (Vector2.Distance(pos, stop) > 0.05f)
+                {
+                    enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
+                    enemyRigidbody2D.MovePosition(
+                        Vector2.MoveTowards(pos, stop, CurrentMoveSpeed * Time.fixedDeltaTime));
+                    SetAnimMoving(true);
+                }
+                else
+                {
+                    enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
+                    enemyRigidbody2D.position = stop;
+                    SetAnimMoving(false);
+                }
+
+                return;
+            }
+
+            // A hero IS in reach - fall through to the hero branch and fight it,
+            // exactly as this enemy would mid-field. The body has to be able to
+            // move again; the pin above may have left it Kinematic.
+            if (enemyRigidbody2D.bodyType == RigidbodyType2D.Kinematic)
+                enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
         }
 
         // 2) If we have a player target -> march down the lane until the hero is

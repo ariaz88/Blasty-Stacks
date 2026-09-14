@@ -1,3 +1,40 @@
+CURRENT UPDATE - 2026-09-14  THE VERTICAL BAND GATE IS OFF
+New constant `RequireVerticalBand = false`. InAttackPosition no longer requires
+the attacker to be LEVEL with its target; the distance and not-sunk-in checks are
+unchanged.
+
+WHY. With range 0.85 the band is only 0.255 world units, so a hero could stand
+well inside weapon range and still be refused for being half a unit too high.
+Worse, the stand point tracks a target that is itself MOVING DOWN the field, so a
+hero chasing from behind can never close the vertical gap - the pair slide past
+each other and NEITHER ENGAGES. Reported 2026-09-14 ("Hero Attack Does not
+Happens.mkv"), and it became common once PHASE 2 started landing every deployment
+on the REAR lane, behind enemies already advancing.
+
+Ruled out first, with evidence: layers correct (enemies on EnemyLayer, mask 64,
+hero detectionRadius 5.0); NOT per-character (every deployed hero prefab reads
+maxAttackRange 0.85 / detectionRadius 5.00 - PlayerCastle's 0.00/0.00 is the base
+and correct); and not a general break, since PlayerAttackState.Tick was firing for
+other heroes in the same run.
+
+SAFE DIRECTION. Turning it off only RELAXES the predicate, so the invariant in
+PlayerManager.ResolveAttackDestination still holds: a point that satisfied the
+strict test trivially satisfies the loose one, and the "mover says arrived /
+state says not yet" freeze cannot come back this way. StandPoint is UNCHANGED -
+units still walk to a proper level position beside the target, they just no
+longer refuse to swing while getting there.
+
+!! KNOWN COST, WATCH FOR IT. The band existed because every melee hitbox here is
+a wide, flat box that reaches SIDEWAYS. A unit attacking from well above or below
+its target can now enter the attack state and swing through empty air. If hits
+start animating without landing, the better fix is a WIDER band (BandFactor,
+currently 0.30) rather than restoring this gate outright.
+
+VERIFIED 2026-09-14: RequireVerticalBand=False; dy 0.00/0.20/0.30/0.50/0.70 all
+return True (previously only dy <= 0.255 passed); "too far" (2.0) and "sunk in"
+(0.05) both still return False.
+
+--------------------------------------------------------------------------------
 ================================================================================
   MeleeEngagement.cs
   Path : Assets/Scripts/Combat/Shared/MeleeEngagement.cs

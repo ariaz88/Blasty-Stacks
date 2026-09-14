@@ -59,6 +59,15 @@ EVENTS
   LoadCompleted(int index, batch)      released and handed to PlayerWaveManager
   AllLoadsCompleted()                  every load has run
 
+  !! A LATE SUBSCRIBER MISSES LOAD 1. The queue starts from
+  BattleStartController.OnBattleStarted and fires LoadStarted(0) inside that same
+  call, before HeroStatsPanel has built its cells (and its BuildAtEndOfFrame path
+  puts it a whole frame later still). The panel therefore showed NO BAR for the
+  first load and appeared to start at load 2. The fix is `CurrentBatch` +
+  `CurrentLoadIndex` + `CurrentLoadProgress`: after subscribing, a listener checks
+  `Running` and replays the load already in flight. Any new listener must do the
+  same.
+
 FLOW
 ----
   Awake            resolves waveManager / battleStart by scene search.

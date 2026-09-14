@@ -27,6 +27,12 @@ PHASE 2 PART 2 (same day) - HEROES NOW REACH THE FIELD AGAIN, VIA LOADS
   - `EarnedBatches` keeps each match's heroes SEPARATE (earnedBatches), because
     HeroDeploymentSequencer releases them one batch per 6s load. earnedHeroes
     remains the flat roster for anything wanting only the total.
+  - `deployGateHold` (Inspector, default 1.20s) - how long a deployed hero STANDS
+    ON THE GATE before it leaps. The first version jumped on the spawn frame,
+    which read as the hero teleporting past the platform; 1.20 is the existing
+    reinforcementGateHold (0.75, which belongs to the gem buy-back and is
+    unchanged) +60%. HoldOnGateThenJump now takes the hold as a PARAMETER so the
+    two paths can differ.
   - `DeployBatch(batch)` [public] spawns one batch: each hero on a RANDOM free
     gate (round-robin fallback when all gates are busy, so an earned hero is
     never silently dropped), then jumps to the REAR lane via GetRearLaneY - the

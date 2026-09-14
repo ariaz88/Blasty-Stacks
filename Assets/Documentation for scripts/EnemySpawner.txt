@@ -1,3 +1,56 @@
+CURRENT UPDATE - 2026-09-14  ENEMY COUNTS COME FROM LevelBattleRules.EnemyWaves
+RunLevel no longer iterates levelConfig.waves directly. BuildWavesFromRules(stage)
+reshapes them so the stage fields exactly as many enemies, in as many waves, as
+LevelBattleRules.EnemyWaves says (Arash, 2026-09-14):
+
+    L1 [1]  L2 [2]  L3 [3]  L4 [2,3]  L5 [2,3]
+    L6 [3,3]  L7 [3,3]  L8 [3,4]  L9 [3,4]  L10 [3,4]
+
+The LevelConfig asset still supplies EVERYTHING else - formation, spawn area,
+enemy types, delays, per-entry unit level - so this RESHAPES the authored waves
+rather than replacing them. A level past the authored range (11+) gets the
+asset's waves unchanged.
+
+  BuildWavesFromRules(stageLevel) -> List<Wave>
+      Template for wave i = the authored wave at the same index, or the LAST
+      authored wave when the table wants more waves than the asset has. That is
+      how a one-wave asset produces a correct two-wave level.
+  CopyWaveWithTotal(template, total, index) -> Wave
+      A COPY whose entry counts sum to exactly `total`, spread as evenly as
+      possible across the template's entries with the remainder going to the
+      earliest ones - so a wave authored with two enemy types keeps both. An entry
+      that would round to zero is DROPPED, not kept at zero: WaveEntry.count is
+      [Min(1)] and a zero is clamped back up to one, which would overshoot.
+  EditorDescribeWaves(config, stageLevel) [#if UNITY_EDITOR]
+      Prints want-vs-got per wave and in total, for checking a re-balance without
+      entering Play mode.
+
+  !! NEVER MUTATES THE LevelConfig ASSET. Those assets are SHARED between stages;
+  writing counts into one would corrupt every stage using it AND persist into the
+  project file. Every wave produced here is a fresh object.
+
+  VERIFIED 2026-09-14 against 'Spawner1' (1 authored wave, 1 entry): every level
+  1-10 reported want == got on every wave and on the total.
+
+--------------------------------------------------------------------------------
+CURRENT UPDATE - 2026-09-14  PHASE 2: THE CP PREPARE STEP IS SKIPPED
+StartPreparedBattle now runs the "wait for DeploymentsReady, then build
+CPBattleController" block ONLY when PlayerWaveManager.CardRewardsActive is false.
+
+!! THIS IS NOT AN OPTIMISATION - IT IS WHY ENEMIES SPAWN AT ALL. CPBattleController
+.Prepare needs the WHOLE hero roster at battle start: it normalises team CP and
+throws "No heroes were released for this battle" on an empty one (CPBattleController
+.cs:123). Under PHASE 2 the roster IS empty when BATTLE is pressed, because heroes
+now arrive progressively through HeroDeploymentSequencer's 6s loads. Prepare
+returned false, the `yield break` after it aborted StartPreparedBattle BEFORE
+RunLevel, and NOT ONE ENEMY EVER SPAWNED - which in turn froze every hero on the
+field, since holdUntilFirstEnemySpawns waits on HasSpawnedFirstEnemy.
+
+Gated on the flag rather than deleted: switching suppressStageSpawning off
+restores the old spawn path and this one together. If the CP layer is ever wanted
+alongside PHASE 2 it has to learn to accept a roster that grows during the battle.
+
+--------------------------------------------------------------------------------
 CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
 Stages 1-5 wait for the sealed earned hero deployments, then prepare CPBattleController. ReferenceEntries takes authored enemy types and cycles them into exactly stage-number units. RunReferenceLevel uses the first authored wave's area/delay and dispatches all reference enemies together. Shared LevelConfig assets are never mutated. PlannedEnemyCP prices precisely these selected enemies, using the same growth as Initialize. RegisterEnemy applies proportional team CP calibration. Stages 6+ still run the original sequential waves/counts. No CP controller stops waves or ends a battle.
 
