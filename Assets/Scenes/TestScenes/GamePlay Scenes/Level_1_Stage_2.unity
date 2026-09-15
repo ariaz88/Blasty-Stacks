@@ -127,6 +127,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 438682786906257018, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 975240980139745779, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
       propertyPath: m_Name
       value: LevelTemplate
@@ -142,6 +146,10 @@ PrefabInstance:
     - target: {fileID: 3638395018391487190, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
       propertyPath: maxHealth
       value: 1000
+      objectReference: {fileID: 0}
+    - target: {fileID: 3977025768155051512, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5411853211264133090, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
       propertyPath: m_LocalPosition.x
