@@ -145,9 +145,14 @@ public static class CPCombatVerification
                 hero.transform.position = new Vector3(enemies[0].transform.position.x, enemies[0].transform.position.y - 2f, 0);
                 hero.GetComponent<Rigidbody2D>().linearVelocity = Vector2.zero;
             }
-            Check(enemies.Length == level, "Wrong enemy count");
-            Check(Math.Abs(battle.PlayerCP - count * (level == 1 ? 100 : 125)) < 0.01, "Wrong player CP");
-            Check(Math.Abs(enemies.Sum(e => CPCalculator.UnitPower(e.enemyManager.unitStats)) - LevelBattleRules.ReferenceEnemyCP(level)) < 0.01, "Wrong enemy CP");
+            Check(enemies.Length == LevelBattleRules.TotalEnemies(level), "Wrong enemy count");
+
+            // NOTE: the CP assertions that used to sit here are GONE on purpose.
+            // They checked that player CP equalled count x 125 and that enemy CP
+            // equalled ReferenceEnemyCP(level) - i.e. they verified the normalisation
+            // that erased the player's upgrades. CP is now whatever the units' own
+            // stats sum to, so there is no target to assert. It is RECORDED below
+            // instead, which is what makes the ratio-to-win-rate table possible.
             SessionState.SetString(Key + ".result", $"Running L{level} M{matches}\n" + string.Join("\n", rows));
             float slidingDistance = 0, movingDuringAttack = 0;
             Vector2 previousEnemyPosition = enemies[0].transform.position;
@@ -184,9 +189,21 @@ public static class CPCombatVerification
                 Check(heroHealth.currentHP < heroHealth.maxHealth, "Enemy never landed a hit on Valkyrie");
                 rows.Add($"Valkyrie HP after duel: {heroHealth.currentHP:F2}/{heroHealth.maxHealth:F2}; enemy successfully landed physical hits.");
             }
-            Check(won == (matches >= LevelBattleRules.FirstWinningMatch(level)), "Wrong natural battle winner");
-            Check(battle.FewestHitsBeforeDeath >= 4, "Unit died in fewer than four hits");
-            rows.Add($"L{level} M{matches}: heroes={count}, enemies={level}, CP={battle.PlayerCP:F0}/{battle.EnemyCP:F0}, {(won ? "Win" : "Loss")} after gate destruction; deaths H/E={battle.HeroDeaths}/{battle.EnemyDeaths}, minimum hits={battle.FewestHitsBeforeDeath}");
+            // THE WINNER IS NO LONGER ASSERTED. This line used to read
+            //     Check(won == (matches >= LevelBattleRules.FirstWinningMatch(level)))
+            // which demanded the result the workbook had pre-decided - the very thing
+            // that made the battle a formality. The outcome is now RECORDED against
+            // the CP ratio that produced it; accumulate these rows across runs to get
+            // the ratio-to-win-rate table, and judge the model from that.
+            // Only the SAFETY FLOOR is a fault. Dying in fewer than the base-state
+            // eight is legitimate and expected once one side has out-levelled the
+            // other - asserting eight here would re-create the hard floor we removed.
+            Check(battle.FewestHitsBeforeDeath >= CharacterStats.SafetyBlowFloor,
+                  $"Unit died in fewer than the safety floor of {CharacterStats.SafetyBlowFloor} hits");
+            rows.Add($"L{level} M{matches}: heroes={count}, enemies={enemies.Length}, " +
+                     $"CP={battle.PlayerCP:F0}/{battle.EnemyCP:F0} (R={battle.Ratio:F2}), " +
+                     $"{(won ? "Win" : "Loss")} after gate destruction; " +
+                     $"deaths H/E={battle.HeroDeaths}/{battle.EnemyDeaths}, minimum hits={battle.FewestHitsBeforeDeath}");
             if (duelOnly) rows.Add($"Enemy sliding distance={slidingDistance:F3}; movement during attack={movingDuringAttack:F3}");
             yield return null;
         }

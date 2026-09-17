@@ -1,3 +1,19 @@
+CURRENT UPDATE - 2026-09-16  DEAD NUMBERED SIBLINGS REMOVED
+Initialize1 and RebuildFromBase1 are deleted. Neither had a call site. Initialize1
+differed from Initialize only in NOT setting unitLevel from the stage, so an enemy
+built through it never grew with the campaign - reviving it would have silently
+disabled enemy scaling entirely.
+
+This file is now the ONLY thing that decides an enemy's strength, and that is the
+intended design: statsBase (UnitStatsSO) x ProgressionMath.GetGrowthMultipliers
+(unitLevel = stage, from this prefab's own `progression` asset). CPBattleController
+no longer rescales enemies to a CP budget - it only reads the result.
+
+Because `progression` is a per-PREFAB serialized field, giving each enemy TYPE its
+own growth curve needs no code at all: create one ProgressionConfigSO asset per type
+and assign it on that prefab.
+
+--------------------------------------------------------------------------------
 ================================================================================
   EnemyManager.cs
   Path : Assets/Scripts/Combat/Enemy/EnemyManager.cs

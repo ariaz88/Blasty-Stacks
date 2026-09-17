@@ -9,8 +9,33 @@ public static class CPCalculator
     /// displayed number near the magnitudes the menus already showed. Because it
     /// is the SAME constant for every unit it cannot change any ordering -
     /// raising or lowering it rescales the whole roster and nothing else.
+    ///
+    /// THIS IS THE KNOB FOR "CP SHOULD READ ABOUT 100" (Arash, 2026-09-16).
+    /// Stats are tuned for how a FIGHT plays - blows to kill, blows survived - and
+    /// must never be bent just to make a CP number look right. When the resulting CP
+    /// reads too high or too low, change this divisor instead: it moves every unit
+    /// on both sides by the same factor, so no ratio, no ordering and no battle
+    /// outcome can shift.
+    ///
+    /// 200 -> 168 -> 178 -> 190 on 2026-09-16, tracking two stat changes: hero and
+    /// level-4 enemy HP raised to reach the 8-blow baseline, then hero ATK +10% so a
+    /// lone hero stops losing level 4.
+    ///
+    /// 190 -> 380 on 2026-09-17, and this one is PURE BOOKKEEPING. Every live combat
+    /// unit had its base maxHP DOUBLED (heroes, the level 1-3 tutorial enemies, and
+    /// every shared enemy asset) so that nothing at the level-4 base state dies in
+    /// fewer than eight blows - it was landing on four. HP is a linear factor of CP,
+    /// so doubling the divisor with it leaves every displayed CP bit-identical:
+    ///     hero 281->562 HP reads 116 before and after; 291->582 reads 121;
+    ///     Reaper at stage 4 reads 92; Zombie 101.
+    /// Because BOTH sides were scaled by the same factor, no time-to-kill ratio, no
+    /// CP ratio and no battle outcome moved - only the DURATION of a fight, which is
+    /// exactly twice what it was.
+    ///
+    /// Re-derive it the same way whenever the baseline moves:
+    ///     divisor = average(ATK x AtkSpd x maxHP x (1 + DEF/100)) / 100
     /// </summary>
-    public const float DisplayDivisor = 200f;
+    public const float DisplayDivisor = 380f;
 
     /// <summary>
     /// CP for a single unit:  (ATK x AtkSpd) x EffectiveHP / K

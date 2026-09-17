@@ -179,6 +179,10 @@ public class HeroCardRevealDirector : MonoBehaviour
         // could never touch the board again.
         playing = null;
         IsDealing = false;
+
+        // Drop anything still waiting. A queued deal that survived a scene change
+        // would replay a previous stage's reward over the new one.
+        dealQueue.Clear();
     }
 
     private void OnDestroy()
@@ -186,16 +190,64 @@ public class HeroCardRevealDirector : MonoBehaviour
         if (instance == this) instance = null;
     }
 
+    /// <summary>One match's reward, waiting its turn on <see cref="dealQueue"/>.</summary>
+    private readonly struct PendingDeal
+    {
+        public readonly IReadOnlyList<UnitDefinitionSO> Heroes;
+        public readonly Vector3 Anchor;
+
+        public PendingDeal(IReadOnlyList<UnitDefinitionSO> heroes, Vector3 anchor)
+        {
+            Heroes = heroes;
+            Anchor = anchor;
+        }
+    }
+
+    private readonly Queue<PendingDeal> dealQueue = new();
+
     private void HandleHeroesEarned(IReadOnlyList<UnitDefinitionSO> heroes, Vector3 anchorWorld)
     {
         if (heroes == null || heroes.Count == 0) return;
 
-        // A second match landing mid-deal restarts the presentation rather than
-        // overlapping two fans. Queued matches already arrive one at a time from
-        // PlayerWaveManager, so this is a safety net, not the normal path.
-        if (playing != null) StopCoroutine(playing);
+        // !! DEALS QUEUE, THEY DO NOT CANCEL EACH OTHER.
+        //
+        // This used to StopCoroutine the running deal and restart, on the
+        // assumption that awards always arrive one at a time. They do not:
+        // PlayerWaveManager's planned loop waits only `nextWaveDelay` (0.75s by
+        // default) between awards, while one full deal measures ~1.87s. A single
+        // piece placement that clears TWO matches bumps MatchesCleared by two,
+        // both `while (MatchesCleared < match)` guards fall through immediately,
+        // and the second award lands roughly 0.75s into the first deal - well
+        // before it ends.
+        //
+        // The board-input gate does not prevent this, because both matches came
+        // from a placement that had already resolved. Cancelling therefore threw
+        // away the first match's cards mid-animation and the player never saw
+        // what that match earned. Queueing shows every match's reward in order.
+        dealQueue.Enqueue(new PendingDeal(heroes, anchorWorld));
 
-        playing = StartCoroutine(PlayDeal(heroes, anchorWorld));
+        if (playing == null) playing = StartCoroutine(DrainDealQueue());
+    }
+
+    /// <summary>
+    /// Plays every queued deal back to back.
+    ///
+    /// IsDealing is held for the WHOLE queue rather than per deal, so the board
+    /// stays locked until the last reward has been shown - otherwise the player
+    /// could start a new match in the gap between two deals.
+    /// </summary>
+    private IEnumerator DrainDealQueue()
+    {
+        IsDealing = true;
+
+        while (dealQueue.Count > 0)
+        {
+            var next = dealQueue.Dequeue();
+            yield return PlayDeal(next.Heroes, next.Anchor);
+        }
+
+        IsDealing = false;
+        playing = null;
     }
 
     // ======================================================================
@@ -204,7 +256,8 @@ public class HeroCardRevealDirector : MonoBehaviour
 
     private IEnumerator PlayDeal(IReadOnlyList<UnitDefinitionSO> heroes, Vector3 anchorWorld)
     {
-        IsDealing = true;
+        // IsDealing and `playing` belong to DrainDealQueue, which owns the whole
+        // run of queued deals - not to one deal.
         EnsureCanvas();
 
         int n = heroes.Count;
@@ -331,8 +384,10 @@ public class HeroCardRevealDirector : MonoBehaviour
         group.alpha = 0f;
         foreach (var c in cards) { c.SetGlow(0f, TealGlow, Color.white); c.Hide(); }
         stage.gameObject.SetActive(false);
-        playing = null;
-        IsDealing = false;
+
+        // NOT cleared here: DrainDealQueue may still have another match's reward
+        // to show, and releasing the board between two deals would let the player
+        // match again mid-sequence.
     }
 
     /// <summary>

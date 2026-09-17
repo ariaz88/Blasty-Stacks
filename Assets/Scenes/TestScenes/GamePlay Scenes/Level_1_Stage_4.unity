@@ -462,6 +462,14 @@ PrefabInstance:
       propertyPath: levelConfig
       value: 
       objectReference: {fileID: 11400000, guid: 4bfd3e8ac5c526e4d9fc45ea350f2336, type: 2}
+    - target: {fileID: 1079043511634868343, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
+      propertyPath: gateRelativeMax.x
+      value: 13.49
+      objectReference: {fileID: 0}
+    - target: {fileID: 1079043511634868343, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
+      propertyPath: gateRelativeMin.x
+      value: -13.51
+      objectReference: {fileID: 0}
     - target: {fileID: 1682839431433286084, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
       propertyPath: m_IsActive
       value: 0
@@ -496,7 +504,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3977025768155051512, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
       propertyPath: m_AnchorMax.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 5411853211264133090, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
       propertyPath: m_LocalPosition.x

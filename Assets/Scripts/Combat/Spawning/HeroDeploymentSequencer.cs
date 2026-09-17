@@ -36,6 +36,13 @@ public class HeroDeploymentSequencer : MonoBehaviour
              "next bar starts on the same frame, which is what the brief asks for.")]
     [Min(0f)] [SerializeField] private float gapBetweenLoads = 0f;
 
+    [Tooltip("How long RunQueue may wait for PlayerWaveManager to finish awarding " +
+             "every cleared match before it snapshots the queue. Must comfortably " +
+             "exceed PlayerWaveManager.nextWaveDelay (0.75s) times the number of " +
+             "matches in a stage. It is a SAFETY NET, not a pacing value - in normal " +
+             "play the wait ends in well under a second.")]
+    [Min(0.5f)] [SerializeField] private float awardWaitTimeout = 5f;
+
     [Header("Refs (left empty = found in the scene at Awake)")]
     [SerializeField] private PlayerWaveManager waveManager;
     [SerializeField] private BattleStartController battleStart;
@@ -124,9 +131,39 @@ public class HeroDeploymentSequencer : MonoBehaviour
     {
         if (!waveManager) yield break;
 
-        // Snapshot the batches. PlayerWaveManager is sealed for battle by now, so
-        // this cannot change under us - copying makes that explicit rather than
-        // relying on it.
+        // !! WAIT FOR THE AWARD PIPELINE BEFORE SNAPSHOTTING. (2026-09-16)
+        //
+        // This used to snapshot EarnedBatches immediately, on the assumption that
+        // "PlayerWaveManager is sealed for battle by now, so this cannot change
+        // under us". THAT ASSUMPTION IS WRONG and it cost a whole battle:
+        //
+        //   SealForBattle stops new MATCHES being counted. It does NOT flush the
+        //   award pipeline - PlannedWaveLoop is a coroutine that converts a cleared
+        //   match into an earned batch only after `nextWaveDelay` (0.75s). Clear the
+        //   last match and press BATTLE inside that window and EarnedBatches is
+        //   still EMPTY, so TotalLoads lands on 0, the queue yield-breaks, and NOT
+        //   ONE HERO EVER DEPLOYS. The enemies then walk to an undefended base and
+        //   the stage is an automatic loss.
+        //
+        // Reproduced in play mode on stage 1: EarnedBatches=1 but TotalLoads=0,
+        // CurrentLoadIndex=-1, ReleasedHeroes=0, enemy marching, gate 500 -> 458.
+        //
+        // So wait until every cleared match has actually been awarded. The timeout
+        // is a safety net: on expiry we take whatever exists rather than hanging.
+        float waited = 0f;
+        while (waveManager.MatchesReleased < waveManager.MatchesCleared
+               && !waveManager.DeploymentFailed
+               && waited < awardWaitTimeout)
+        {
+            waited += Time.deltaTime;
+            yield return null;
+        }
+        if (waveManager.MatchesReleased < waveManager.MatchesCleared)
+            Debug.LogWarning($"[HeroDeployment] Started with {waveManager.MatchesReleased} of " +
+                             $"{waveManager.MatchesCleared} matches awarded after {waited:F2}s" +
+                             (waveManager.DeploymentFailed ? " (deployment had FAILED)." : "."), this);
+
+        // Snapshot the batches. Safe now that the pipeline has caught up.
         var batches = new List<IReadOnlyList<UnitDefinitionSO>>();
         foreach (var b in waveManager.EarnedBatches)
             if (b != null && b.Count > 0) batches.Add(b);

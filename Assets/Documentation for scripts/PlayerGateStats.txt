@@ -1,4 +1,12 @@
-CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+CURRENT UPDATE - 2026-09-16 (supersedes the gate-damping notes below)
+ApplyDamageToPlayerGate now CHIPS while the base still has living defenders, at EVERY stage:
+    CPBattleController.HasLivingDefenders(this) -> damage = maxHealth * LevelBattleRules.BaseChipPerBlow (1%)
+    no living defenders                         -> full weapon damage, and the stage ends
+This replaces the gate on CPBattleController.BattleIsAnExpectedWin, which damped the base only in battles a script had already decided the player would win. That question no longer exists - the battle decides its own result - so the rule is now outcome-neutral: an attacker that slips past a LIVE battle must not decide the match on its own, mirroring the enemy gate.
+Chipping rather than full immunity is deliberate: taking literally nothing read as a broken game, and a hundred connected blows to fell a defended base settles nothing.
+
+--------------------------------------------------------------------------------
+SUPERSEDED - 2026-09-10 (kept for history)
 Stages 1-5 reject incoming hits while the gate's own registered defending heroes are alive. After defenders are defeated, ordinary weapon damage reduces gate HP and its existing destruction event ends the stage. No controller damages or destroys this gate. UI references are null-safe. Stages 6+ have no new gate protection.
 
 ================================================================================

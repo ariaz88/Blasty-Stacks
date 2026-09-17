@@ -20,39 +20,47 @@ public class CharacterStats : MonoBehaviour
     public int HitsTaken => hitsTaken;
 
     /// <summary>
-    /// THE FOUR-HIT RULE. Nobody - hero or enemy, any stage - dies in fewer than
-    /// <see cref="LevelBattleRules.MinHitsToKillAnyone"/> blows.
+    /// How many blows a unit takes to die is EMERGENT - it comes from the attacker's
+    /// ATK against this unit's HP and defence, and nothing here enforces a number
+    /// (Arash, 2026-09-16).
     ///
-    /// WHY IT LIVES HERE AND NOT IN CPBattleController.
-    /// It was implemented there first and did not hold in play: a level 4 enemy
-    /// still died in two hits. That method returns the damage UNTOUCHED on several
-    /// paths that are invisible at runtime - no battle prepared, the unit missing
-    /// from the registered hero/enemy sets, a stale static Instance left by a
-    /// previous battle, or a scene mismatch. Every one of those silently skips the
-    /// ceiling. Down here there is nothing to miss: the unit clamps its own
-    /// incoming damage, so the rule holds even with no CP battle in the scene at
-    /// all - which is also what makes it true for stage 6+.
+    /// Eight blows is where the BASE state should sit, and that is achieved by
+    /// AUTHORING each unit's level-1 maxHP (see LevelBattleRules.BaseStateBlowsToKill),
+    /// not by clamping damage at runtime. The count is SUPPOSED to drift:
     ///
-    /// Three mechanisms, deliberately:
-    ///   1. a CEILING of maxHealth / HitsToKillMe. That divisor is THIS unit's own
-    ///      number, interpolated from its defence between 8 and 11, so a tougher
-    ///      character genuinely takes 9, 10 or 11 blows. A single fixed ceiling was
-    ///      tried first and measured 240 of 240 matchups onto exactly 8 - after CP
-    ///      normalisation every attacker clears a flat 12.5% blow, so it bound
-    ///      every time and all variety collapsed;
-    ///   2. a FLOOR of maxHealth/11, so a very soft blow is lifted and no duel
-    ///      drags past about eleven exchanges;
-    ///   3. a lethality guard - before the eighth blow the unit cannot be reduced
-    ///      past a sliver of health. This catches float drift and any damage that
-    ///      arrives outside the normal weapon path.
+    ///     enemies grow every stage; the player upgrades only every ~5 stages, so a
+    ///     hero slides from ~8 blows at stage 1 to ~7 at stage 3 to ~5 at stage 4,
+    ///     then an upgrade raises its ATK and HP together and restores ~8.
     ///
-    /// Neither bound applies to a blow that was already zero: damage cancelled
-    /// upstream (pause, battle over, a spent budget) stays cancelled.
+    /// That slide IS the difficulty signal - "you are under-levelled, go upgrade".
+    /// A hard eight-blow floor used to live here and it erased that signal entirely,
+    /// keeping an under-levelled hero alive for its full eight blows. It also
+    /// silently protected whoever was losing, which is the class of behaviour this
+    /// whole system was stripped of. Do not bring it back.
+    ///
+    /// WHAT REMAINS is <see cref="SafetyBlowFloor"/>: a deliberately LOOSE guard so a
+    /// freak mismatch can never read as a one-shot. It is not balance - it is there
+    /// so a bug or an extreme pairing looks like a fight rather than a teleport.
+    ///
+    /// Nothing raises a weak blow. A soft attacker genuinely grinds, which is what
+    /// keeps ATK - and therefore CP - deciding real fights.
+    ///
+    /// A blow that was already zero stays zero: damage cancelled upstream (pause,
+    /// battle over) is never revived.
+    ///
+    /// THE PAUSE GATE LIVES HERE. It used to sit in
+    /// CPBattleController.AdjustIncomingDamage, which was the only thing blocking
+    /// damage while the game was paused or before the battle started - PlayerStats
+    /// and EnemyStats never checked it themselves. That method is gone, so the gate
+    /// moved down to this chokepoint, where no early return can skip it.
     /// </summary>
-    public float ClampIncomingBlow(float damage, Object attacker = null, bool allowFloor = true)
+    public float ClampIncomingBlow(float damage, Object attacker = null)
     {
         damage = Mathf.Max(0f, damage);
         if (damage <= 0f || maxHealth <= 0f) return damage;
+
+        // Nothing lands while the game is paused or the battle is not running.
+        if (GameplayPause.IsPaused || !LevelGameManager.IsBattleRunning) return 0f;
 
         hitsTaken++;
         if (attacker)
@@ -61,50 +69,43 @@ public class CharacterStats : MonoBehaviour
             attackers[attacker] = landed + 1;
         }
 
-        float ceiling = maxHealth / HitsToKillMe;
-        damage = Mathf.Min(damage, ceiling);
-
-        // The floor lifts blows that are weak because of STATS. It must never lift
-        // one that a design budget deliberately lowered, which is what `allowFloor`
-        // is for.
-        //
-        // THE BUG THIS FIXES. The protected hero's budget works out at 45%/8 = 5.6%
-        // per blow at two enemies, but the floor is maxHP/11 = 9.1%, so every one of
-        // those blows was raised back up to 9.1%. The hero then spent its whole 45%
-        // allowance in five blows instead of eight and froze on the reserve for the
-        // rest of the fight - reported from a level 2 playthrough as "it takes 10%
-        // per hit, not 5%".
-        if (allowFloor)
-        {
-            float floor = maxHealth / LevelBattleRules.MaxHitsToKillAnyone;
-            damage = Mathf.Max(damage, Mathf.Min(floor, ceiling));
-        }
-
-        if (hitsTaken < LevelBattleRules.MinHitsToKillAnyone)
-            damage = Mathf.Min(damage, Mathf.Max(0f, currentHP - maxHealth * 0.001f));
+        // LOOSE SAFETY GUARD ONLY - not balance. A single blow may never remove more
+        // than 1/SafetyBlowFloor of maximum health, so nothing ever reads as a
+        // one-shot. At a sane base calibration (~8 blows) this never binds; it exists
+        // for freak pairings and for stages where one side has run far ahead.
+        damage = Mathf.Min(damage, maxHealth / SafetyBlowFloor);
 
         return Mathf.Max(0f, damage);
     }
 
     /// <summary>
-    /// This unit's defence, for the toughness band. Overridden by PlayerStats and
-    /// EnemyStats to read the live stat block, so an upgrade that raises defence
-    /// immediately moves the character up the band.
+    /// This unit's defence. Overridden by PlayerStats and EnemyStats to read the
+    /// live stat block. It does NOT select a hits-to-die band any more: defence works
+    /// the ordinary way, reducing each incoming blow in CombatMath.DamagePerHit,
+    /// which by itself makes a tough unit take more swings.
     /// </summary>
     protected virtual float Defense => 0f;
 
     /// <summary>
-    /// Blows this unit takes to die: 8 at no defence, up to 11 at defence 80+.
+    /// The absolute fewest blows that may kill ANY unit, as a last-resort guard.
     ///
-    /// LEVELS 1-3 ARE FLAT AT EIGHT. Those levels run a scripted exchange and the
-    /// design calls for the kill to land on the eighth blow every time; letting the
-    /// defence band apply there made a defence-65 enemy take 10 and a defence-78 one
-    /// take 11, which is what was reported. The band is for levels 4 and up.
+    /// Deliberately far below the base-state target of eight. It is NOT a balance
+    /// lever: a fight that ends this fast means one side has massively outgrown the
+    /// other, and the game should SHOW that rather than hide it. Four simply stops
+    /// the extreme case from looking like an instant kill.
+    ///
+    /// FOUR IS ARASH'S NUMBER (2026-09-16). Raising it back towards eight would
+    /// re-create the hard floor that erased the under-levelled signal - an
+    /// under-levelled hero is MEANT to start dying in 7, then 5 blows. Set base HP
+    /// instead.
     /// </summary>
-    public int HitsToKillMe =>
-        CPBattleController.IsTutorialExchange
-            ? LevelBattleRules.MinHitsToKillAnyone
-            : LevelBattleRules.HitsToKill(Defense);
+    public const int SafetyBlowFloor = 4;
+
+    /// <summary>
+    /// The base-state expectation for this unit, for logging and for
+    /// CharacterStats.ReportDeath - NOT a rule anything enforces.
+    /// </summary>
+    public int HitsToKillMe => LevelBattleRules.BaseStateBlowsToKill;
 
     /// <summary>Clears the hit history, for a revived or re-pooled unit.</summary>
     public void ResetHitHistory() { hitsTaken = 0; attackers.Clear(); }
@@ -132,8 +133,16 @@ public class CharacterStats : MonoBehaviour
     /// </summary>
     public void ReportDeath()
     {
-        int required = HitsToKillMe;
-        string verdict = hitsTaken >= required ? "OK" : "<<< RULE BROKEN";
+        // The verdict is INFORMATIONAL, not a pass/fail. Blows-to-die is emergent, so
+        // a number under the base-state expectation is not a broken rule - it usually
+        // means this unit is out-levelled, which is exactly what the log should make
+        // visible. Only the safety floor is ever a genuine fault.
+        int expected = HitsToKillMe;
+        string verdict = hitsTaken < SafetyBlowFloor
+            ? "<<< BELOW SAFETY FLOOR - investigate"
+            : hitsTaken < expected ? "fast - this unit is out-levelled"
+            : hitsTaken > expected ? "slow - this unit is over-levelled"
+            : "on the base-state expectation";
 
         int fewest = int.MaxValue;
         var split = new System.Text.StringBuilder();
@@ -146,7 +155,7 @@ public class CharacterStats : MonoBehaviour
         if (attackers.Count == 0) { split.Append("none"); fewest = 0; }
 
         Debug.Log($"[HITS] '{name}' died after {hitsTaken} blow(s) from {attackers.Count} attacker(s) " +
-                  $"[{split}]. Required at least {required} (defence {Defense:F0}). {verdict}" +
+                  $"[{split}]. Base-state expectation {expected} (defence {Defense:F0}). {verdict}" +
                   (attackers.Count > 1
                       ? $"  (a viewer watching only one of them would have counted {fewest})"
                       : ""), this);

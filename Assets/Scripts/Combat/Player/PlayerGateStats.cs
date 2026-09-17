@@ -31,24 +31,21 @@ public class PlayerGateStats : CharacterStats
 
     public void ApplyDamageToPlayerGate(float damageAmount)
     {
-        // WHAT DECIDES THIS IS THE BATTLE'S INTENDED OUTCOME, not who is still alive.
+        // WHILE THIS BASE STILL HAS DEFENDERS, a blow only CHIPS it - 1% of maximum.
+        // Once every hero has fallen, the base takes full damage and the stage ends.
         //
-        // In a battle the player is meant to WIN, an enemy that slips past the fight
-        // and reaches the castle must not be able to decide the match: it loses 1% of
-        // its maximum per connected blow. That is visible feedback that settles
-        // nothing - felling a base that way needs a hundred blows, far longer than
-        // these battles run. The base used to take literally NOTHING in that case,
-        // which read as a broken game rather than as a rule.
+        // This is outcome-neutral on purpose. It never asks who is supposed to win;
+        // it encodes one structural rule - an attacker that slips past a live battle
+        // must not decide the match on its own - mirroring the enemy gate's
+        // HasLivingDefenders. A hundred connected blows to fell a defended base is
+        // far longer than any battle here runs, so it settles nothing while still
+        // giving visible feedback. Taking literally NOTHING read as a broken game.
         //
-        // In a battle the player is meant to LOSE, the same enemy deals its normal
-        // damage. Damping it there would leave the match unable to end the way the
-        // workbook says it must (Arash, 2026-09-12).
-        //
-        // THIS USED TO KEY OFF `HasLivingDefenders`, which tied the damping to whether
-        // any hero was still standing. That is the wrong question: it damped the
-        // losing battles too, right up until the last hero fell, and then let the base
-        // fall at full speed in the battles that were never in danger anyway.
-        if (CPBattleController.BattleIsAnExpectedWin(this))
+        // IT USED TO KEY OFF THE INTENDED OUTCOME (CPBattleController
+        // .BattleIsAnExpectedWin), damping the base only in battles the script had
+        // already decided the player would win. That question no longer exists: the
+        // battle decides its own result.
+        if (CPBattleController.HasLivingDefenders(this))
             damageAmount = maxHealth * LevelBattleRules.BaseChipPerBlow;
 
         if (isPlayerGateDestroyed)

@@ -1,0 +1,153 @@
+================================================================================
+  TargetClaimRegistry.cs
+  Path : Assets/Scripts/Combat/Shared/TargetClaimRegistry.cs
+  Type : static class
+  Layer: Combat / Shared
+  Added: 2026-09-17
+================================================================================
+
+PURPOSE
+-------
+Answers one question for a hero that is about to pick a target: "is anybody
+already dealing with that enemy?"
+
+THE RULE IT EXISTS FOR (Arash, 2026-09-17): an enemy that NO hero is handling
+outranks an enemy that is merely closer. The symptom it fixes, reported from
+play: a hero spawns and walks at the nearest enemy; a second hero spawns on the
+same side and, being nearest-driven, walks at the SAME enemy - while the other
+enemy strolls unopposed into the player base. Two heroes on one target is never
+worth an undefended base.
+
+A CLAIM IS NOT A SEPARATE OBJECT. A hero claims an enemy simply by holding it in
+PlayerManager.currentTarget. That field is set the moment it targets, stays set
+while it walks over, and stays set while it fights - so "already targeted",
+"already walking towards" and "already fighting" collapse into ONE condition,
+and no claim can leak or go stale behind a hero's back. There is nothing to
+release.
+
+FIELDS
+------
+  Heroes (static HashSet<PlayerManager>)
+      Every hero currently on the field. PlayerManager.OnEnable files itself in,
+      PlayerManager.OnDisable drops out, so a destroyed or pooled hero cannot
+      linger. Used instead of FindObjectsOfType because claim counting is asked
+      once per candidate enemy per acquisition, and FindObjectsOfType allocates
+      and walks the whole scene every call.
+
+METHODS
+-------
+  ResetStatics()   [RuntimeInitializeOnLoadMethod, SubsystemRegistration]
+      Clears Heroes when Play mode starts. Required because "Enter Play Mode
+      Options" can disable the domain reload, in which case the set survives from
+      the previous run and the first battle counts claims held by heroes that no
+      longer exist. Same reasoning as HeroRoster.ResetStatics.
+
+  Register(PlayerManager) / Unregister(PlayerManager)
+      Owned by PlayerManager.OnEnable / OnDisable. Null-safe.
+
+  ClearAll()
+      Drops everything. Nothing calls it today; it is there for a stage reload
+      that ever leaks.
+
+  OtherClaimants(EnemyStats enemy, PlayerManager self) -> int
+      How many OTHER heroes currently hold `enemy` in currentTarget and pass
+      IsHandling.
+
+      `self` IS EXCLUDED ON PURPOSE. A hero must never read its own claim as a
+      reason to avoid its own target: it would see "1 claimant" on the enemy it
+      is already fighting, wander off to a free one, and the hero it handed the
+      fight to would do the same thing back. That is the oscillation SESSIONS.md
+      records happening five separate times in this codebase.
+
+  IsHandling(PlayerManager) -> bool   [private]
+      A hero only counts as handling its target when:
+        * isUnlocked - heroes spawn onto the castle gates LOCKED and a puzzle
+          match throws them out. One still on a gate defends nothing, and
+          counting its target would push a newly released hero away from an
+          enemy nobody is really on. Same test as HeroRoster.IsInBattle.
+        * not in PlayerDeathState - a dead hero keeps currentTarget set while the
+          dying animation plays (~0.5s before the GameObject goes), so without
+          this a corpse keeps an enemy reserved and the next hero walks past it.
+
+  Beats(candidate, candidateClaims, candidateDistSq,
+        best, bestClaims, bestDistSq) -> bool
+      The whole ranking, in one place, in this order:
+        1. FEWEST other claimants  - an unhandled enemy beats a closer handled one.
+        2. NEAREST                 - among equally-covered enemies, the close one.
+        3. Lowest instance id      - deterministic tie-break, never a coin flip.
+
+      Step 1 is the new rule; step 2 is the old behaviour it sits on top of. When
+      every enemy is equally covered - including the ordinary case where all of
+      them are free - this collapses back to plain "nearest", so early fights
+      look exactly as they did before. When 12 heroes face 5 enemies it spreads
+      them ~3/3/2/2/2 instead of stacking eight onto whoever is closest.
+
+      Step 3 exists because SESSIONS.md registers this exact class of bug five
+      times: two units comparing equal values both conclude "I am not worse" and
+      both take the same action.
+
+  LogPicks (static bool, currently TRUE)
+  LogPick(hero, chosen, otherClaims, distSq, phase)
+      One `[TARGET]` line per acquisition: who picked what, how many heroes were
+      already on it, how far it was. A pick reading "others=1" while a free enemy
+      exists is the rule broken; "others=0" on the far enemy is the rule working.
+
+      Left ON deliberately. The rule failed its first playtest SILENTLY, and the
+      screenshot could not distinguish "the rule never ran" from "it ran and
+      found nothing free" from "it ran before the second enemy existed". Set
+      false when targeting is signed off, like CPBattleController.LogEveryBlow.
+      Acquisitions are rare - spawn and after a kill - so this is a handful of
+      lines per battle, not per frame.
+
+HOW IT CONNECTS
+---------------
+  - PlayerManager.OnEnable / OnDisable   -> Register / Unregister.
+  - PlayerManager.UpdateTargetSelection  -> OtherClaimants + Beats, in BOTH the
+    first-detection pass and the persistent search.
+  - TargetDetectionForPlayer.AcquireBestEnemy -> the same two calls. Sharing
+    Beats is what stops this project's two acquisition paths from disagreeing
+    about who to pick.
+  - Reads PlayerManager.currentTarget, .isUnlocked, .currentState and
+    .PlayerDeathState. Writes nothing - it only reports.
+
+NOTES
+-----
+  - Modelled on AttackSlotRegistry: a static, no per-frame interaction between
+    units, one decision taken at the moment of choosing. That is the project's
+    standing rule (SESSIONS.md, 2026-08-21: units have ZERO physics interaction,
+    and picking a spot once is not an interaction).
+  - THE TIMING TRAP, and the reason this failed its first playtest: IsHandling
+    ignores locked heroes (right - a hero stranded on a gate must not reserve an
+    enemy forever), while PlayerManager.Update ran target selection from the
+    instant a hero was instantiated, ~1.2s before release (also defensible on its
+    own). Together they meant a whole wave chose while every member was invisible
+    to this registry, so all of them read "nobody is on anything" and picked the
+    same nearest enemy. Fixed by rule 0: a locked hero does not choose at all.
+    ANY future change that lets a hero pick before it is unlocked reopens this.
+  - CLOSED 2026-09-17 by PlayerManager.TryRebalance (rule 1b): a hero that picked
+    while one enemy was the only one alive used to keep it forever, so multi-wave
+    stages doubled up by construction. MEASURED on level 4 from the [TARGET] log,
+    not guessed - the first deployment genuinely had no other choice, and wave 2
+    then arrived unopposed. A hero now leaves a SHARED target for one with
+    STRICTLY fewer other claimants, at most twice a second.
+  - ALSO FIXED 2026-09-17: PlayerManager's first-detection pass resolved
+    EnemyStats with a bare GetComponent on the overlap hit, so any enemy whose
+    collider is not on the object carrying EnemyStats was invisible to it and the
+    hero picked a crowded enemy with a free one nearby. It now falls back to
+    GetComponentInParent, matching TargetDetectionForPlayer.IsCandidate.
+  - THE RULE ONLY WORKS BECAUSE TARGETS ARE STICKY. PlayerManager.
+    UpdateTargetSelection no longer re-picks while its target lives; a claim that
+    could be dropped for a marginal distance gain would not be information any
+    other hero could act on. If stickiness is ever removed, this registry becomes
+    an oscillator - read rule 1 in UpdateTargetSelection first.
+  - Distances are compared SQUARED. Any margin added to Beats must be squared too.
+  - Cost is Heroes.Count per candidate enemy, and only while a hero has NO target.
+    Worst realistic case is a 12-hero stage the frame a wave dies: 12 x 5 x 12 =
+    ~720 reference compares, once, against no allocation at all.
+  - It does NOT consider how close an enemy is to the player base. The reported
+    motivation was base defence, but the rule shipped is "unhandled first", not
+    "most threatening first". If a hero should prefer the enemy nearest OUR gate
+    among equally-free ones, that is a second sort key in Beats and a separate
+    decision.
+  - Enemies picking heroes are NOT covered. EnemyManager has its own selection
+    and never got the hysteresis treatment either (registered in SESSIONS.md).

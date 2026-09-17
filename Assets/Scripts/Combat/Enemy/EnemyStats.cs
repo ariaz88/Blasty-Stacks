@@ -45,18 +45,17 @@ public class EnemyStats : CharacterStats
         return this.transform;
     }
     /// <summary>
-    /// <paramref name="attacker"/> is the hero that swung. Needed because the
-    /// stage 1-5 model lets a lone, outnumbered protected hero kill in two hits,
-    /// and that boost must apply to THAT hero's blows only - never to its allies',
-    /// which stay completely unassisted. Optional, so any older call still compiles.
+    /// <paramref name="attacker"/> is the hero that swung. It is kept so the
+    /// per-attacker hit breakdown in CharacterStats.ReportDeath stays meaningful.
+    /// Optional, so any older call still compiles.
+    ///
+    /// NOTHING adjusts this damage any more. The blow is taken as the attacker's
+    /// stats produced it, clamped only by the pacing band in ClampIncomingBlow.
     /// </summary>
     public void ApplyDamageToEnemy(float damageAmount, PlayerManager attacker = null)
     {
-        damageAmount = CPBattleController.AdjustIncomingDamage(this, damageAmount, attacker);
-        // LAST, and outside the CP battle on purpose: the four-hit rule must hold
-        // even when no battle is prepared or this enemy never reached the
-        // controller's registered set. See CharacterStats.ClampIncomingBlow.
         damageAmount = ClampIncomingBlow(damageAmount, attacker);
+        CPBattleController.ReportBlow(this, damageAmount, attacker);   // observation only
         SetResolvedHealth(Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount)));
     }
 

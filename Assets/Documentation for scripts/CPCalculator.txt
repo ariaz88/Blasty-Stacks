@@ -1,4 +1,12 @@
-CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+CURRENT UPDATE - 2026-09-17 (supersedes conflicting older notes below)
+DisplayDivisor is 380, not the 200 written under FIELDS. It has moved four times:
+200 -> 168 -> 178 -> 190 (2026-09-16, tracking stat changes) -> 380 (2026-09-17).
+The last move is pure bookkeeping: every live combat unit had its base maxHP
+DOUBLED so nothing at the level-4 base state dies in fewer than eight blows, and
+HP is a linear factor of CP, so the divisor doubled with it and every displayed
+CP is unchanged. See NOTES, last entry.
+
+PREVIOUS UPDATE - 2026-09-10
 CP is a strength estimate, not a proof of actual 1v1/team victory. Attack cadence, discrete hits, movement, range and targeting can change outcomes. UnitPower returns an unrounded double score; TeamPower sums these. Stages outside 1-5 retain the previous UnitCP float arithmetic and SquadCP per-unit rounding. Stage 1-5 battle totals use unrounded scores. The tutorial's hit-only assistance is explicitly separate from nominal CP.
 
 ================================================================================
@@ -32,11 +40,17 @@ why it does not appear in the formula.
 
 FIELDS
 ------
-  DisplayDivisor (const float = 200)
+  DisplayDivisor (const float = 380)
       Cosmetic only. The raw product lands in the thousands; dividing every unit
       by the SAME constant keeps displayed CP near the magnitudes the menus
       showed before. Because it is identical for every unit it cannot change any
       ordering - changing it rescales the whole roster and nothing else.
+
+      THIS IS THE KNOB FOR "CP SHOULD READ ABOUT 100" (Arash, 2026-09-16). Stats
+      are authored for how the FIGHT plays - blows to kill, blows survived - and
+      are never bent to make the CP number look right. When CP reads too high or
+      too low, move the divisor instead. Re-derive it as:
+          divisor = average(ATK x AtkSpd x maxHP x (1 + DEF/100)) / 100
 
 METHODS
 -------
@@ -103,3 +117,22 @@ NOTES
   - GateBase now scores 0 because its ATK is 0. That is correct - a gate deals no
     damage and cannot win a duel - but any UI that displayed the old value of 15
     will now show 0.
+  - 2026-09-17, THE HP DOUBLING. At the level-4 base state everything was dying in
+    four blows (the hero's blow was even hitting CharacterStats.SafetyBlowFloor,
+    maxHP/4, so "four" was the clamp, not the stats). Arash's fix: leave ATK alone,
+    raise maxHP by ONE percentage on every character, then move the divisor to hold
+    CP where it was. The percentage is +100% - base maxHP x2 on all 8 hero assets,
+    both shared enemy assets, the three Tutorial enemy assets, and the four
+    late-campaign enemy assets - and DisplayDivisor went 190 -> 380 with it.
+      * Displayed CP is BIT-IDENTICAL: 116 / 121 for the two hero profiles, 92 for
+        Reaper at stage 4, 101 for Zombie.
+      * Blows to die at stage 4 went 4 -> 8 (hero killing either enemy) and 5 -> 10
+        (either enemy killing a hero). Nothing dies in under eight, which is what
+        LevelBattleRules.BaseStateBlowsToKill has always asked for.
+      * The SafetyBlowFloor no longer binds anywhere at level 4 (blow 72.5 against
+        a cap of 135.3), so ATK differences are visible again.
+      * Scaling BOTH sides by the same factor is what makes this safe: every
+        time-to-kill RATIO, every CP ratio and every battle outcome is unchanged.
+        Only the DURATION of a fight moved, and it is exactly twice what it was.
+    If maxHP is ever rescaled again, the divisor must move by the same factor or
+    every CP in the menus shifts.

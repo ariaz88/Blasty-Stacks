@@ -1,4 +1,12 @@
-CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+CURRENT UPDATE - 2026-09-16 (supersedes everything below about damage adjustment)
+ApplyDamageToEnemy NO LONGER ADJUSTS DAMAGE AT ALL. CPBattleController.AdjustIncomingDamage is gone with the rest of the enforcement layer, so the blow lands exactly as the attacker's stats produced it. The order is now:
+    damage = ClampIncomingBlow(damage, attacker)     loose safety guard only (maxHP/4)
+    CPBattleController.ReportBlow(this, damage)      OBSERVATION ONLY, returns void
+    SetResolvedHealth(...)
+The scripted tutorial exchange that used to set an enemy's damage outright in levels 1-3 is gone; every stage runs real combat. `attacker` is still passed, now only so CharacterStats.ReportDeath can print the per-attacker hit breakdown.
+
+--------------------------------------------------------------------------------
+SUPERSEDED - 2026-09-10 (kept for history)
 ApplyDamageToEnemy now passes real incoming hit damage through CPBattleController.AdjustIncomingDamage. SetResolvedHealth is called only from the incoming damage method; no timer or team-budget controller calls it. Missing health bars are safe. Defeat still follows actual HP reaching zero and EnemyManager processes normal death/XP.
 
 ================================================================================

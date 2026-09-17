@@ -1,4 +1,9 @@
-CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+CURRENT UPDATE - 2026-09-16 (supersedes the note below)
+Update NO LONGER skips the mutual-wipe auto-defeat branch when a CPBattleController is prepared. That check existed because the scripted stages required a physically destroyed gate rather than a timeout. Nothing is scripted any more, and CPBattleController is now prepared for EVERY battle as a read-only reporter - so keeping the check would have disabled stalemate detection permanently and hung the stage in Playing forever whenever the last hero and last enemy killed each other.
+Mutual-wipe handling is now uniform at every stage, still behind detectMutualWipe and its grace timer.
+
+--------------------------------------------------------------------------------
+SUPERSEDED - 2026-09-10 (kept for history)
 When a prepared CPBattleController exists (stages 1-5 only), Update skips the mutual-wipe auto-defeat branch. Both gates remaining alive must never yield an automatic battle result in these stages. Only the existing gate destruction events decide Win/Loss. Stage 6+ retains legacy mutual-wipe handling.
 
 ================================================================================

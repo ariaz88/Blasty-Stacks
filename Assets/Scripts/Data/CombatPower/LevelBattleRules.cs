@@ -2,7 +2,18 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>Campaign stages 1-5 only. Spreadsheet "Level" means stage, not chapter.</summary>
+/// <summary>
+/// Authored per-stage pacing tables. Spreadsheet "Level" means STAGE, not chapter.
+///
+/// What is left here after 2026-09-16 is deliberately only the things that shape a
+/// battle's SIZE and LENGTH - hero deployment counts, enemy counts per wave, and the
+/// blows-to-die band. Every table that set a CP TARGET or decided a winner was
+/// removed; see the note below. Nothing in this file may grow back into a rule that
+/// knows which side is supposed to win.
+///
+/// Note the split coverage: Deployments/AppliesTo cover stages 1-5, while EnemyWaves
+/// covers 1-10 and the hits-to-die band applies at every stage.
+/// </summary>
 public static class LevelBattleRules
 {
     private static readonly int[][] Deployments =
@@ -20,40 +31,32 @@ public static class LevelBattleRules
         for (int i = 1; i <= Math.Min(matches, TotalPairs(level)); i++) total += HeroesForMatch(level, i);
         return total;
     }
-    /// <summary>
-    /// Reference CP for ONE hero at this level. The team is normalised so its
-    /// TOTAL lands on heroCount * this - see CPBattleController.Prepare. Heroes are
-    /// no longer flattened to an identical value individually, so a genuinely
-    /// strongest hero exists for the battle to protect.
-    /// </summary>
-    public static double PerHeroCP(int level) => level == 1 ? 100 : 125;
-
-    /// <summary>
-    /// CP for each individual enemy, in spawn order, where the design authored
-    /// per-unit values instead of a team budget (Arash, 2026-09-11).
-    ///
-    /// Level 3 introduces a second enemy type, so its three units are not equal.
-    /// A null row means "no per-unit authoring" - that level keeps the team-total
-    /// budget in ReferenceEnemyCP and scales its roster proportionally.
-    /// </summary>
-    private static readonly double[][] EnemyUnits =
-    {
-        new double[] { 35 },            // level 1 - one enemy
-        new double[] { 35, 35 },        // level 2 - two of the same type
-        new double[] { 35, 40, 40 },    // level 3 - type A once, type B twice (115 total)
-        null,                           // level 4 - team budget
-        null                            // level 5 - team budget
-    };
-
-    /// <summary>Per-enemy CP targets for this level, or null if it uses a team budget.</summary>
-    public static double[] EnemyUnitCPs(int level) => AppliesTo(level) ? EnemyUnits[level - 1] : null;
+    // ------------------------------------------------------------------
+    //  REMOVED 2026-09-16 - the CP TARGET tables
+    // ------------------------------------------------------------------
+    // PerHeroCP, EnemyUnits/EnemyUnitCPs and ReferenceEnemyCP are gone, along with
+    // FirstWinningMatch, DamageBudgetPerEnemy, MinHitsToSpendBudget and the
+    // flank/surround/tutorial constants that enforced a pre-decided result.
+    //
+    // They described CP the wrong way round. CP is BOTTOM-UP: a unit's CP comes from
+    // that unit's own stats, and a side's total is the plain sum of its units
+    // (CPBattleController.PlayerCP / EnemyCP). A per-level CP TARGET can only be met
+    // by writing stats back into units, which is exactly what erased the player's
+    // upgrades. Enemy strength now comes from each type's own ProgressionConfigSO
+    // growth curve; hero strength from the player's upgrades. Nothing normalises
+    // either side, and nothing decides the winner in advance.
+    //
+    // The workbook figures those tables encoded (Wittle_Defender_Levels_6-10_Balance
+    // .xlsx) are now a VALIDATION TARGET, not an input: author base stats and curves,
+    // sum the CP, compare, adjust. Do not reintroduce them as constants.
 
     /// <summary>
     /// HOW MANY ENEMIES EACH LEVEL FIELDS, SPLIT INTO WAVES. One int per wave, in
     /// spawn order. Authored by Arash 2026-09-14.
     ///
     ///   L1 [1]     L2 [2]     L3 [3]
-    ///   L4 [2,3]   L5 [2,3]              5 each, but in TWO waves, not one clump
+    ///   L4 [2,2]   L5 [2,3]              L4 cut 5 -> 4 (Arash, 2026-09-16): wave 1 is
+    ///                                    two SIDE BY SIDE, wave 2 is one of each type
     ///   L6 [3,3]   L7 [3,3]              6 each
     ///   L8 [3,4]   L9 [3,4]   L10 [3,4]  7 each
     ///
@@ -61,20 +64,25 @@ public static class LevelBattleRules
     /// table, not the totals. Levels 4/5 already fielded five enemies; what
     /// changes is that they no longer all appear at once.
     ///
-    /// Deliberately a SEPARATE table from Deployments and EnemyUnits: it covers
-    /// levels 6-10, which the CP rules (AppliesTo) do not, and the counts are a
-    /// pacing decision that should be readable without decoding a CP budget.
+    /// Deliberately a SEPARATE table from Deployments: it covers levels 6-10, which
+    /// AppliesTo does not, and the counts are a pacing decision that should be
+    /// readable on its own.
     ///
-    /// The per-enemy CPs in EnemyUnits above are NOT re-derived from this - Arash
-    /// asked for the counts ONLY, from the balance workbook, and explicitly to
-    /// leave the rest of that reference alone.
+    /// COUNTS ONLY. This table says how many enemies arrive and when; it says nothing
+    /// about how strong they are. Enemy strength comes from each type's UnitStatsSO
+    /// base scaled by its own ProgressionConfigSO growth curve, and total enemy CP is
+    /// whatever those units happen to sum to.
+    ///
+    /// Levels 11+ are unauthored: the LevelConfig asset's own waves are used verbatim,
+    /// so counts stop growing there while stats keep rising. Extending this table (or
+    /// replacing it with a curve) is open work.
     /// </summary>
     private static readonly int[][] EnemyWaves =
     {
         new[] { 1 },        // level 1
         new[] { 2 },        // level 2
         new[] { 3 },        // level 3
-        new[] { 2, 3 },     // level 4
+        new[] { 2, 2 },     // level 4 - two side by side, then one of each type
         new[] { 2, 3 },     // level 5
         new[] { 3, 3 },     // level 6
         new[] { 3, 3 },     // level 7
@@ -105,232 +113,116 @@ public static class LevelBattleRules
         return total;
     }
 
-    public static int FirstWinningMatch(int level) => !AppliesTo(level) ? 0 : level == 4 ? 3 : level == 5 ? 4 : 1;
-
     /// <summary>
-    /// Total enemy CP. Derived from the per-unit list where one exists, so the two
-    /// can never drift apart, and falls back to the authored team budget otherwise.
-    /// </summary>
-    public static double ReferenceEnemyCP(int level)
-    {
-        var units = EnemyUnitCPs(level);
-        if (units != null)
-        {
-            double sum = 0;
-            foreach (double cp in units) sum += cp;
-            return sum;
-        }
-        return level == 4 ? 400 : level == 5 ? 650 : 0;
-    }
-
-    /// <summary>
-    /// How much of the protected hero's maximum HP a SINGLE enemy may ever remove,
-    /// as a fraction. Sized so the hero survives even if it ends up facing the whole
-    /// enemy army alone: E enemies x this is always below 1.
-    ///
-    ///     (100 / E) - 5, rounded UP to the nearest 5
-    ///
-    /// E=1 -> 95%, E=2 -> 45%, E=3 -> 30%, E=4 -> 20%, E=5 -> 15%.
-    /// The rounding convention is Arash's: 28.3 for three enemies becomes 30, and
-    /// the guaranteed reserve is whatever is left over (10% at E=3).
-    /// </summary>
-    public static float DamageBudgetPerEnemy(int enemyCount)
-    {
-        if (enemyCount < 1) enemyCount = 1;
-        double raw = (100.0 / enemyCount) - 5.0;
-        double rounded = Math.Ceiling(raw / 5.0) * 5.0;
-        return (float)(Math.Min(95.0, Math.Max(5.0, rounded)) / 100.0);
-    }
-
-    /// <summary>
-    /// Minimum hits an enemy needs to spend its whole budget on the protected
-    /// hero. Raised 4 -> 8 with the universal eight-hit rule, so the two agree:
-    /// an enemy that dies in eight blows also needs eight to spend its allowance.
-    ///     level 2, budget 45%  ->  45/8 = 5.6% per hit
-    ///     level 3, budget 30%  ->  30/8 = 3.8% per hit
-    /// </summary>
-    public const int MinHitsToSpendBudget = 8;
-
-    /// <summary>
-    /// Damage multiplier applied to the protected hero while it is FLANKED - living
-    /// enemies engaging it from the left AND the right at the same time.
-    ///
-    /// A hero facing two enemies on the same side can answer both: it strikes one,
-    /// steps to the next, and every blow it takes is paid for. Caught between two,
-    /// it can only ever face one of them, so the other hits it for free. Halving the
-    /// incoming damage is what makes that position survivable rather than a tax on
-    /// being surrounded.
-    ///
-    /// Level 2: 5.6% per blow becomes 2.8%.   Level 3: 3.8% becomes 1.9%.
-    /// </summary>
-    public const float FlankedDamageScale = 0.5f;
-
-    /// <summary>
-    /// How close a living enemy must be to the protected hero to count as engaging
-    /// it for the flank test. Enemies walking past on their way to the base are
-    /// further out than this and do not make the hero "surrounded".
-    /// </summary>
-    public const float FlankEngageRange = 1.2f;
-
-    /// <summary>
-    /// Enemies engaging the champion from BOTH sides at which the fight stops being a
-    /// flank and becomes a pile-on. Arash, 2026-09-12, from a level 3 playthrough:
-    /// one enemy on one side of the hero and TWO on the other, all three landing
-    /// blows. Halving is the answer to being caught between two; three is a different
-    /// situation and gets its own number below.
-    /// </summary>
-    public const int SurroundedEnemyCount = 3;
-
-    /// <summary>
-    /// What ONE blow may take from the protected hero while
-    /// <see cref="SurroundedEnemyCount"/> or more enemies fight it from both sides,
-    /// as a fraction of its maximum HP. Arash's number: "make it 1% instead of 3.75%".
-    ///
-    ///     level 3 unflanked  3.75%  ->  flanked by two  1.88%  ->  surrounded  1.00%
-    ///
-    /// APPLIED AS A CEILING, NEVER AS A SET VALUE. At level 5 the halved blow is
-    /// already 0.94%, and "set it to 1%" would make being surrounded by five enemies
-    /// HURT MORE than being caught between two. Taking the smaller of the two keeps
-    /// the progression in one direction: the more enemies pile on, the less each blow
-    /// takes.
-    ///
-    /// The LIFETIME allowance is deliberately not touched, exactly as with the flank
-    /// halving - an enemy still gets its full 30%, it simply needs 30 blows to spend
-    /// it instead of 8. Being surrounded buys the hero TIME; it does not make the
-    /// enemies weaker overall.
-    /// </summary>
-    public const float SurroundedDamagePerHit = 0.01f;
-
-    /// <summary>
-    /// What ONE blow takes off the PLAYER's base while the battle is one the player
-    /// is meant to WIN, as a fraction of the base's maximum health.
+    /// What ONE blow takes off the PLAYER's base while that base still has living
+    /// defenders, as a fraction of its maximum health.
     ///
     /// The base used to take literally nothing in that case, which read as a bug: an
     /// enemy that walked past the duel and hammered the castle produced no reaction
     /// at all. One percent is visible feedback without deciding anything - a hundred
-    /// connected blows to fell a base, far longer than any battle here lasts.
+    /// connected blows to fell a base, far longer than any battle here lasts. Once
+    /// every hero has fallen the base takes full damage and the stage ends.
     ///
-    /// IT IS GATED ON THE INTENDED OUTCOME, not on whether any hero is still alive
-    /// (Arash, 2026-09-12). In a battle the player is meant to LOSE the base takes
-    /// its NORMAL damage, because that loss is the point and damping it would leave
-    /// the match unable to end the way the workbook says it must. The old condition -
-    /// "while the base still has living defenders" - answered the wrong question: it
-    /// damped the losing battles right up until the last hero fell, then let the base
-    /// fall at full speed in the battles that were never in danger anyway.
-    /// See CPBattleController.BattleIsAnExpectedWin.
+    /// IT IS GATED ON WHETHER DEFENDERS ARE ALIVE, not on any intended outcome. It
+    /// briefly keyed off CPBattleController.BattleIsAnExpectedWin - damping the base
+    /// only in battles a script had already decided the player would win. That
+    /// question no longer exists; the battle decides its own result.
     ///
-    /// Applied to the PLAYER's base only, deliberately. Letting heroes chip the
-    /// ENEMY base the same way would be an outcome bug, not cosmetic: destroying
-    /// that gate ends the level in a win, so a stray hero could finish a match the
-    /// workbook says must be a loss. The enemy gate keeps full immunity while its
-    /// own defenders live - CPBattleController.HasLivingDefenders.
+    /// Applied to the PLAYER's base only. The ENEMY gate keeps full immunity while
+    /// its own defenders live (CPBattleController.HasLivingDefenders) rather than
+    /// chipping, because felling that gate ENDS the stage in a win - a stray hero
+    /// should not be able to finish a battle its army is losing.
     /// </summary>
     public const float BaseChipPerBlow = 0.01f;
 
     /// <summary>
-    /// NOBODY dies in fewer than this many hits - hero or enemy, every stage this
-    /// system governs. Enforced as a ceiling of maxHP/4 on each blow, never as a
-    /// floor, which is the whole point: a blow that was already gentler than a
-    /// quarter is left alone, so a high-defense unit still takes 5, 6 or 7 hits.
+    /// THE BASE-STATE CALIBRATION TARGET. It is an AUTHORING number, not a runtime
+    /// rule - nothing enforces it during a battle (Arash, 2026-09-16).
     ///
-    /// Measured against the live roster at level 4 (hero CP 125 vs enemy CP 100),
-    /// across 120 real pairings:
-    ///     3 hits x43   4 hits x49   5 hits x14   6 hits x13   7 hits x1
-    /// The ceiling lifts only the 43 three-hit pairings to four and leaves the
-    /// other 77 exactly as authored. Defence spread is real - heroes 10..80,
-    /// enemies 25..78 - and that spread is what produces the variety.
+    /// WHAT IT MEANS. At the BASE state - stage 1, nothing upgraded - a character
+    /// should take about this many blows to die. Author each unit's level-1 maxHP to
+    /// land there against its level-1 opponent:
     ///
-    /// WHY A DAMAGE CEILING AND NOT AN HP INCREASE: maxHP is a CP input
-    /// (CP = ATK x AtkSpd x HP x (1 + DEF/100) / 200). Raising HP to stretch a
-    /// fight raises that unit's CP, which moves the Player/Enemy CP ratio, which
-    /// changes the battle result the workbook says this match must produce. The
-    /// ceiling buys the same visible pacing and leaves every CP figure untouched.
+    ///     maxHP  such that  EffectiveHP / ATK_opponent  ~= 8
+    ///                       (EffectiveHP = maxHP x (1 + DEF/100))
+    ///
+    /// WHAT IT DOES NOT MEAN. It is NOT "nobody may ever die in under eight blows".
+    /// The count is SUPPOSED to drift away from 8 as the campaign runs, and that
+    /// drift is the game's difficulty signal:
+    ///
+    ///     enemies grow EVERY stage; the player upgrades only every ~5 stages,
+    ///     so inside a cycle the hero falls progressively behind -
+    ///         stage 1  ~8 blows to kill the hero
+    ///         stage 3  ~7
+    ///         stage 4  ~5     <- "you are under-levelled, go upgrade"
+    ///         stage 5  upgrade restores ATK *and* HP, back to ~8
+    ///
+    /// A hard floor of eight would ERASE that signal: an under-levelled hero would
+    /// still survive eight blows and the player would never feel behind. It would
+    /// also quietly protect whoever is losing, which is the whole class of behaviour
+    /// this system was stripped of. So there is no such floor - see
+    /// CharacterStats.SafetyBlowFloor for the loose guard that remains.
+    ///
+    /// SIZING THE TWO GROWTH RATES. Enemy growth per stage `g` and the hero's upgrade
+    /// factor `U` every `N` stages should satisfy
+    ///
+    ///     U ~= g^N
+    ///
+    /// so each cycle returns to roughly the same place. Whether the enemy ends a
+    /// cycle slightly ahead or slightly behind the hero is a DESIGN choice, taken
+    /// from the balance workbook - Arash will set the actual figures.
     /// </summary>
-    public const int MinHitsToKillAnyone = 8;
-
-    /// <summary>
-    /// The other end of the band. A blow is also RAISED if it is so weak that the
-    /// fight would drag past this, so no duel outlives about eleven exchanges.
-    ///
-    /// Together the two bounds put every blow between 1/11 and 1/8 of the target's
-    /// maximum - roughly 9% to 12.5% - which is the "at most 10-15% per hit"
-    /// Arash asked for. Where a matchup lands inside the band is decided by
-    /// defence, so a tougher character genuinely takes 9, 10 or 11 rather than
-    /// everything collapsing onto one number.
-    /// </summary>
-    public const int MaxHitsToKillAnyone = 11;
-
-    /// <summary>
-    /// Defence at which a unit reaches the top of the band and takes the full
-    /// <see cref="MaxHitsToKillAnyone"/> blows. Below it, a unit's hits-to-die is
-    /// interpolated between the two bounds.
-    ///
-    /// 80 is the top of the authored range (Enemy_Golem_02 sits at 78, the castle
-    /// at 80), so today's toughest unit lands on 11 and the softest on 8 - and an
-    /// upgrade that raises defence genuinely moves a character up the band, which
-    /// is what "a stronger character should take 9, then 10" asks for.
-    ///
-    /// WHY DEFENCE DRIVES THIS AT ALL: a single fixed ceiling was measured over the
-    /// whole roster and put 240 of 240 matchups on exactly 8 hits. After CP
-    /// normalisation every attacker comfortably clears a 12.5% blow, so the ceiling
-    /// binds every time and all variety collapses. Sizing the ceiling per DEFENDER
-    /// is what restores it.
-    /// </summary>
-    public const float DefenseForMaxHits = 80f;
-
-    /// <summary>
-    /// Blows this defender should take to die, from its own defence. Clamped into
-    /// [Min, Max] so the answer is always inside the band.
-    /// </summary>
-    public static int HitsToKill(float defense)
-    {
-        float t = Mathf.Clamp01(Mathf.Max(0f, defense) / DefenseForMaxHits);
-        int hits = Mathf.RoundToInt(Mathf.Lerp(MinHitsToKillAnyone, MaxHitsToKillAnyone, t));
-        return Mathf.Clamp(hits, MinHitsToKillAnyone, MaxHitsToKillAnyone);
-    }
+    public const int BaseStateBlowsToKill = 8;
 
     // ------------------------------------------------------------------
-    //  TUTORIAL PRESENTATION - levels 1-3 only
+    //  REMOVED 2026-09-16 - every runtime bound on how fast a unit may die
     // ------------------------------------------------------------------
-    // These three levels are an explicit exception (Arash, 2026-09-11). They are
-    // guaranteed wins with one or very few heroes, and at those CP ratios real
-    // combat looks wrong: a level 1 hero at CP 100 against a CP 35 enemy simply
-    // deletes it in a single blow. So the exchange is SCRIPTED for appearance -
-    // fixed hits to kill, fixed damage per hit - while levels 4 and up keep real
-    // combat and the champion model.
+    // Gone: MaxHitsToKillAnyone (11), DefenseForMaxHits (80), HitsToKill(defence),
+    // the maxHP/11 damage FLOOR, and finally the hard maxHP/8 damage CEILING that
+    // guaranteed eight blows.
+    //
+    // Removed in two steps, both at Arash's direction:
+    //
+    //  1. The UPPER bound went first. The maxHP/11 floor lifted every weak blow to
+    //     the same value, so a feeble attacker and a strong one landed IDENTICAL
+    //     damage - ATK stopped affecting who wins, and CP (ATK x AtkSpd x EffectiveHP)
+    //     could only predict through attack speed. Scaling hits-to-die by defence
+    //     also double-counted defence, which already reduces every blow in
+    //     CombatMath.DamagePerHit.
+    //
+    //  2. The eight-blow FLOOR went next, once the model was stated fully: eight is
+    //     where the BASE state should sit, not a law for the whole campaign. Enemies
+    //     grow every stage while the player upgrades every ~5, so a hero is MEANT to
+    //     start dying in 7, then 5 blows as a cycle runs - that is the signal to go
+    //     and upgrade. A hard floor would have hidden it, and would have protected
+    //     whoever was losing.
+    //
+    // What remains is CharacterStats.SafetyBlowFloor, a deliberately loose guard that
+    // exists only so a freak mismatch cannot read as a one-shot. Do not tighten it
+    // back towards eight, and do not reintroduce an upper bound.
 
-    /// <summary>TRUE for the three tutorial levels that use the scripted exchange.</summary>
-    public static bool IsTutorialPresentation(int level) => level >= 1 && level <= 3;
+    // ------------------------------------------------------------------
+    //  REMOVED 2026-09-16 - the TUTORIAL PRESENTATION block (levels 1-3)
+    // ------------------------------------------------------------------
+    // IsTutorialPresentation, TutorialHitsToKillEnemy and TutorialHeroDamagePerHit
+    // are gone, together with CPBattleController.ScriptTutorialBlow and
+    // IsTutorialExchange, which read them.
+    //
+    // They existed because levels 1-3 were guaranteed wins at CP ratios where real
+    // combat looked wrong - a CP 100 hero deleting a CP 35 enemy in one blow - so
+    // the exchange was scripted for appearance. The ratios themselves were the
+    // problem, and they came from heroes vastly outnumbering enemies (12 heroes
+    // against 5 at level 5) plus the CP normalisation that flattened both sides.
+    //
+    // The answer now is to fix the STATS and the counts, not to stage the fight.
+    // Every stage runs the same real combat, and the 8-11 blow band in
+    // CharacterStats.HitsToKillMe governs pacing everywhere.
+    //
+    // Earlier removals, kept as history: "TutorialEnemySpeedScale = 0.6f" (a 40%
+    // enemy slow-down, dropped 2026-09-12 for one uniform authored speed) and
+    // "SoloRushHitsToKill = 2" (a two-hit kill for a lone outnumbered hero, dropped
+    // 2026-09-11). Do not reintroduce a per-level speed or lethality multiplier.
 
-    /// <summary>
-    /// Hits an enemy takes to die in levels 1-3.
-    ///
-    /// Deliberately an ALIAS of <see cref="MinHitsToKillAnyone"/> rather than its
-    /// own number: "level does not matter, nobody dies under eight" is a universal
-    /// rule, and a separate constant here is exactly how the tutorial and the rest
-    /// of the game drifted apart last time.
-    /// </summary>
-    public static int TutorialHitsToKillEnemy => MinHitsToKillAnyone;
-
-    /// <summary>
-    /// Fraction of a hero's maximum HP each enemy blow removes in levels 1-3.
-    /// Applied in both directions - it is a presentation value, not a cap - so the
-    /// tutorial exchange reads the same whatever the units were authored at.
-    /// </summary>
-    public const float TutorialHeroDamagePerHit = 0.07f;
-
-    // REMOVED 2026-09-12: "TutorialEnemySpeedScale = 0.6f", a 40% enemy slow-down
-    // in levels 1-3. Arash replaced it with one uniform speed for every unit at
-    // every level, authored on the stat assets (0.5). The reason it existed - a
-    // spare enemy reaching the player's base while the hero was busy - is now
-    // accepted; the base also takes real chip damage, so that is visible rather
-    // than silent. Do not reintroduce a per-level speed multiplier.
-
-    // NOTE: "SoloRushHitsToKill = 2" was REMOVED on 2026-09-11. It let a lone,
-    // outnumbered hero kill in two, which only ever applied to levels 2 and 3 -
-    // exactly the levels now covered by TutorialHitsToKillEnemy = 5. The pressure
-    // it existed to relieve is handled instead by slowing the enemy approach, which
-    // looks far better than a hero deleting things in two blows.
     public static int ResolveLevel(GameObject owner, LevelConfig config)
     {
         string name = owner.scene.name;

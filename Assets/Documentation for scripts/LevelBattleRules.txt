@@ -1,7 +1,46 @@
-CURRENT UPDATE - 2026-09-14  ENEMY WAVE COUNTS ADDED, COVERING LEVELS 1-10
-New table `EnemyWaves` - how many enemies each level fields, SPLIT INTO WAVES
-(Arash, 2026-09-14):
+CURRENT UPDATE - 2026-09-16  EVERY CP TARGET AND OUTCOME RULE REMOVED
+Deleted (Arash, 2026-09-16), and not to be reintroduced as constants:
+    PerHeroCP, EnemyUnits / EnemyUnitCPs, ReferenceEnemyCP, FirstWinningMatch,
+    DamageBudgetPerEnemy, MinHitsToSpendBudget, FlankedDamageScale,
+    FlankEngageRange, SurroundedEnemyCount, SurroundedDamagePerHit,
+    IsTutorialPresentation, TutorialHitsToKillEnemy, TutorialHeroDamagePerHit,
+    MaxHitsToKillAnyone, DefenseForMaxHits, HitsToKill(defence),
+    MinHitsToKillAnyone (renamed - see below)
 
+`MinHitsToKillAnyone` is now `BaseStateBlowsToKill = 8`, and the rename is the
+point: it is an AUTHORING target for level-1 stats, not a rule anything enforces at
+runtime. See BASE-STATE CALIBRATION below.
+
+They described CP the wrong way round. CP is BOTTOM-UP: a unit's CP comes from that
+unit's own stats, and a side's total is the plain SUM of its units. A per-level CP
+TARGET can only be met by writing stats back into units - which is exactly what
+erased the player's upgrades. Enemy strength now comes from each type's own
+ProgressionConfigSO growth curve; hero strength from the player's upgrades.
+
+The workbook figures those tables encoded (Wittle_Defender_Levels_6-10_Balance.xlsx)
+are now a VALIDATION TARGET, not an input: author base stats and curves, sum the CP,
+compare, adjust. Landing near the figures is the goal; matching them exactly is not.
+
+--------------------------------------------------------------------------------
+PURPOSE
+Authored per-stage pacing tables. "Level" in the design workbook means STAGE, not
+chapter. Pure rules table - no MonoBehaviour, no runtime state.
+
+What remains shapes only a battle's SIZE and LENGTH. Nothing here knows which side
+is supposed to win, and nothing in this file may grow back into a rule that does.
+
+Coverage is deliberately split:
+    Deployments / AppliesTo     stages 1-5
+    EnemyWaves                  stages 1-10
+    hits-to-die band            every stage
+
+DEPLOYMENT
+  Deployments   1: 1-1-1   2: 1-1-2   3: 1-1-2-1   4: 1-1-2-4   5: 1-1-2-2-2-4
+  TotalPairs / HeroesForMatch / TotalHeroes read that table.
+  ResolveLevel  reads the stage number out of the scene name ("..._Stage_N"), else
+                LevelConfig.levelNumber, else LevelManager.CurrentStage.
+
+ENEMY WAVE COUNTS - levels 1-10  (Arash, 2026-09-14)
     L1 [1]    L2 [2]    L3 [3]
     L4 [2,3]  L5 [2,3]                    5 each, but in TWO waves, not one clump
     L6 [3,3]  L7 [3,3]                    6 each
@@ -11,189 +50,105 @@ New table `EnemyWaves` - how many enemies each level fields, SPLIT INTO WAVES
   TotalEnemies(level)    -> sum across waves, 0 when unauthored
   MaxAuthoredEnemyLevel  -> 10
 
-Levels 4+ MUST arrive in two or more waves - that is the point of the table, not
-the totals. L4/L5 already fielded five enemies; what changed is that they no
-longer all appear at once. EnemySpawner.BuildWavesFromRules consumes this.
+  Levels 4+ MUST arrive in two or more waves - that is the point of the table, not
+  the totals. EnemySpawner.BuildWavesFromRules consumes it.
 
-!! THIS TABLE SPANS 1-10, BUT AppliesTo() IS STILL 1-5. The wave counts are
-independent of the CP/deployment rules on purpose, so levels 6-10 get their enemy
-counts without being pulled into the guaranteed-win model. Do not widen AppliesTo
-to match it without also authoring Deployments and EnemyUnits rows for 6-10.
+  COUNTS ONLY. This table says how many enemies arrive and when; it says nothing
+  about how strong they are. Total enemy CP is whatever the spawned units sum to.
 
-!! Per-enemy CP (EnemyUnits) was NOT re-derived from these counts. Arash asked for
-the counts ONLY, out of Wittle_Defender_Levels_6-10_Balance.xlsx, and explicitly
-to ignore the rest of that workbook. Note the workbook's Enemy CP column
-disagrees with the code for levels 1-2 (80/100 vs 35/70) and was left alone.
+  Levels 11+ are unauthored: the LevelConfig asset's own waves are used verbatim, so
+  counts stop growing there while stats keep rising. Extending this table, or
+  replacing it with a curve, is open work.
 
---------------------------------------------------------------------------------
-PURPOSE
-Campaign stages 1-5 only. "Level" in the design workbook means stage, not chapter.
-Pure rules table - no MonoBehaviour, no runtime state. Everything the guaranteed-win
-model needs to know about a stage lives here.
+BASE-STATE CALIBRATION - an AUTHORING target, not a runtime rule
+  BaseStateBlowsToKill = 8      <- the only constant left here
+  (the loose runtime guard is CharacterStats.SafetyBlowFloor = 4)
 
-DEPLOYMENT
-  Deployments   1: 1-1-1   2: 1-1-2   3: 1-1-2-1   4: 1-1-2-4   5: 1-1-2-2-2-4
-  TotalPairs / HeroesForMatch / TotalHeroes read that table.
-  FirstWinningMatch   levels 1-3 -> 1,  level 4 -> 3,  level 5 -> 4.
-  ResolveLevel        reads the stage number out of the scene name ("..._Stage_N"),
-                      else LevelConfig.levelNumber, else LevelManager.CurrentStage.
+  WHAT IT MEANS. At the BASE state - stage 1, nothing upgraded - a character should
+  take about eight blows to die. Author each unit's level-1 maxHP to land there
+  against its level-1 opponent:
 
-COMBAT POWER
-  PerHeroCP(level)    100 at level 1, 125 at levels 2-5. This is the reference for
-                      ONE hero; CPBattleController normalises the team TOTAL to
-                      heroCount x this. Heroes are NOT flattened individually any
-                      more - see NOTES.
+      maxHP  such that  EffectiveHP / ATK_opponent  ~= 8
+                        (EffectiveHP = maxHP x (1 + DEF/100))
 
-  EnemyUnitCPs(level) Per-enemy CP in spawn order, where the design authored
-                      individual values instead of a team budget:
-                          level 1    35
-                          level 2    35, 35
-                          level 3    35, 40, 40      (level 3 adds a second type)
-                          level 4-5  null -> team budget
-  ReferenceEnemyCP    Sum of the per-unit list where one exists, so the two can
-                      never drift apart; 400 / 650 for levels 4-5.
+  WHAT IT DOES NOT MEAN. It is NOT "nobody may ever die in under eight blows".
+  The count is SUPPOSED to drift, and the drift is the difficulty signal:
 
-THE DAMAGE BUDGET
-  DamageBudgetPerEnemy(E)
-      How much of the PROTECTED hero's maximum HP a single enemy may ever remove:
-          (100 / E) - 5, rounded UP to the nearest 5
-      E=1 95%    E=2 45%    E=3 30%    E=4 20%    E=5 15%
-      Sized so E enemies together always leave the hero standing, even if every
-      ally falls and it ends up facing the whole army alone.
+      enemies grow EVERY stage; the player upgrades only every ~5 stages
+          stage 1  ~8 blows to kill the hero
+          stage 3  ~7
+          stage 4  ~5     <- "you are under-levelled, go upgrade"
+          stage 5  upgrade raises ATK *and* HP together, back to ~8
 
-  MinHitsToSpendBudget = 8
-      An enemy needs at least eight hits to spend its allowance, so no single blow
-      takes a visible chunk. At E=3 that is 30% / 8 = 3.75% per hit.
-      RAISED 4 -> 8 with the universal eight-hit rule, so the two agree: an enemy
-      that dies in eight blows also needs eight to spend its allowance.
-      (The doc previously said 4 here, with 7.5% per hit. Stale - it is 8.)
+  A hard eight-blow floor used to sit in CharacterStats and it ERASED that signal:
+  an under-levelled hero still survived its full eight blows, so the player never
+  felt behind. It also silently protected whoever was losing. Removed 2026-09-16.
 
-BEING OUTNUMBERED - applies to the PROTECTED hero only
-  FlankEngageRange = 1.2
-      How close a living enemy must be to count as engaging the hero. Enemies
-      walking past on their way to the base are further out and do not surround it.
+  REMOVED, in two steps, and not to come back:
+    1. MaxHitsToKillAnyone (11), DefenseForMaxHits (80), HitsToKill(defence) and the
+       maxHP/11 damage FLOOR. The floor lifted every weak blow to the same value, so
+       a feeble attacker and a strong one landed IDENTICAL damage - ATK stopped
+       affecting who wins and CP could only predict through attack speed. Scaling
+       hits-to-die by defence also double-counted defence, which already reduces
+       every blow in CombatMath.DamagePerHit.
+    2. The maxHP/8 damage CEILING that guaranteed the eight blows. Eight belongs to
+       the base state, not to the whole campaign.
 
-  FlankedDamageScale = 0.5
-      Caught between two enemies - at least one each side, both genuinely fighting
-      IT - the hero can only ever face one, so the other strikes for free. The blow
-      AND the cap are halved. Two enemies on the SAME side is not a flank: the hero
-      can answer both, so they land full damage.
+  Measured after both removals, 1000 HP defender, guard maxHP/4 = 250:
+      raw 600 -> 4 blows (guard bit)   raw 143 ->  7      raw 91 -> 11
+      raw 250 -> 4 blows               raw 125 ->  8      raw 71 -> 15
+      raw 200 -> 5 blows               raw 111 -> 10      raw 50 -> 20
+  5, 6 and 7 blows are now reachable - impossible under the old clamp.
 
-  SurroundedEnemyCount = 3
-  SurroundedDamagePerHit = 0.01
-      THREE OR MORE from both sides is a different situation again - Arash,
-      2026-09-12, from a level 3 playthrough: one enemy on one side and two on the
-      other, all three landing blows. Each blow is then capped at 1% of the hero's
-      maximum HP.
-          level 3:  3.75% normal  ->  1.88% flanked  ->  1.00% surrounded
-      A CEILING, NOT A SET VALUE. At level 5 the halved blow is already 0.94%, and
-      setting 1% there would make five attackers hurt MORE than two; taking the
-      smaller keeps the progression in one direction.
+SIZING THE TWO GROWTH RATES
+  Enemy growth per stage `g`, hero upgrade factor `U` every `N` stages:
 
-      NEITHER RULE TOUCHES THE LIFETIME ALLOWANCE. An enemy still gets its full
-      30%; at 1% a blow it simply needs 31 blows to spend it instead of 8. Being
-      surrounded buys the hero TIME, it does not make the enemies weaker overall.
-      Evaluated in CPBattleController.LimitDamageToChampion via
-      CountEngagedFlankers, which counts per side rather than answering yes/no.
+      U ~= g^N          (N = 5 as a working assumption)
 
-MINIMUM HITS TO KILL - every stage, level is irrelevant
-  MinHitsToKillAnyone = 8
-  MaxHitsToKillAnyone = 11
-  DefenseForMaxHits   = 80
-  HitsToKill(defense) -> blows this defender takes, interpolated across the band
-
-      Nobody - hero or enemy, any level - dies in fewer than 8 blows, and no duel
-      runs past about 11. Each blow lands between 9.1% and 12.5% of the target's
-      maximum. Where a unit sits is decided by its own DEFENCE, so a tougher
-      character genuinely takes 9, 10 or 11, and an upgrade walks it up the band.
-
-      Measured on the live roster: defence 10 -> 8 hits, 25 -> 9, 40 -> 10,
-      52 -> 10, 65 -> 10, 78 -> 11.
-
-  (superseded) MinHitsToKillAnyone = 4
-      Nobody dies in fewer than four hits, hero or enemy, at any stage 1-5.
-      Enforced in CharacterStats.ClampIncomingBlow (NOT in CPBattleController -
-      it was there first and did not hold; see that file's notes) as a CEILING of
-      maxHP/4 on each blow, never a floor - that is the whole point. A blow already gentler than a quarter passes untouched, so a
-      high-defence unit still takes its natural 5, 6, 7 or 8.
-
-      Measured on the live roster (both directions, 240 pairings per level):
-        level 4   4 hits x146   5 x52   6 x26   7 x13   8 x3
-        level 5   4 hits x148   5 x49   6 x32   7 x10   8 x1
-      Roughly 40% of matchups run longer than the floor, driven by the real
-      defence spread (heroes 10..80, enemies 25..78).
-
-      WHY A DAMAGE CEILING AND NOT AN HP INCREASE: maxHP is a CP INPUT
-      (CP = ATK x AtkSpd x HP x (1 + DEF/100) / 200). Raising HP to stretch a
-      fight raises that unit's CP, which moves the Player/Enemy CP ratio, which
-      changes the result the workbook says the match must produce. The ceiling
-      buys identical pacing and leaves every CP figure untouched.
-
-TUTORIAL PRESENTATION - levels 1-3 only
-  These three levels are an explicit exception. They are guaranteed wins fought by
-  one or very few heroes, and at those CP ratios REAL combat reads badly: a level 1
-  hero at CP 100 against a CP 35 enemy deletes it in a single blow. So the exchange
-  is scripted for appearance, while levels 4-5 keep real combat.
-
-  IsTutorialPresentation(level)   true for 1, 2, 3
-  TutorialHitsToKillEnemy         an ALIAS of MinHitsToKillAnyone (8), deliberately
-                                  not its own constant: "nobody dies under eight" is
-                                  universal, and a separate number here is exactly
-                                  how the tutorial and the rest of the game drifted
-                                  apart last time. Each blow removes 1/8 of the
-                                  enemy and the kill lands on the eighth swing.
-                                  (This doc said 4 / "a quarter" - stale.)
-  TutorialHeroDamagePerHit = 0.07 every enemy blow removes a flat 7% of a hero's
-                                  maximum - set in BOTH directions, not capped
-  REMOVED 2026-09-12: TutorialEnemySpeedScale (a 40% enemy slow-down in levels
-  1-3). Replaced by ONE uniform speed for every unit at every level, authored on
-  the stat assets (currently 0.5). The reason it existed - a spare enemy reaching
-  the player's base while the hero was busy - is now accepted, and that base takes
-  real chip damage (BaseChipPerBlow) so it is visible rather than silent.
-  Do NOT reintroduce a per-level speed multiplier: change the stat block instead,
-  so the Inspector keeps telling the truth.
+  so each cycle returns to roughly the same place. Whether the enemy finishes a cycle
+  slightly ahead of the hero or slightly behind is a DESIGN choice to be taken from
+  the balance workbook - Arash will set the actual figures. Until then, nothing in
+  code assumes either.
 
 THE PLAYER'S BASE
   BaseChipPerBlow = 0.01
-      What one connected blow takes off the PLAYER's base while the battle is one
-      the player is meant to WIN - 1% of the base's maximum.
+      What one connected blow takes off the PLAYER's base WHILE THAT BASE STILL HAS
+      LIVING DEFENDERS - 1% of maximum, a hundred blows to fell it. Once every hero
+      has fallen the base takes full damage and the stage ends.
 
-          meant to WIN   ->  1% a blow (a hundred blows to fell it)
-          meant to LOSE  ->  NORMAL weapon damage
-          no prepared battle (stage 6+) -> NORMAL weapon damage
-
-      GATED ON THE INTENDED OUTCOME, not on whether defenders are alive (Arash,
-      2026-09-12). A stray enemy must not decide a match the player is supposed to
-      win; but in a match the player is supposed to lose, that loss is the point and
-      damping it would leave the battle unable to end as the workbook requires.
-      Read through CPBattleController.BattleIsAnExpectedWin.
+      GATED ON WHETHER DEFENDERS ARE ALIVE, not on any intended outcome. It briefly
+      keyed off CPBattleController.BattleIsAnExpectedWin, damping the base only in
+      battles a script had already decided the player would win; that question no
+      longer exists. Taking literally NOTHING read as a broken game, which is why it
+      chips rather than being immune.
 
       The ENEMY gate is NOT chipped - it keeps full immunity while its own defenders
-      live (CPBattleController.HasLivingDefenders). Destroying it ends the level in a
-      win, so a stray hero chipping it would be an outcome bug, not cosmetic.
-
-  REMOVED: "SoloRushHitsToKill = 2" (2026-09-11). It let a lone, outnumbered hero
-  kill in two, which only ever applied to levels 2 and 3 - exactly the levels the
-  tutorial script now covers at four. The pressure it relieved is handled instead
-  by the speed reduction, which looks far better than deleting enemies in two hits.
+      live (CPBattleController.HasLivingDefenders), because felling that gate ENDS
+      the stage in a win and a stray hero should not finish a battle its army is
+      losing.
 
 HOW IT CONNECTS
-  - CPBattleController    reads every value above
-  - EnemySpawner          ResolveLevel, AppliesTo, enemy counts
+  - EnemySpawner          ResolveLevel, AppliesTo, EnemyWaveCounts
   - PlayerWaveManager     deployment sequence and RuleLevel
+  - CharacterStats        BaseStateBlowsToKill (reported only; the runtime guard is
+                          CharacterStats.SafetyBlowFloor, which lives there not here)
+  - PlayerGateStats       BaseChipPerBlow
   - CPCalculator          AppliesTo gates which rounding path CP display uses
 
 NOTES
-  - Stage 6+ is out of scope entirely: AppliesTo returns false and every caller
-    falls back to the original behaviour.
-  - The workbook's win/loss column is reproducible from the CP ratio alone
-    (R = PlayerCP / EnemyCP): R<0.75 Fast Loss, <1.00 Slow Loss, <1.15 Normal Win,
-    else Fast Win. Verified against all 51 rows of levels 1-10 with zero mismatches.
-    FirstWinningMatch is therefore just "the first match where R crosses 1.00",
-    kept as an explicit table only because CPBattleController asserts the two agree.
-  - Enemy CP for levels 1 and 2 is deliberately BELOW the workbook totals (35 and
-    70 against 80 and 100). Arash set the per-unit values directly on 2026-09-11;
-    the recorded outcomes are unchanged because both were already clear wins.
-  - The per-unit list is indexed by SPAWN ORDER, not by enemy type, so it stays
-    deterministic regardless of how EnemySpawner.ReferenceEntries cycles the
-    authored prefabs. Editing a row re-balances that stage and nothing else.
+  - THE R BANDS ARE STILL THE BEST DESCRIPTION OF THE WORKBOOK, and they are now a
+    PREDICTION to be measured rather than a rule to be enforced:
+        R < 0.75  Fast Loss     R < 1.00  Slow Loss
+        R < 1.15  Normal Win    else      Fast Win
+    Verified against all 51 rows of levels 1-10 with zero mismatches. Feed
+    CPCombatVerification's recorded rows back against these to see how well real
+    combat reproduces them.
+  - The workbook's Enemy CP column disagreed with the old code for levels 1-2
+    (80/100 vs 35/70). Both tables are gone, so the conflict is moot - but expect
+    early-stage totals to differ from the workbook until base stats are retuned.
+  - AppliesTo is still 1-5 while EnemyWaves spans 1-10. Widening AppliesTo needs
+    Deployments rows for 6-10 first.
+  - Enemy growth currently compounds to roughly +22% CP per stage (atk 8% x hp 10% x
+    atkSpd 2% in ProgressionConfigSO), about 44x by stage 20. That is far too steep
+    for an upgrade cadence of a few stages and is the next thing to retune - open
+    work, not done here.

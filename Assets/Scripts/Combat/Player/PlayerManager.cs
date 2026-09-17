@@ -105,25 +105,30 @@ public class PlayerManager : MonoBehaviour
     private float damageAppling;
 
     [Header("TEMPORARY - march speed boost")]
-    [Tooltip("TEMPORARY WORKAROUND, NOT A DESIGN RULE. Multiplies walking speed " +
-             "ONLY after every enemy is dead - the march on the enemy base. Set to " +
-             "1 to switch it off entirely. " +
-             "WHY IT IS HERE: the march was reported as feeling slower than the " +
-             "pre-battle approach. It is NOT - both were measured at a steady 0.6, " +
-             "with no damping anywhere and linearDamping 0 on every prefab. The " +
-             "difference is distance and the total absence of course changes: the " +
-             "approach covers 1-3 units with visible micro-corrections, the march " +
-             "covers the whole lane in a dead-straight line. This boost papers over " +
-             "that until the real cause of the PERCEPTION is understood. " +
-             "Safe to leave on meanwhile: moveSpeed is not a CP input, and by the " +
-             "time it applies there is no enemy left for it to affect.")]
-    [SerializeField, Range(1f, 3f)] private float marchSpeedBoost = 1.3f;
-
-    /// <summary>
-    /// Speed for the march on the enemy base, once the field is clear.
-    /// See <see cref="marchSpeedBoost"/> - this is a temporary measure.
-    /// </summary>
-    public float MarchSpeed => CurrentMoveSpeed * Mathf.Max(1f, marchSpeedBoost);
+    // REMOVED 2026-09-16: "marchSpeedBoost = 1.3" and the MarchSpeed property.
+    //
+    // A HERO NOW MOVES AT ONE CONSTANT SPEED (Arash's directive). The only thing
+    // that may change it is a full STOP - combat, attacking, the deploy lock.
+    //
+    // What the boost did: HandleRoamForward used MarchSpeed while HandleMoveToTarget
+    // used CurrentMoveSpeed, so a hero travelled at 0.78 with no target and dropped
+    // to 0.60 the instant it locked one. Killing an enemy therefore produced a
+    // visible 23% slowdown as the hero turned to chase the next - reported by Arash
+    // and confirmed in play.
+    //
+    // WHY IT MUST NOT COME BACK. It was added because the long march READ as slower
+    // than the short approach, even though both were measured at a steady 0.6 - the
+    // real cause being distance and the absence of course changes. Fixing a
+    // perception problem with a real speed change produced three concrete faults:
+    //   * a unit that changes speed on invisible state reads as broken;
+    //   * moveSpeed is deliberately excluded from CP on the grounds that it does not
+    //     decide a fight - only true while it is CONSTANT. A hero that closes 30%
+    //     faster while untargeted reaches the next enemy sooner and takes less fire
+    //     on the way, which CP cannot see;
+    //   * enemies have no equivalent, so the hero was 20% faster than an enemy while
+    //     chasing but 56% faster while roaming.
+    // If the march ever feels sluggish again, shorten the lane or raise the authored
+    // moveSpeed on BOTH sides - a visible number, not a hidden state multiplier.
 
     [Header("Live speed readout (debug, read-only)")]
     [Tooltip("What this hero is ACTUALLY travelling at right now, measured from how " +
@@ -170,7 +175,8 @@ public class PlayerManager : MonoBehaviour
 
         // Report what this hero is CURRENTLY asking for, so actual-vs-intended stays
         // a valid comparison while the march boost is applied.
-        intendedMoveSpeed = currentTarget ? CurrentMoveSpeed : MarchSpeed;
+        // One speed, with or without a target - see the note on the removed boost.
+        intendedMoveSpeed = CurrentMoveSpeed;
         speedProbeLastPos = now;
         speedProbeStarted = true;
     }
@@ -189,10 +195,14 @@ public class PlayerManager : MonoBehaviour
     public bool faceCenterOnStart = true;
 
     [Header("Anti-Jitter (hysteresis)")]
-    [Tooltip("A NEW enemy must be this much closer, as a fraction, before we switch " +
-             "target. 0.2 = must be 20% closer. Without a margin, two enemies at " +
-             "almost equal distance make the unit swap target every single frame.")]
-    [SerializeField, Range(0f, 0.9f)] private float retargetHysteresis = 0.2f;
+    // REMOVED 2026-09-17: retargetHysteresis (0.2). It let a hero swap to an enemy
+    // that was 20% nearer while it still had a living target, which the
+    // unhandled-enemy rule now forbids outright - UpdateTargetSelection only picks
+    // when it has nothing. The margin it provided is no longer needed either: the
+    // jitter it was fighting came from re-picking every frame, and a sticky target
+    // cannot jitter. Do not reintroduce it without reading rule 1 in
+    // UpdateTargetSelection; with claim-aware ranking a distance re-pick makes two
+    // heroes trade targets with each other indefinitely.
 
     [Tooltip("The OTHER side of a target must be this much closer before we walk " +
              "around to it. Switching sides moves the destination ACROSS the target, " +
@@ -226,6 +236,9 @@ public class PlayerManager : MonoBehaviour
     private void OnEnable()
     {
         EnemyGateStats.OnGateDestroyed += HandleGateDestroyed;
+
+        // File this hero so other heroes can see which enemy it is handling.
+        TargetClaimRegistry.Register(this);
     }
     private void OnDisable()
     {
@@ -234,6 +247,10 @@ public class PlayerManager : MonoBehaviour
         // Hand the attack spot back so a later attacker can use it.
         AttackSlotRegistry.Release(this);
         attackSlotTarget = null;
+
+        // Stop reserving whatever enemy this hero was on, so the next hero to
+        // pick a target sees it as free again.
+        TargetClaimRegistry.Unregister(this);
     }
 
     /// <summary>
@@ -596,11 +613,76 @@ public class PlayerManager : MonoBehaviour
 
     }
 
+    /// <summary>
+    /// Picks and keeps this hero's enemy. Runs every frame from Update.
+    ///
+    /// TWO RULES, in this order (Arash, 2026-09-17):
+    ///
+    /// 1. A LIVE TARGET IS NEVER ABANDONED. Selection only happens when the hero
+    ///    has nothing, or when what it had has died. This replaced a
+    ///    distance-hysteresis re-pick that could hand a hero a nearer enemy
+    ///    mid-approach; with rule 2 below that re-pick became an oscillator,
+    ///    because two heroes comparing the same pair of enemies would swap
+    ///    targets with each other forever.
+    ///
+    /// 2. AN UNHANDLED ENEMY BEATS A CLOSER ONE. See TargetClaimRegistry - the
+    ///    ranking is fewest-other-claimants, then nearest, then instance id.
+    ///
+    /// The scenario that produced the rule: hero A spawns, walks at the left
+    /// enemy; hero B spawns on the same side and, being nearest-driven, walks at
+    /// the SAME enemy, while the right-hand enemy reaches the player base
+    /// unopposed. Under rule 2 hero B crosses to the right enemy even though it
+    /// is much farther away, because nobody else is on it.
+    /// </summary>
     public bool UpdateTargetSelection()
     {
         // =========================
+        // Rule 0: locked heroes do not choose
+        // =========================
+        // A hero still standing on its deploy gate picks NOTHING, and drops
+        // anything it was holding.
+        //
+        // THIS IS THE FIX FOR THE FIRST REPORTED FAILURE OF RULE 2 (2026-09-17).
+        // Update() runs this every frame from the moment a hero is instantiated,
+        // which is ~1.2s BEFORE PlayerWaveManager releases it - and
+        // TargetClaimRegistry.IsHandling deliberately ignores locked heroes,
+        // because a hero stranded on a gate must not reserve an enemy forever.
+        // Put together, an entire wave sitting on the gates saw "nobody is on
+        // anything", every hero of that wave picked the same nearest enemy, and
+        // rule 1 then froze that choice for the rest of the battle. Two heroes
+        // walked at one enemy while the other one strolled at the base - the
+        // exact behaviour rule 2 was written to stop.
+        //
+        // Choosing at RELEASE instead makes the claims real: heroes released in
+        // the same frame still run their Update one after another, and
+        // OtherClaimants is counted live, so the second hero sees the first
+        // hero's fresh claim and moves on to the free enemy.
+        if (!isUnlocked)
+        {
+            currentTarget = null;
+            hasEverDetectedEnemy = false;
+            return false;
+        }
+
+        // =========================
+        // Rule 1: stickiness, with ONE bounded exception
+        // =========================
+        // A live target is never given up for a nearer one. That is what makes a
+        // claim stable enough for every OTHER hero to reason about: a claim that
+        // can be dropped for a marginal distance gain is not information anyone
+        // can act on.
+        if (currentTarget != null && !currentTarget.enemyIsdead)
+        {
+            lastKnownTarget = currentTarget;
+            TryRebalance();
+            return true;
+        }
+
+        // =========================
         // Phase A: First detection
         // =========================
+        // Radius-limited, so a hero still walking in does not lock onto something
+        // on the far side of the field before it has seen anything at all.
         if (!hasEverDetectedEnemy)
         {
             Collider2D[] hits = Physics2D.OverlapCircleAll(
@@ -609,19 +691,29 @@ public class PlayerManager : MonoBehaviour
                 LayerMask.GetMask("EnemyLayer")
             );
 
-            float bestDist = float.MaxValue;
             EnemyStats best = null;
+            int bestClaims = 0;
+            float bestDistSq = 0f;
 
             foreach (var h in hits)
             {
-                EnemyStats es = h.GetComponent<EnemyStats>();
+                // GetComponentInParent fallback: an enemy's overlap collider is
+                // not always on the object that carries EnemyStats. Plain
+                // GetComponent silently dropped those enemies from the candidate
+                // list, which made this pass pick a crowded enemy while a free
+                // one stood two metres away. TargetDetectionForPlayer.IsCandidate
+                // has always had the fallback; this one did not.
+                EnemyStats es = h.GetComponent<EnemyStats>() ?? h.GetComponentInParent<EnemyStats>();
                 if (es == null || es.enemyIsdead) continue;
 
-                float d = Vector2.Distance(transform.position, es.transform.position);
-                if (d < bestDist)
+                int claims = TargetClaimRegistry.OtherClaimants(es, this);
+                float dsq = ((Vector2)(es.transform.position - transform.position)).sqrMagnitude;
+
+                if (TargetClaimRegistry.Beats(es, claims, dsq, best, bestClaims, bestDistSq))
                 {
-                    bestDist = d;
                     best = es;
+                    bestClaims = claims;
+                    bestDistSq = dsq;
                 }
             }
 
@@ -630,6 +722,7 @@ public class PlayerManager : MonoBehaviour
                 currentTarget = best;
                 lastKnownTarget = best;
                 hasEverDetectedEnemy = true;
+                TargetClaimRegistry.LogPick(this, best, bestClaims, bestDistSq, "first detection");
                 return true;
             }
 
@@ -639,53 +732,17 @@ public class PlayerManager : MonoBehaviour
         // =========================
         // Phase B: Persistent search
         // =========================
-        EnemyStats nearest = null;
-        float nearestDist = float.MaxValue;
+        // No radius here on purpose. Once a hero has seen the battle it may be
+        // sent right across the field to cover an enemy nobody else is on - that
+        // is the whole point of the rule, and in the reported case the free enemy
+        // WAS the far one.
+        EnemyStats chosen = RankLivingEnemies(out int chosenClaims, out float chosenDistSq);
 
-        EnemyStats[] allEnemies = FindObjectsOfType<EnemyStats>();
-        for (int i = 0; i < allEnemies.Length; i++)
+        if (chosen != null)
         {
-            EnemyStats es = allEnemies[i];
-            if (es == null || es.enemyIsdead) continue;
-
-            float d = Vector2.Distance(transform.position, es.transform.position);
-            if (d < nearestDist)
-            {
-                nearestDist = d;
-                nearest = es;
-            }
-        }
-
-        if (nearest != null)
-        {
-            if (currentTarget == null)
-            {
-                currentTarget = nearest;
-                lastKnownTarget = nearest;
-            }
-            else
-            {
-                float currentDistSqr =
-                    (transform.position - currentTarget.transform.position).sqrMagnitude;
-
-                float nearestDistSqr =
-                    (transform.position - nearest.transform.position).sqrMagnitude;
-
-                // A new enemy must be CLEARLY closer before we switch. Comparing
-                // raw distances meant two enemies at almost equal range swapped the
-                // target every frame, which flipped the approach side and the
-                // sprite with it. Dead current targets are handled above, so this
-                // only ever delays a marginal upgrade.
-                float retargetMargin = 1f - retargetHysteresis;
-
-                if (currentTarget.enemyIsdead ||
-                    nearestDistSqr < currentDistSqr * retargetMargin * retargetMargin)
-                {
-                    currentTarget = nearest;
-                    lastKnownTarget = nearest;
-                }
-            }
-
+            currentTarget = chosen;
+            lastKnownTarget = chosen;
+            TargetClaimRegistry.LogPick(this, chosen, chosenClaims, chosenDistSq, "persistent search");
             return true;
         }
 
@@ -694,6 +751,95 @@ public class PlayerManager : MonoBehaviour
         lastKnownTarget = null;
         hasEverDetectedEnemy = false;
         return false;
+    }
+
+    /// <summary>
+    /// Ranks every living enemy on the field for THIS hero and returns the best
+    /// one, by TargetClaimRegistry.Beats. Shared by the persistent search and by
+    /// the re-balance so they can never disagree.
+    /// </summary>
+    private EnemyStats RankLivingEnemies(out int bestClaims, out float bestDistSq)
+    {
+        EnemyStats best = null;
+        bestClaims = 0;
+        bestDistSq = 0f;
+
+        EnemyStats[] allEnemies = FindObjectsOfType<EnemyStats>();
+        for (int i = 0; i < allEnemies.Length; i++)
+        {
+            EnemyStats es = allEnemies[i];
+            if (es == null || es.enemyIsdead) continue;
+
+            int claims = TargetClaimRegistry.OtherClaimants(es, this);
+            float dsq = ((Vector2)(es.transform.position - transform.position)).sqrMagnitude;
+
+            if (TargetClaimRegistry.Beats(es, claims, dsq, best, bestClaims, bestDistSq))
+            {
+                best = es;
+                bestClaims = claims;
+                bestDistSq = dsq;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>How often a doubled-up hero may look for somewhere better to be.</summary>
+    private const float RebalanceInterval = 0.5f;
+    private float nextRebalanceTime;
+
+    /// <summary>
+    /// RULE 1b - the only way a hero ever leaves a living enemy.
+    ///
+    /// WHY IT EXISTS. Rule 2 only fires at the moment a hero picks, and that
+    /// moment is often too early to be right. Measured on level 4 (2026-09-17,
+    /// from the [TARGET] log): enemies arrive in TWO waves, so the heroes of the
+    /// first deployment correctly doubled up on the only enemy that existed -
+    /// there was nothing else to choose - and rule 1 then held them there after
+    /// the second wave walked in unopposed. The rule was working; "decide once,
+    /// at spawn" was simply not enough information.
+    ///
+    /// THE CONDITION, and why it cannot oscillate:
+    ///   * It only runs when this hero's target is SHARED (myOthers > 0). A hero
+    ///     fighting alone never moves, so a fight is never abandoned on a whim.
+    ///   * It only moves to an enemy with STRICTLY fewer other claimants.
+    ///   * OtherClaimants excludes self and is counted LIVE, so the instant this
+    ///     hero leaves, its old target reads one claimant fewer for everybody.
+    /// Together those make it a strict descent: every switch lowers the crowding
+    /// of the hero that moves, and the hero left behind is now alone, so IT will
+    /// not move. Two heroes cannot trade places - the second one re-reads the
+    /// board after the first has already moved and finds nothing to improve.
+    ///
+    /// Worked example, 3 heroes on E1 and 1 on E2: the first to evaluate sees
+    /// myOthers=2, finds E2 at 1, moves. The next sees myOthers=1 and E2 at 2 -
+    /// no strict improvement, stays. Settles at 2/2 and stops.
+    ///
+    /// Throttled to RebalanceInterval because the scan behind it is a full-scene
+    /// FindObjectsOfType. It runs only for heroes that are actually doubled up,
+    /// and at most twice a second each.
+    /// </summary>
+    private void TryRebalance()
+    {
+        if (Time.time < nextRebalanceTime) return;
+        nextRebalanceTime = Time.time + RebalanceInterval;
+
+        // Alone on this enemy: nothing to fix, and this is also the guard that
+        // makes the whole thing terminate.
+        int myOthers = TargetClaimRegistry.OtherClaimants(currentTarget, this);
+        if (myOthers <= 0) return;
+
+        EnemyStats best = RankLivingEnemies(out int bestClaims, out float bestDistSq);
+        if (best == null || best == currentTarget) return;
+
+        // STRICT improvement only. ">=" here would let two heroes swap targets
+        // with each other forever, which is the bug SESSIONS.md has registered
+        // five separate times in this codebase.
+        if (bestClaims >= myOthers) return;
+
+        currentTarget = best;
+        lastKnownTarget = best;
+        TargetClaimRegistry.LogPick(this, best, bestClaims, bestDistSq,
+                                    $"re-balance, left an enemy shared with {myOthers}");
     }
 
     public Vector3 GetActiveTargetPosition()
@@ -828,9 +974,10 @@ public class PlayerManager : MonoBehaviour
             transform.position += (Vector3)CrowdSeparation2D.Instance.ResolveOverlap(transform);
         }
 
-        // MarchSpeed, not CurrentMoveSpeed: the temporary boost above applies only
-        // here, on the walk to the enemy base with no enemies left alive.
-        playerRigidbody.linearVelocity = dir * MarchSpeed;
+        // THE SAME CurrentMoveSpeed as HandleMoveToTarget. This line used to read
+        // MarchSpeed, which was 1.3x faster, so a hero sped up the moment its target
+        // died and slowed down again as soon as it locked the next one.
+        playerRigidbody.linearVelocity = dir * CurrentMoveSpeed;
         SetAnimMoving(true);
     }
 

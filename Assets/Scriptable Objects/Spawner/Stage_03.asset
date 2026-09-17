@@ -28,30 +28,13 @@ MonoBehaviour:
     secondRowDelay: 0.35
     entries:
     - enemyPrefab: {fileID: 4367385366119628093, guid: 3065521d068d75447b209a6866fe33c1, type: 3}
-      statsBase: {fileID: 11400000, guid: 2f60d89d09f7f644f837555f769b6fd5, type: 2}
-      count: 3
+      statsBase: {fileID: 11400000, guid: fedc048441b60834b891a7b88ec57db6, type: 2}
+      count: 2
       row: 0
       unitLevel: 1
-    concurrencyCap: 0
-  - name: Wave 2
-    delayBeforeWave: 1.5
-    formation: 1
-    spawnMin: {x: -3, y: 4.25}
-    spawnMax: {x: 3, y: 6.25}
-    gridColumns: 4
-    minSlotSpacing: {x: 0.8, y: 0.5}
-    frontAnchor: 0
-    rowYOffset: 1.2
-    secondRowDelay: 0.35
-    entries:
     - enemyPrefab: {fileID: 6411937674325925182, guid: 5bff2e5b095d3c842bd4db2fc620d638, type: 3}
-      statsBase: {fileID: 11400000, guid: c6cbf9fc280dc084d89b707c253af02a, type: 2}
-      count: 2
+      statsBase: {fileID: 11400000, guid: c9c8e77f6b3905b42bebcbee4f2b5a8a, type: 2}
+      count: 1
       row: 0
-      unitLevel: 1
-    - enemyPrefab: {fileID: 4367385366119628093, guid: 3065521d068d75447b209a6866fe33c1, type: 3}
-      statsBase: {fileID: 11400000, guid: 2f60d89d09f7f644f837555f769b6fd5, type: 2}
-      count: 2
-      row: 1
       unitLevel: 1
     concurrencyCap: 0

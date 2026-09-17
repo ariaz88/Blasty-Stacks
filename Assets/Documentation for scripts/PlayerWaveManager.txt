@@ -1,4 +1,21 @@
-CURRENT UPDATE - 2026-09-14  PHASE 2: NO HERO IS SPAWNED ONTO A GATE ANY MORE
+CURRENT UPDATE - 2026-09-16  HERO CALIBRATION REPLACED BY PLAIN REGISTRATION
+The spawn path used to end with
+    if (UsesDeploymentRules) CPBattleController.CalibrateHero(pm, RuleLevel);
+which applied the team-normalisation factor to the hero - overwriting the player's
+upgraded stats. It is now
+    CPBattleController.RegisterHero(pm);
+called UNCONDITIONALLY, at every stage. It only adds the hero to the CP roster and
+ensures MeleeContactRecovery; it never touches unitStats.
+
+This also fixes a latent bug: the old call was gated on UsesDeploymentRules (stages
+1-5) AND bailed out again inside for any level outside 1-5, so heroes from stage 6
+on never received MeleeContactRecovery at all and could stick on melee contact.
+
+A hero's battlefield stats are now exactly what PlayerStatsApplier.CurrentStats
+produced, so Units-menu upgrades finally reach the fight.
+
+--------------------------------------------------------------------------------
+PREVIOUS UPDATE - 2026-09-14  PHASE 2: NO HERO IS SPAWNED ONTO A GATE ANY MORE
 (supersedes every "spawn"/"gate"/"release jump" note below while the flag is ON)
 
 New Inspector flag `suppressStageSpawning`, DEFAULT ON. While it is on:

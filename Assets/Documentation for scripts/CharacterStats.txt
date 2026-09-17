@@ -1,3 +1,50 @@
+CURRENT UPDATE - 2026-09-16  THE PAUSE GATE MOVED IN; HitsToKillMe IS UNIFORM
+1. ClampIncomingBlow now starts with
+       if (GameplayPause.IsPaused || !LevelGameManager.IsBattleRunning) return 0f;
+   That gate used to live in CPBattleController.AdjustIncomingDamage and was the
+   ONLY thing blocking damage while paused or before the battle ran - PlayerStats
+   and EnemyStats never checked it themselves. That method was deleted with the rest
+   of the enforcement layer, so the gate moved down to this chokepoint, for the same
+   reason the blow clamp lives here: no early return can skip it. DO NOT DROP IT.
+
+2. EVERY RUNTIME BOUND ON BLOWS-TO-DIE IS DELETED. Removed in two steps:
+   first the maxHealth/11 damage FLOOR, `allowFloor`, and HitsToKillMe's dependence
+   on defence; then the hard maxHealth/8 CEILING that guaranteed eight blows.
+
+   BLOWS-TO-DIE IS NOW EMERGENT. It comes from the attacker's ATK against this
+   unit's HP and defence, and nothing enforces a number.
+
+   Eight is where the BASE state should sit, reached by AUTHORING each unit's
+   level-1 maxHP (LevelBattleRules.BaseStateBlowsToKill), not by clamping. The count
+   is SUPPOSED to drift, and that drift is the difficulty signal:
+       enemies grow EVERY stage; the player upgrades only every ~5 stages
+       stage 1  ~8 blows to kill the hero
+       stage 3  ~7
+       stage 4  ~5      <- "you are under-levelled, go upgrade"
+       stage 5  upgrade raises ATK *and* HP together, back to ~8
+   A hard eight-blow floor erased that signal completely - an under-levelled hero
+   still survived its full eight - and silently protected whoever was losing.
+
+   Why the old FLOOR was the harmful half: lifting every soft blow to a flat
+   maxHP/11 made a feeble attacker and a strong one land the SAME damage, so ATK
+   stopped affecting who wins and CP could only predict through attack speed.
+   Scaling hits-to-die by defence also double-counted defence, which already reduces
+   each blow in CombatMath.DamagePerHit.
+
+3. WHAT REMAINS is SafetyBlowFloor = 4 (Arash's number): a single blow may never
+   remove more than maxHealth/4. It is NOT balance - it exists only so a freak
+   mismatch cannot read as a one-shot. At a sane base calibration it never binds.
+
+   Measured, 1000 HP defender, guard = 250:
+       raw 600 -> 4 blows (guard bit)   raw 143 ->  7      raw 91 -> 11
+       raw 250 -> 4 blows               raw 125 ->  8      raw 71 -> 15
+       raw 200 -> 5 blows               raw 111 -> 10      raw 50 -> 20
+   5, 6 and 7 blows are now REACHABLE - they were impossible under the old clamp.
+
+!! DO NOT RAISE SafetyBlowFloor BACK TOWARDS EIGHT. That re-creates the hard floor
+and the under-levelled signal disappears again. Set base HP instead.
+
+--------------------------------------------------------------------------------
 ================================================================================
   CharacterStats.cs
   Path : Assets/Scripts/Combat/Shared/CharacterStats.cs
@@ -73,12 +120,15 @@ METHODS
 
 HOW IT CONNECTS
 ---------------
-  - PlayerStats.ApplyDamageToPlayer and EnemyStats.ApplyDamageToEnemy both call
-    ClampIncomingBlow AFTER CPBattleController.AdjustIncomingDamage.
-  - LevelBattleRules.HitsToKill / MinHitsToKillAnyone / MaxHitsToKillAnyone /
-    DefenseForMaxHits supply the band.
-  - CPBattleController still owns the CHAMPION budget and the levels 1-3 script;
-    this class owns only the universal floor.
+  (STALE as of 2026-09-16 - the current wiring is at the top of this file)
+  - PlayerStats.ApplyDamageToPlayer and EnemyStats.ApplyDamageToEnemy now call
+    ClampIncomingBlow FIRST and then CPBattleController.ReportBlow, which only
+    observes. AdjustIncomingDamage no longer exists.
+  - LevelBattleRules.BaseStateBlowsToKill is a reported expectation only;
+    HitsToKill / MinHitsToKillAnyone / MaxHitsToKillAnyone / DefenseForMaxHits are
+    all deleted. The only runtime bound is this class's own SafetyBlowFloor = 4.
+  - CPBattleController owns NOTHING in combat any more - no champion budget, no
+    levels 1-3 script. It is a read-only CP reporter.
 
 NOTES
 -----

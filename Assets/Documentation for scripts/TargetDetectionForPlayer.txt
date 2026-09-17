@@ -1,3 +1,14 @@
+CURRENT UPDATE - 2026-09-17  ACQUIRE ONLY, AND "UNHANDLED" BEATS "NEAREST"
+This class no longer switches a living target for a nearer one. Three Inspector
+fields and one method were deleted with that behaviour:
+    allowNearestSwitch, onlySwitchIfInFront, retargetHysteresis   (fields)
+    EnsureTarget1                                                 (dead sibling)
+    AcquireNearestEnemy  ->  renamed AcquireBestEnemy
+A hero now keeps its enemy until that enemy dies, and picks a new one by FEWEST
+OTHER HEROES ON IT first, nearest second. See TargetClaimRegistry.txt for the
+rule and PlayerManager.UpdateTargetSelection for the other half of it. The
+sections below have been rewritten; nothing under "Retargeting" survives.
+
 ================================================================================
   TargetDetectionForPlayer.cs
   Path : Assets/Scripts/Combat/Player/TargetDetectionForPlayer.cs
@@ -10,8 +21,7 @@ PURPOSE
 -------
 All of the player's enemy-finding logic in one place. The FSM states call a
 single method, EnsureTarget(), and this class decides whether the current target
-is still valid, acquires a new one, and optionally switches to a nearer enemy
-without jittering back and forth.
+is still valid and, if not, acquires a new one.
 
 Centralising this is why PlayerIdleState is only five lines long.
 
@@ -23,39 +33,64 @@ INSPECTOR FIELDS
                          instead of the 3D Physics.OverlapSphere
 
   Retargeting
-    allowNearestSwitch   (bool, default false) may abandon a valid target for a
-                         closer one
-    onlySwitchIfInFront  (bool, default true) candidate must be inside the FOV
     respectFOV           (bool, default false) apply the FOV test when
                          validating or searching
-    retargetHysteresis   (float, min 0, default 0.35)
-                         A candidate must be at least this much NEARER before a
-                         switch happens. This is the anti-jitter guard: without
-                         it, two enemies at nearly equal distance would make the
-                         unit flip target every frame.
+
+    REMOVED 2026-09-17: allowNearestSwitch, onlySwitchIfInFront and
+    retargetHysteresis. All three served one behaviour - "drop the enemy you
+    have for a nearer one" - and that behaviour is now forbidden. Every other
+    hero reads PlayerManager.currentTarget as a CLAIM, and a claim that can be
+    dropped for 30cm of distance is not information anyone can act on.
+    PlayerIdleState was the only caller and it passed `true`, so this was live
+    code, not a dormant option.
 
 KEY METHODS
 -----------
   EnsureTarget(bool? overrideAllowNearestSwitch = null) -> bool
       The single entry point called from the states.
-      1. If the current target is invalid, acquire the nearest enemy. If one is
-         found, set playerManager.hasDetectedEnemyOnce = true (a latch other
-         systems use to know the unit has engaged at least once).
-      2. If retargeting is allowed, find the nearest OTHER enemy and switch only
-         when it passes the FOV gate AND is nearer by more than the hysteresis.
-      Returns whether a valid target exists afterwards.
-      The optional parameter lets a caller force retargeting on or off - for
-      example PlayerIdleState calls EnsureTarget(true).
+
+      RETURNS FALSE IMMEDIATELY WHILE playerManager.isUnlocked IS FALSE. A hero
+      on its deploy gate picks nothing - same reason as rule 0 in
+      PlayerManager.UpdateTargetSelection: locked heroes are invisible to
+      TargetClaimRegistry, so a whole wave choosing while it waits on the gates
+      all picks the same enemy. This is the SECOND acquisition path, so it needs
+      the guard independently or it reopens the hole on its own.
+
+      Otherwise ACQUIRE ONLY:
+      if the current target is invalid, acquire the best enemy; if one is found,
+      set playerManager.hasDetectedEnemyOnce = true (a latch other systems use to
+      know the unit has engaged at least once). Returns whether a valid target
+      exists afterwards.
+
+      The parameter is KEPT SO PlayerIdleState STILL COMPILES and is no longer
+      read. It is not an accidental no-op: "switch to whatever is nearest" is
+      precisely the behaviour that sent two heroes at the same enemy while the
+      other one walked into the player base.
 
   IsTargetValid(EnemyStats target, bool doFOV) -> bool
-      Conservative checks in order: not null, activeInHierarchy, within
-      playerManager.detectionRadius, and optionally inside the FOV.
+      not null, activeInHierarchy, NOT enemyIsdead, optionally inside the FOV.
 
-  AcquireNearestEnemy(bool doFOV, EnemyStats exclude, out float bestDist)
+      NO RADIUS TEST since 2026-09-17. It used to reject anything further away
+      than detectionRadius, which contradicts the new rule: a hero is
+      deliberately sent across the field to cover an enemy nobody else is on, and
+      a radius test would declare that target invalid on arrival and re-acquire
+      the nearest one - exactly the pile-up the rule removes.
+
+      The enemyIsdead test is NEW. Only activeInHierarchy was checked before, so
+      a corpse still playing its death animation read as a valid target and the
+      hero stood waiting for it.
+
+  AcquireBestEnemy(bool doFOV, EnemyStats exclude, out float bestDist)
       Runs an overlap query (2D or 3D depending on use2D) against
       enemyDetectionLayer within playerManager.detectionRadius, and returns the
-      nearest valid EnemyStats using squared distance. Can exclude one candidate
-      (used to find "the nearest OTHER enemy").
+      BEST valid EnemyStats: fewest other heroes handling it, then nearest, then
+      lowest instance id. The ranking itself is TargetClaimRegistry.Beats, shared
+      with PlayerManager.UpdateTargetSelection so the two acquisition paths in
+      this project can never disagree about who to pick. Can exclude one
+      candidate.
+
+      Renamed from AcquireNearestEnemy - "nearest" stopped being the whole rule
+      and a name that still said so would be a trap.
 
   AnyEnemyAliveInScene() -> bool
       Used by PlayerPursueTargetState to decide whether it is allowed to switch
@@ -70,11 +105,18 @@ HOW IT CONNECTS
   - PlayerIdleState, PlayerPursueTargetState and PlayerCombatState all rely on
     it instead of running their own physics queries.
   - Writes playerManager.currentTarget and hasDetectedEnemyOnce.
+  - Calls TargetClaimRegistry.OtherClaimants / .Beats for the ranking.
+  - This is the SECOND of two acquisition paths. The other is
+    PlayerManager.UpdateTargetSelection, which runs every frame from Update and
+    searches the whole field with no radius limit. They agree only because
+    neither one may switch a living target - before stickiness, whichever ran
+    last won.
 
 NOTES
 -----
-  - A dead numbered variant EnsureTarget1() remains. It is identical except that
-    it does not set hasDetectedEnemyOnce. The un-numbered version is live.
+  - REMOVED 2026-09-17: EnsureTarget1, a dead numbered variant with no call site.
+    It differed only in not setting hasDetectedEnemyOnce, so reviving it would
+    have left that latch false forever.
   - The overlap queries allocate an array on every call (OverlapCircleAll rather
     than the NonAlloc variant). Because they run per unit per state tick, using
     Physics2D.OverlapCircleNonAlloc with a reusable buffer would remove a

@@ -241,8 +241,11 @@ public class LevelGameManager : MonoBehaviour
     /// </summary>
     private void Update()
     {
-        // Tutorial results require a physically destroyed gate, never a timeout.
-        if (CPBattleController.Instance && CPBattleController.Instance.IsPrepared) return;
+        // NOTE: this used to bail out whenever a CP battle was prepared, because the
+        // scripted stages required a physically destroyed gate rather than a timeout.
+        // Nothing is scripted any more, and CPBattleController is now prepared for
+        // EVERY battle as a reporter - so keeping that check would have disabled
+        // mutual-wipe detection permanently and hung the stage in Playing forever.
         if (!detectMutualWipe || CurrentState != GameState.Playing)
         {
             stalemateTimer = 0f;

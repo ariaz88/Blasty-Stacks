@@ -71,36 +71,10 @@ public class EnemyManager : MonoBehaviour
     // Guards the once-per-death work: awarding XP and starting the despawn.
     private bool xpGiven = false;
 
-    public void Initialize1(int stageLevelFromSpawner)
-    {
-        stageLevel = stageLevelFromSpawner;
-        RebuildFromBase();
-    }
-
-    public void RebuildFromBase1()
-    {
-        unitStats.FromSO(statsBase);
-
-        if (progression)
-        {
-            var g = ProgressionMath.GetGrowthMultipliers(unitLevel, progression);
-            unitStats.attack *= g.gA;
-            unitStats.defense *= g.gD;
-            unitStats.maxHP *= g.gH;
-            unitStats.attackSpeed *= g.gAS;
-        }
-
-        unitStats.ApplyMultipliers(_atkM, _defM, _hpM, _mvM, _asM, _rngM);
-
-        var hp = GetComponent<EnemyStats>();
-        if (hp)
-        {
-            hp.maxHealth = unitStats.maxHP;
-            hp.currentHP = unitStats.maxHP;
-        }
-
-        cp = UnitCP_WithFallback(unitStats, stageLevel, cpWeights);
-    }
+    // REMOVED 2026-09-16: Initialize1 / RebuildFromBase1, dead numbered siblings of
+    // the two methods below. Neither had a call site. Initialize1 differed only in
+    // NOT setting unitLevel from the stage, so an enemy built through it never grew
+    // with the campaign at all - reviving it would silently disable enemy scaling.
 
     public void Initialize(int stageLevelFromSpawner)
     {
@@ -662,6 +636,56 @@ public class EnemyManager : MonoBehaviour
             SetInitialFacingByScreenHalf();
         }
     }
+    // ------------------------------------------------------------------
+    //  FIRST-STRIKE RULE - the hero always opens an engagement
+    // ------------------------------------------------------------------
+    [Header("First strike")]
+    [Tooltip("Safety valve for the first-strike rule. An enemy that has never been " +
+             "struck holds its opening swing, but only for this long - after that it " +
+             "attacks anyway so a hero that never arrives cannot freeze the battle. " +
+             "Keep it well ABOVE the time a hero needs to close and swing.")]
+    [SerializeField, Min(0f)] private float firstStrikeGrace = 3f;
+
+    private CharacterStats firstStrikeTarget;
+    private float firstStrikeEngagedAt;
+
+    /// <summary>
+    /// FALSE while this enemy is still owing the hero the opening blow.
+    ///
+    /// WHY THIS EXISTS. Arash reported that the enemy always swung first, and it did -
+    /// not through any stat advantage. Both sides start with currentRecoveryTimer 0 on
+    /// every prefab and their reach is all but identical (hero maxAttackRange 0.85,
+    /// enemy stoppingDistance 0.83). The cause was pure SEQUENCE: the enemy spawns the
+    /// moment BATTLE is pressed, walks down and is standing still, facing, cooldown
+    /// ready, by the time the hero finishes its 6s deployment load and closes. The
+    /// hero is still moving into its attack slot, so the enemy gets a free opening hit.
+    ///
+    /// That free hit decided whole duels, because blow counts are integers: a hero
+    /// killing in 4.05 swings and dying in 4.52 both round to 5, so whoever lands
+    /// first wins outright and a real 12% advantage counted for nothing.
+    ///
+    /// The rule: an enemy holds its opening swing until it has taken at least one hit.
+    /// After that it fights completely normally - this is an OPENING rule, not a
+    /// damage handicap, and it never changes how hard anyone hits.
+    ///
+    /// THE GRACE IS A DEADLOCK GUARD, not balance. If the hero never arrives - it died
+    /// on the way, it is fighting someone else, it is stuck - the enemy must not stand
+    /// there forever, so after firstStrikeGrace it swings regardless.
+    /// </summary>
+    private bool MayStrike(CharacterStats hero)
+    {
+        if (firstStrikeTarget != hero)
+        {
+            firstStrikeTarget = hero;
+            firstStrikeEngagedAt = Time.time;
+        }
+
+        // Already struck: the hero has had its opening, fight normally from here.
+        if (enemyStats && enemyStats.HitsTaken > 0) return true;
+
+        return Time.time - firstStrikeEngagedAt >= firstStrikeGrace;
+    }
+
     void HandleCurrentAction()
     {
         if (enemyLocoMotion == null) return;
@@ -679,6 +703,10 @@ public class EnemyManager : MonoBehaviour
             var ps = enemyLocoMotion.currentTarget;
             if (!ps.playerIsdead && !enemyStats.enemyIsdead)
             {
+                // THE FIRST BLOW OF AN ENGAGEMENT BELONGS TO THE HERO (Arash, 2026-09-16).
+                // Hold the swing until this enemy has actually been struck - see MayStrike.
+                if (!MayStrike(ps)) { UpdateFacing(); return; }
+
                 AttackTarget();
                 UpdateFacing();
             }

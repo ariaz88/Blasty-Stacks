@@ -174,91 +174,26 @@ public class EnemySpawner : MonoBehaviour
     private IEnumerator StartPreparedBattle()
     {
         int stage = LevelBattleRules.ResolveLevel(gameObject, levelConfig);
-        if (LevelBattleRules.AppliesTo(stage))
-        {
-            var heroes = FindObjectOfType<PlayerWaveManager>();
-            if (!heroes)
-            {
-                Debug.LogError("[EnemySpawner] CP battle requires a PlayerWaveManager.", this);
-                yield break;
-            }
-            heroes.SealForBattle();
+        var heroes = FindObjectOfType<PlayerWaveManager>();
 
-            // !! PHASE 2: the CP layer CANNOT run here, and skipping it is not an
-            // optimisation - it is the only way enemies spawn at all.
-            //
-            // CPBattleController.Prepare needs the WHOLE hero roster at battle
-            // start: it normalises team CP and throws "No heroes were released for
-            // this battle" on an empty one. Under PHASE 2 the roster IS empty when
-            // BATTLE is pressed - heroes now arrive progressively through
-            // HeroDeploymentSequencer's 6s loads. Prepare therefore returned false
-            // and the `yield break` below it aborted StartPreparedBattle BEFORE
-            // RunLevel, so not one enemy ever spawned - which in turn froze every
-            // hero, because holdUntilFirstEnemySpawns waits on HasSpawnedFirstEnemy.
-            //
-            // Deliberately gated on CardRewardsActive rather than deleted: turning
-            // suppressStageSpawning off restores the old spawn path AND this one
-            // together.
-            if (!heroes.CardRewardsActive)
-            {
-                while (!heroes.DeploymentsReady && !heroes.DeploymentFailed) yield return null;
-                if (heroes.DeploymentFailed) yield break;
-                cpBattle = gameObject.AddComponent<CPBattleController>();
-                if (!cpBattle.Prepare(this, heroes)) yield break;
-            }
-        }
+        if (LevelBattleRules.AppliesTo(stage) && heroes) heroes.SealForBattle();
+
+        // The reporter is created for EVERY battle, at every stage, and it cannot
+        // fail. It only measures - it never rescales a unit and never decides a
+        // result - so there is nothing here that can abort the spawn.
+        //
+        // It used to be gated on !CardRewardsActive because the old Prepare()
+        // normalised team CP and returned false on an empty roster, which aborted
+        // this coroutine before RunLevel and meant no enemy ever spawned. Heroes
+        // arrive progressively through HeroDeploymentSequencer's timed loads, so an
+        // empty roster at battle start is normal; late arrivals register themselves
+        // through CPBattleController.RegisterHero.
+        cpBattle = gameObject.AddComponent<CPBattleController>();
+        cpBattle.Prepare(this, heroes);
+
         yield return RunLevel();
     }
 
-    public double PlannedEnemyCP()
-    {
-        double total = 0;
-        int stage = LevelBattleRules.ResolveLevel(gameObject, levelConfig);
-        foreach (var entry in ReferenceEntries(stage))
-        {
-            if (entry == null || !entry.enemyPrefab || !entry.statsBase || entry.count <= 0)
-                throw new System.ArgumentException("Invalid enemy wave entry.");
-            var enemy = entry.enemyPrefab.GetComponent<EnemyManager>();
-            if (!enemy || !entry.enemyPrefab.GetComponent<EnemyStats>())
-                throw new System.ArgumentException("Enemy prefab needs EnemyManager and EnemyStats.");
-            var stats = new UnitStatsRuntime();
-            stats.FromSO(entry.statsBase);
-            var growth = ProgressionMath.GetGrowthMultipliers(stage, enemy.progression);
-            stats.attack *= growth.gA;
-            stats.defense *= growth.gD;
-            stats.maxHP *= growth.gH;
-            stats.attackSpeed *= growth.gAS;
-            double cp = CPCalculator.UnitPower(stats);
-            if (!(cp > 0)) throw new System.ArgumentException("Every enemy needs positive CP.");
-            total += cp;
-        }
-        return total;
-    }
-
-    // Stages 1-5 have exactly stage-number enemies, spread across authored types.
-    // Do not mutate shared LevelConfig assets (later stages may also reference them).
-    private List<WaveEntry> ReferenceEntries(int stage)
-    {
-        var types = new List<WaveEntry>();
-        foreach (var wave in levelConfig.waves)
-            foreach (var entry in wave.entries)
-                if (entry != null && ValidateEntry(entry) && !types.Exists(x => x.enemyPrefab == entry.enemyPrefab)) types.Add(entry);
-        if (types.Count == 0) throw new System.ArgumentException("No valid enemy prefabs in level config.");
-        var result = new List<WaveEntry>();
-        for (int i = 0; i < stage; i++) result.Add(types[i % types.Count]);
-        return result;
-    }
-
-    private IEnumerator RunReferenceLevel(int stage)
-    {
-        var entries = ReferenceEntries(stage);
-        var wave = levelConfig.waves[0];
-        yield return WaitForSecondsGameplay(levelConfig.startDelay + wave.delayBeforeWave);
-        ResolveSpawnArea(wave, out var min, out var max);
-        var positions = GenerateGridPositions(min, max, entries.Count, wave.gridColumns, wave.minSlotSpacing);
-        for (int i = 0; i < entries.Count; i++) SpawnOne(entries[i], positions[i], stage);
-        AllWavesDispatched = true;
-    }
     bool IsGameplayPaused()
     {
         return HudCurrencyView.Instance != null && HudCurrencyView.Instance.IsGameplayPaused;
@@ -312,12 +247,14 @@ public class EnemySpawner : MonoBehaviour
     }
     IEnumerator RunLevel()
     {
-        if (cpBattle)
-        {
-            yield return RunReferenceLevel(LevelBattleRules.ResolveLevel(gameObject, levelConfig));
-            yield break;
-        }
-        // Use LevelManager�s global additive stage index as the stage/CP level.
+        // REMOVED 2026-09-16: a short-circuit into RunReferenceLevel whenever a CP
+        // battle existed. That path spawned exactly `stage` enemies in one clump to
+        // hit a reference CP budget, ignoring the authored wave table entirely. Both
+        // it and the budget are gone - enemy counts come from LevelBattleRules
+        // .EnemyWaveCounts and enemy strength from each type's own growth curve.
+        // cpBattle now exists in every battle and must not change how they spawn.
+
+        // Use LevelManager's global additive stage index as the stage/CP level.
         // Fallback to levelConfig.levelNumber if LevelManager is not present
         // (e.g. when testing the scene directly).
         int stageLevel = LevelManager.Instance != null

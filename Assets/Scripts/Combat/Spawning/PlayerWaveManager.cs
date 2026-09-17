@@ -1069,7 +1069,11 @@ public class PlayerWaveManager : MonoBehaviour
                                  "computed stats - keeping prefab defaults.", pm);
         }
 
-        if (UsesDeploymentRules) CPBattleController.CalibrateHero(pm, RuleLevel);
+        // Unconditional, at EVERY stage. This registers the hero for CP reporting and
+        // attaches MeleeContactRecovery. It used to be gated on UsesDeploymentRules
+        // (stages 1-5) AND bailed out again inside for any other level, so heroes from
+        // stage 6 on never got the melee unstick helper at all.
+        CPBattleController.RegisterHero(pm);
         return pm;
     }
 

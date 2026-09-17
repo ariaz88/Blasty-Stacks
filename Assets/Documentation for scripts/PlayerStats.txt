@@ -1,4 +1,13 @@
-CURRENT UPDATE - 2026-09-10 (supersedes conflicting older notes below)
+CURRENT UPDATE - 2026-09-16 (supersedes everything below about damage adjustment)
+ApplyDamageToPlayer NO LONGER ADJUSTS DAMAGE AT ALL. CPBattleController.AdjustIncomingDamage and IsProtected are gone with the rest of the enforcement layer, so the blow lands exactly as the attacker's stats produced it. The order is now:
+    damage = ClampIncomingBlow(damage, attacker)     loose safety guard only (maxHP/4)
+    CPBattleController.ReportBlow(this, damage)      OBSERVATION ONLY, returns void
+    SetResolvedHealth(...)
+There is no winning-side mitigation and no champion HP safety net any longer - those decided the result in advance. `attacker` is still passed, now only so CharacterStats.ReportDeath can print the per-attacker hit breakdown.
+The pause / battle-not-running gate that used to live inside AdjustIncomingDamage moved into CharacterStats.ClampIncomingBlow; it was the only thing enforcing it and this file never checked it independently.
+
+--------------------------------------------------------------------------------
+SUPERSEDED - 2026-09-10 (kept for history)
 ApplyDamageToPlayer now passes real incoming hit damage through CPBattleController.AdjustIncomingDamage. No controller independently ticks HP. SetResolvedHealth is a health update helper only; it is called by ApplyDamageToPlayer, updates against live maxHealth, tolerates missing healthBar and flags death at zero. Stages 1-5 have explicit winning-side mitigation and a 1%-HP safety net; other stages keep normal damage.
 
 ================================================================================

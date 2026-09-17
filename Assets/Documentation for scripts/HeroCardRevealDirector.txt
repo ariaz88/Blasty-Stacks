@@ -123,8 +123,27 @@ FLOW
       and PlayerWaveManager never clears it, so the unsubscribe is MANDATORY.
 
   HandleHeroesEarned(heroes, anchorWorld)
-      Restarts the coroutine if one is already running rather than overlapping two
-      fans. Queued matches already arrive one at a time, so this is a safety net.
+      ENQUEUES the reward and starts DrainDealQueue if it is not already running.
+
+  DrainDealQueue()  [coroutine]
+      Plays every queued deal back to back. Holds IsDealing for the WHOLE queue,
+      not per deal, so the board cannot be touched in the gap between two rewards.
+
+  !! DEALS QUEUE - THEY MUST NOT CANCEL EACH OTHER. The first version called
+  StopCoroutine on the running deal and restarted, with a comment claiming awards
+  "arrive one at a time, so this is a safety net, not the normal path". THAT WAS
+  WRONG and measurably so: PlayerWaveManager's planned loop waits only
+  `nextWaveDelay` (0.75s default, PlayerWaveManager.cs:23) between awards, while a
+  full deal is ~1.87s. One piece placement that clears TWO matches bumps
+  MatchesCleared by two, both `while (MatchesCleared < match)` guards fall through
+  at once, and the second award lands ~0.75s into the first deal. The board-input
+  gate does NOT prevent it, because both matches came from a placement that had
+  already resolved. Cancelling threw away the first match's cards mid-animation,
+  so the player never saw what that match earned.
+
+  PlayDeal no longer touches IsDealing or `playing` - DrainDealQueue owns both.
+  OnDisable clears the queue, or a deal queued before a scene change would replay
+  the previous stage's reward over the new one.
 
   PlayDeal(heroes, anchorWorld)  [coroutine]
       Runs the beats above. Uses Time.unscaledDeltaTime and

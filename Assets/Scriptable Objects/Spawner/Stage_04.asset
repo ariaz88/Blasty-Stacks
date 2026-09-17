@@ -18,11 +18,11 @@ MonoBehaviour:
   waves:
   - name: Wave 1
     delayBeforeWave: 0.5
-    formation: 1
-    spawnMin: {x: -3, y: 4.25}
-    spawnMax: {x: 3, y: 6.25}
-    gridColumns: 4
-    minSlotSpacing: {x: 0.8, y: 0.5}
+    formation: 0
+    spawnMin: {x: -13.5, y: 4.25}
+    spawnMax: {x: 13.5, y: 6.25}
+    gridColumns: 2
+    minSlotSpacing: {x: 9, y: 0.5}
     frontAnchor: 0
     rowYOffset: 1.2
     secondRowDelay: 0.35
@@ -40,11 +40,11 @@ MonoBehaviour:
     concurrencyCap: 0
   - name: Wave 2
     delayBeforeWave: 1.5
-    formation: 1
-    spawnMin: {x: -3, y: 4.25}
-    spawnMax: {x: 3, y: 6.25}
-    gridColumns: 4
-    minSlotSpacing: {x: 0.8, y: 0.5}
+    formation: 0
+    spawnMin: {x: -13.5, y: 4.25}
+    spawnMax: {x: 13.5, y: 6.25}
+    gridColumns: 2
+    minSlotSpacing: {x: 9, y: 0.5}
     frontAnchor: 0
     rowYOffset: 1.2
     secondRowDelay: 0.35

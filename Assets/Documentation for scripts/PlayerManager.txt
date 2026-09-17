@@ -1,3 +1,53 @@
+CURRENT UPDATE - 2026-09-17  TARGETING: UNHANDLED BEATS NEAREST, AND TARGETS STICK
+Two rules were added to UpdateTargetSelection (rewritten in full, see its section):
+  1. A hero NEVER abandons a living target. `retargetHysteresis` is DELETED with
+     the re-pick it guarded.
+  2. When picking, an enemy NO other hero is handling outranks a closer one.
+     Ranking lives in the new TargetClaimRegistry (fewest claimants, then nearest,
+     then instance id) and is shared with TargetDetectionForPlayer.AcquireBestEnemy.
+OnEnable/OnDisable now Register/Unregister this hero with TargetClaimRegistry.
+A hero's claim IS its currentTarget field - there is no separate claim object and
+nothing to release. Read TargetClaimRegistry.txt before changing either rule.
+
+PREVIOUS UPDATE - 2026-09-16  A HERO MOVES AT ONE CONSTANT SPEED
+`marchSpeedBoost` (1.3) and the `MarchSpeed` property are DELETED. Both movement
+paths now use CurrentMoveSpeed:
+    HandleRoamForward   (no target)  -> dir * CurrentMoveSpeed
+    HandleMoveToTarget  (has target) -> dir * CurrentMoveSpeed
+The only thing that may change a hero's speed is a full STOP - combat, attacking,
+the deploy lock (Arash's directive).
+
+THE BUG IT FIXES. HandleRoamForward used MarchSpeed while HandleMoveToTarget used
+CurrentMoveSpeed, so a hero travelled at 0.78 with no target and dropped to 0.60 the
+instant it locked one. Killing an enemy produced a visible 23% slowdown as the hero
+turned to chase the next. Reported by Arash from play, then confirmed in the code.
+
+WHY IT MUST NOT COME BACK. The boost was added because the long march READ as slower
+than the short approach - even though both measured a steady 0.6, the real cause
+being distance and the absence of course changes. Fixing a perception problem with a
+real speed change produced three faults:
+  * a unit that changes speed on invisible state reads as broken;
+  * moveSpeed is excluded from CP on the grounds that it does not decide a fight -
+    only true while it is CONSTANT. A hero closing 30% faster while untargeted
+    reaches the next enemy sooner and takes less fire on the way, which CP cannot see;
+  * enemies have no equivalent, so the hero was 20% faster than an enemy while
+    chasing but 56% faster while roaming.
+If the march feels sluggish again: shorten the lane, or raise the authored moveSpeed
+on BOTH sides. A visible number, never a hidden state multiplier.
+
+OTHER THINGS THAT STILL AFFECT EFFECTIVE SPEED (none of them change the speed value):
+  1. CrowdSeparation2D.SteerAroundBlockers (avoidStrength 0.9) bends the travel
+     DIRECTION up to ~42 degrees around an ally, so forward progress toward the
+     target drops to about 74% while a blocker is close. Allies only, never enemies.
+  2. ResolveAttackDestination sends each attacker to its own slot on an arc AROUND
+     the target, so the path is longer than a straight line.
+  3. MeleeContactRecovery.IsRepositioning makes FixedUpdate return BEFORE the state
+     machine; the body is then driven by MovePosition and the damage collider is
+     disabled. Fires after 2.5s without contact, lasts up to 1.1s.
+Authored speeds for reference: every hero 0.60, every enemy 0.50 - NOT equal,
+despite an older note in SESSIONS.md claiming they are.
+
+--------------------------------------------------------------------------------
 ================================================================================
   PlayerManager.cs
   Path : Assets/Scripts/Combat/Player/PlayerManager.cs
@@ -196,19 +246,91 @@ Update()
 
 UpdateTargetSelection() -> bool
 --------------------------------
-  A two-phase target search:
+  THREE RULES then a two-phase search. Rewritten 2026-09-17.
+
+  RULE 0 - A LOCKED HERO DOES NOT CHOOSE
+      While isUnlocked is false the method clears currentTarget, resets
+      hasEverDetectedEnemy and returns. A hero standing on its deploy gate picks
+      nothing.
+
+      THIS IS WHAT BROKE RULE 2 ON ITS FIRST PLAYTEST. Update() calls this every
+      frame from the moment a hero is instantiated - roughly 1.2s BEFORE
+      PlayerWaveManager.UnlockCurrentWave releases it - and
+      TargetClaimRegistry.IsHandling deliberately ignores locked heroes, so a
+      hero on a gate cannot reserve an enemy. Both halves are individually right
+      and together they were a hole: a whole wave waiting on the gates saw
+      "nobody is on anything", every hero picked the same nearest enemy, and rule
+      1 then froze that choice for the rest of the battle. Arash's screenshot:
+      two heroes on one enemy while the other walked at the base unopposed.
+
+      Choosing at RELEASE makes the claims real. Heroes released in the same
+      frame still run Update one after another, and OtherClaimants is counted
+      live, so the second hero sees the first one's fresh claim.
+
+  RULE 1b - THE ONE EXCEPTION: RE-BALANCE OFF A SHARED TARGET
+      TryRebalance(), called only while the hero HAS a live target, at most every
+      RebalanceInterval (0.5s). It moves the hero only when BOTH hold:
+        * its current target is SHARED (myOthers > 0) - a hero fighting alone
+          never moves, so no fight is dropped on a whim; and
+        * some enemy has STRICTLY fewer other claimants.
+
+      WHY IT WAS NEEDED. Rule 2 fires only at the moment of picking, and that
+      moment is often too early. Measured on level 4 from the [TARGET] log
+      (2026-09-17): enemies arrive in TWO waves, so the first deployment
+      correctly doubled up on the only enemy that existed - there was nothing
+      else to choose - and rule 1 then held them there while wave 2 walked in
+      unopposed. The rule was working; "decide once, at spawn" was not enough.
+
+      WHY IT CANNOT OSCILLATE. OtherClaimants excludes self and is counted LIVE,
+      so the instant a hero leaves, its old target reads one claimant fewer for
+      everyone. Every switch strictly lowers the crowding of the hero that moves,
+      and the hero left behind is then alone and will not move. Worked example,
+      3 heroes on E1 and 1 on E2: the first to evaluate sees myOthers=2, finds E2
+      at 1, moves; the next sees myOthers=1 against E2 at 2, no strict
+      improvement, stays. Settles at 2/2 and stops. Using ">=" instead of ">"
+      would re-create the five-times-registered swap bug.
+
+  RULE 1 - A LIVE TARGET IS NEVER ABANDONED (except by rule 1b)
+      If currentTarget exists and is not dead, the method returns immediately.
+      Everything below runs only when the hero has nothing, or when what it had
+      has died. This replaced a distance-hysteresis re-pick (retargetHysteresis,
+      0.2 = "must be 20% closer"), which is DELETED.
+
+      Stickiness is not a nicety - it is what makes rule 2 possible. Every other
+      hero reads currentTarget as a CLAIM, and a claim that can be dropped for a
+      marginal distance gain is not information anyone can act on. Worse, with
+      claim-aware ranking a distance re-pick becomes an oscillator: two heroes
+      comparing the same pair of enemies trade targets with each other forever.
+
+  RULE 2 - AN UNHANDLED ENEMY BEATS A CLOSER ONE
+      Candidates are ranked by TargetClaimRegistry.Beats: fewest OTHER heroes
+      already on it, then nearest, then lowest instance id. When every enemy is
+      equally covered this collapses back to plain "nearest", so ordinary fights
+      look unchanged.
+
+      THE SCENARIO IT FIXES (Arash, from play): hero A spawns and walks at the
+      left enemy; hero B spawns on the same side and, being nearest-driven, walks
+      at the SAME enemy - while the right-hand enemy reaches the player base
+      unopposed. Hero B now crosses to the right enemy although it is far away,
+      because nobody else is on it.
 
   PHASE A - First detection (while !hasEverDetectedEnemy)
       Runs ONE Physics2D.OverlapCircleAll against "EnemyLayer" within
-      detectionRadius, picks the nearest living EnemyStats. On success sets
+      detectionRadius and picks the best living EnemyStats by the ranking above.
+      Radius-limited so a hero still walking in cannot lock onto something on the
+      far side of the field before it has seen anything at all. On success sets
       currentTarget/lastKnownTarget and latches hasEverDetectedEnemy = true.
 
   PHASE B - Persistent search (once hasEverDetectedEnemy is true)
-      From then on it calls FindObjectsOfType<EnemyStats>() EVERY FRAME and
-      scans ALL of them for the nearest living one, only switching
-      currentTarget if the newly-nearest is STRICTLY closer than the existing
-      target (using squared distance). If none remain, clears both target
-      fields and hasEverDetectedEnemy, dropping back to Phase A next frame.
+      Calls FindObjectsOfType<EnemyStats>() and ranks ALL living enemies the same
+      way. NO radius limit, on purpose: a hero may be sent right across the field
+      to cover an enemy nobody else is on, and in the reported case the free
+      enemy WAS the far one. If none remain, clears both target fields and
+      hasEverDetectedEnemy, dropping back to Phase A next frame.
+
+      Because of rule 1 this now runs only on the frames where a hero has no
+      target, not every frame - which incidentally removes most of the cost the
+      warning below is about.
 
   !! PERFORMANCE: Phase B runs FindObjectsOfType<EnemyStats>() - a full scene
   scan allocating an array - EVERY FRAME for EVERY player unit once it has
@@ -344,18 +466,22 @@ NOTES / RISKS
 -------------
   - DUPLICATE TARGETING SYSTEMS: this class's own UpdateTargetSelection() and
     TargetDetectionForPlayer.EnsureTarget() (called from the FSM states) are
-    two independent implementations that both assign playerManager.currentTarget
-    every frame, using different search strategies (this one scans ALL
-    EnemyStats every frame in Phase B; TargetDetectionForPlayer uses a
-    configurable overlap radius with hysteresis and FOV options). Because both
-    run every frame, the LAST one to execute in the frame order wins, and it is
-    not obvious from either file alone which will "stick". This is very likely
-    a leftover from an earlier target-acquisition design that was never fully
-    replaced - worth consolidating onto TargetDetectionForPlayer alone.
-  - UpdateTargetSelection's Phase B is the single most expensive operation
-    running every frame per unit in the combat layer (full-scene
-    FindObjectsOfType scan). With many player units alive simultaneously this
-    is O(units * enemies) per frame.
+    still two independent implementations that both assign
+    playerManager.currentTarget, using different search strategies (this one
+    scans ALL EnemyStats with no radius limit in Phase B; TargetDetectionForPlayer
+    uses a configurable overlap radius with FOV options). They are STILL worth
+    consolidating onto one path.
+
+    [2026-09-17] The race they used to run is defused, not removed. Neither path
+    may switch a living target any more, and both rank candidates through the
+    same TargetClaimRegistry.Beats, so whichever executes last in a frame now
+    reaches the same answer. Before stickiness the last writer simply won, and
+    neither file made that visible.
+  - UpdateTargetSelection's Phase B is a full-scene FindObjectsOfType scan, and
+    it used to run every frame for every unit. [2026-09-17] Rule 1 means it now
+    runs only on the frames where a hero has NO target - at spawn and after its
+    enemy dies - so the per-frame O(units * enemies) cost is largely gone. It is
+    still the expensive path when a whole wave dies at once.
   - [2026-08-21] RESOLVED: the two concurrent anti-overlap systems
     (ApplyFriendlySeparation inside movement, and the separate
     ResolveHorizontalOverlap in FixedUpdate) are both gone. Spacing is owned by

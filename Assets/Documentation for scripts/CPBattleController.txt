@@ -1,187 +1,125 @@
+CURRENT UPDATE - 2026-09-16  THE ENFORCEMENT IS GONE; THIS IS NOW A READ-ONLY REPORTER
+This script used to decide the winner before the battle began. All of that was
+removed (Arash, 2026-09-16). What is left only MEASURES.
+
+Removed, and none of it may come back:
+  * the hero rescale to heroCount x PerHeroCP - it ERASED the player's Units-menu
+    upgrades at battle start, which was the reported bug;
+  * PlayerShouldWin (from MatchesCleared) and the throw when CP disagreed with it;
+  * ChooseChampion + LimitDamageToChampion - one hero that could not lose, and a
+    per-enemy lifetime damage allowance against it;
+  * ScriptTutorialBlow / IsTutorialExchange - levels 1-3 staged outright;
+  * CountEngagedFlankers / ChampionIsFlanked / ChampionIsSurrounded - they existed
+    only to feed the champion's damage budget;
+  * ScaleToCP / ApplyFactor / EnemyScale - top-down distribution of a team CP
+    budget across the enemies;
+  * BattleIsAnExpectedWin - the player's base damped only in battles the script had
+    already decided the player would win;
+  * CalibrateHero's normalisation half (the MeleeContactRecovery half survives as
+    RegisterHero).
+
+If a future change needs one side to win, change its STATS or its growth curve.
+Never this file.
+
+--------------------------------------------------------------------------------
 PURPOSE
-Stages 1-5 referee: reference CP calibration plus the guaranteed-win model.
-Added at runtime by EnemySpawner. Never ticks HP, kills units remotely, stops
-waves, or destroys a gate - only real weapon hits ever deal damage.
+Read-only combat-power reporter, added at runtime by EnemySpawner for EVERY battle
+at every stage. It keeps the roster of both sides, sums their CP and reports the
+ratio. It never writes to a unit, never adjusts damage, and never ends a battle.
 
-THE MODEL  (Arash, 2026-09-11)
-Exactly ONE hero is assisted: the strongest on the field, chosen when the battle
-is prepared. It carries the guarantee alone. Every other hero fights with NO
-assistance at all - it wins, loses or dies exactly as it would with this component
-absent, and the damage it deals on the way is real. That is what makes the fight
-read as genuine rather than staged.
+CP IS BOTTOM-UP
+  CP_unit  = ATK x AtkSpd x maxHP x (1 + DEF/100) / 200     (CPCalculator.UnitPower)
+  PlayerCP = sum of CP over the heroes on the field
+  EnemyCP  = sum of CP over the enemies on the field
+  Ratio    = PlayerCP / EnemyCP
 
-The protected hero is not invulnerable and has no blanket HP floor. Each
-INDIVIDUAL enemy instead gets a lifetime allowance of how much of that hero it may
-ever remove, spread over at least four hits.
+Totals are READOUTS, never inputs. Same enemy type -> same stats -> same CP;
+different type -> different base -> different CP. A hero fights with exactly the
+stats the player's upgrades produced; an enemy with exactly the stats its type's
+ProgressionConfigSO curve produced.
 
 FIELDS
   Instance / IsPrepared        scene-scoped singleton and readiness flag
-  PlayerCP / EnemyCP           reference totals for this battle
-  PlayerShouldWin              matches cleared vs LevelBattleRules.FirstWinningMatch
-  BattleResult / Level / HeroCount
-  Champion                     the protected hero; null when the player should lose
+  Level                        global stage number, for the report line
+  PlayerCP / EnemyCP / Ratio   summed live on read, never cached, never written back
+  HeroCount / EnemyCount       roster sizes
   HeroDeaths / EnemyDeaths / FewestHitsBeforeDeath
-                               telemetry read by the Editor verification harness
-  teamFactor                   team normalisation factor, reused by reinforcements
-  budgetPerEnemy / perHitCap   the guarantee, from LevelBattleRules
-  plannedEnemyCount            enemies this stage fields (= level number)
-  tutorialExchange             levels 1-3: the scripted presentation is active
-  spentByEnemy                 per-attacker lifetime damage against the champion
+                               telemetry read by CPCombatVerification
+  playerCurve / enemyCurve     RESERVED, unused. Arash asked for a per-side curve to
+                               be available here. Nothing reads them, and nothing may
+                               read them to CHANGE a unit - reporting or prediction
+                               weighting only.
+  heroUnits / enemyUnits       the managers, for CP
+  heroes / enemies             their CharacterStats, for HasLivingDefenders
 
 FLOW
   Prepare(spawner, waves)
-    1. Resolve level; bail unless stages 1-5 and deployments have settled.
-    2. TEAM-TOTAL normalisation. Sum the roster's raw CP, then scale every hero by
-       one shared factor so the TOTAL lands on heroCount x PerHeroCP. Preserves
-       each hero's share, so a genuinely strongest hero exists - see NOTES.
-    3. Enemy budget, EnemyScale, PlayerShouldWin, and the assert that reference CP
-       and the deployment outcome agree.
-    4. ChooseChampion.
+    Snapshots whichever heroes are already on the field, sets IsPrepared, logs the
+    opening report. DELIBERATELY CANNOT FAIL and returns void: heroes now arrive
+    progressively through HeroDeploymentSequencer's timed loads, so an empty roster
+    at battle start is the NORMAL case, not an error.
+    The old Prepare returned bool and aborted the spawn coroutine on an empty
+    roster, which is why it had to be gated off entirely under the card-reward flow -
+    with it enabled, not one enemy ever spawned.
 
-  ChooseChampion(roster)
-    Highest CP after normalisation, instance-id tie-break so the choice does not
-    depend on spawn order. Returns without choosing when the player is meant to
-    LOSE: a lost battle runs completely unassisted, which is what lets a Slow Loss
-    earn its length from near-matched armies rather than a damage multiplier.
+  RegisterHero(hero)                                                    [static]
+    Ensures MeleeContactRecovery, then adds the hero to the CP roster.
+    CALLED FOR EVERY HERO AT EVERY STAGE. It used to be CalibrateHero, gated on
+    UsesDeploymentRules AND bailing out again inside for any level outside 1-5, so
+    heroes from stage 6 on never got the melee unstick helper at all.
 
   RegisterEnemy(enemy)
-    Per-unit CP where LevelBattleRules authored it (levels 1-3), otherwise the team
-    budget shared out in proportion to each type's authored strength. It no longer
-    touches moveSpeed - the levels 1-3 slow-down was removed on 2026-09-12 in
-    favour of one uniform authored speed.
-
-  IsTutorialExchange                                                    [static]
-    TRUE while levels 1-3 run their scripted exchange. CharacterStats reads it so
-    those levels use a FLAT eight blows for every unit instead of the 8-11 defence
-    band, which is what levels 4-5 use.
-
-  CalibrateHero(hero, level)                                            [static]
-    Ensures MeleeContactRecovery, and applies teamFactor to a hero that arrived
-    AFTER Prepare (a mid-battle reinforcement). Heroes present at Prepare are
-    scaled there instead, in one pass, because team normalisation needs to see the
-    whole roster at once.
-
-  AdjustIncomingDamage(target, damage, attacker)                        [static]
-    Called only when a weapon actually hits. `attacker` is REQUIRED by the model:
-    budgets are per individual enemy, so identical blows from two enemies have to
-    be accounted separately. Order: count the hit; ScriptTutorialBlow in levels
-    1-3; then LimitDamageToChampion for the protected hero.
-
-    THE FOUR-HIT CEILING IS NO LONGER HERE. It was, and it did not hold in play -
-    a level 4 enemy still died in two hits, because every early return above skips
-    it silently (no battle prepared, unit missing from the registered sets, stale
-    static Instance, scene mismatch). It now lives in
-    CharacterStats.ClampIncomingBlow, which PlayerStats/EnemyStats apply AFTER
-    this call, where nothing can bypass it. Do not re-add it here.
-
-  CountEngagedFlankers(out left, out right)                             [private]
-    Counts the enemies genuinely fighting the champion on EACH side of it.
-    BEING NEARBY IS NOT ENOUGH - an enemy counts only if ALL of these hold:
-      1. alive;
-      2. within LevelBattleRules.FlankEngageRange (1.2)   - cheap reject first;
-      3. clearly to one side, |dx| >= MeleeEngagement.SideDeadZoneX (0.25), so
-         directly above or below counts as NEITHER;
-      4. its OWN currentTarget is this hero - it is fighting IT, not some other
-         hero it happens to be standing beside;
-      5. IsInAttackPosition() - close and level enough that its weapon really lands.
-    Two enemies standing either side while one of them is busy with somebody else
-    is not a flank: the hero only takes free hits when both are hitting IT.
-    IT COUNTS RATHER THAN STOPPING AT ONE PER SIDE. The earlier version returned as
-    soon as it had a left and a right, which is all a yes/no flank needs - but it
-    cannot tell 1-and-1 from 1-and-2, and since 2026-09-12 those are different
-    rules. Bounded by the stage's enemy count, 5 at most.
-
-  ChampionIsFlanked                                                    [property]
-    left > 0 && right > 0. Public, for on-screen debugging.
-
-  ChampionIsSurrounded                                                 [property]
-    Flanked AND left + right >= LevelBattleRules.SurroundedEnemyCount (3) - the
-    hero is not merely caught between two but PILED ON, one enemy on one side and
-    two on the other. Reported from a level 3 playthrough (Arash, 2026-09-12).
-    Public, for on-screen debugging.
-
-  LimitDamageToChampion(attacker, damage)
-    0. FLANK HALVING. While flanked, the blow AND the cap are both multiplied by
-       LevelBattleRules.FlankedDamageScale (0.5) - level 2 drops 5.63% -> 2.81%,
-       level 3 3.75% -> 1.88%. A hero facing two enemies on the SAME side can
-       answer both; caught between two it can only face one, so the other hits it
-       for free. The lifetime allowance is deliberately NOT scaled: an enemy still
-       gets its full 45%/30%, it just needs twice the blows to spend it. Being
-       surrounded buys time, it does not weaken the enemies.
-    0b. SURROUNDED CEILING. While 3+ enemies fight it from both sides, the blow is
-       additionally capped at LevelBattleRules.SurroundedDamagePerHit (1% of max).
-       Level 3: 3.75% normal -> 1.88% flanked -> 1.00% surrounded.
-       A CEILING, NOT A SET VALUE. At level 5 the halved blow is already 0.94%, and
-       setting 1% there would make five attackers hurt MORE than two. Taking the
-       smaller keeps the progression in one direction.
-       It reads the count ONCE and shares it with the halving above - reading both
-       properties here would repeat the whole walk per blow and could disagree if a
-       unit moved between the two reads.
-    1. no single blow above budget / 8 of maximum HP (level 2: 5.63%, level 3: 3.75%);
-    2. each enemy has a lifetime allowance and stops mattering once spent;
-    3. the END-OF-BATTLE reserve only: 1 - budget x enemyCount (10% at two or
-       three enemies). It exists so a fully-spent army cannot kill the protected
-       hero, nothing more.
-
-    PER-BLOW TABLE, computed from the live constants 2026-09-12:
-       level 1 (1 enemy, 95%)  11.88% normal   5.94% flanked      n/a surrounded
-       level 2 (2, 45%)         5.63%          2.81%              n/a
-       level 3 (3, 30%)         3.75%          1.88%           1.00%   (31 blows)
-       level 4 (4, 20%)         2.50%          1.25%           1.00%   (20 blows)
-       level 5 (5, 15%)         1.88%          0.94%           0.94%   (16 blows)
-    The last column is how many blows ONE enemy then needs to spend its lifetime
-    allowance - the deliberate consequence of not scaling the allowance.
-
-    IT IS DELIBERATELY NOT STAGED. A staged version was tried - unlocking one
-    enemy's budget per enemy still standing, so the hero would still be above half
-    when the first died. Arash rejected it: each enemy's allowance is ITS OWN, and
-    two enemies striking at once may spend both. In level 3 that is 30% + 30% =
-    60%, taking the hero to 40% while the third walks on the base, rather than
-    freezing it at a 70% floor. The per-enemy allowance is the real limit.
-
-  ScriptTutorialBlow(target, isEnemy, hits)
-    LEVELS 1-3 ONLY. The exchange is scripted so it LOOKS like a fight: an enemy
-    loses exactly a quarter of its maximum per hit and dies on the fourth, and a
-    hero loses a flat 7%. Both are SET, not capped, so the tutorial reads the same
-    whatever the units were authored at. The killing blow is taken from currentHP
-    so float drift can never leave a sliver of health behind.
-    The champion's budget still applies on top, so it can never be worn past its
-    reserve however long the fight runs.
-
-    (RushKill, which let a lone outnumbered hero kill in two, was REMOVED the same
-    day - superseded by the four-hit script plus the enemy speed reduction.)
+    Ensures MeleeContactRecovery, then adds the enemy to the CP roster. Its stats
+    are NOT touched - they come from EnemyManager.RebuildFromBase.
 
   HasLivingDefenders(gate)                                              [static]
-    A defended base cannot be bypassed by an attacker walking past the battle.
+    TRUE while the gate's own side still has living defenders.
+    KEPT, and it is NOT outcome forcing: it never asks who should win and applies
+    identically whatever the CP figures say. It encodes one structural rule - you
+    must defeat the defending army before you can fell the castle - so a single fast
+    unit cannot walk past a live battle and end the match alone. Without it the
+    winner would often be whoever ran past first, which would make CP LESS
+    predictive, not more.
+
+  LogEveryBlow  [static bool, default TRUE]  +  TotalBlowsThisBattle
+    Every landed blow prints one line:
+        [BLOW #7] Player_CowMinotaur_02(Clone) -> Enemy_Reaper_Man_01(Clone) (ENEMY)
+        dmg 55.4   HP 117.1 -> 61.7 / 394   this target has now taken 7 blow(s)
+    and the killing blow appends "*** DEAD after N blow(s) ***".
+    #n is the running total for the WHOLE battle; "this target has now taken N" is
+    the per-victim count, which is the number that answers "how many hits to kill".
+    ADDED 2026-09-16 because counting on screen and counting in code disagreed:
+    watching counts ANIMATION SWINGS, including those that never connect, while only
+    landed blows reach here. Set LogEveryBlow=false to silence it once tuned.
+
+  ReportBlow(target, damage, attacker)                                  [static]
+    Purely observational: returns nothing, changes nothing. Called by
+    PlayerStats/EnemyStats AFTER the damage is final, so the telemetry describes
+    what really happened. Counts hits per victim and records deaths.
 
 HOW IT CONNECTS
-  - EnemySpawner             creates it, calls Prepare and RegisterEnemy
-  - PlayerWaveManager        calls CalibrateHero per spawned hero
-  - PlayerStats/EnemyStats   route damage through AdjustIncomingDamage, passing the
-                             attacker (EnemyManager / PlayerManager respectively)
-  - PlayerGateStats/EnemyGateStats   call HasLivingDefenders
-  - LevelGameManager         skips mutual-wipe auto-defeat while IsPrepared
+  - EnemySpawner             creates it, calls Prepare, then RegisterEnemy per spawn
+  - PlayerWaveManager        calls RegisterHero for every hero it spawns
+  - PlayerStats/EnemyStats   call ReportBlow after ClampIncomingBlow
+  - PlayerGateStats          chips while HasLivingDefenders is true
+  - EnemyGateStats           fully immune while HasLivingDefenders is true
+  - CPCombatVerification     reads PlayerCP / EnemyCP / Ratio and the telemetry
 
 NOTES
-  - REPLACED 2026-09-11 and must not come back: a last-survivor 1%-HP floor that
-    triggered at the end of a fight instead of being budgeted before it, and a
-    damage reduction hard-coded to one specific level and hero count.
-  - The universal 25%-of-max-HP ceiling was briefly removed the same day, restored
-    here as MinHitsToKillAnyone, found STILL not to hold in play, and finally moved
-    down into CharacterStats where it cannot be bypassed. It was never the thing
-    that made the game feel staged - the forced outcome and the last-survivor floor
-    were. Do not remove it and do not move it back up here.
-  - WHY TEAM-TOTAL NORMALISATION. Scaling every hero to an identical CP made the
-    roster mathematically tied, so "the strongest hero" did not exist and this
-    model had nothing to protect. Normalising the total keeps Player CP exactly on
-    the workbook figure AND preserves each hero's share of it, so upgrades and
-    archetypes still rank against each other.
-  - Individual heroes now VARY around the per-hero reference rather than sitting on
-    it. heroCount x PerHeroCP is a team figure, not a per-unit promise.
-  - The champion fights whoever it is nearest, exactly like any other hero - there
-    is no assigned duel. The budget is sized against the TOTAL enemy count, so it
-    survives no matter which enemies it ends up facing or in what order.
-  - Prepare throws ArgumentException internally and catches it; CalibrateHero does
-    NOT, and PlayerWaveManager calls it outside any try. It no longer scales on
-    that path unless a battle is already prepared, so the throw is much harder to
-    reach, but a hero with zero CP reaching ScaleToCP would still surface there.
+  - THE MINIMUM-BLOWS RULE IS NOT HERE and is not enforcement. It constrains how
+    LONG a fight lasts, not who wins it, and lives in
+    CharacterStats.ClampIncomingBlow where no early return can skip it. It is a
+    FLOOR of eight blows with NO matching ceiling (Arash, 2026-09-16) - a weak
+    attacker takes as many swings as its stats say, unbounded.
+  - THE PAUSE GATE MOVED OUT. "no damage while paused or before the battle runs"
+    used to sit inside AdjustIncomingDamage and was the ONLY thing enforcing it -
+    PlayerStats and EnemyStats never checked it themselves. It is now the first line
+    of CharacterStats.ClampIncomingBlow. Do not drop it.
+  - LevelGameManager no longer skips mutual-wipe auto-defeat while IsPrepared. That
+    check existed because scripted stages required a physically destroyed gate; with
+    the reporter prepared for every battle it would have disabled stalemate
+    detection permanently and hung the stage in Playing forever.
+  - WHY THE OLD MODEL EXISTED AT ALL: heroes vastly outnumbered enemies (12 v 5 at
+    level 5). Melee advantage is superlinear in unit count, so those fights ended
+    instantly and had to be staged to look like fights. The real fix is the counts
+    and the stats, not a script. Bringing the two sides closer together is open work.

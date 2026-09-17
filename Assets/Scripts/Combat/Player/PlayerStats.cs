@@ -21,21 +21,18 @@ public class PlayerStats : CharacterStats
 
 
     /// <summary>
-    /// <paramref name="attacker"/> is the enemy that swung. It matters: the stage
-    /// 1-5 model gives each individual enemy its own lifetime damage allowance
-    /// against the protected hero, so identical blows from two different enemies
-    /// have to be accounted separately. Optional, so any older call still compiles.
+    /// <paramref name="attacker"/> is the enemy that swung. It is kept so the
+    /// per-attacker hit breakdown in CharacterStats.ReportDeath stays meaningful -
+    /// a unit that looks like it died in four blows has usually taken its full
+    /// eight, half of them from a neighbour. Optional, so older calls still compile.
+    ///
+    /// NOTHING adjusts this damage any more. The blow is taken as the attacker's
+    /// stats produced it, clamped only by the pacing band in ClampIncomingBlow.
     /// </summary>
     public void ApplyDamageToPlayer(float damageAmount, EnemyManager attacker = null)
     {
-        damageAmount = CPBattleController.AdjustIncomingDamage(this, damageAmount, attacker);
-        // LAST, and outside the CP battle on purpose: the four-hit rule must hold
-        // even when no battle is prepared or this hero never reached the
-        // controller's registered set. See CharacterStats.ClampIncomingBlow.
-        // The floor must not undo the champion's budget - see CPBattleController
-        // .IsProtected. Every other hero keeps the normal floor.
-        damageAmount = ClampIncomingBlow(damageAmount, attacker,
-                                         !CPBattleController.IsProtected(this));
+        damageAmount = ClampIncomingBlow(damageAmount, attacker);
+        CPBattleController.ReportBlow(this, damageAmount, attacker);   // observation only
         SetResolvedHealth(Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount)));
     }
 

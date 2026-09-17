@@ -1,4 +1,25 @@
-CURRENT UPDATE - 2026-09-14  ENEMY COUNTS COME FROM LevelBattleRules.EnemyWaves
+CURRENT UPDATE - 2026-09-16  THE REFERENCE-CP SPAWN PATH IS GONE
+StartPreparedBattle no longer gates the CP layer on CardRewardsActive, and no longer
+waits on DeploymentsReady or aborts on failure. It now ALWAYS creates a
+CPBattleController and calls Prepare(this, heroes), which returns void and cannot
+fail. The reporter only measures, so nothing it does can stop enemies spawning.
+
+Deleted with it:
+  * PlannedEnemyCP()   - summed a reference enemy CP budget for the old normaliser
+  * ReferenceEntries() - "stages 1-5 field exactly stage-number enemies"
+  * RunReferenceLevel()- spawned those enemies in ONE clump, ignoring the authored
+                         wave table entirely
+  * the short-circuit at the top of RunLevel that jumped into it whenever a CP
+    battle existed. cpBattle now exists in EVERY battle, so that branch would have
+    hijacked every stage in the game.
+
+Enemy counts come from LevelBattleRules.EnemyWaveCounts (below); enemy strength from
+each type's own ProgressionConfigSO growth curve in EnemyManager.RebuildFromBase.
+SpawnOne still calls cpBattle.RegisterEnemy(em) - registration and the melee unstick
+helper only, no stat scaling.
+
+--------------------------------------------------------------------------------
+PREVIOUS UPDATE - 2026-09-14  ENEMY COUNTS COME FROM LevelBattleRules.EnemyWaves
 RunLevel no longer iterates levelConfig.waves directly. BuildWavesFromRules(stage)
 reshapes them so the stage fields exactly as many enemies, in as many waves, as
 LevelBattleRules.EnemyWaves says (Arash, 2026-09-14):

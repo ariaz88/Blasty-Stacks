@@ -1,3 +1,29 @@
+CURRENT UPDATE - 2026-09-16  RACE FIXED: NO HERO EVER DEPLOYED IF BATTLE WAS PRESSED FAST
+RunQueue used to snapshot waveManager.EarnedBatches the instant BATTLE was pressed,
+on the stated assumption that "PlayerWaveManager is sealed for battle by now, so this
+cannot change under us". THE ASSUMPTION WAS WRONG.
+
+SealForBattle stops new MATCHES being counted. It does NOT flush the award pipeline:
+PlannedWaveLoop converts a cleared match into an earned batch only after
+PlayerWaveManager.nextWaveDelay (0.75s). Clear the last match, press BATTLE inside
+that window, and EarnedBatches is still EMPTY -> TotalLoads = 0 -> the coroutine
+yield-breaks -> NOT ONE HERO EVER DEPLOYS. Enemies then walk to an undefended base
+and the stage is an automatic loss with no way to intervene.
+
+REPRODUCED in play mode on stage 1 (Arash reported seeing it repeatedly in normal
+play, then watched it happen live):
+    EarnedBatches=1  but  TotalLoads=0, CurrentLoadIndex=-1, ReleasedHeroes=0
+    enemy marching, player gate 500 -> 458, ~20s with no hero
+
+THE FIX: RunQueue now waits until MatchesReleased >= MatchesCleared before it
+snapshots, bounded by the new `awardWaitTimeout` (5s, Inspector). On timeout it takes
+whatever exists and logs a warning naming the shortfall, rather than hanging.
+
+NOT A TIMESCALE BUG. The 6s load uses Time.deltaTime, so it scales correctly - at 2x
+speed the load really does take 3 real seconds. The stall was purely the empty
+snapshot.
+
+--------------------------------------------------------------------------------
 ================================================================================
   HeroDeploymentSequencer.cs
   Path : Assets/Scripts/Combat/Spawning/HeroDeploymentSequencer.cs
