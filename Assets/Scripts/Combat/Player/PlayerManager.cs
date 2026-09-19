@@ -869,12 +869,8 @@ public class PlayerManager : MonoBehaviour
     private float heldAttackSide;
 
     /// <summary>
-    /// TRUE when this hero is standing somewhere its weapon can actually land on
-    /// its current enemy target - beside it, not stacked above or below it.
-    ///
-    /// The states used to decide this with a bare radial distance, which cannot
-    /// tell "beside" from "on top of". See MeleeEngagement for why that matters:
-    /// the melee hitboxes are wide, flat boxes that reach sideways only.
+    /// True in melee range, including close contact. Missed weapon contact is
+    /// handled by recovery, never by pushing a unit out of attack range.
     /// </summary>
     public bool IsInAttackPosition()
     {
@@ -949,12 +945,7 @@ public class PlayerManager : MonoBehaviour
     /// Walk straight ahead when there is no enemy to chase - i.e. the march on the
     /// enemy gate once the field is clear.
     ///
-    /// This exists because PlayerPursueTargetState used to drive that march with a
-    /// raw "linearVelocity = transform.up * moveSpeed" written inline. That path
-    /// never went through HandleMoveToTarget, so it skipped ally avoidance AND
-    /// personal space entirely - which is why heroes arriving at the gate walked
-    /// straight into the ranks already hitting it, even though the very same
-    /// avoidance worked fine before the battle.
+    /// Uses the same ally path steering as pursuit, without position corrections.
     /// </summary>
     public void HandleRoamForward()
     {
@@ -970,8 +961,7 @@ public class PlayerManager : MonoBehaviour
             // Arc around allies already parked at the gate...
             dir = CrowdSeparation2D.Instance.SteerAroundBlockers(transform, dir);
 
-            // ...and keep a little personal space if we still end up on top of one.
-            transform.position += (Vector3)CrowdSeparation2D.Instance.ResolveOverlap(transform);
+
         }
 
         // THE SAME CurrentMoveSpeed as HandleMoveToTarget. This line used to read
@@ -1000,14 +990,6 @@ public class PlayerManager : MonoBehaviour
     if (currentTarget == null && chosenEnemyOffset == null)
         return;
 
-    // Keep a little personal space while closing in, so two heroes converging on
-    // the same enemy do not sink into each other before they reach attack range.
-    // This runs ONLY here, and HandleMoveToTarget is only ever called from the
-    // pursue state - so the instant a hero stops to attack it is left alone
-    // again, exactly as the zero-interaction rule requires.
-    if (CrowdSeparation2D.Instance != null)
-        transform.position += (Vector3)CrowdSeparation2D.Instance.ResolveOverlap(transform);
-
     // Each attacker walks to its OWN spot on an arc around the target instead of
     // everyone converging on one point. The slot is claimed once and kept while
     // the target does not change, so nobody drifts mid-fight - and no unit ever
@@ -1018,7 +1000,7 @@ public class PlayerManager : MonoBehaviour
 
     Vector2 destination = ResolveAttackDestination(anchor);
 
-    Vector2 toTarget = destination - (Vector2)transform.position;
+    Vector2 toTarget = destination - playerRigidbody.position;
     float dist = toTarget.magnitude;
 
     if (dist < 0.05f)
@@ -1031,16 +1013,7 @@ public class PlayerManager : MonoBehaviour
 
     Vector2 dir = toTarget.normalized;
 
-    // Walk AROUND an ally standing in the way, at ALL times - mid-battle too.
-    //
-    // This used to be restricted to the walk-up to the gate, which is why a hero
-    // stuck directly behind another mid-fight could never get past: it pushed
-    // straight into its ally's back, the personal-space correction pushed it
-    // straight back, the two cancelled, and it played its walk animation on the
-    // spot. Letting it route around is the whole fix.
-    //
-    // Note this can NEVER make a hero circle its own kill: SteerAroundBlockers
-    // only considers units on the SAME layer, so enemies are never avoided.
+    // Route around allies without adding any backwards position correction.
     if (CrowdSeparation2D.Instance != null)
         dir = CrowdSeparation2D.Instance.SteerAroundBlockers(transform, dir);
 

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections;
 
 [DefaultExecutionOrder(-100)]
@@ -524,22 +524,14 @@ public class EnemyManager : MonoBehaviour
         // most of a map away and then walked past the one standing next to it.
         // An enemy with no hero inside the engage distance has NO hero target at
         // all, and marches on the base - which is the intended behaviour.
+        // Acquisition has a radius; a committed, living target does not.
+        if (StillFightable(enemyLocoMotion.currentTarget)) return;
+
         float engage = enemyLocoMotion.fairDistanceToPlayer;
         if (engage <= 0f)
         {
             enemyLocoMotion.currentTarget = null;
             return;
-        }
-
-        // THE LOCK holds only while the locked hero is still inside the engage
-        // distance. Outside it the lock drops and the search below re-picks, so a
-        // hero that walks right up to this enemy takes the target.
-        if (StillFightable(enemyLocoMotion.currentTarget, engage))
-        {
-            float lockedDist = Vector2.Distance(
-                enemyLocoMotion.currentTarget.transform.position, transform.position);
-
-            if (lockedDist <= engage) return;
         }
 
         LayerMask mask = enemyLocoMotion.playerDetectionLayer;
@@ -554,11 +546,10 @@ public class EnemyManager : MonoBehaviour
         for (int i = 0; i < hits.Length; i++)
         {
             var ps = hits[i].GetComponent<PlayerStats>() ?? hits[i].GetComponentInParent<PlayerStats>();
-            if (ps == null) continue;
-            if (ps.playerIsdead) continue;
+            if (!StillFightable(ps)) continue;
 
             float d = Vector2.Distance(ps.transform.position, transform.position);
-            if (d < bestDist)
+            if (d <= engage && d < bestDist)
             {
                 bestDist = d;
                 best = ps;
@@ -572,21 +563,18 @@ public class EnemyManager : MonoBehaviour
     /// Whether a locked target is still a hero this enemy can actually fight. These are
     /// the ONLY three things that release the lock.
     /// </summary>
-    bool StillFightable(PlayerStats hero, float radius)
+    bool StillFightable(PlayerStats hero)
     {
         // Dead, or the object is gone - Unity's null check covers a destroyed hero.
-        if (!hero || hero.playerIsdead) return false;
+        if (!hero || hero.playerIsdead || !hero.gameObject.activeInHierarchy) return false;
 
         // An undeployed hero in the lock state is not a valid target: EnemyDamageCollider
         // refuses to hit one, so an enemy that stayed locked onto it would stand there
         // swinging at something it can never damage.
         var pm = hero.PlayerManager;
-        if (pm && pm.currentState == pm.PlayerLockState) return false;
+        if (pm && pm.PlayerLockState != null && pm.currentState == pm.PlayerLockState) return false;
 
-        // Out of detection entirely. Falling back to the ordinary search here is also
-        // what lets an enemy give up on a hero and walk on the base instead.
-        return ((Vector2)hero.transform.position - (Vector2)transform.position).sqrMagnitude
-               <= radius * radius;
+        return true;
     }
 
 
@@ -723,17 +711,13 @@ public class EnemyManager : MonoBehaviour
         // gate-locked enemy sat at (2.96,4.02) with a hero targeted 1.36 away and
         // isPerformingAction permanently true.
         //
-        // Same distance the locomotion uses to decide to break off, so "close
-        // enough to walk to" and "close enough to stop hitting the gate" can never
-        // disagree and leave the enemy oscillating.
-        bool heroNearby =
+        // A living locked hero takes priority even outside acquisition range.
+        bool hasHeroTarget =
             enemyLocoMotion != null &&
             enemyLocoMotion.currentTarget != null &&
-            !enemyLocoMotion.currentTarget.playerIsdead &&
-            Vector2.Distance(enemyLocoMotion.currentTarget.transform.position, transform.position)
-                <= enemyLocoMotion.fairDistanceToPlayer;
+            StillFightable(enemyLocoMotion.currentTarget);
 
-        if (!heroNearby && attackPlayerGate && currentGateTarget != null && !currentGateTarget.isPlayerGateDestroyed)
+        if (!hasHeroTarget && attackPlayerGate && currentGateTarget != null && !currentGateTarget.isPlayerGateDestroyed)
         {
             if (currentRecoveryTimer <= 0 && !isPerformingAction)
             {

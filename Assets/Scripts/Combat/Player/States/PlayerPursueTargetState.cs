@@ -48,7 +48,7 @@ public class PlayerPursueTargetState : PlayerState
         {
             // Marching on the gate with no enemies left. This MUST go through
             // HandleRoamForward, not a raw velocity write: that is where ally
-            // avoidance and personal space live. Setting linearVelocity directly
+            // ally path steering lives. Setting linearVelocity directly
             // here is what made heroes walk into the ranks already at the gate.
             pm.HandleRoamForward();
             return this; // remain in pursue while roaming forward
@@ -58,18 +58,8 @@ public class PlayerPursueTargetState : PlayerState
  
         pm.canMove = true;
 
-        // "Arrived" is NOT a plain radial distance any more.
-        //
-        // It used to be `distance <= maxAttackRange`, and that is why a hero
-        // walking up a lane at an enemy coming down it stopped DIRECTLY BELOW its
-        // target: in range, sprites sunk into each other, and completely unable to
-        // land a hit, because every melee hitbox in this project is a wide flat box
-        // that only reaches sideways. The mover was already aiming for a spot beside
-        // the enemy - this test stopped the hero before it ever got there.
-        //
-        // IsInAttackPosition also fails when the hero is too far INSIDE the target,
-        // so a target that walks into a hero pushes it back out to its stand point
-        // instead of the two merging.
+        // Close contact is a valid attack position too. Never back out of
+        // an overlapping target just to satisfy a minimum stand-off radius.
         if (!pm.IsInAttackPosition())
         {
             // pursue

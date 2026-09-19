@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D))]
 
@@ -173,25 +173,14 @@ public class EnemyLocoMotion : MonoBehaviour
 
         Vector2 pos = enemyRigidbody2D.position;
 
-        // 1) Gate reached: hold the line - but NOT at the cost of ignoring a hero.
-        //
-        // This branch used to pin the enemy Kinematic on gateStopPosition and
-        // RETURN, before the hero-target branch below ever ran. Once an enemy
-        // touched the gate trigger it therefore stopped seeing heroes entirely:
-        // it walked to the base and stood there while a hero circled it, which is
-        // exactly the "near the base the enemy doesn't see the hero at all"
-        // report (2026-09-14). A gate-locked enemy now breaks off for a hero that
-        // is as close as it would react to MID-FIELD - the same
-        // fairDistanceToPlayer the branch below uses - and re-forms on the line
-        // once that hero is gone.
+        // A committed hero takes priority over the gate, regardless of distance.
         if (enemyManager != null && enemyManager.reachedGate)
         {
-            bool heroInReach =
+            bool hasHeroTarget =
                 currentTarget != null &&
-                !currentTarget.playerIsdead &&
-                Vector2.Distance((Vector2)currentTarget.transform.position, pos) <= fairDistanceToPlayer;
+                !currentTarget.playerIsdead && currentTarget.gameObject.activeInHierarchy;
 
-            if (!heroInReach)
+            if (!hasHeroTarget)
             {
                 Vector2 stop = enemyManager.gateStopPosition;
 
@@ -221,60 +210,23 @@ public class EnemyLocoMotion : MonoBehaviour
                 enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
         }
 
-        // 2) If we have a player target -> march down the lane until the hero is
-        //    close, then step round to our own spot BESIDE it.
+        // 2) Pursue the locked hero until it is in attack range.
+
         if (currentTarget != null && !currentTarget.playerIsdead)
         {
             Vector2 targetPos = currentTarget.transform.position;
-            float dist = Vector2.Distance(targetPos, pos);
 
-            // NOTE (2026-09-11): there used to be a "hold position while a hero is
-            // engaging us" branch here, which stopped the enemy dead as soon as a
-            // committed hero came within maxAttackRange + 0.35 - i.e. up to 1.20
-            // world units away, well outside this enemy's own 0.71 stand point. It
-            // was added to kill a magnetic pull, but the pull came from
-            // MeleeContactRecovery, not from here, and that is where it is now
-            // handled. The branch made the enemy freeze visibly early, BEFORE the
-            // hero had arrived, which is not wanted: an enemy walks until it is in
-            // a position it can actually strike from, and only then stops.
-
-            // Already standing somewhere we can actually reach the hero from: stop.
-            //
-            // This used to be `dist <= stoppingDistance`, a plain radial test, and
-            // that is what parked enemies DIRECTLY ON TOP OF the hero they were
-            // fighting. Coming straight down a lane at a hero coming straight up
-            // it, "0.83 away" meant 0.83 ABOVE - inside range, sprites overlapping,
-            // and unable to land a single hit, because the enemy weapon hitbox is a
-            // wide flat box that only reaches sideways.
-            if (MeleeEngagement.InAttackPosition(pos, targetPos, stoppingDistance))
+            // Use exactly the same eligibility rule as the attack controller.
+            if (IsInAttackPosition())
             {
                 StopAtCurrentPosition();
                 return;
             }
 
-            bool isRealPlayer = currentTarget.CompareTag("Player"); // gate should be "PlayerGate"
-            bool withinFair = dist <= fairDistanceToPlayer;
-
-            Vector2 moveDir = -(Vector2)transform.up;   // lane march, straight down
-
-            if (isRealPlayer && withinFair)
-            {
-                Vector2 stand = ResolveStandPoint(targetPos);
-                Vector2 toStand = stand - pos;
-
-                if (toStand.sqrMagnitude < 0.0025f)   // arrived, within 5cm
-                {
-                    StopAtCurrentPosition();
-                    return;
-                }
-
-                moveDir = toStand.normalized;
-            }
-
-            Vector2 next = pos + moveDir * CurrentMoveSpeed * Time.fixedDeltaTime;
-            if (isRealPlayer && withinFair)
-                next = Vector2.MoveTowards(pos, ResolveStandPoint(targetPos), CurrentMoveSpeed * Time.fixedDeltaTime);
-
+            // Acquisition already validated this hero. Pursue the lock even
+            // outside the original acquisition radius, including at the gate.
+            Vector2 stand = ResolveStandPoint(targetPos);
+            Vector2 next = Vector2.MoveTowards(pos, stand, CurrentMoveSpeed * Time.fixedDeltaTime);
             enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
             enemyRigidbody2D.MovePosition(next);
             SetAnimMoving(true);

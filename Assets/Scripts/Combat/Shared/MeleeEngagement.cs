@@ -153,12 +153,9 @@ public static class MeleeEngagement
     }
 
     /// <summary>
-    /// TRUE when this unit is standing somewhere its weapon can actually reach the
-    /// target: inside range, not sunk into the target, and level enough with it.
-    ///
-    /// All three conditions are satisfied with margin by the point
-    /// <see cref="StandPoint"/> returns, which is what guarantees that "walk to the
-    /// stand point" and "am I in position" can never disagree forever.
+    /// Attack eligibility includes close contact; standoff is a destination
+    /// preference, not a minimum distance that can force opponents apart.
+    /// StandPoint satisfies this predicate for the authored melee ranges.
     /// </summary>
     public static bool InAttackPosition(Vector2 self, Vector2 target, float range)
     {
@@ -166,7 +163,8 @@ public static class MeleeEngagement
 
         float distance = d.magnitude;
         if (distance > range) return false;
-        if (distance < Standoff(range) * ArrivalSlack) return false;
+        // Close contact must enter combat too. Rejecting the inner circle made
+        // overlapping opponents chase moving stand points instead of attacking.
 
         return !RequireVerticalBand || Mathf.Abs(d.y) <= Band(range);
     }
