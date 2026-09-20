@@ -11,15 +11,17 @@ using UnityEngine;
 /// removed; see the note below. Nothing in this file may grow back into a rule that
 /// knows which side is supposed to win.
 ///
-/// Note the split coverage: Deployments/AppliesTo cover stages 1-5, while EnemyWaves
-/// covers 1-10 and the hits-to-die band applies at every stage.
+/// Deployments and enemy waves cover stages 1-10.
 /// </summary>
 public static class LevelBattleRules
 {
     private static readonly int[][] Deployments =
     {
         new[] { 1, 1, 1 }, new[] { 1, 1, 2 }, new[] { 1, 1, 2, 1 },
-        new[] { 1, 1, 2, 4 }, new[] { 1, 1, 2, 2, 2, 4 }
+        new[] { 1, 1, 2, 4 }, new[] { 1, 1, 2, 2, 2, 4 },
+        new[] { 1, 1, 2, 2, 4 }, new[] { 1, 1, 2, 1, 2, 2, 4 },
+        new[] { 1, 1, 2, 2, 2, 4 }, new[] { 1, 2, 2, 2, 2, 4 },
+        new[] { 1, 1, 2, 2, 2, 3, 4 }
     };
     public static bool AppliesTo(int level) => level >= 1 && level <= Deployments.Length;
     public static int TotalPairs(int level) => AppliesTo(level) ? Deployments[level - 1].Length : 0;
@@ -57,16 +59,14 @@ public static class LevelBattleRules
     ///   L1 [1]     L2 [2]     L3 [3]
     ///   L4 [2,2]   L5 [2,3]              L4 cut 5 -> 4 (Arash, 2026-09-16): wave 1 is
     ///                                    two SIDE BY SIDE, wave 2 is one of each type
-    ///   L6 [3,3]   L7 [3,3]              6 each
-    ///   L8 [3,4]   L9 [3,4]   L10 [3,4]  7 each
+    ///   L6 [2,3]   L7 [3,3]   L8 [3,3]
+    ///   L9 [3,4]   L10 [3,4]
     ///
     /// Levels 4 and up MUST arrive in two or more waves - that is the point of the
     /// table, not the totals. Levels 4/5 already fielded five enemies; what
     /// changes is that they no longer all appear at once.
     ///
-    /// Deliberately a SEPARATE table from Deployments: it covers levels 6-10, which
-    /// AppliesTo does not, and the counts are a pacing decision that should be
-    /// readable on its own.
+    /// Enemy counts are a separate pacing decision from hero deployment counts.
     ///
     /// COUNTS ONLY. This table says how many enemies arrive and when; it says nothing
     /// about how strong they are. Enemy strength comes from each type's UnitStatsSO
@@ -84,9 +84,9 @@ public static class LevelBattleRules
         new[] { 3 },        // level 3
         new[] { 2, 2 },     // level 4 - two side by side, then one of each type
         new[] { 2, 3 },     // level 5
-        new[] { 3, 3 },     // level 6
+        new[] { 2, 3 },     // level 6: new type, same count
         new[] { 3, 3 },     // level 7
-        new[] { 3, 4 },     // level 8
+        new[] { 3, 3 },     // level 8: consolidate before the next increase
         new[] { 3, 4 },     // level 9
         new[] { 3, 4 },     // level 10
     };

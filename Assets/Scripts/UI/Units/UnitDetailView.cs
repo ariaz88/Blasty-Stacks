@@ -344,6 +344,11 @@ public class UnitDetailView : MonoBehaviour
         coinsTextDelta.text = costNeeded.ToString();
     }
 
+    public void SetHeroXpCost(int needed, int owned)
+    {
+        if (xpText) xpText.text = $"{needed} / {owned}";
+    }
+
 
 
     public void SetRequirementDetail(string text)

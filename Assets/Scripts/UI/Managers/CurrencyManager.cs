@@ -16,8 +16,8 @@ public class CurrencyManager : MonoBehaviour
     [Min(0)] [SerializeField] private int startingCoins = 10;
     [Min(0)] [SerializeField] private int startingHeroXP = 0;   // NEW
 
-    public int StartingCoins => startingCoins; // <— add
-    public int StartingGems => startingGems;  // <— add
+    public int StartingCoins => startingCoins; // <â€” add
+    public int StartingGems => startingGems;  // <â€” add
     public int StartingHeroXP => startingHeroXP;                // NEW
 
 
@@ -59,7 +59,7 @@ public class CurrencyManager : MonoBehaviour
         int old = Gems;
         Gems = Mathf.Max(0, Gems + delta);
 
-        SaveSystem.SetGems(Gems);   // NEW – persist
+        SaveSystem.SetGems(Gems);   // NEW â€“ persist
         FireChanged("Gems", Gems, Gems - old);
     }
 
@@ -71,7 +71,7 @@ public class CurrencyManager : MonoBehaviour
         int old = Gems;
         Gems -= amount;
 
-        SaveSystem.SetGems(Gems);   // NEW – persist
+        SaveSystem.SetGems(Gems);   // NEW â€“ persist
         FireChanged("Gems", Gems, Gems - old);
         return true;
     }
@@ -83,7 +83,7 @@ public class CurrencyManager : MonoBehaviour
         int old = Gems;
         Gems = val;
 
-        SaveSystem.SetGems(Gems);   // NEW – persist
+        SaveSystem.SetGems(Gems);   // NEW â€“ persist
         FireChanged("Gems", Gems, Gems - old);
     }
 
@@ -96,7 +96,7 @@ public class CurrencyManager : MonoBehaviour
         if (delta == 0) return;
         int old = Coins;
         Coins = Mathf.Max(0, Coins + delta);
-        SaveSystem.SetCoins(Coins);            // <— persist
+        SaveSystem.SetCoins(Coins);            // <â€” persist
 
         FireChanged("Coins", Coins, Coins - old);
     }
@@ -108,7 +108,7 @@ public class CurrencyManager : MonoBehaviour
 
         int old = Coins;
         Coins -= amount;
-        SaveSystem.SetCoins(Coins);            // <— persist
+        SaveSystem.SetCoins(Coins);            // <â€” persist
 
         FireChanged("Coins", Coins, Coins - old);
         return true;
@@ -119,8 +119,21 @@ public class CurrencyManager : MonoBehaviour
         if (val == Coins) return;
         int old = Coins;
         Coins = Mathf.Max(0, val);
-        SaveSystem.SetCoins(Coins);            // <— persist
+        SaveSystem.SetCoins(Coins);            // <â€” persist
         if (!silent) FireChanged("Coins", Coins, Coins - old);
+    }
+
+    /// <summary>Debit both resources before notifying UI listeners.</summary>
+    public bool TrySpendUpgradeResources(int coins, int heroXp)
+    {
+        if (coins < 0 || heroXp < 0 || Coins < coins || HeroXP < heroXp) return false;
+        Coins -= coins;
+        HeroXP -= heroXp;
+        SaveSystem.SetCoins(Coins);
+        SaveSystem.SetHeroXP(HeroXP);
+        FireChanged("Coins", Coins, -coins);
+        FireChanged("HeroXP", HeroXP, -heroXp);
+        return true;
     }
 
     #endregion
@@ -133,7 +146,7 @@ public class CurrencyManager : MonoBehaviour
         int old = HeroXP;
         HeroXP = Mathf.Max(0, HeroXP + delta);
 
-        SaveSystem.SetHeroXP(HeroXP);       // NEW – persist
+        SaveSystem.SetHeroXP(HeroXP);       // NEW â€“ persist
         FireChanged("HeroXP", HeroXP, HeroXP - old);
     }
 
@@ -146,7 +159,7 @@ public class CurrencyManager : MonoBehaviour
         int old = HeroXP;
         HeroXP -= amount;
 
-        SaveSystem.SetHeroXP(HeroXP);       // NEW – persist
+        SaveSystem.SetHeroXP(HeroXP);       // NEW â€“ persist
         FireChanged("HeroXP", HeroXP, HeroXP - old);
         return true;
     }
@@ -158,7 +171,7 @@ public class CurrencyManager : MonoBehaviour
         int old = HeroXP;
         HeroXP = val;
 
-        SaveSystem.SetHeroXP(HeroXP);       // NEW – persist
+        SaveSystem.SetHeroXP(HeroXP);       // NEW â€“ persist
         FireChanged("HeroXP", HeroXP, HeroXP - old);
     }
 

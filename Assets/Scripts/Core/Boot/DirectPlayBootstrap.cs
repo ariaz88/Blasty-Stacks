@@ -114,10 +114,8 @@ public static class DirectPlayBootstrap
         HomeManager.CurrentLevelId = levelId;
         HomeManager.CurrentStage1Based = stage1Based;
 
-        // Unlock everything up to this stage. GameStartManager wipes the save on
-        // every boot (resetBool is hard-coded true), so without this a direct run
-        // of stage 12 would be sitting on a save that says "stage 1 is as far as
-        // you got" - which the win panel and the menu would both act on.
+        // Direct editor runs may jump ahead of the saved campaign progress.
+        // Align the unlocked stage so the win panel and menu agree with this run.
         var progress = SaveSystem.EnsureLevel(levelId, stagesPerLevel);
         int wantedHighest = Mathf.Clamp(stage1Based - 1, 0, stagesPerLevel - 1);
         if (progress.highestUnlocked < wantedHighest)

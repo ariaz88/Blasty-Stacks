@@ -19,6 +19,13 @@ public class UpgradeCostSO : ScriptableObject
     [Tooltip("Cost for the first upgrade (Level 1 → 2).")]
     [Min(1)] public int baseCost = 2;
 
+    [Header("Hero XP (shared wallet)")]
+    [Min(1)] public int firstHeroXpCost = 1;
+    [Min(1)] public int heroXpCostStep = 1;
+
+    public int GetHeroXpCostForLevel(int currentLevel) => IsAtCap(currentLevel)
+        ? 0 : Mathf.Max(1, firstHeroXpCost) + (Mathf.Max(1, currentLevel) - 1) * Mathf.Max(1, heroXpCostStep);
+
     [Header("Geometric")]
     [Tooltip("Applied only in Geometric mode.")]
     [Range(1.0f, 2.0f)] public float ratio = 1.20f;

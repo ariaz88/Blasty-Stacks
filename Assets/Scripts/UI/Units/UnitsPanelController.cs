@@ -432,7 +432,8 @@ public class UnitsPanelController : MonoBehaviour
         int level = GetLevelSafe(unitId);
         int cost = upgradeCost ? upgradeCost.GetCostForLevel(level) : 0;
         int coins = _currency ? _currency.Coins : 0;
-        bool affordable = coins >= cost;
+        bool affordable = _gsm?.ProgressionService != null &&
+                          _gsm.ProgressionService.CanUpgrade(unitId, out _);
 
         // Toggle which button is visible
         if (upgradeButton)
@@ -470,6 +471,13 @@ public class UnitsPanelController : MonoBehaviour
 
                     // costNeeded vs coinsOwned
                     int coinsOwned = _currency ? _currency.Coins : 0;
+                    int xpNeeded = upgradeCost ? upgradeCost.GetHeroXpCostForLevel(level) : 0;
+                    int xpOwned = _currency ? _currency.HeroXP : 0;
+                    if (xpOwned < xpNeeded)
+                    {
+                        detailView.ShowLockedStageToast(anchor, 28f, $"Hero XP: {xpOwned} / {xpNeeded}");
+                        return;
+                    }
                     detailView.PlayNotEnoughResourcesToastStacked(anchor, cost, coinsOwned);
                 });
             }
@@ -545,8 +553,9 @@ public class UnitsPanelController : MonoBehaviour
 
         // meta
         int cp = CPCalculator.UnitCP(cur, level, cpWeights);
-        int xp = 70;
+        int xp = upgradeCost ? upgradeCost.GetHeroXpCostForLevel(level) : 0;
         targetView.SetMeta(cp, 0, xp); // don't let SetMeta overwrite coins line
+        targetView.SetHeroXpCost(xp, _currency ? _currency.HeroXP : 0);
 
         // Show “needed / owned” for coins
         int coinsOwned = _currency ? _currency.Coins : 0;
@@ -664,6 +673,7 @@ public class UnitsPanelController : MonoBehaviour
     // FIXED signature to match CurrencyManager.OnCurrencyChanged
     private void HandleCurrencyChanged(string currency, int newValue, int delta)
     {
+        RefreshDeployedUpgradeCues();
         // refresh upgrade interactability if we are on a deployed detail page
         if (!detailScreen || !detailScreen.activeInHierarchy) return;
         if (_selectedUnitId < 0) return;
@@ -672,7 +682,11 @@ public class UnitsPanelController : MonoBehaviour
         if (!def) return;
 
         Bucket b = GetBucketForUnit(def);
-        if (b == Bucket.Deployed) WireUpgradeButton(_selectedUnitId, visible: true);
+        if (b == Bucket.Deployed)
+        {
+            WireUpgradeButton(_selectedUnitId, visible: true);
+            BuildUnlockedStats(_selectedUnitId, detailView);
+        }
 
         RefreshDeployedUpgradeCues();
 
@@ -803,10 +817,7 @@ public class UnitsPanelController : MonoBehaviour
     // ADD inside UnitsPanelController
     private bool IsUpgradeable(int unitId)
     {
-        int level = _gsm.PlayerUnits.GetLevel(unitId);
-        int cost = upgradeCost.GetCostForLevel(level);
-        int coins = CurrencyManager.Instance ? CurrencyManager.Instance.Coins : 0;
-        return coins >= cost;
+        return _gsm?.ProgressionService != null && _gsm.ProgressionService.CanUpgrade(unitId, out _);
     }
     // ADD inside UnitsPanelController
     private void RefreshDeployedUpgradeCues()

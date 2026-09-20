@@ -31,6 +31,8 @@ public class StageRewardConfig
 // Shared calculator used by both Home screen and WinPanel.
 public static class StageRewardCalculator
 {
+    // Four first upgrades funded after stage 5; four second upgrades after stage 9.
+    private static readonly int[] EarlyHeroXp = { 0, 1, 1, 1, 1, 1, 2, 2, 3, 3 };
     public static WinPanel.RewardValues GetRewardForStageAndHpCase(
         int stage1Based,
         int hpCase,
@@ -63,6 +65,11 @@ public static class StageRewardCalculator
         if (hpCase >= 2) total.Add(r2);
         if (hpCase >= 3) total.Add(r3);
 
+        if (stage1Based <= EarlyHeroXp.Length)
+        {
+            total.coins = Mathf.RoundToInt((10 + 10 * stage1Based) * (1f + 0.1f * (hpCase - 1)));
+            total.heroXP = EarlyHeroXp[stage1Based - 1];
+        }
         return total;
     }
 }

@@ -9,7 +9,6 @@ public class GameStartManager : MonoBehaviour
     public static GameStartManager Instance { get; private set; }
 
 
-    private bool resetBool;
 
 
     [Header("Design-Time Data (Assign in Inspector)")]
@@ -47,8 +46,6 @@ public class GameStartManager : MonoBehaviour
 
 
 
-        resetBool = true;
-        OnResetButtonClicked();
         InitializeServices();
 
         // Subscribe ONCE to level progression
@@ -75,7 +72,7 @@ public class GameStartManager : MonoBehaviour
 
     public void OnResetButtonClicked()
     {
-        SaveSystem.ResetAllIfRequested(resetBool);
+        SaveSystem.ResetAllIfRequested(true);
         // Optional: Reload scene or notify user
         Debug.Log("Reset complete—starting fresh!");
     }

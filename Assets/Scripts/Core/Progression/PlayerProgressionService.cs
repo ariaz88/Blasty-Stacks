@@ -5,7 +5,7 @@ using System.Collections.Generic;
 /// <summary>
 ///  view for player-side upgrades:
 /// - Computes cost & checks caps
-/// - Spends gems via CurrencyManager
+/// - Spends coins and Hero XP via CurrencyManager
 /// - Levels up via PlayerUnitsModel
 /// - (Optional helper) Computes current/next stats for UI using ProgressionMath
 /// 
@@ -119,9 +119,11 @@ public class PlayerProgressionService
         return _costConfig != null ? _costConfig.GetCostForLevel(lvl) : 0;
     }
 
+    public int GetUpgradeHeroXpCost(int unitId) => _costConfig.GetHeroXpCostForLevel(_units.GetLevel(unitId));
+
     /// <summary>
     /// Returns true if the unit can upgrade right now, and a short reason if not.
-    /// Reasons: "Locked", "AtCap", "NotEnoughGems".
+    /// Reasons: "Locked", "AtCap", "NotEnoughCoins", "NotEnoughHeroXP".
     /// </summary>
     // PlayerProgressionService.cs
     public bool CanUpgrade(int unitId, out string reason)
@@ -137,6 +139,11 @@ public class PlayerProgressionService
             reason = "NotEnoughCoins";
             return false;
         }
+        if (_currency.HeroXP < GetUpgradeHeroXpCost(unitId))
+        {
+            reason = "NotEnoughHeroXP";
+            return false;
+        }
         return true;
     }
 
@@ -146,21 +153,20 @@ public class PlayerProgressionService
 
     /// <summary>
     /// Performs the upgrade if possible:
-    /// - spends gems
+    /// - spends coins and Hero XP
     /// - increments level
     /// - fires OnUnitUpgraded
     /// Returns true on success.
     /// </summary>
     public bool TryUpgrade(int unitId)
     {
-        if (!IsUnlocked(unitId)) return false;
-        if (IsAtCap(unitId)) return false;
+        if (!CanUpgrade(unitId, out _)) return false;
 
         int oldLevel = _units.GetLevel(unitId);
         int cost = GetUpgradeCost(unitId);
 
 
-        if (!_currency.TrySpendCoins(cost)) return false;
+        if (!_currency.TrySpendUpgradeResources(cost, GetUpgradeHeroXpCost(unitId))) return false;
 
 
         int newLevel = _units.LevelUp(unitId);
