@@ -47,8 +47,11 @@ public class LevelManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // load saved stage or start fresh
-        _currentStage = PlayerPrefs.GetInt(PlayerPrefsKey, startingStage);
+        // load saved stage or start fresh. With persistence disabled the stored key
+        // is ignored so every Play run begins at startingStage.
+        _currentStage = SavePersistence.Enabled
+            ? PlayerPrefs.GetInt(PlayerPrefsKey, startingStage)
+            : startingStage;
         _currentStage = Mathf.Clamp(_currentStage, 1, Mathf.Max(1, maxStage));
     }
 
@@ -71,8 +74,7 @@ public class LevelManager : MonoBehaviour
         if (clamped == _currentStage && !loadScene) return;
 
         _currentStage = clamped;
-        PlayerPrefs.SetInt(PlayerPrefsKey, _currentStage);
-        PlayerPrefs.Save();
+        PersistCurrentStage();
 
         OnStageChanged?.Invoke(_currentStage);
 
@@ -141,6 +143,18 @@ public class LevelManager : MonoBehaviour
         return _currentStage >= targetGlobal;
     }
 
+    /// <summary>
+    /// Write the current stage to PlayerPrefs. No-op while <see cref="SavePersistence"/>
+    /// is disabled, so the debug gate can't be defeated by a stage change.
+    /// </summary>
+    public static void PersistCurrentStage()
+    {
+        if (Instance == null || !SavePersistence.Enabled) return;
+
+        PlayerPrefs.SetInt(PlayerPrefsKey, Instance._currentStage);
+        PlayerPrefs.Save();
+    }
+
     public static void ResetProgressToStart()
     {
         // If the singleton already exists, reset its runtime value
@@ -149,8 +163,7 @@ public class LevelManager : MonoBehaviour
             Instance._currentStage = Instance.startingStage;
 
             // Overwrite the PlayerPrefs entry
-            PlayerPrefs.SetInt(PlayerPrefsKey, Instance._currentStage);
-            PlayerPrefs.Save();
+            PersistCurrentStage();
 
             // Re-fire events so any listeners can update if needed
             Instance.OnStageChanged?.Invoke(Instance._currentStage);

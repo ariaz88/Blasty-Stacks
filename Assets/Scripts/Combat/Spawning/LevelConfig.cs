@@ -29,6 +29,15 @@ public class Wave
     public string name = "Wave";
     public float delayBeforeWave = 5f;
 
+    [Tooltip("ON  = this wave arrives on a FIXED timer: exactly delayBeforeWave " +
+             "seconds after the previous wave spawned, whether or not the previous " +
+             "wave is dead. Waves can overlap. Use it when the stage wants a " +
+             "predictable beat (stage 6: 10s, then 12s).\n" +
+             "OFF = the original behaviour: wait for the field to be cleared, " +
+             "bounded by EnemySpawner.MaxSecondsBetweenWaves.\n" +
+             "Defaults OFF, so every already-authored stage is unchanged.")]
+    public bool spawnOnTimerOnly = false;
+
     [Header("Formation")]
     public SpawnFormation formation = SpawnFormation.AllTogetherGrid;
 

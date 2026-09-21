@@ -42,8 +42,9 @@ FLOW
 ----
   Awake()
       1. Singleton guard + DontDestroyOnLoad.
-      2. resetBool = true;  OnResetButtonClicked();     <-- SEE CRITICAL NOTE
-      3. InitializeServices().
+      2. InitializeServices().
+      (The old "resetBool = true; OnResetButtonClicked();" boot wipe was
+       REMOVED in commit c94a908, 2026-09-20 - see NOTES.)
 
   OnEnable() -> WaitForLevelManager() coroutine
       Polls each frame until LevelManager.Instance exists, then subscribes to
@@ -62,14 +63,22 @@ FLOW
              and deploys initiallyUnlockedUnitIds, unlocks but benches
              initiallyUndeployedIds, and writes the seeded roster to the save.
       4. Currency: works out isFirstRunEconomy (no saved units AND coins, gems
-         and heroXp are all zero). If so it uses CurrencyManager's Starting*
-         values and seeds them into the save; otherwise it loads the saved
-         values - including legitimate zeros.
+         and heroXp are all zero). If so it seeds starting balances; otherwise
+         it loads the saved values - including legitimate zeros.
+         DEBUG GATE (2026-09-20): the first-run branch now splits on
+         SavePersistence.Enabled -
+           enabled  -> CurrencyManager.Starting* (the inspector values, which in
+                       StarterScene.unity are gems 4 / coins 4 / heroXP 6)
+           disabled -> SavePersistence.FreshStart* (0 / 0 / 0)
+         With the gate off, SaveSystem always hands back an empty SaveData, so
+         isFirstRunEconomy is ALWAYS true and every run boots with nothing
+         banked. See SavePersistence.
       5. Constructs PlayerProgressionService a SECOND time with the same
          arguments (redundant - the first construction at step 2 is discarded).
 
   OnResetButtonClicked()
-      Calls SaveSystem.ResetAllIfRequested(resetBool).
+      Calls SaveSystem.ResetAllIfRequested(true). Still wired to a debug reset
+      button; it is no longer called from Awake.
 
 HOW IT CONNECTS
 ---------------
@@ -81,19 +90,16 @@ HOW IT CONNECTS
 
 NOTES / CRITICAL ISSUES
 -----------------------
-  !!! CRITICAL - THE GAME WIPES ITS SAVE ON EVERY LAUNCH !!!
-  !!! In Awake() the code does:
-  !!!         resetBool = true;
-  !!!         OnResetButtonClicked();
-  !!! resetBool is hard-coded to true, and OnResetButtonClicked forwards it to
-  !!! SaveSystem.ResetAllIfRequested(true), which performs a FULL wipe:
-  !!! deletes the save key, resets LevelManager progress to the starting stage,
-  !!! resets currency to starting values and re-seeds the unit roster.
-  !!! Consequence: every time the game boots, all player progress is erased.
-  !!! Stage stars, unlocked units, upgrade levels and currency never survive a
-  !!! restart. This is almost certainly a development/debug leftover.
-  !!! FIX: expose resetBool as a [SerializeField] set to false, or delete these
-  !!! two lines, so the reset only happens when a debug button is pressed.
+  - BOOT WIPE: RESOLVED (2026-09-20, commit c94a908). This doc previously
+    flagged as critical that Awake() hard-coded resetBool = true and called
+    OnResetButtonClicked(), wiping all progress on every launch. Both the field
+    and the call are gone; saves now persist normally.
+    Follow-on: because progress suddenly persisted, Play runs started resuming
+    at stage 6 with banked resources during the stage 5-10 balance pass. Rather
+    than restoring the blunt boot wipe, the SavePersistence debug gate was added
+    - it makes runs start clean WITHOUT deleting the save, and can be switched
+    off from an in-game button or Tools > Save System. See SavePersistence,
+    SavePersistenceDebugPanel and SavePersistenceMenu.
 
   - InitializeServices() constructs PlayerProgressionService twice. Harmless but
     wasteful; the second one is the instance actually kept.

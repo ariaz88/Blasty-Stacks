@@ -51,6 +51,33 @@ TYPES
           !! design before retuning tier multipliers, since changing e.g.
           !! tier1Multiplier affects EVERY hpCase's total, not just the lowest one.
 
+EARLY-CAMPAIGN OVERRIDE  (stages 1-10, added in commit c94a908, 2026-09-20)
+------------------------------------------------------------------------------
+  private static readonly int[] EarlyHeroXp = { 1, 1, 1, 1, 1, 1, 2, 2, 3, 3 };
+
+  The LAST thing GetRewardForStageAndHpCase does is, for stage1Based <= 10,
+  THROW AWAY the computed coins and heroXP and replace them:
+      total.coins  = round((10 + 10 * stage) * (1 + 0.1 * (hpCase - 1)))
+      total.heroXP = EarlyHeroXp[stage - 1]
+  So for the first ten stages the whole config-driven formula above is dead for
+  those two currencies - coins are a flat 20/30/40/.../110 ramp with a +10%
+  per HP case bonus, and hero XP is a hand-authored table. GEMS are NOT
+  overridden and still come from the tiered formula.
+
+  If you retune coinsPerStagePercent or xpPerStagePercent and see no change in
+  early stages, THIS is why. Stage 11+ uses the formula normally.
+
+  Stage-1 hero XP was 0 until 2026-09-21 and is now 1 - the player earns hero
+  XP from their very first win (Arash's directive). Effect on the documented
+  upgrade milestones: four first upgrades cost 160 coins + 4 XP, and coins are
+  still the binding constraint (140 banked after stage 4, 200 after stage 5), so
+  the "affordable at stage 5" timing is unchanged; only the 4th XP now arrives a
+  stage earlier, leaving 1 spare. The second-upgrade milestone (240 coins + 8 XP,
+  funded after stage 9) is untouched.
+  EarlyCampaignEconomyVerification asserts these exact totals - if you change
+  the table again, update its Require(...) lines in the same pass or it throws.
+  The intent table also lives in Docs/balance/stages-5-10.md.
+
 HOW IT CONNECTS
 ---------------
   - WinPanel.CalculateAllRewards calls this with the CP-relevant stage number

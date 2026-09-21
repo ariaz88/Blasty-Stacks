@@ -102,11 +102,18 @@ SAVING
       Stamps savedAtUtc, serializes Data to JSON, writes the PlayerPrefs key and
       calls PlayerPrefs.Save(). Wrapped in a recursion guard: if saveDepth
       exceeds 10 it logs an error and returns instead of saving.
+      DEBUG GATE (added 2026-09-20): if SavePersistence.Enabled is false it
+      still stamps savedAtUtc and still leaves the in-memory cache mutated, but
+      returns BEFORE touching PlayerPrefs. The running session therefore behaves
+      completely normally - progress is live, just volatile. See SavePersistence.
 
   ResetAll()
       Deletes the PlayerPrefs key and nulls the cache - a true wipe.
 
   LoadInternal()  [private]
+      DEBUG GATE: if SavePersistence.Enabled is false it returns a brand-new
+      SaveData immediately, ignoring whatever blob is on disk - this is what
+      makes every Play run boot as a new player.
       Returns a fresh SaveData if no key exists. Otherwise deserializes the JSON.
       Then runs a version-gated migration: for saves with version < 2 it forces
       isDeployed = false on every locked unit, sets version = 2, assigns _cache
@@ -115,16 +122,23 @@ SAVING
 
   ResetAllIfRequested(bool)
       Full "new game" reset used by debug tooling: ResetAll(), then
-      LevelManager.ResetProgressToStart(), then restores CurrencyManager to its
-      starting values, then re-seeds PlayerUnits from the units database.
+      LevelManager.ResetProgressToStart(), then resets CurrencyManager, then
+      re-seeds PlayerUnits from the units database.
+      Currency reset is gate-aware: with SavePersistence disabled it writes
+      SavePersistence.FreshStart* (0/0/0) instead of CurrencyManager's
+      Starting* inspector values, so a mid-session reset produces exactly the
+      same state as a relaunch. It also resets heroXP, which it previously
+      missed.
 
 HOW IT CONNECTS
 ---------------
+  - SavePersistence gates both Save() and LoadInternal() - see that doc first
+    if saving appears to do nothing.
   - CurrencyManager mirrors its balances here.
   - GameStartManager reads units[] on boot and writes the seeded roster back.
   - WinPanel / LevelGameManager call RecordStageResult when a stage is won.
   - HomeManager / StageCard read stars and highestUnlocked to build the map UI.
-  - SaveOnStop calls Save() on quit and on exiting Play mode.
+  - SaveOnStop calls Save() on quit and on exiting Play mode (also gated).
 
 NOTES / RISKS
 -------------
@@ -141,9 +155,11 @@ NOTES / RISKS
   - Almost every setter calls Save() immediately, so a screen that updates many
     units in a loop writes the entire JSON blob once PER UNIT. For bulk edits
     prefer mutating Data directly and calling Save() once at the end.
-  - Numbered leftover methods still exist here: Save1, SetUnitDeployed1,
-    RecordStageResul1 (note the typo), ResetAllIfRequested1, ResetAllIfRequested2.
-    None of them is called - the un-numbered versions are the live ones.
+  - Numbered leftover methods: SetUnitDeployed1 and RecordStageResul1 (note the
+    typo) still exist and are still uncalled - the un-numbered versions are the
+    live ones. Save1, ResetAllIfRequested1 and ResetAllIfRequested2 were DELETED
+    on 2026-09-20 after confirming no call sites; deleting Save1 also removed an
+    ungated second write path that would have bypassed SavePersistence.
   - A brand-new SaveData is created with version = 1, so the very first load of
     a fresh save also runs the migration branch. Harmless but wasteful.
   - PlayerPrefs on Android/iOS is not a secure store. Anyone can edit currency.

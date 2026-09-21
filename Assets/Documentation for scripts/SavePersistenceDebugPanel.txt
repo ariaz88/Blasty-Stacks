@@ -1,0 +1,121 @@
+================================================================================
+  SavePersistenceDebugPanel.cs
+  Path : Assets/Scripts/Debug/SavePersistenceDebugPanel.cs
+  Type : MonoBehaviour  (entire body wrapped in
+         #if UNITY_EDITOR || DEVELOPMENT_BUILD)
+  Layer: Debug
+  Scenes: none - it auto-spawns itself at runtime
+================================================================================
+
+PURPOSE
+-------
+The in-game switch for the SavePersistence debug gate. Lets you turn save/load
+back on (or off again) while playing, without editing code or hunting through
+the Inspector, and wipe progress on the spot.
+
+It is deliberately ZERO-SETUP: it creates its own GameObject before the first
+scene loads, so it works no matter which scene you press Play on and regardless
+of whether MenuScene or StarterScene is the entry point.
+
+MENU-ONLY (2026-09-21): the object is persistent, but it only DRAWS while the
+active scene is one of allowedScenes (default: MenuScene). It must never cover
+gameplay or turn up in a screenshot of a battle.
+
+INSPECTOR FIELDS
+----------------
+  startCollapsed  (bool, SerializeField, default true)
+      Whether the panel begins as a single small "SAVE: ON/OFF" chip rather
+      than the expanded control list. Only meaningful if you place the
+      component manually - the auto-spawned instance uses the default.
+  allowedScenes   (string[], SerializeField, default { "MenuScene" })
+      Scene names the panel may draw in. Compared case-insensitively against
+      the ACTIVE scene's name. Empty or null => never visible.
+
+RUNTIME STATE
+-------------
+  _collapsed  (private bool)  current fold state, initialised from
+      startCollapsed in Awake().
+  _visible    (private bool)  cached result of the allowedScenes test. Cached
+      rather than recomputed in OnGUI because OnGUI runs several times per
+      frame and Scene.name allocates a string on every access.
+  _area       (private Rect)  recomputed every OnGUI from the current screen
+      size, so it stays anchored to the top-right corner.
+
+FLOW
+----
+  AutoSpawn()  [RuntimeInitializeOnLoadMethod(BeforeSceneLoad)]  private static
+      Runs automatically before the first scene's Start. Creates
+      "[Debug] SavePersistencePanel", adds this component, and marks it
+      DontDestroyOnLoad so it survives the MenuScene -> StarterScene transition
+      like the other managers.
+
+  Awake()
+      _collapsed = startCollapsed, then an initial RefreshVisibility against the
+      active scene.
+
+  OnEnable() / OnDisable()
+      Subscribe / unsubscribe SceneManager.activeSceneChanged AND
+      SceneManager.sceneLoaded. Both are needed: the object is created
+      BeforeSceneLoad, so the scene Awake inspected may not have been the real
+      first scene yet.
+
+  RefreshVisibility(Scene)  [private]
+      Sets _visible by case-insensitive name match against allowedScenes.
+      OnSceneLoaded deliberately passes SceneManager.GetActiveScene() rather
+      than the scene that just loaded, so an ADDITIVE load of a menu-named
+      scene cannot make the panel think it is in the menu while gameplay is on
+      screen.
+
+  OnGUI()
+      Returns immediately when !_visible - this is the menu-only gate.
+      Scales the IMGUI matrix by Screen.height / 720 (min 1) via
+      GUIUtility.ScaleAroundPivot, so the panel stays legible in a tall
+      phone-shaped Game view instead of rendering as unreadably small.
+      Lays out a box in the top-right.
+      Collapsed : one button labelled "SAVE: ON" / "SAVE: OFF" that expands.
+      Expanded  : a status label, a toggle button
+                  ("Enable save/load" / "Disable save/load"),
+                  a "Reset progress now" button,
+                  a live "Stage N" readout (LevelManager.CurrentStage),
+                  and a "Hide" button that re-collapses.
+
+PUBLIC METHODS  (wire these to a uGUI Button's OnClick if you prefer an
+                 in-canvas control over the IMGUI panel)
+------------------------------------------------------------------------------
+  ToggleSaving()      -> SavePersistence.Toggle()
+  EnableSaving()      -> SavePersistence.Enabled = true
+  DisableSaving()     -> SavePersistence.Enabled = false
+  ResetProgressNow()  -> SaveSystem.ResetAllIfRequested(true)
+                         (wipes the save key, resets LevelManager to
+                         startingStage, zeroes/reseeds currency, and reloads
+                         the unit roster from the database defaults)
+
+HOW IT CONNECTS
+---------------
+  - SavePersistence  - the gate this panel exists to flip.
+  - SaveSystem       - ResetAllIfRequested for the wipe button.
+  - LevelManager     - read-only, for the current-stage readout.
+  - SavePersistenceMenu - the Editor-menu twin of this panel, for flipping the
+                     same gate without entering Play mode.
+
+NOTES
+-----
+  - EVERYTHING in this class, including AutoSpawn, is inside
+    #if UNITY_EDITOR || DEVELOPMENT_BUILD. In a release build the class compiles
+    to an empty MonoBehaviour that never spawns and draws nothing, matching the
+    gate itself (which is hard-wired ON in release).
+  - It uses IMGUI (OnGUI) rather than uGUI on purpose: no canvas, no prefab, no
+    scene reference, nothing to wire up or accidentally leave in a scene file.
+    The trade-off is that it renders on top of everything and is not touch-
+    friendly at small sizes - which is the other reason it is menu-only.
+  - The GameObject still EXISTS during gameplay (DontDestroyOnLoad), it is just
+    not drawn. If you press Play directly into a gameplay scene you will see no
+    panel at all - use Tools > Save System instead, or add that scene's name to
+    allowedScenes temporarily.
+  - "Reset progress now" respects the gate: while saving is disabled it zeroes
+    the wallet rather than restoring CurrencyManager's inspector starting
+    values, so a mid-session reset produces the same state as a relaunch.
+  - This panel does NOT survive as a scene object - do not expect to find it in
+    MenuScene.unity or StarterScene.unity. Search for the AutoSpawn attribute
+    if you are wondering where the "[Debug] SavePersistencePanel" object in the
+    hierarchy came from.

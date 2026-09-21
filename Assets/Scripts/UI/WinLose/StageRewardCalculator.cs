@@ -31,8 +31,13 @@ public class StageRewardConfig
 // Shared calculator used by both Home screen and WinPanel.
 public static class StageRewardCalculator
 {
-    // Four first upgrades funded after stage 5; four second upgrades after stage 9.
-    private static readonly int[] EarlyHeroXp = { 0, 1, 1, 1, 1, 1, 2, 2, 3, 3 };
+    // Hero XP per stage win, stages 1-10. Stage 1 pays out like every other early
+    // stage - the player earns hero XP from their very first win.
+    // Four first upgrades (160 coins + 4 XP) are still gated by COINS at stage 5
+    // (200 coins banked by then, vs 140 after stage 4); the 4th XP now arrives one
+    // stage earlier, at stage 4, leaving 1 spare. Four second upgrades
+    // (240 coins + 8 XP) are funded after stage 9 exactly as before.
+    private static readonly int[] EarlyHeroXp = { 1, 1, 1, 1, 1, 1, 2, 2, 3, 3 };
     public static WinPanel.RewardValues GetRewardForStageAndHpCase(
         int stage1Based,
         int hpCase,

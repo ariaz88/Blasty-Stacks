@@ -37,11 +37,19 @@ asset's waves unchanged.
       authored wave when the table wants more waves than the asset has. That is
       how a one-wave asset produces a correct two-wave level.
   CopyWaveWithTotal(template, total, index) -> Wave
-      A COPY whose entry counts sum to exactly `total`, spread as evenly as
-      possible across the template's entries with the remainder going to the
-      earliest ones - so a wave authored with two enemy types keeps both. An entry
-      that would round to zero is DROPPED, not kept at zero: WaveEntry.count is
-      [Min(1)] and a zero is clamped back up to one, which would overshoot.
+      A COPY whose entry counts sum to exactly `total`.
+      !! AUTHORED MIX WINS (added 2026-09-21). If the template's own counts
+      !! ALREADY sum to `total`, they are copied VERBATIM. This is what lets a
+      !! stage author a specific MIX ("1 Reaper, 2 Zombies, 2 Skeletons") rather
+      !! than only a head count. Before this, the even spread below silently
+      !! rewrote the mix: stage 6 wave 2 authored as Skeleton x2 + Zombie x1 came
+      !! out as Zombie x2 + Skeleton x1, decided purely by ENTRY ORDER, which is
+      !! impossible to author around and nearly invisible in play.
+      Otherwise the total is spread as evenly as possible across the template's
+      entries with the remainder going to the earliest ones - so a wave authored
+      with two enemy types keeps both. An entry that would round to zero is
+      DROPPED, not kept at zero: WaveEntry.count is [Min(1)] and a zero is
+      clamped back up to one, which would overshoot.
   EditorDescribeWaves(config, stageLevel) [#if UNITY_EDITOR]
       Prints want-vs-got per wave and in total, for checking a re-balance without
       entering Play mode.
@@ -203,9 +211,19 @@ PAUSE-AWARE WAITING
 MAIN LOOP
 ---------
   RunLevel()  (the live version)
-      1. stageLevel = LevelManager.CurrentStage if LevelManager.Instance
-         exists, ELSE levelConfig.levelNumber as a fallback - this lets the
-         scene be tested standalone without a LevelManager present.
+      1. stageLevel = LevelBattleRules.ResolveLevel(gameObject, levelConfig)
+         - the scene name's "_Stage_N" suffix first (gameplay scenes are
+         Level_1_Stage_N), then the asset's own levelNumber.
+         CHANGED 2026-09-21. It used to read LevelManager.CurrentStage first and
+         fall back to levelConfig.levelNumber only when the singleton was absent.
+         That could DISAGREE with StartPreparedBattle, which has always used
+         ResolveLevel - so the stage deciding wave counts and enemy stat growth
+         could differ from the stage the battle was set up for. Any flow that
+         reaches a gameplay scene without HomeManager/DirectPlayBootstrap calling
+         SetStage drifts, and since SavePersistence forces LevelManager back to
+         stage 1 every run, that drift is now the NORMAL case in editor testing.
+         Both call sites now resolve identically, from authored data that cannot
+         move at runtime.
       2. Waits levelConfig.startDelay (pause-aware).
       3. For each wave in order:
            - waits wave.delayBeforeWave if set (pause-aware)
@@ -260,10 +278,34 @@ LOW-LEVEL UTILITIES
       RunLevel's WaitUntil(_alive == 0) know when a wave is cleared.
 
   GenerateGridPositions(min, max, count, columns, minSpacing)  [static]
-      Computes an evenly-spaced grid inside the rectangle. Columns default to
-      ceil(sqrt(count)) if not specified. Spacing is the larger of the "fit
-      evenly" spacing and the configured minSpacing. Rows are filled top-to-
-      bottom, all positions clamped inside the rectangle.
+      A CENTRED grid inside the rectangle. REWRITTEN 2026-09-21.
+      Columns default to ceil(sqrt(count)), and are now also CLAMPED to count -
+      an empty trailing column would shift the row off centre.
+      Spacing per axis comes from SlotSpacing (below). The block is centred on
+      the box centre, and a short final row is centred on its own rather than
+      left-aligned. Rows fill top-to-bottom. NOTHING IS CLAMPED any more,
+      because nothing can fall outside by construction.
+
+      !! THE BUG THIS REPLACED (found from Arash's annotated stage-6 screenshots)
+      !! The old version put the first slot at xMin + dx and clamped overflow.
+      !! Against the REAL box - gate-relative, 6 wide - with minSlotSpacing.x 3:
+      !!   2 enemies: dx = 6/3 = 2, raised to 3, slots at centre and centre+3,
+      !!              so the pair sat visibly shoved to the RIGHT.
+      !!   3 enemies: dx = 6/4 = 1.5, raised to 3, slots at centre, centre+3,
+      !!              centre+6 - and centre+6 is outside, so Mathf.Clamp pulled
+      !!              it back ONTO centre+3. TWO ENEMIES ON ONE SPOT.
+      !! A clamp can only collapse slots together, never make them fit. Spacing
+      !! is now capped to what the box holds instead.
+
+  SlotSpacing(span, slots, desired)  [static, new 2026-09-21]
+      Gap between adjacent slots on one axis: the authored minimum when the box
+      can hold it, otherwise span/(slots-1), the widest that still fits edge to
+      edge. 0 for a single slot, which centres it.
+      CONSEQUENCE WORTH KNOWING: minSlotSpacing is a minimum only while it fits.
+      With the current 6-wide gate box, 2 and 3 enemies get the authored 3-unit
+      spacing, but 4 enemies (stages 9 and 10, wave 2) need a 9-wide span and so
+      COMPRESS to 2 units. Widen gateRelativeMin/Max.x on LevelTemplate.prefab
+      if those waves should keep 3.
 
   DistributeAlongX(xMin, xMax, count)  [static]
       Evenly spaces count positions between xMin and xMax inclusive (a single
@@ -272,7 +314,12 @@ LOW-LEVEL UTILITIES
 HOW IT CONNECTS
 ---------------
   - Reads LevelConfig and its Wave/WaveEntry data.
-  - Reads LevelManager.CurrentStage for the CP/progression lens.
+  - Reads LevelBattleRules.ResolveLevel for the CP/progression lens (NOT
+    LevelManager.CurrentStage any more - see RunLevel step 1).
+  - StageCompositionReport (Editor) mirrors BuildWavesFromRules /
+    CopyWaveWithTotal / GenerateGridPositions to print what a stage will field
+    without playing it. Change the spread or layout rules here and that mirror
+    must be updated in the same pass or it starts lying.
   - Drives EnemyManager.Initialize on every spawned enemy.
   - Reads HudCurrencyView.Instance.IsGameplayPaused for pause-aware waiting.
   - BattleStartController calls StartBattle() when the BATTLE button is pressed

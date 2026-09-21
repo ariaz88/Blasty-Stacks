@@ -29,9 +29,11 @@ public static class EarlyCampaignEconomyVerification
                 var reward = StageRewardCalculator.GetRewardForStageAndHpCase(stage, 1, cfg);
                 wallet.AddCoins(reward.coins); wallet.AddHeroXP(reward.heroXP);
             }
-            Require(wallet.Coins == 200 && wallet.HeroXP == 4, "Minimum rewards before stage 6");
+            // 5 XP, not 4: stage 1 pays 1 Hero XP as of 2026-09-21, so one is spare here.
+            // Coins (200 banked vs 160 needed) remain what gates the four first upgrades.
+            Require(wallet.Coins == 200 && wallet.HeroXP == 5, "Minimum rewards before stage 6");
             foreach (int id in ids) Require(service.TryUpgrade(id) && model.GetLevel(id) == 2, "First upgrade " + id);
-            Require(wallet.Coins == 40 && wallet.HeroXP == 0, "Four upgrades debit both currencies");
+            Require(wallet.Coins == 40 && wallet.HeroXP == 1, "Four upgrades debit both currencies");
             int coinsBefore = wallet.Coins;
             Require(!service.TryUpgrade(ids[0]) && wallet.Coins == coinsBefore, "Insufficient resources do not debit coins");
             for (int stage = 6; stage <= 9; stage++)

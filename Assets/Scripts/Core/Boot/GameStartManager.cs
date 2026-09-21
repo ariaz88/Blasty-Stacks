@@ -176,10 +176,21 @@ public class GameStartManager : MonoBehaviour
 
         if (isFirstRunEconomy)
         {
-            // Use starting values from CurrencyManager
-            loadedCoins = currencyMgr.StartingCoins;
-            loadedGems = currencyMgr.StartingGems;
-            loadedHeroXp = currencyMgr.StartingHeroXP;
+            if (SavePersistence.Enabled)
+            {
+                // Use starting values from CurrencyManager
+                loadedCoins = currencyMgr.StartingCoins;
+                loadedGems = currencyMgr.StartingGems;
+                loadedHeroXp = currencyMgr.StartingHeroXP;
+            }
+            else
+            {
+                // Debug gate: every run is a fresh player with nothing banked, so the
+                // CurrencyManager inspector seed (4/4/6) is bypassed.
+                loadedCoins = SavePersistence.FreshStartCoins;
+                loadedGems = SavePersistence.FreshStartGems;
+                loadedHeroXp = SavePersistence.FreshStartHeroXp;
+            }
         }
         else
         {

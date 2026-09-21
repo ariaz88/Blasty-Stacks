@@ -286,12 +286,6 @@ public static class SaveSystem
     }
 
 
-    public static void Save1()
-    {
-        Data.savedAtUtc = System.DateTime.UtcNow.ToString("o");
-        PlayerPrefs.SetString(KEY, JsonUtility.ToJson(Data));
-        PlayerPrefs.Save();
-    }
     public static void Save()
     {
         if (saveDepth > 10) { Debug.LogError("[SaveSystem] Recursion guard: Skipping save"); return; }
@@ -299,6 +293,11 @@ public static class SaveSystem
         try
         {
             Data.savedAtUtc = System.DateTime.UtcNow.ToString("o");
+
+            // Debug gate: keep mutating the in-memory cache (so the running session
+            // behaves normally) but write nothing, so the next Play starts fresh.
+            if (!SavePersistence.Enabled) return;
+
             PlayerPrefs.SetString(KEY, JsonUtility.ToJson(Data));
             PlayerPrefs.Save();
         }
@@ -313,6 +312,9 @@ public static class SaveSystem
 
     private static SaveData LoadInternal()
     {
+        // Debug gate: ignore anything on disk, so every run boots as a new player.
+        if (!SavePersistence.Enabled) return new SaveData();
+
         if (!PlayerPrefs.HasKey(KEY)) return new SaveData();
         var json = PlayerPrefs.GetString(KEY);
         var loaded = JsonUtility.FromJson<SaveData>(json);
@@ -343,39 +345,6 @@ public static class SaveSystem
     /// to initial state, like a new game. Clears PlayerPrefs and cache.
     /// Call this from UI (e.g., checkbox) or debug tools.
     /// </summary>
-    public static void ResetAllIfRequested1(bool resetNow)
-    {
-        if (!resetNow) return; // No-op if unchecked
-
-        ResetAll(); // Existing method: Deletes key, nulls cache
-        Debug.Log("[SaveSystem] Full reset requested: Game state cleared to new player defaults.");
-    }
-
-    public static void ResetAllIfRequested2(bool resetNow)
-    {
-        if (!resetNow) return;
-
-        ResetAll(); // Clears PlayerPrefs and cache
-
-        // NEW: Force runtime resets for managers (call after bootstrap or in scene reload)
-        var currencyMgr = CurrencyManager.Instance;
-        if (currencyMgr != null)
-        {
-            currencyMgr.SetGems(currencyMgr.StartingGems);
-            currencyMgr.SetCoins(currencyMgr.StartingCoins, silent: true);
-            Debug.Log("[SaveSystem] Reset runtime currency to starting values.");
-        }
-
-        var gsm = GameStartManager.Instance;
-        if (gsm?.PlayerUnits != null)
-        {
-            // Reload units from database defaults (no saved override)
-            gsm.PlayerUnits.InitializeFromDatabase(gsm.unitsDatabase, gsm.initiallyUnlockedUnitIds); // Assume fields exposed
-            Debug.Log("[SaveSystem] Reset units to initial state.");
-        }
-
-        Debug.Log("[SaveSystem] Full reset complete: All progress cleared to new game defaults.");
-    }
     public static void ResetAllIfRequested(bool resetNow)
     {
         if (!resetNow) return;
@@ -385,13 +354,17 @@ public static class SaveSystem
         // --- NEW: reset LevelManager stage progress ---
         LevelManager.ResetProgressToStart();
 
-        // Reset runtime currency
+        // Reset runtime currency. With persistence disabled a "fresh start" means
+        // zero resources, not the CurrencyManager inspector values - same rule
+        // GameStartManager applies on boot, so a mid-session reset matches a relaunch.
         var currencyMgr = CurrencyManager.Instance;
         if (currencyMgr != null)
         {
-            currencyMgr.SetGems(currencyMgr.StartingGems);
-            currencyMgr.SetCoins(currencyMgr.StartingCoins, silent: true);
-            Debug.Log("[SaveSystem] Reset runtime currency to starting values.");
+            bool zeroed = !SavePersistence.Enabled;
+            currencyMgr.SetGems(zeroed ? SavePersistence.FreshStartGems : currencyMgr.StartingGems);
+            currencyMgr.SetCoins(zeroed ? SavePersistence.FreshStartCoins : currencyMgr.StartingCoins, silent: true);
+            currencyMgr.SetHeroXP(zeroed ? SavePersistence.FreshStartHeroXp : currencyMgr.StartingHeroXP);
+            Debug.Log($"[SaveSystem] Reset runtime currency to {(zeroed ? "zero" : "starting")} values.");
         }
 
         // Reset player units to initial state

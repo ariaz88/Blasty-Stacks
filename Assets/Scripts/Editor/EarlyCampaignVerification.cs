@@ -35,6 +35,10 @@ public static class EarlyCampaignVerification
         SessionState.SetInt(Key + ".repeats", repeats); SessionState.SetInt(Key + ".match", onlyMatch);
         SessionState.SetBool(Key, true); SessionState.SetString(Key + ".status", "Starting");
         DirectPlayMenu.Enabled = false;
+        // The harness drives scenarios through saves that must survive the play-mode
+        // transition, so the SavePersistence debug gate has to be on while it runs.
+        SessionState.SetBool(Key + ".persist", SavePersistence.Enabled);
+        SavePersistence.Enabled = true;
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         EditorApplication.isPlaying = true;
     }
@@ -56,6 +60,7 @@ public static class EarlyCampaignVerification
             PlayerPrefs.Save();
             typeof(SaveSystem).GetField("_cache", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, null);
             DirectPlayMenu.Enabled = SessionState.GetBool(Key + ".direct", true);
+            SavePersistence.Enabled = SessionState.GetBool(Key + ".persist", true);
             SessionState.SetBool(Key, false);
             string path = SessionState.GetString(Key + ".scene", "");
             if (!string.IsNullOrEmpty(path)) EditorSceneManager.OpenScene(path);

@@ -22,7 +22,7 @@ MonoBehaviour:
     spawnMin: {x: -13.5, y: 4.25}
     spawnMax: {x: 13.5, y: 6.25}
     gridColumns: 2
-    minSlotSpacing: {x: 9, y: 0.5}
+    minSlotSpacing: {x: 3, y: 0.5}
     frontAnchor: 0
     rowYOffset: 1.2
     secondRowDelay: 0.35
@@ -44,7 +44,7 @@ MonoBehaviour:
     spawnMin: {x: -13.5, y: 4.25}
     spawnMax: {x: 13.5, y: 6.25}
     gridColumns: 2
-    minSlotSpacing: {x: 9, y: 0.5}
+    minSlotSpacing: {x: 3, y: 0.5}
     frontAnchor: 0
     rowYOffset: 1.2
     secondRowDelay: 0.35

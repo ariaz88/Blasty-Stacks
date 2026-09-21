@@ -59,7 +59,7 @@ public static class LevelBattleRules
     ///   L1 [1]     L2 [2]     L3 [3]
     ///   L4 [2,2]   L5 [2,3]              L4 cut 5 -> 4 (Arash, 2026-09-16): wave 1 is
     ///                                    two SIDE BY SIDE, wave 2 is one of each type
-    ///   L6 [2,3]   L7 [3,3]   L8 [3,3]
+    ///   L6 [2,2,2] L7 [3,3]   L8 [3,3]   L6 went 5 -> 6 in THREE waves (Arash, 2026-09-21)
     ///   L9 [3,4]   L10 [3,4]
     ///
     /// Levels 4 and up MUST arrive in two or more waves - that is the point of the
@@ -84,7 +84,8 @@ public static class LevelBattleRules
         new[] { 3 },        // level 3
         new[] { 2, 2 },     // level 4 - two side by side, then one of each type
         new[] { 2, 3 },     // level 5
-        new[] { 2, 3 },     // level 6: new type, same count
+        new[] { 2, 2, 2 },  // level 6: SIX enemies in THREE waves of two (Arash, 2026-09-21).
+                            // Wave 1 is the returning pair; waves 2 and 3 are the new type only.
         new[] { 3, 3 },     // level 7
         new[] { 3, 3 },     // level 8: consolidate before the next increase
         new[] { 3, 4 },     // level 9
@@ -93,6 +94,40 @@ public static class LevelBattleRules
 
     /// <summary>Highest level this wave table covers.</summary>
     public static int MaxAuthoredEnemyLevel => EnemyWaves.Length;
+
+    /// <summary>
+    /// TEMPORARY, STAGE 6 ONLY (Arash, 2026-09-21 - "برای این لول فعلا").
+    ///
+    /// A reward for clearing the WHOLE board: if the player completed 100% of the
+    /// stage's matches, the FINAL enemy wave fields one extra enemy. Otherwise the
+    /// authored count stands. At stage 6 that is 3 Skeleton Swordsmen in wave 3
+    /// instead of 2, so a full clear is met with a harder last wave.
+    ///
+    /// This is a COUNT rule, like the rest of this file - it does not touch stats
+    /// and does not decide a winner. It is checked when the final wave is about to
+    /// SPAWN, not when the battle starts, because the player is still clearing
+    /// matches while the earlier waves are being fought.
+    ///
+    /// Scoped to one level on purpose. Generalising it means giving
+    /// <see cref="EnemyWaves"/> a per-level bonus column rather than widening this
+    /// constant.
+    /// </summary>
+    public const int FullClearBonusLevel = 6;
+
+    /// <summary>
+    /// How many enemies the final wave actually fields. <paramref name="authoredCount"/>
+    /// is what <see cref="EnemyWaveCounts"/> says; the bonus applies only on the
+    /// level above and only on a 100% match clear.
+    /// </summary>
+    public static int FinalWaveCount(int level, int authoredCount, bool allMatchesCleared) =>
+        level == FullClearBonusLevel && allMatchesCleared ? authoredCount + 1 : authoredCount;
+
+    /// <summary>
+    /// True when the player has cleared every match the deployment table defines
+    /// for this level. Null-safe: no wave manager means "not cleared".
+    /// </summary>
+    public static bool AllMatchesCleared(int level, PlayerWaveManager heroes) =>
+        heroes != null && AppliesTo(level) && heroes.MatchesCleared >= TotalPairs(level);
 
     /// <summary>
     /// Enemy count per wave for this level, in spawn order - or null when the

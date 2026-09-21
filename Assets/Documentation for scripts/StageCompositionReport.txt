@@ -1,0 +1,85 @@
+================================================================================
+  StageCompositionReport.cs
+  Path : Assets/Scripts/Editor/StageCompositionReport.cs
+  Type : static class, Editor-only (lives in an "Editor" folder)
+  Layer: Editor
+  Scenes: none
+================================================================================
+
+PURPOSE
+-------
+Prints exactly what EnemySpawner will field for a range of stages, WITHOUT
+entering Play mode: wave counts, enemy types in spawn order, each unit's
+stage-scaled ATK/AtkSpd/HP/DEF and CP, per-wave and per-stage CP totals, and the
+X position and spacing the grid layout will produce.
+
+Written 2026-09-21 because none of that was observable except by playing a stage
+and counting by eye - which is how "level 6 has 4 enemies" and a complaint about
+enemies being spread to the screen edges both had to be diagnosed. It authors
+NOTHING and writes NOTHING; every number is recomputed from the same assets and
+the same arithmetic the game uses at runtime.
+
+MENU ITEMS
+----------
+  Tools/Testing/Report Stage Composition (1-10)        (priority 40)
+  Tools/Testing/Report Stage Composition (stage 6 only) (priority 41)
+      Both call Report(first, last), which logs Build(first, last).
+
+METHODS
+-------
+  Build(first, last) -> string        [public]
+      The report as text. Public so tooling (the Unity MCP RunCommand, a test)
+      can read it back directly instead of scraping the console.
+  Report(first, last)                 [private]  Debug.Log(Build(...)).
+  LoadStageConfig(stage)              Loads "Assets/Scriptable Objects/Spawner/
+      Stage_NN.asset" by convention - a stage with no such asset is reported as
+      missing rather than throwing.
+  TemplateTotal(wave)                 Sum of authored entry counts, used when a
+      level is past LevelBattleRules' authored range and the asset's own waves
+      are what run.
+  SpreadTypes(template, total)        MIRRORS EnemySpawner.CopyWaveWithTotal
+      (authored mix verbatim when it already sums to `total`, else even spread
+      with remainder to the earliest) and then SpawnAllTogetherGrid's
+      round-robin interleave - so the returned ORDER is the spawn order, which
+      is what maps onto the X positions.
+  GridXOffsets(wave, count)           MIRRORS EnemySpawner.GenerateGridPositions
+      for the X axis, reported as OFFSETS FROM THE BOX CENTRE rather than
+      absolute X - see LiveBoxWidth for why an absolute X would be fiction.
+  SlotSpacing(span, slots, desired)   MIRRORS EnemySpawner.SlotSpacing.
+  LiveBoxWidth(wave)                  The width the spawner ACTUALLY lays out
+      inside. LevelTemplate.prefab has spawnRelativeToEnemyGate ON, so for every
+      stage built on it the live box is gateRelativeMin/Max around the enemy
+      gate (currently 6 wide) and the Wave's own spawnMin/spawnMax is never
+      read - the assets still say 27. Read off the template with SerializedObject
+      because those fields are private [SerializeField]. Falls back to the wave's
+      own width if the template cannot be loaded.
+      This is not cosmetic: at 6 wide a 4-enemy wave cannot hold 3-unit spacing
+      and compresses to 2, which reporting the 27 would have hidden.
+  ScaledStats(so, stage)              MIRRORS EnemyManager.RebuildFromBase: base
+      UnitStatsSO values times the compounded EnemyProgression growth for that
+      stage, via ProgressionMath.GetGrowthMultipliers.
+
+HOW IT CONNECTS
+---------------
+  - LevelBattleRules.EnemyWaveCounts - the authority on how many enemies arrive.
+  - LevelConfig / Wave / WaveEntry   - types, spawn box, grid columns.
+  - ProgressionMath + EnemyProgression.asset - the per-stage stat growth.
+  - CPCalculator.UnitPower           - the CP figure, unrounded.
+  - EnemySpawner                     - the three mirrored algorithms.
+
+NOTES
+-----
+  !! IT IS A MIRROR, NOT A CALL. SpreadTypes, GridXPositions and ScaledStats
+  !! reimplement private EnemySpawner/EnemyManager logic because those members
+  !! are private and instance-bound. If the spread rule, the grid layout or the
+  !! growth application changes in EnemySpawner/EnemyManager, THIS FILE MUST BE
+  !! UPDATED IN THE SAME PASS or the report will confidently print numbers the
+  !! game does not produce. That is the one real maintenance cost of the tool.
+  - It reports the PLANNED composition. It cannot tell you whether a wave is
+    actually reached: EnemySpawner waits for _alive == 0 before starting the
+    next wave, so a stage lost during wave 1 never fields wave 2 at all.
+  - CP here is descriptive only. Nothing in the game reads CP to decide a fight
+    (see CPCalculator and LevelBattleRules) - it is a comparison aid.
+  - The EnemyProgression path is hard-coded. A moved or renamed progression
+    asset makes ScaledStats silently return UNSCALED base values, which would
+    read as every stage having stage-1 enemies.

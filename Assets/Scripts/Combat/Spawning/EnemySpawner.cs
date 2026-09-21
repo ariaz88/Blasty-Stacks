@@ -37,6 +37,12 @@ public class EnemySpawner : MonoBehaviour
     bool _battleStarted;
     private CPBattleController cpBattle;
 
+    /// <summary>
+    /// The hero side, cached at battle start. Only read for the stage-6 full-clear
+    /// bonus on the final wave - see LevelBattleRules.FullClearBonusLevel.
+    /// </summary>
+    private PlayerWaveManager _heroes;
+
     /// <summary>True once the wave loop has actually been kicked off.</summary>
     public bool BattleStarted => _battleStarted;
 
@@ -175,6 +181,7 @@ public class EnemySpawner : MonoBehaviour
     {
         int stage = LevelBattleRules.ResolveLevel(gameObject, levelConfig);
         var heroes = FindObjectOfType<PlayerWaveManager>();
+        _heroes = heroes;   // kept for the final-wave full-clear check in RunLevel
 
         if (LevelBattleRules.AppliesTo(stage) && heroes) heroes.SealForBattle();
 
@@ -192,6 +199,38 @@ public class EnemySpawner : MonoBehaviour
         cpBattle.Prepare(this, heroes);
 
         yield return RunLevel();
+    }
+
+    /// <summary>
+    /// Hard ceiling on the gap between one wave spawning and the next (Arash,
+    /// 2026-09-21: "if it is more than 8 seconds, make it 8").
+    ///
+    /// Before this the gap was UNBOUNDED - each wave waited for the field to be
+    /// completely cleared, so the delay was however long the kill happened to
+    /// take, and an enemy that could not be reached stalled the stage forever.
+    /// </summary>
+    private const float MaxSecondsBetweenWaves = 8f;
+
+    /// <summary>
+    /// The gap between waves: honour the authored beat, then wait for the field to
+    /// clear - but never longer than <see cref="MaxSecondsBetweenWaves"/> in total.
+    /// Pause-aware, like every other wait here.
+    /// </summary>
+    IEnumerator WaitBetweenWaves(float authoredDelay)
+    {
+        float elapsed = 0f;
+        float minDelay = Mathf.Clamp(authoredDelay, 0f, MaxSecondsBetweenWaves);
+
+        while (elapsed < MaxSecondsBetweenWaves)
+        {
+            if (!IsGameplayPaused()) elapsed += Time.deltaTime;
+
+            // Early out as soon as the authored beat has passed AND the field is
+            // clear, so a wave that dies quickly still advances quickly.
+            if (elapsed >= minDelay && _alive == 0) yield break;
+
+            yield return null;
+        }
     }
 
     bool IsGameplayPaused()
@@ -254,18 +293,34 @@ public class EnemySpawner : MonoBehaviour
         // .EnemyWaveCounts and enemy strength from each type's own growth curve.
         // cpBattle now exists in every battle and must not change how they spawn.
 
-        // Use LevelManager's global additive stage index as the stage/CP level.
-        // Fallback to levelConfig.levelNumber if LevelManager is not present
-        // (e.g. when testing the scene directly).
-        int stageLevel = LevelManager.Instance != null
-            ? LevelManager.CurrentStage
-            : levelConfig.levelNumber;
+        // The SAME resolution StartPreparedBattle already uses, so the stage that
+        // decides the wave counts and the enemy stat curve cannot disagree with the
+        // stage the battle was set up for.
+        //
+        // This used to read LevelManager.CurrentStage first and only fall back to
+        // levelConfig.levelNumber when the singleton was missing. Those two can
+        // drift: pressing Play directly on a stage scene, or any flow that reaches
+        // a gameplay scene without HomeManager/DirectPlayBootstrap calling SetStage,
+        // leaves CurrentStage pointing somewhere else - and then this stage fields
+        // ANOTHER stage's wave counts and enemy strength. Since SavePersistence
+        // forces LevelManager back to stage 1 on every run, that drift is now the
+        // normal case in editor testing rather than an edge case.
+        //
+        // ResolveLevel reads the "_Stage_N" suffix of the scene name first (the
+        // gameplay scenes are Level_1_Stage_N), then the asset's own levelNumber -
+        // both of which are authored per stage and cannot drift at runtime.
+        int stageLevel = LevelBattleRules.ResolveLevel(gameObject, levelConfig);
 
         // LevelBattleRules.EnemyWaves is the authority on HOW MANY enemies arrive
         // and in how many waves (Arash, 2026-09-14). The LevelConfig asset still
         // supplies everything else - formation, spawn area, enemy types, delays -
         // so this reshapes the authored waves rather than replacing them.
         var waveList = BuildWavesFromRules(stageLevel);
+
+        // The authored per-wave counts, kept for the final-wave bonus check below.
+        // Null past the authored range, where the asset's own waves run unchanged.
+        var counts = LevelBattleRules.EnemyWaveCounts(stageLevel);
+        if (counts != null && counts.Length != waveList.Count) counts = null;
 
         // A level with no waves authored has, trivially, already sent everything it has.
         if (waveList.Count == 0)
@@ -278,7 +333,28 @@ public class EnemySpawner : MonoBehaviour
         {
             var wave = waveList[i];
 
-            if (wave.delayBeforeWave > 0f)
+            // FINAL-WAVE FULL-CLEAR BONUS (stage 6 only, temporary).
+            // Resolved HERE rather than in BuildWavesFromRules because the player
+            // goes on clearing board matches while the earlier waves are fought -
+            // asking at battle start would always see zero matches cleared.
+            if (i == waveList.Count - 1 && counts != null)
+            {
+                bool cleared = LevelBattleRules.AllMatchesCleared(stageLevel, _heroes);
+                int wanted = LevelBattleRules.FinalWaveCount(stageLevel, counts[i], cleared);
+
+                if (wanted != counts[i])
+                {
+                    var template = levelConfig.waves[Mathf.Min(i, levelConfig.waves.Count - 1)];
+                    wave = CopyWaveWithTotal(template, wanted, i);
+                    Debug.Log($"[EnemySpawner] Stage {stageLevel}: all {LevelBattleRules.TotalPairs(stageLevel)} " +
+                              $"matches cleared - final wave {counts[i]} -> {wanted} enemies.", this);
+                }
+            }
+
+            // The FIRST wave still honours its own authored beat after startDelay.
+            // Later waves get their delay folded into the capped gap below instead,
+            // so the gap never exceeds MaxSecondsBetweenWaves.
+            if (i == 0 && wave.delayBeforeWave > 0f)
                 yield return WaitForSecondsGameplay(wave.delayBeforeWave);
 
             switch (wave.formation)
@@ -293,15 +369,35 @@ public class EnemySpawner : MonoBehaviour
                     break;
             }
 
+            int spawned = 0;
+            foreach (var e in wave.entries) if (e != null) spawned += e.count;
+            Debug.Log($"[EnemySpawner] Stage {stageLevel}: spawned wave {i + 1}/{waveList.Count} " +
+                      $"with {spawned} enem{(spawned == 1 ? "y" : "ies")}.", this);
+
             // Flagged HERE rather than after the loop: the last iteration parks on the
-            // WaitUntil below and only falls through once the field is clear, so waiting
+            // wait below and only falls through once the field is clear, so waiting
             // for the loop to end would make this useless to anyone asking "can more
             // enemies still arrive?" while the final wave is alive.
             if (i == waveList.Count - 1)
                 AllWavesDispatched = true;
 
-            // Wait for wave clear (optional)
-            yield return new WaitUntil(() => _alive == 0);
+            if (i < waveList.Count - 1)
+            {
+                var next = waveList[i + 1];
+
+                // EVERY remaining wave WILL arrive: on a fixed timer when the wave
+                // asks for one, otherwise on a clear-gated but BOUNDED wait. Either
+                // way a wave that cannot be killed can no longer stall the stage.
+                if (next.spawnOnTimerOnly)
+                    yield return WaitForSecondsGameplay(Mathf.Max(0f, next.delayBeforeWave));
+                else
+                    yield return WaitBetweenWaves(next.delayBeforeWave);
+            }
+            else
+            {
+                // Last wave: nothing further to spawn, so just let the field settle.
+                yield return new WaitUntil(() => _alive == 0);
+            }
         }
 
         // Stage complete � if you ever want to auto-advance directly from here,
@@ -349,10 +445,17 @@ public class EnemySpawner : MonoBehaviour
     /// A copy of <paramref name="template"/> whose entry counts sum to exactly
     /// <paramref name="total"/>.
     ///
-    /// The total is spread across the template's entries as evenly as possible,
-    /// remainder to the earliest ones, so a wave authored with two enemy types
-    /// keeps both instead of collapsing to the first. An entry that rounds down to
-    /// zero is DROPPED rather than kept at zero, because WaveEntry.count is
+    /// WHEN THE AUTHORED COUNTS ALREADY SUM TO <paramref name="total"/> THEY ARE
+    /// USED VERBATIM. That is what lets a stage author a specific MIX - "1 Reaper,
+    /// 2 Zombies, 2 Skeletons" - instead of only a head count. Without it the even
+    /// spread below silently overwrites the mix: a wave authored as 2 Skeletons +
+    /// 1 Zombie would come out as 2 Zombies + 1 Skeleton purely because of entry
+    /// order, which is impossible to author around and very hard to spot in play.
+    ///
+    /// Otherwise the total is spread across the template's entries as evenly as
+    /// possible, remainder to the earliest ones, so a wave authored with two enemy
+    /// types keeps both instead of collapsing to the first. An entry that rounds
+    /// down to zero is DROPPED rather than kept at zero, because WaveEntry.count is
     /// [Min(1)] and a zero would be clamped back up to one and overshoot the total.
     /// </summary>
     private static Wave CopyWaveWithTotal(Wave template, int total, int waveIndex)
@@ -361,6 +464,7 @@ public class EnemySpawner : MonoBehaviour
         {
             name = $"{template.name} (rules {waveIndex + 1})",
             delayBeforeWave = template.delayBeforeWave,
+            spawnOnTimerOnly = template.spawnOnTimerOnly,
             formation = template.formation,
             spawnMin = template.spawnMin,
             spawnMax = template.spawnMax,
@@ -378,6 +482,27 @@ public class EnemySpawner : MonoBehaviour
             if (e != null && e.enemyPrefab) sources.Add(e);
 
         if (sources.Count == 0 || total <= 0) return copy;
+
+        // Authored mix wins when it already fields the right number of enemies.
+        int authored = 0;
+        foreach (var e in sources) authored += Mathf.Max(0, e.count);
+
+        if (authored == total)
+        {
+            foreach (var src in sources)
+            {
+                if (src.count <= 0) continue;
+                copy.entries.Add(new WaveEntry
+                {
+                    enemyPrefab = src.enemyPrefab,
+                    statsBase = src.statsBase,
+                    count = src.count,
+                    row = src.row,
+                    unitLevel = src.unitLevel
+                });
+            }
+            return copy;
+        }
 
         int each = total / sources.Count;
         int remainder = total % sources.Count;
@@ -592,48 +717,92 @@ public class EnemySpawner : MonoBehaviour
         _alive = Mathf.Max(0, _alive - 1);
     }
 
-    // Generate N positions in a grid that fits inside [min,max]
+    /// <summary>
+    /// N positions laid out as a CENTRED grid inside [min,max].
+    ///
+    /// REWRITTEN 2026-09-21 (Arash, from two annotated screenshots of stage 6).
+    /// The old version started at the left edge and clamped anything that fell
+    /// outside, which broke in two visible ways with the real gate-relative box
+    /// (6 wide, minSlotSpacing.x 3):
+    ///
+    ///   2 enemies: dx = 6/3 = 2, raised to the minimum 3, first slot at
+    ///              xMin + 3 = the box CENTRE -> the pair sat at centre and
+    ///              centre+3, i.e. visibly shoved to the right.
+    ///   3 enemies: dx = 6/4 = 1.5, raised to 3, slots at centre, centre+3 and
+    ///              centre+6 - and centre+6 is outside the box, so Mathf.Clamp
+    ///              pulled it back ONTO centre+3. TWO ENEMIES ON ONE SPOT.
+    ///
+    /// The clamp could only ever collapse slots together; it could not make them
+    /// fit. So spacing is now CAPPED to what the box can actually hold and the
+    /// block is CENTRED, which makes both of those impossible:
+    ///
+    ///   - minSpacing is honoured as a minimum only while it fits. Past that the
+    ///     row is spread edge to edge instead of overflowing.
+    ///   - every slot is distinct by construction, so nothing overlaps.
+    ///   - the formation is symmetric about the box centre, so it reads as
+    ///     deliberate placement rather than drift to one side.
+    ///   - a short final row is centred on its own, not left-aligned.
+    ///
+    /// With the current box this gives exactly the arrangement Arash drew:
+    ///   2 enemies -> centre-1.5, centre+1.5
+    ///   3 enemies -> centre-3,   centre, centre+3
+    /// both at the same 3-unit spacing.
+    /// </summary>
     static List<Vector3> GenerateGridPositions(Vector2 min, Vector2 max, int count, int columns, Vector2 minSpacing)
     {
         var positions = new List<Vector3>(count);
+        if (count <= 0) return positions;
 
         float xMin = Mathf.Min(min.x, max.x);
         float xMax = Mathf.Max(min.x, max.x);
         float yMin = Mathf.Min(min.y, max.y);
         float yMax = Mathf.Max(min.y, max.y);
-        float w = Mathf.Max(0.01f, xMax - xMin);
-        float h = Mathf.Max(0.01f, yMax - yMin);
+        float w = Mathf.Max(0f, xMax - xMin);
+        float h = Mathf.Max(0f, yMax - yMin);
 
-        // columns: auto if not set
+        // Never ask for more columns than there are units - an empty trailing
+        // column would push the row off centre.
         int cols = (columns > 0) ? columns : Mathf.CeilToInt(Mathf.Sqrt(count));
-        cols = Mathf.Max(1, cols);
+        cols = Mathf.Clamp(cols, 1, count);
         int rows = Mathf.CeilToInt(count / (float)cols);
 
-        // spacing: try to fit evenly, respecting minSpacing
-        float dx = w / (cols + 1);
-        float dy = h / (rows + 1);
-        dx = Mathf.Max(dx, (minSpacing.x > 0f ? minSpacing.x : dx));
-        dy = Mathf.Max(dy, (minSpacing.y > 0f ? minSpacing.y : dy));
+        float dx = SlotSpacing(w, cols, minSpacing.x);
+        float dy = SlotSpacing(h, rows, minSpacing.y);
 
-        // recompute effective cols/rows to keep positions inside area
-        // we�ll center within the rectangle
-        float xStart = xMin + dx;
-        float yStart = yMin + dy;
+        float xCentre = (xMin + xMax) * 0.5f;
+        float yCentre = (yMin + yMax) * 0.5f;
+        float yStart = yCentre - (rows - 1) * dy * 0.5f;
 
         int placed = 0;
         for (int r = 0; r < rows && placed < count; r++)
         {
-            for (int c = 0; c < cols && placed < count; c++)
+            int inRow = Mathf.Min(cols, count - placed);
+            float rowStart = xCentre - (inRow - 1) * dx * 0.5f;
+
+            for (int c = 0; c < inRow; c++)
             {
-                float x = xStart + c * dx;
-                float y = yStart + (rows - 1 - r) * dy; // top-to-bottom
-                x = Mathf.Clamp(x, xMin, xMax);
-                y = Mathf.Clamp(y, yMin, yMax);
+                float x = rowStart + c * dx;
+                float y = yStart + (rows - 1 - r) * dy;   // top-to-bottom
                 positions.Add(new Vector3(x, y, 0f));
                 placed++;
             }
         }
         return positions;
+    }
+
+    /// <summary>
+    /// Gap between adjacent slots along one axis: the authored minimum when the
+    /// box can hold it, otherwise the widest gap that still fits edge to edge.
+    /// Returns 0 for a single slot, which centres it.
+    /// </summary>
+    static float SlotSpacing(float span, int slots, float desired)
+    {
+        if (slots <= 1) return 0f;
+
+        float widestThatFits = span / (slots - 1);
+        if (desired <= 0f) return widestThatFits;
+
+        return Mathf.Min(desired, widestThatFits);
     }
 
     // Evenly spaced X positions between xMin..xMax (inclusive ends)

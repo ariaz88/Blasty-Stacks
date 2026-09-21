@@ -1,0 +1,62 @@
+================================================================================
+  SavePersistenceMenu.cs
+  Path : Assets/Scripts/Editor/SavePersistenceMenu.cs
+  Type : static class, Editor-only (lives in an "Editor" folder, so it is never
+         compiled into a player build)
+  Layer: Editor
+  Scenes: none
+================================================================================
+
+PURPOSE
+-------
+Editor-menu access to the SavePersistence debug gate, so it can be flipped
+WITHOUT entering Play mode, plus a one-click wipe of the two PlayerPrefs keys
+that hold all progress. The Play-mode twin of SavePersistenceDebugPanel.
+
+MENU ITEMS
+----------
+  Tools/Save System/Save && Load Enabled        (priority 0)   [checkable]
+      ToggleSaving()   - SavePersistence.Enabled = !SavePersistence.Enabled
+      ToggleSavingValidate()  [MenuItem(..., validate = true)]
+          Calls Menu.SetChecked(...) with the current gate value so the item
+          shows a tick when saving is on, then returns true (always clickable).
+      NOTE the doubled ampersand in the path: "&" is the Unity menu shortcut
+      escape, so "Save && Load Enabled" is what renders as "Save & Load
+      Enabled".
+
+  Tools/Save System/Wipe Saved Progress Now     (priority 20)
+      WipeSavedProgress()
+          Shows an EditorUtility.DisplayDialog confirmation first (the action
+          is irreversible), then:
+            1. PlayerPrefs.DeleteKey("GAME_SAVE_V1")   - units, currency,
+               stars/unlocks, tutorials, deploy stages, battle energy
+            2. PlayerPrefs.DeleteKey("LM.CurrentStage") - the global stage
+            3. PlayerPrefs.Save()
+            4. SaveSystem.ResetAll()  - drops the in-memory cache too, so a
+               later Save() in the same editor session cannot resurrect the
+               old blob from the still-loaded cache
+          Logs a confirmation line.
+
+HOW IT CONNECTS
+---------------
+  - SavePersistence  - the gate being toggled.
+  - SaveSystem       - ResetAll(), and the "GAME_SAVE_V1" key it owns.
+  - LevelManager     - the "LM.CurrentStage" key it owns (deleted directly here
+                       rather than via LevelManager, because in Edit mode
+                       LevelManager.Instance does not exist).
+
+NOTES
+-----
+  - WHY THE WIPE ITEM EXISTS: disabling the gate stops new writes and ignores
+    reads, but it does not erase a save that was already written. If you disable
+    saving and still want the on-disk blob gone (for example before handing the
+    project to someone else, or before re-enabling saving), run the wipe once.
+  - The two keys deleted here are hard-coded string literals rather than
+    references to the private constants in SaveSystem / LevelManager. If either
+    key name is ever changed, this file must be updated in lockstep - grep for
+    "GAME_SAVE_V1" and "LM.CurrentStage", which also appear in the Editor
+    verification harnesses (CPCombatVerification, EarlyCampaignVerification,
+    EarlyCampaignEconomyVerification).
+  - Menu.SetChecked is called from the validate function, which Unity invokes
+    every time the menu is opened - that is the standard idiom for a checkable
+    menu item and the same reason the item is cheap to leave always-enabled.

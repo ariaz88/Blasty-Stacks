@@ -46,8 +46,17 @@ METHODS
   MarkLevelWon()          advances to CurrentStage + 1 and loads its scene
   RestartStage()          reloads the scene for the current stage
   SetStage(stage, loadScene = true)
-      Clamps to 1..maxStage, persists to PlayerPrefs immediately, raises both
-      events, then optionally loads the stage scene.
+      Clamps to 1..maxStage, persists via PersistCurrentStage() immediately,
+      raises both events, then optionally loads the stage scene.
+
+  PersistCurrentStage()  [static, added 2026-09-20]
+      The single write path for "LM.CurrentStage". No-ops when
+      SavePersistence.Enabled is false, or when Instance is null (which is the
+      normal case in Edit mode). Every previous inline
+      PlayerPrefs.SetInt + PlayerPrefs.Save pair now routes through here, so
+      the debug gate cannot be defeated by a stage change. Also called by
+      SavePersistence when saving is switched back ON, to commit the current
+      stage right away.
 
   LoadSceneForStage(stage)  [private]
       Uses stageSceneNames[stage-1] when a non-empty name exists, otherwise
@@ -64,13 +73,20 @@ METHODS
       "Is the player at or past Stage X-Y?" Used for unit unlock requirements.
 
   ResetProgressToStart()   [static]
-      Resets to startingStage, rewrites PlayerPrefs and re-fires both events.
+      Resets to startingStage, rewrites PlayerPrefs (via PersistCurrentStage,
+      so it too respects the debug gate) and re-fires both events.
       If the singleton does not exist yet it simply deletes the PlayerPrefs key
       so the next Awake starts fresh.
 
 PERSISTENCE
 -----------
   Uses its OWN PlayerPrefs key: "LM.CurrentStage".
+
+  DEBUG GATE (added 2026-09-20): Awake() reads that key only when
+  SavePersistence.Enabled is true; otherwise it boots at startingStage and
+  ignores whatever is stored. Combined with the SaveSystem gate, this makes
+  every Play run start at stage 1 with zero resources. See SavePersistence.
+
   !! NOTE: this is the one place in the project that persists outside
   !! SaveSystem. The current stage therefore lives in a different key from the
   !! rest of the save file, and the two can get out of sync - for example if

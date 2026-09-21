@@ -441,6 +441,148 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
 ## Session Log — full entries (newest first)
 
 
+### 2026-09-21 — Enemy spawn layout: centred formations, spacing capped to the box
+
+- **Goal:** Arash, from two annotated screenshots of stage 6: the 2-enemy wave's spacing is
+  good but it sits in the wrong place, and the 3-enemy wave puts two enemies on the same spot.
+  "From now on use this arrangement for 2- and 3-enemy groups."
+- **Status:** done, verified in edit mode via `Tools > Testing > Report Stage Composition`.
+  NOT play-tested.
+- **Root cause, part 1 — the spawn box in the assets is DEAD.** `LevelTemplate.prefab` has
+  `spawnRelativeToEnemyGate: 1`, so for every stage built on it the live box is
+  `gateRelativeMin`/`gateRelativeMax` measured from the enemy gate — **6 wide** — while the
+  `Stage_NN` assets still say `spawnMin/Max.x = ±13.5`, i.e. 27. Those asset fields are never
+  read for those stages. A spacing fix authored into `Stage_06.asset` earlier the same day had
+  literally no effect, which is what made the first attempt look like it had worked when the
+  report was computed from the asset values.
+- **Root cause, part 2 — `GenerateGridPositions` left-aligned and clamped.** It put the first
+  slot at `xMin + dx` and `Mathf.Clamp`ed anything outside. Against the real 6-wide box with
+  `minSlotSpacing.x = 3`:
+  - 2 enemies: `dx = 6/3 = 2`, raised to the minimum 3, slots at centre and centre+3 — so the
+    pair sat visibly shoved to the right rather than centred.
+  - 3 enemies: `dx = 6/4 = 1.5`, raised to 3, slots at centre, centre+3, centre+6 — and
+    centre+6 is outside the box, so the clamp pulled it back **onto** centre+3. Two enemies on
+    one spot. A clamp can only ever collapse slots together; it cannot make them fit.
+- **Fix:** rewrote `GenerateGridPositions` to centre the block on the box centre and added
+  `SlotSpacing(span, slots, desired)` = `min(desired, span/(slots-1))`, so the authored minimum
+  is honoured only while it fits and the row is spread edge to edge past that. Columns are now
+  clamped to `count` (an empty trailing column shifted the row off centre), a short final row is
+  centred on its own, and no position is clamped any more because none can fall outside.
+- **The standard now in force** (Arash's drawing): 2 enemies at centre ±1.5, 3 enemies at
+  centre −3 / 0 / +3, both at 3-unit spacing.
+- **Also changed:** `Stage_04.asset` `minSlotSpacing.x` 9 → 3 (it was the last stage in the
+  authored range still at the old wide spacing — the same "enemies at both edges of the screen"
+  complaint). `LevelTemplate.prefab` `gateRelativeMin/Max` y `-4 … -2` → `-2 … 0`, raising the
+  spawn line **2 world units** toward the enemy gate; scale came from the screenshot, where the
+  pair is 3 world units ≈ 105 px apart, and Arash's mark sat ≈69 px higher. This is the shared
+  template, so it moves the spawn line for **every** stage using it.
+- **Known consequence, not fixed:** 4-enemy waves (stages 9 and 10, wave 2) need a 9-wide span
+  and so compress to **2-unit** spacing inside the 6-wide box. Widen `gateRelativeMin/Max.x` if
+  they should keep 3. Arash only specified 2- and 3-enemy groups.
+- **Tooling:** `StageCompositionReport.LiveBoxWidth` now reads `spawnRelativeToEnemyGate` and
+  the gate-relative box off `LevelTemplate.prefab` with `SerializedObject` (the fields are
+  private `[SerializeField]`), and the report prints offsets from the box centre rather than an
+  absolute X. Before this the tool reported the asset's 27 and would have hidden the 4-enemy
+  compression entirely.
+
+
+### 2026-09-21 — Stage 6: 5 enemies as 2+3, new Skeleton Swordsman at +20% CP
+
+- **Goal:** Arash: stage 6 shows 4 enemies; make it 5, spawned 2 then 3. Introduce a new enemy
+  at stage 6, a skeleton swordsman, with CP 20% above the enemies already in the stage but the
+  same attack speed. Later refined to an exact mix: 1 of type 1 (the stage-1 enemy), 2 of
+  type 2, and 2 of the new type, with both new ones in the last wave.
+- **Status:** done, CP and composition verified in edit mode. NOT play-tested.
+- **The "4 enemies" report could not be reproduced from the data.** `LevelBattleRules.EnemyWaves`
+  has had `{2,3}` = 5 for level 6 since 2026-09-14, and `Stage_06.asset` resolves to 5. The one
+  mechanism found that produces exactly 4 is the stage resolving to **4** instead of 6
+  (`EnemyWaves[3] = {2,2}`), which was possible because `RunLevel` read
+  `LevelManager.CurrentStage` while `StartPreparedBattle` used `LevelBattleRules.ResolveLevel`.
+  Those can disagree, and since `SavePersistence` now forces `CurrentStage` to 1 on every run,
+  the drift is the normal case in editor testing. Both call sites now use `ResolveLevel`
+  (scene-name `_Stage_N` → asset `levelNumber`), which cannot move at runtime.
+- **Second bug found while authoring the mix:** `CopyWaveWithTotal` spread the rules' head count
+  evenly across the template's entries, **overwriting authored per-type counts**. Wave 2
+  authored as Skeleton ×2 + Zombie ×1 came out as Zombie ×2 + Skeleton ×1, decided purely by
+  entry order — the requested mix was simply not authorable. It now copies the authored counts
+  verbatim when they already sum to the rules total, keeping the even spread as the fallback.
+- **New asset `Enemy_Skeleton_Swordsman.asset`** — ATK 52.49176, DEF 52, maxHP 489.12777,
+  AtkSpd 0.66041815, moveSpeed 0.5, attackRange 0.83. Deliberately a NEW asset rather than an
+  edit to `Enemy_Skeleton_Crusader_1`, so stages 9+ keep the original Crusader numbers. It
+  reuses the Crusader PREFAB because that is the only skeleton art in the project (it does carry
+  a sword sprite, `Skeleton_Crusader_1Sword.png`).
+- **CP derivation.** `CP = ATK × AtkSpd × maxHP × (1 + DEF/100) / 380`, with each stat first
+  scaled by the compounded `EnemyProgression` growth for the stage (at L6: gA 1.39031,
+  gH 1.46750, gAS 1.05993, gD 1.05930). Stage-6 CP of the existing enemies: Reaper 113.7,
+  Zombie 124.7 (Orc 143.4, Crusader 164.9). Reference taken as the **Zombie**, matching Arash's
+  own example. Target = 1.20 × 124.71 = 149.65. Dropping attack speed from the Crusader's 0.7 to
+  the Reaper/Zombie 0.66041815 (Arash's "same attack speed as the others") already takes it to
+  155.60, so ATK and HP were each scaled by √(149.65/155.60) = 0.980691 — split multiplicatively
+  per the precedent in `Docs/balance/stages-5-10.md`. DEF stayed at 52 to keep the armoured
+  identity. Verified in Unity: **149.7, exactly 1.200 × the Zombie**.
+- **Composition:** wave 1 = Reaper ×1 + Zombie ×1; wave 2 = Skeleton ×2 + Zombie ×1. Totals
+  1 / 2 / 2 as asked, both Skeletons in the last wave. **The Orc no longer appears at stage 6**
+  — it now debuts at stage 7. Stage-6 total enemy CP 620.2 → 662.4.
+- **OPEN — "enemies must always win if no upgrade happens" is NOT met, and conflicts with the
+  +20% spec.** An unupgraded hero is 116.47 CP (measured, `Docs/balance/latest-playmode.csv`).
+  Stage 6 deploys `{1,1,2,2,4}` = up to 10 heroes: 6 heroes = 698.8 CP and 10 = 1164.7, against
+  662.4 total enemy CP, so the player still wins. Closing it needs roughly **+76%** enemy CP,
+  not +20%. Left for Arash to decide between raising enemy CP, adding enemies, or cutting the
+  stage-6 hero deployment table — deliberately not resolved unilaterally, since the deployment
+  counts and the +20% figure are both his.
+- **New tool:** `Assets/Scripts/Editor/StageCompositionReport.cs` —
+  `Tools > Testing > Report Stage Composition`. Read-only; prints per stage the wave counts,
+  types in spawn order, each unit's stage-scaled stats and CP, wave/stage CP totals, and the
+  layout offsets and spacing. It MIRRORS private spawner logic, so it must be updated whenever
+  `CopyWaveWithTotal`, `GenerateGridPositions` or `RebuildFromBase` changes.
+
+
+### 2026-09-20/21 — Save/load gated off behind `SavePersistence`, stage 1 pays Hero XP
+
+- **Goal:** Arash: the game resumes at stage 6 with resources; make every run start at stage 1
+  with 0 resources, temporarily, with a button to turn saving back on when wanted. Then: the
+  save panel must appear only in the menu, not during gameplay. Then: stage 1 must award Hero XP.
+- **Status:** done, compiles clean. NOT play-tested.
+- **Cause of the resume:** commit c94a908 removed the boot-time wipe from
+  `GameStartManager.Awake` (`resetBool = true; OnResetButtonClicked();`). Before that every
+  launch wiped the save, so progress had never actually persisted. The old wipe was NOT restored
+  — it destroys the save permanently — a gate that *ignores* the save was added instead.
+- **`Assets/Scripts/Core/SaveLoad/SavePersistence.cs`** — one switch in front of all disk
+  persistence, defaulting OFF, in its own PlayerPrefs key (`DEBUG_SAVE_PERSISTENCE_ENABLED`) so
+  `SaveSystem.ResetAll()`, which deletes only `GAME_SAVE_V1`, can never clear the toggle. While
+  off: `SaveSystem.Save` still mutates the in-memory cache but writes nothing (so a running
+  session behaves normally, just volatilely), `SaveSystem.LoadInternal` returns a fresh
+  `SaveData`, `LevelManager.Awake` ignores `LM.CurrentStage` and boots at `startingStage`, and
+  `GameStartManager` seeds the wallet from `FreshStart*` (0/0/0) instead of `CurrencyManager`'s
+  inspector values (gems 4 / coins 4 / heroXP 6 in StarterScene). In a non-development player
+  the gate is hard-wired ON, so shipping with the toggle off cannot break saving for real users.
+- **Controls:** `Debug/SavePersistenceDebugPanel` auto-spawns via
+  `[RuntimeInitializeOnLoadMethod(BeforeSceneLoad)]`, needs no scene wiring, and from 2026-09-21
+  only DRAWS when the active scene is in `allowedScenes` (default `MenuScene`) — visibility is
+  cached off `activeSceneChanged`/`sceneLoaded` because `OnGUI` runs several times a frame and
+  `Scene.name` allocates. It also exposes `ToggleSaving`/`EnableSaving`/`DisableSaving`/
+  `ResetProgressNow` for a uGUI Button. `Editor/SavePersistenceMenu` adds
+  `Tools > Save System > Save & Load Enabled` (checkable, works outside Play mode) and
+  `Wipe Saved Progress Now` — needed because the gate ignores an existing save but does not
+  delete it.
+- **Also:** `LevelManager.PersistCurrentStage()` is now the single write path for
+  `LM.CurrentStage` and no-ops while the gate is off. `EarlyCampaignVerification` forces the gate
+  ON for its run, snapshotting and restoring it the same way it already does for
+  `DirectPlayMenu.Enabled`. Deleted confirmed-dead `SaveSystem.Save1`,
+  `ResetAllIfRequested1`, `ResetAllIfRequested2` — `Save1` mattered, it was a second ungated
+  write path. `ResetAllIfRequested` now also resets heroXP, which it had been skipping, and
+  zeroes currency instead of restoring the inspector values while the gate is off.
+- **Hero XP at stage 1:** `StageRewardCalculator.EarlyHeroXp[0]` 0 → 1, table now
+  `{1,1,1,1,1,1,2,2,3,3}`. Note this table is a hard override: for stages 1-10 the method
+  discards the config-driven coin and XP formula entirely (coins become a flat 20/30/…/110 ramp
+  with +10% per HP case); only gems still use the formula. Coins remain the binding constraint
+  on the four first upgrades (140 banked after stage 4 vs 160 needed, 200 after stage 5), so the
+  "affordable at stage 5" milestone is unchanged — only the 4th XP arrives a stage earlier,
+  leaving 1 spare. `EarlyCampaignEconomyVerification` hard-codes these totals and was updated
+  (200c/5xp, then 40c/1xp) or it would have thrown.
+
+
+
 ### 2026-09-12 — Any scene can now be played directly in the Editor (testing only; the build is untouched)
 
 - **Goal:** Arash: a level opened on its own errors out, the game can only be started from
