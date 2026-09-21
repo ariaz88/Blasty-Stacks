@@ -178,6 +178,62 @@ public class EnemyManager : MonoBehaviour
     public bool faceCenterOnStart = true;
     public bool playerIsInLeft;
 
+    [Header("No-backtracking rule (Arash, 2026-09-21)")]
+    [Tooltip("How far BEHIND this enemy a hero may be and still count as 'beside' " +
+             "rather than 'behind'. Small, so a hero level with the enemy is still " +
+             "engaged, but one that has genuinely walked past is not chased.")]
+    public float behindTolerance = 0.35f;
+    [Tooltip("How long after being hit an enemy will still turn and fight a hero " +
+             "that is behind it. It turns and attacks IN PLACE - it never walks back.")]
+    public float retaliationMemory = 3f;
+
+    /// <summary>
+    /// The way this enemy advances: straight at the player base. The march in
+    /// EnemyLocoMotion uses exactly this vector, so "behind" below is measured
+    /// against the real direction of travel rather than an assumed world axis.
+    /// </summary>
+    public Vector2 MarchDirection => -(Vector2)transform.up;
+
+    /// <summary>
+    /// THE RULE: an enemy advances toward the player base and may step toward a hero
+    /// in front of it or to either side, but it MUST NOT turn round and chase a hero
+    /// that has already passed it. A hero that slips behind is left to the units
+    /// further back.
+    ///
+    /// "Behind" is the half-plane strictly behind the enemy, with
+    /// <see cref="behindTolerance"/> of slack so a hero exactly level with the enemy
+    /// counts as beside it, not behind it.
+    /// </summary>
+    public bool IsBehind(Vector3 worldPos)
+    {
+        Vector2 toTarget = (Vector2)worldPos - (Vector2)transform.position;
+        return Vector2.Dot(toTarget, MarchDirection) < -behindTolerance;
+    }
+
+    /// <summary>
+    /// The one hero this enemy will turn round for: whoever last hit it. It still
+    /// does not WALK backwards - see EnemyLocoMotion.HandleMoveToTarget, which strips
+    /// the backward component out of every step - it only faces and attacks in place.
+    /// </summary>
+    public PlayerStats RetaliationTarget { get; private set; }
+    private float retaliationExpiry;
+
+    /// <summary>Called by EnemyStats whenever a hero lands a blow on this enemy.</summary>
+    public void NotifyAttackedBy(PlayerManager attacker)
+    {
+        if (!attacker) return;
+
+        var hero = attacker.GetComponent<PlayerStats>() ?? attacker.GetComponentInParent<PlayerStats>();
+        if (!hero) return;
+
+        RetaliationTarget = hero;
+        retaliationExpiry = Time.time + retaliationMemory;
+    }
+
+    /// <summary>True while this hero is the one that recently hit us.</summary>
+    public bool IsRetaliationTarget(PlayerStats hero) =>
+        hero != null && hero == RetaliationTarget && Time.time <= retaliationExpiry;
+
     [Header("Gate stop")]
     public bool reachedGate = false;      // true after first contact with gate
     public Vector2 gateStopPosition;      // where THIS enemy stopped at the gate
@@ -525,7 +581,23 @@ public class EnemyManager : MonoBehaviour
         // An enemy with no hero inside the engage distance has NO hero target at
         // all, and marches on the base - which is the intended behaviour.
         // Acquisition has a radius; a committed, living target does not.
-        if (StillFightable(enemyLocoMotion.currentTarget)) return;
+        // NO-BACKTRACKING (Arash, 2026-09-21). The lock is still hard, with ONE new
+        // release: a hero that has walked PAST this enemy is dropped, so the enemy
+        // turns back to the base instead of reversing to chase. It is kept when it
+        // is still within attack reach (finish the fight you are already in) or when
+        // it is the hero that just hit us (retaliation - handled in place, no walking).
+        var locked = enemyLocoMotion.currentTarget;
+        if (StillFightable(locked))
+        {
+            bool abandonedBehind =
+                IsBehind(locked.transform.position) &&
+                !IsRetaliationTarget(locked) &&
+                !enemyLocoMotion.IsInAttackPosition();
+
+            if (!abandonedBehind) return;
+
+            enemyLocoMotion.currentTarget = null;   // fall through: re-acquire or march on
+        }
 
         float engage = enemyLocoMotion.fairDistanceToPlayer;
         if (engage <= 0f)
@@ -547,6 +619,11 @@ public class EnemyManager : MonoBehaviour
         {
             var ps = hits[i].GetComponent<PlayerStats>() ?? hits[i].GetComponentInParent<PlayerStats>();
             if (!StillFightable(ps)) continue;
+
+            // Only heroes IN FRONT or TO EITHER SIDE are worth committing to. One that
+            // has already passed this enemy is skipped, unless it is the hero that
+            // just hit us - and even then the enemy fights it in place, never walks back.
+            if (IsBehind(ps.transform.position) && !IsRetaliationTarget(ps)) continue;
 
             float d = Vector2.Distance(ps.transform.position, transform.position);
             if (d <= engage && d < bestDist)

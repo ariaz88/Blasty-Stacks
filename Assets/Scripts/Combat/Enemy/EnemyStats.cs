@@ -54,6 +54,11 @@ public class EnemyStats : CharacterStats
     /// </summary>
     public void ApplyDamageToEnemy(float damageAmount, PlayerManager attacker = null)
     {
+        // Being hit is the ONE thing that lets an enemy turn round for a hero that
+        // is behind it - it faces and fights in place, it never walks back. See
+        // EnemyManager.NotifyAttackedBy / IsBehind.
+        if (enemyManager) enemyManager.NotifyAttackedBy(attacker);
+
         damageAmount = ClampIncomingBlow(damageAmount, attacker);
         CPBattleController.ReportBlow(this, damageAmount, attacker);   // observation only
         SetResolvedHealth(Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount)));

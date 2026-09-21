@@ -441,6 +441,100 @@ _Unfinished work any session may pick up. Delete a line when it is genuinely clo
 ## Session Log — full entries (newest first)
 
 
+### 2026-09-21 — Enemies no longer backtrack
+
+- **Goal:** Arash: an enemy sometimes turns round mid-march and chases a hero that has
+  already passed it. Rule wanted: an enemy advances on the player base and may engage a
+  hero in front of it or to either side, but never reverses to chase. If a hero attacks it
+  from behind it may turn and fight **in place**. At the base it holds its spot, turns and
+  fights rather than chasing.
+- **Status:** compiles clean, geometry unit-checked in edit mode. NOT play-tested.
+- **Implemented in two halves, both needed.** Targeting stops the enemy WANTING to go back;
+  movement stops it physically doing so. Either alone leaks: a hero can walk past *after*
+  the lock was taken, and `ResolveStandPoint` can place a stand point beside a hero that is
+  itself behind the enemy.
+- **`EnemyManager`** — `MarchDirection` (`-transform.up`, the same vector the march uses, so
+  "behind" is measured against real travel rather than an assumed world axis);
+  `IsBehind(worldPos)` = `Dot(toTarget, MarchDirection) < -behindTolerance`, with
+  `behindTolerance` 0.35 so a hero level with the enemy counts as beside, not behind, and the
+  test does not flicker as they drift past each other. `DetectPlayerTargets` now skips
+  behind candidates during acquisition, and the hard lock gains its one new release: a locked
+  hero that slips behind is dropped unless it is still in attack reach or is the retaliation
+  target. Retaliation: `NotifyAttackedBy` / `RetaliationTarget` / `IsRetaliationTarget`,
+  a `retaliationMemory` of 3s.
+- **`EnemyStats.ApplyDamageToEnemy`** calls `NotifyAttackedBy(attacker)` first — the attacker
+  was already a parameter, so no new plumbing.
+- **`EnemyLocoMotion.StripBackwardMotion(from, to)`** projects out any component against
+  `MarchDirection` and keeps the perpendicular part. Deliberately NOT a cancel-the-whole-step
+  test: the lateral part must survive so the enemy still slides across to a hero beside it.
+  A hero directly behind yields a zero-length step and the caller holds position.
+- **Gate branch changed.** With a live hero target it used to fall through to pursuit, which
+  walked a gate-parked enemy off the line after anything that came near, including a hero
+  behind it. It now holds `gateStopPosition`; facing is a sprite flip
+  (`EnemyManager.UpdateFacing`) and the attack controller hits from there.
+  **Accepted consequence:** a hero that parks just outside attack reach of a gate-parked
+  enemy is never chased.
+- Verified `march (0,-1)`; in-front false, passed-us true, both sides false.
+
+
+### 2026-09-21 — Stage 6 isolated into its own enemy assets, and retuned
+
+- **Goal:** Arash, after several global passes: stages 1-5 must not move at all — the
+  difficulty curve was already set — only stage 6 should change, relative to stage 5.
+- **MY ERROR, corrected.** Earlier passes that day scaled the SHARED base stat assets
+  (1.30x → 1.70x → 1.80x → 1.50x → 1.40x CP, always ATK^0.6/HP^0.4). Because CP is built from
+  base stats, that lifted EVERY stage, not stage 6. I flagged it each time but should have
+  scoped it instead of only noting it. All six shared assets were restored to their exact
+  pre-2026-09-21 values; stages 3, 4, 5, 7, 8 re-verified at 83.8 / 387.0 / 537.1 / 840.0 /
+  898.8, i.e. identical to before.
+- **New stage-6-only assets** `Enemy_Reaper_Man_01_L6` and `Enemy_Zombie_villager_L6`,
+  referenced only by `Stage_06.asset`, joining the already stage-6-only
+  `Enemy_Skeleton_Swordsman`. This is the shape all future per-stage tuning should take.
+- **Why the global multiplier could never do what was asked:** it multiplies BASE stats, so it
+  applies identically at stage 5 and stage 6 and cancels out of the ratio. Stage-6-over-stage-5
+  stayed +12% (the `EnemyProgression` step: atk and hp both +5.83%, 1.0583² = 1.12) at 1.00x,
+  1.30x and 1.40x alike. Only per-stage assets — or the level-6 entry in the progression
+  curves — can move that number.
+- **Final tuning, several iterations:** +20% over L5 → raised to +38.82% to put the full-clear
+  total at 105% of the unupgraded hero roster (1222.9 vs 1164.7) → then retargeted to a flat
+  1170 total, which is **+32.81%** per returning enemy. Answered along the way: +38.5% would
+  give 1220.1, +35% gives 1189.3.
+- **Final stage 6:** Reaper_L6 CP 134.81, Zombie_L6 147.88, Skeleton Swordsman 177.46
+  (still exactly 1.200x the L6 Zombie). Totals 992.5 with 6 enemies, **1170.0** with the
+  full-clear 7th — 100.5% of the 1164.7 unupgraded roster.
+- Hero CP references are measured, from `Docs/balance/latest-playmode.csv`: 116.47 unupgraded,
+  141.37 at upgrade level 2.
+
+
+### 2026-09-21 — Stage 6 wave structure, timing and the full-clear bonus
+
+- **Composition:** 6 enemies in THREE waves of two. Wave 1 is the returning pair (1 Reaper +
+  1 Zombie); waves 2 and 3 are the new Skeleton Swordsman only, 4 in total.
+  `LevelBattleRules.EnemyWaves[6]` = `{2,2,2}`. The Orc is out of stage 6 and debuts at 7.
+- **Full-clear bonus.** `LevelBattleRules.FullClearBonusLevel = 6` +
+  `FinalWaveCount(level, authored, cleared)` + `AllMatchesCleared(level, heroes)`. On a 100%
+  match clear the FINAL wave fields 3 skeletons instead of 2. Evaluated when that wave is
+  about to SPAWN, not at battle start — the player keeps clearing matches while the earlier
+  waves are fought, so battle start would always read zero. Stage 6 has 5 matches
+  (`TotalPairs`), and `MatchesCleared` is driven by `MatchResolver` blasts and capped at that.
+  The bonus changes only the wave's SIZE; the wave itself always spawns.
+- **Wave timing.** The gap used to be unbounded — every wave waited for `_alive == 0`. Added
+  `MaxSecondsBetweenWaves = 8` and `WaitBetweenWaves` for the clear-gated path, then, when
+  Arash asked for an 11s/13s schedule, a per-wave `Wave.spawnOnTimerOnly` flag: ON = arrive on
+  a fixed timer `delayBeforeWave` after the previous wave SPAWNED, regardless of whether it is
+  dead; waves may overlap. Set only on stage 6 waves 2 and 3 (11s, 13s → ~11.6s and ~24.6s
+  after battle start). It defaults OFF because switching the shared path to pure timing would
+  have sent wave 2 of every other stage after its authored ~1.5s instead of after a clear.
+  Verified stages 4, 5, 7, 9 still `timer=False`.
+- **Per-wave spawn logging added** to settle a report that only the last wave was arriving. The
+  code always spawned all three; the likely cause is waves 1-2 being wiped almost instantly by
+  a full 10-hero roster. The log will show which.
+- **Spawn line** moved twice: `gateRelative` y `-4…-2` → `-2…0` (2 units toward the gate, from
+  measuring Arash's screenshot at 3 world units ≈ 105 px) → then back to `-3…-1` when that read
+  as the enemies dropping off the roof of the base. Shared template, so all stages move with it.
+
+
+
 ### 2026-09-21 — Enemy spawn layout: centred formations, spacing capped to the box
 
 - **Goal:** Arash, from two annotated screenshots of stage 6: the 2-enemy wave's spacing is

@@ -40,11 +40,11 @@ DEPLOYMENT
   ResolveLevel  reads the stage number out of the scene name ("..._Stage_N"), else
                 LevelConfig.levelNumber, else LevelManager.CurrentStage.
 
-ENEMY WAVE COUNTS - levels 1-10  (Arash, 2026-09-14)
-    L1 [1]    L2 [2]    L3 [3]
-    L4 [2,3]  L5 [2,3]                    5 each, but in TWO waves, not one clump
-    L6 [3,3]  L7 [3,3]                    6 each
-    L8 [3,4]  L9 [3,4]  L10 [3,4]         7 each
+ENEMY WAVE COUNTS - levels 1-10  (Arash, 2026-09-14; L4 and L6 revised since)
+    L1 [1]      L2 [2]    L3 [3]
+    L4 [2,2]    L5 [2,3]
+    L6 [2,2,2]  L7 [3,3]  L8 [3,3]        L6 = SIX in THREE waves (2026-09-21)
+    L9 [3,4]    L10 [3,4]
 
   EnemyWaveCounts(level) -> int[] per wave in spawn order, or null past level 10
   TotalEnemies(level)    -> sum across waves, 0 when unauthored
@@ -52,6 +52,23 @@ ENEMY WAVE COUNTS - levels 1-10  (Arash, 2026-09-14)
 
   Levels 4+ MUST arrive in two or more waves - that is the point of the table, not
   the totals. EnemySpawner.BuildWavesFromRules consumes it.
+
+FULL-CLEAR BONUS - TEMPORARY, STAGE 6 ONLY  (Arash, 2026-09-21)
+  FullClearBonusLevel = 6
+  FinalWaveCount(level, authoredCount, allMatchesCleared) -> int
+      authoredCount + 1 on that level when the player cleared 100% of the
+      stage's matches; otherwise authoredCount unchanged. At stage 6 that is
+      3 Skeleton Swordsmen in the last wave instead of 2.
+  AllMatchesCleared(level, PlayerWaveManager) -> bool
+      heroes.MatchesCleared >= TotalPairs(level). Null-safe.
+
+  It is a COUNT rule like the rest of this file - no stats, no decided winner.
+  EnemySpawner evaluates it when the FINAL wave is about to SPAWN, not at battle
+  start, because the player goes on clearing matches while the earlier waves are
+  fought; asking at battle start would always read zero.
+  The bonus only changes the final wave's SIZE - that wave always spawns.
+  Scoped to one level on purpose: generalising it means giving EnemyWaves a
+  per-level bonus column, not widening the constant.
 
   COUNTS ONLY. This table says how many enemies arrive and when; it says nothing
   about how strong they are. Total enemy CP is whatever the spawned units sum to.

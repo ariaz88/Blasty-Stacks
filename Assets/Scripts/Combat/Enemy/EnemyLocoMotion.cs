@@ -203,11 +203,28 @@ public class EnemyLocoMotion : MonoBehaviour
                 return;
             }
 
-            // A hero IS in reach - fall through to the hero branch and fight it,
-            // exactly as this enemy would mid-field. The body has to be able to
-            // move again; the pin above may have left it Kinematic.
-            if (enemyRigidbody2D.bodyType == RigidbodyType2D.Kinematic)
+            // A hero IS in reach. AT THE BASE THE ENEMY DOES NOT CHASE (Arash,
+            // 2026-09-21): it has arrived, so it holds its spot, turns to the hero
+            // and fights from there. Previously this fell through to the pursuit
+            // branch, which walked the enemy off the gate line after any hero that
+            // came near - including one standing behind it.
+            //
+            // Facing is handled by EnemyManager.UpdateFacing (a sprite flip), and the
+            // attack controller hits from here when the hero is in reach, so holding
+            // position costs nothing but the chase.
+            Vector2 hold = enemyManager.gateStopPosition;
+            if (Vector2.Distance(pos, hold) > 0.05f)
+            {
                 enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
+                enemyRigidbody2D.MovePosition(
+                    Vector2.MoveTowards(pos, hold, CurrentMoveSpeed * Time.fixedDeltaTime));
+                SetAnimMoving(true);
+            }
+            else
+            {
+                StopAtCurrentPosition();
+            }
+            return;
         }
 
         // 2) Pursue the locked hero until it is in attack range.
@@ -227,6 +244,23 @@ public class EnemyLocoMotion : MonoBehaviour
             // outside the original acquisition radius, including at the gate.
             Vector2 stand = ResolveStandPoint(targetPos);
             Vector2 next = Vector2.MoveTowards(pos, stand, CurrentMoveSpeed * Time.fixedDeltaTime);
+
+            // NO BACKTRACKING (Arash, 2026-09-21). An enemy advances on the base and
+            // may step sideways - or forward - onto a hero, but it must never reverse
+            // to chase one that has passed it. Rather than cancelling the whole step,
+            // only the BACKWARD COMPONENT is removed: the lateral part survives, so
+            // the enemy still slides across to a hero beside it, and a hero directly
+            // behind simply produces no movement at all.
+            next = StripBackwardMotion(pos, next);
+
+            if ((next - pos).sqrMagnitude <= 1e-8f)
+            {
+                // Nothing left to walk - hold position and let the attack logic face
+                // and hit the hero from here if it is in reach.
+                StopAtCurrentPosition();
+                return;
+            }
+
             enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
             enemyRigidbody2D.MovePosition(next);
             SetAnimMoving(true);
@@ -273,6 +307,29 @@ public class EnemyLocoMotion : MonoBehaviour
             return;
         }
 
+    }
+
+    /// <summary>
+    /// The same step with any motion AGAINST the march direction removed, so an
+    /// enemy can advance and strafe but never reverse. Returns the step unchanged
+    /// when there is no manager to ask for a march direction.
+    /// </summary>
+    Vector2 StripBackwardMotion(Vector2 from, Vector2 to)
+    {
+        if (enemyManager == null) return to;
+
+        Vector2 march = enemyManager.MarchDirection;
+        if (march.sqrMagnitude < 1e-6f) return to;
+        march.Normalize();
+
+        Vector2 delta = to - from;
+        float along = Vector2.Dot(delta, march);
+
+        // Negative = moving back the way we came. Project that part out and keep
+        // the perpendicular (sideways) part.
+        if (along < 0f) delta -= march * along;
+
+        return from + delta;
     }
 
     void StopAtCurrentPosition()

@@ -297,6 +297,32 @@ LOW-LEVEL UTILITIES
       !! A clamp can only collapse slots together, never make them fit. Spacing
       !! is now capped to what the box holds instead.
 
+  MaxSecondsBetweenWaves  (const float = 8)   [new 2026-09-21]
+  WaitBetweenWaves(authoredDelay)  [coroutine, new 2026-09-21]
+      The gap between one wave spawning and the next on the CLEAR-GATED path:
+      honour the authored beat, then wait for the field to clear, but never
+      more than 8 seconds in total. Pause-aware.
+      Before this the gap was UNBOUNDED - every wave waited for _alive == 0, so
+      the delay was however long the kill took and an enemy that could not be
+      reached stalled the stage forever.
+      A wave with Wave.spawnOnTimerOnly set BYPASSES this entirely and waits
+      exactly its delayBeforeWave, which is how stage 6 runs 11s and 13s gaps
+      above the 8s ceiling.
+
+  FINAL-WAVE FULL-CLEAR BONUS  [in RunLevel, new 2026-09-21]
+      Just before the LAST wave spawns, RunLevel asks
+      LevelBattleRules.FinalWaveCount(...) whether the player has cleared 100%
+      of the stage's matches, and if the answer changes the count it rebuilds
+      that wave via CopyWaveWithTotal. Evaluated at SPAWN time, not at battle
+      start, because matches keep being cleared while earlier waves are fought.
+      Only the SIZE changes - the final wave always spawns.
+      Needs _heroes, the PlayerWaveManager cached in StartPreparedBattle.
+
+  Per-wave spawn logging  [new 2026-09-21]
+      Every wave logs "spawned wave i/N with X enemies", added to settle a
+      report that only the last wave was arriving. Use it to tell an actual
+      missing wave from waves 1-2 being wiped so fast they are not noticed.
+
   SlotSpacing(span, slots, desired)  [static, new 2026-09-21]
       Gap between adjacent slots on one axis: the authored minimum when the box
       can hold it, otherwise span/(slots-1), the widest that still fits edge to

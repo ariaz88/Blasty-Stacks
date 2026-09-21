@@ -115,13 +115,38 @@ LIFECYCLE
       Time.fixedDeltaTime, so an enemy walks at exactly its stat speed regardless
       of frame rate.
 
+NO-BACKTRACKING (added 2026-09-21, Arash)
+------------------------------------------------------------
+An enemy advances on the player base. It may step FORWARD or SIDEWAYS onto a
+hero, but it must never reverse to chase one that has walked past it. Only
+being hit makes it turn round - and even then it fights IN PLACE.
+
+  StripBackwardMotion(from, to) -> Vector2
+      Returns the step with any component against EnemyManager.MarchDirection
+      projected out, keeping the perpendicular part. Deliberately NOT a
+      cancel-the-whole-step test: the lateral part must survive so the enemy
+      still slides across to a hero beside it. A hero directly behind yields a
+      zero-length step, and the caller then holds position instead of moving.
+      Falls through unchanged when there is no manager to ask.
+
+The targeting half of the rule lives in EnemyManager (IsBehind, the acquisition
+filter and the lock release). BOTH are needed: that one stops the enemy WANTING
+to go back, this one stops it physically doing so - a hero can walk past after
+the lock was taken, and a stand point beside a hero can itself sit behind.
+
 HandleMoveToTarget()  - the live version, evaluated in order
 ------------------------------------------------------------
   1. GATE LATCH
-     If enemyManager.reachedGate is true, force the body Kinematic, snap the
-     position back to enemyManager.gateStopPosition and stop animating.
-     This is a hard clamp: once an enemy arrives at the gate it can NEVER move
-     again or drift past it.
+     If enemyManager.reachedGate is true and there is NO live hero target,
+     walk back to enemyManager.gateStopPosition (never snap) and pin Kinematic
+     on arrival.
+     WITH a live hero target, since 2026-09-21 the enemy NO LONGER chases:
+     it holds gateStopPosition, and EnemyManager.UpdateFacing turns it to the
+     hero while the attack controller hits from there. Previously this fell
+     through to the pursuit branch, which walked the enemy off the gate line
+     after any hero that came near - including one standing behind it.
+     Consequence, accepted: a hero that stays just outside attack reach of a
+     gate-parked enemy is never chased.
 
   2. ENGAGE A PLAYER UNIT
      If currentTarget exists and is not dead:
@@ -137,6 +162,9 @@ HandleMoveToTarget()  - the live version, evaluated in order
        - Otherwise keep marching straight down the lane (-transform.up).
      Body becomes Dynamic and moves with MovePosition at
      CurrentMoveSpeed * Time.fixedDeltaTime.
+     SINCE 2026-09-21 the computed step is passed through
+     StripBackwardMotion() before MovePosition, and a step that comes back
+     empty stops the enemy where it stands instead of moving it.
 
   ResolveStandPoint(targetPos)
      Claims an AttackSlotRegistry slot on the target the first time (released in

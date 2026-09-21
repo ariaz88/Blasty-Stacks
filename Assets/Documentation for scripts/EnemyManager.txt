@@ -198,6 +198,19 @@ TARGETING
       take the target away. StillFightable() below is the only thing that
       releases the lock.
 
+      NO-BACKTRACKING, added 2026-09-21 (Arash). An enemy advances on the player
+      base and may engage a hero IN FRONT of it or TO EITHER SIDE, but it must
+      never turn round and chase one that has already walked past it. Two places
+      enforce it here:
+        - ACQUISITION skips any candidate for which IsBehind() is true.
+        - THE LOCK gains its one new release: a locked hero that has slipped
+          behind is dropped, so the enemy re-acquires or marches on. It is KEPT
+          when it is still inside attack reach (finish the fight you are in) or
+          when it is the retaliation target.
+      Movement is constrained separately, in EnemyLocoMotion - see
+      StripBackwardMotion. Both halves are needed: this one stops the enemy
+      WANTING to go back, that one stops it physically doing so.
+
       THE BUG THAT CAUSED THE LOCK. This is called every frame from Update, and
       it used to overwrite currentTarget unconditionally. An enemy in the middle
       of a crowded 4v4 or 5v5 line has heroes on both sides at almost exactly
@@ -327,6 +340,33 @@ REVIVE
       target so detection runs fresh, resets action/interaction flags and the
       cooldown timer, and finally calls DetectPlayerTargets() immediately so the
       enemy does not have to wait a frame to reacquire someone.
+
+NO-BACKTRACKING API  (added 2026-09-21)
+------------------------------------------------------------------------------
+  behindTolerance   (float, default 0.35)  how far behind the enemy a hero may
+      be and still count as BESIDE it rather than behind. Slack, so a hero
+      exactly level with the enemy is still engaged and the test does not
+      flicker as the two drift past each other.
+  retaliationMemory (float, default 3)  how long after being hit the enemy will
+      still turn and fight a hero behind it.
+
+  MarchDirection -> Vector2        = -transform.up, the SAME vector
+      EnemyLocoMotion marches along, so "behind" is measured against the real
+      direction of travel rather than an assumed world axis. (A rotated enemy
+      therefore behaves correctly; nothing in the project rotates them today.)
+
+  IsBehind(worldPos) -> bool
+      Dot(toTarget, MarchDirection) < -behindTolerance. The half-plane strictly
+      behind the enemy. In front and both sides return false.
+
+  RetaliationTarget (PlayerStats, read-only) + IsRetaliationTarget(hero)
+      The one hero this enemy will turn round for: whoever last hit it, for
+      retaliationMemory seconds. It still does not WALK back - it only faces
+      and attacks in place.
+
+  NotifyAttackedBy(PlayerManager)
+      Called from EnemyStats.ApplyDamageToEnemy on every blow. Resolves the
+      attacker's PlayerStats and starts the retaliation window.
 
 HOW IT CONNECTS
 ---------------

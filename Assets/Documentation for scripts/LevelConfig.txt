@@ -42,6 +42,17 @@ TYPES DEFINED IN THIS FILE
       name               (string, default "Wave")  for readability in the
                          Inspector list, not used by code
       delayBeforeWave    (float, default 5)  pause before this wave starts
+      spawnOnTimerOnly   (bool, default FALSE)  added 2026-09-21.
+          ON  = this wave arrives on a FIXED timer, exactly delayBeforeWave
+                seconds after the previous wave SPAWNED, whether or not the
+                previous wave is dead. Waves can overlap. Used where the stage
+                wants a predictable beat - stage 6 runs 11s then 13s.
+          OFF = the original behaviour: wait for the field to be cleared,
+                bounded by EnemySpawner.MaxSecondsBetweenWaves (8s).
+          It defaults OFF deliberately. Making the timed path the shared
+          default would have sent wave 2 of every other stage after its
+          authored ~1.5s instead of after a clear - a large, unrequested
+          difficulty jump across stages 4, 5 and 7-20.
       formation          (SpawnFormation, default AllTogetherGrid)
       spawnMin / spawnMax (Vector2)  the world-space rectangle enemies spawn
                          inside (defaults (1,2) to (10,4))

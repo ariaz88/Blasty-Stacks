@@ -44,13 +44,19 @@ METHODS
       This is what makes attackers surround an enemy from the correct side
       instead of all piling onto one point.
 
-  ApplyDamageToEnemy(float damageAmount)
-      Subtracts damage clamped so HP cannot fall below zero and negative damage
-      cannot heal. Refreshes the bar. Sets enemyIsdead at zero HP.
+  ApplyDamageToEnemy(float damageAmount, PlayerManager attacker = null)
+      FIRST calls enemyManager.NotifyAttackedBy(attacker) - added 2026-09-21.
+      Being hit is the ONLY thing that lets an enemy turn round for a hero
+      standing behind it, and even then it faces and fights IN PLACE rather
+      than walking back. See EnemyManager's no-backtracking section.
+      Then clamps the blow, reports it to CPBattleController (observation only)
+      and applies it. HP cannot fall below zero and negative damage cannot
+      heal. Refreshes the bar. Sets enemyIsdead at zero HP.
 
 HOW IT CONNECTS
 ---------------
-  - PlayerDamageCollider calls ApplyDamageToEnemy.
+  - PlayerDamageCollider calls ApplyDamageToEnemy, and is therefore what feeds
+    the enemy's retaliation memory.
   - EnemyManager polls enemyIsdead to run the death sequence and award XP.
   - TargetDetectionForPlayer uses GetOffsetFacingPlayer to pick an approach slot.
 
