@@ -15,19 +15,34 @@ MonoBehaviour:
   mode: 0
   levelCap: 50
   baseCost: 40
+  authoredHeroXpCosts:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 4
+  - 5
+  - 5
+  - 6
   firstHeroXpCost: 1
   heroXpCostStep: 1
+  authoredCoinCosts:
+  - 50
+  - 80
+  - 200
+  - 340
+  - 580
+  - 1000
+  - 1700
+  - 2900
   ratio: 1.5
   pieces:
   - fromLevelInclusive: 1
-    toLevelInclusive: 5
-    ratio: 1.22
-  - fromLevelInclusive: 6
-    toLevelInclusive: 10
-    ratio: 1.2
-  - fromLevelInclusive: 11
-    toLevelInclusive: 20
-    ratio: 1.18
-  - fromLevelInclusive: 21
+    toLevelInclusive: 15
+    ratio: 1.5
+  - fromLevelInclusive: 16
+    toLevelInclusive: 25
+    ratio: 1.35
+  - fromLevelInclusive: 26
     toLevelInclusive: 50
-    ratio: 1.16
+    ratio: 1.2

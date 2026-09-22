@@ -99,6 +99,61 @@ public static class TargetClaimRegistry
     }
 
     /// <summary>
+    /// "Of everyone handling this enemy, am I the closest to it?"
+    ///
+    /// THE RULE THIS EXISTS FOR (Arash, 2026-09-22): a hero may only walk away
+    /// from its target if somebody CLOSER is left holding it. Re-balancing is
+    /// meant to spread heroes over the battlefield, not to hand a fight to a hero
+    /// that is further away than the one leaving - that leaves the enemy covered
+    /// worse than before, which is a straight loss no amount of spread pays for.
+    ///
+    /// The reported case, from play: several heroes are on the only enemy on the
+    /// field (early stages field ONE enemy in wave 1, so a whole deployment has
+    /// nothing else to pick). A new wave spawns, its enemies have zero claimants,
+    /// and every hero on the old target sees a strict improvement - including the
+    /// one that was about to reach it. That hero turns around and walks the length
+    /// of the field while the enemy it had cornered is left to a hero behind it.
+    ///
+    /// EXACTLY ONE keeper per enemy, so this can never freeze a whole group:
+    /// nearest wins, and an exact distance tie is broken by instance id - the same
+    /// deterministic tie-break <see cref="Beats"/> uses, and for the same reason.
+    /// Everybody else on that target is free to leave.
+    ///
+    /// Returns TRUE when nobody else claims the enemy at all, which is the honest
+    /// answer - a lone hero IS the nearest claimant. TryRebalance already returns
+    /// earlier in that case, so the trivial answer is never the deciding one.
+    /// </summary>
+    public static bool IsNearestClaimant(EnemyStats enemy, PlayerManager self)
+    {
+        if (enemy == null || self == null) return false;
+
+        Vector2 target = enemy.transform.position;
+        float mine = ((Vector2)self.transform.position - target).sqrMagnitude;
+
+        foreach (var hero in Heroes)
+        {
+            if (hero == null || hero == self) continue;
+            if (hero.currentTarget != enemy) continue;
+            if (!IsHandling(hero)) continue;
+
+            float theirs = ((Vector2)hero.transform.position - target).sqrMagnitude;
+
+            if (Mathf.Approximately(theirs, mine))
+            {
+                // Dead heat: the lower instance id keeps it. Without a tie-break
+                // both heroes read "I am not further away" and BOTH stay, which
+                // would defeat the re-balance entirely for a symmetric pair.
+                if (hero.GetInstanceID() < self.GetInstanceID()) return false;
+                continue;
+            }
+
+            if (theirs < mine) return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Ranks one candidate enemy against the best found so far, in this order:
     ///
     ///   1. FEWEST other claimants   - an unhandled enemy beats a closer handled one.

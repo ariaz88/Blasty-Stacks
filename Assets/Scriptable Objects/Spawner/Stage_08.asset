@@ -18,33 +18,66 @@ MonoBehaviour:
   waves:
   - name: Stage 8 wave 1
     delayBeforeWave: 0.5
+    spawnOnTimerOnly: 0
     formation: 0
     spawnMin: {x: -13.5, y: 4.25}
     spawnMax: {x: 13.5, y: 6.25}
-    gridColumns: 3
+    gridColumns: 1
     minSlotSpacing: {x: 3, y: 0.5}
     frontAnchor: 0
     rowYOffset: 1.2
     secondRowDelay: 0.35
     entries:
-    - enemyPrefab: {fileID: 3282131553736139674, guid: c992828f89e405d45933b4d93d1d6a1e, type: 3}
-      statsBase: {fileID: 11400000, guid: bb3ee3d2c63eebc449f29c631a1fbc49, type: 2}
-      count: 1
-      row: 0
-      unitLevel: 1
-    - enemyPrefab: {fileID: 6411937674325925182, guid: 5bff2e5b095d3c842bd4db2fc620d638, type: 3}
-      statsBase: {fileID: 11400000, guid: c6cbf9fc280dc084d89b707c253af02a, type: 2}
-      count: 1
-      row: 0
-      unitLevel: 1
     - enemyPrefab: {fileID: 4367385366119628093, guid: 3065521d068d75447b209a6866fe33c1, type: 3}
-      statsBase: {fileID: 11400000, guid: 2f60d89d09f7f644f837555f769b6fd5, type: 2}
+      statsBase: {fileID: 11400000, guid: 2133808c5918d164ca91cfc910b146bb, type: 2}
       count: 1
       row: 0
       unitLevel: 1
     concurrencyCap: 0
   - name: Stage 8 wave 2
-    delayBeforeWave: 1.5
+    delayBeforeWave: 11
+    spawnOnTimerOnly: 1
+    formation: 0
+    spawnMin: {x: -13.5, y: 4.25}
+    spawnMax: {x: 13.5, y: 6.25}
+    gridColumns: 2
+    minSlotSpacing: {x: 3, y: 0.5}
+    frontAnchor: 0
+    rowYOffset: 1.2
+    secondRowDelay: 0.35
+    entries:
+    - enemyPrefab: {fileID: 6411937674325925182, guid: 5bff2e5b095d3c842bd4db2fc620d638, type: 3}
+      statsBase: {fileID: 11400000, guid: 9303dd3cbb297264098ed70028d095c6, type: 2}
+      count: 2
+      row: 0
+      unitLevel: 1
+    concurrencyCap: 0
+  - name: Stage 8 wave 3
+    delayBeforeWave: 12
+    spawnOnTimerOnly: 1
+    formation: 0
+    spawnMin: {x: -13.5, y: 4.25}
+    spawnMax: {x: 13.5, y: 6.25}
+    gridColumns: 2
+    minSlotSpacing: {x: 3, y: 0.5}
+    frontAnchor: 0
+    rowYOffset: 1.2
+    secondRowDelay: 0.35
+    entries:
+    - enemyPrefab: {fileID: 4367385366119628093, guid: 3065521d068d75447b209a6866fe33c1, type: 3}
+      statsBase: {fileID: 11400000, guid: 2133808c5918d164ca91cfc910b146bb, type: 2}
+      count: 1
+      row: 0
+      unitLevel: 1
+    - enemyPrefab: {fileID: 6411937674325925182, guid: 5bff2e5b095d3c842bd4db2fc620d638, type: 3}
+      statsBase: {fileID: 11400000, guid: 9303dd3cbb297264098ed70028d095c6, type: 2}
+      count: 1
+      row: 0
+      unitLevel: 1
+    concurrencyCap: 0
+  - name: Stage 8 wave 4 (skeleton | villager | skeleton)
+    delayBeforeWave: 9
+    spawnOnTimerOnly: 1
     formation: 0
     spawnMin: {x: -13.5, y: 4.25}
     spawnMax: {x: 13.5, y: 6.25}
@@ -54,18 +87,13 @@ MonoBehaviour:
     rowYOffset: 1.2
     secondRowDelay: 0.35
     entries:
-    - enemyPrefab: {fileID: 3282131553736139674, guid: c992828f89e405d45933b4d93d1d6a1e, type: 3}
-      statsBase: {fileID: 11400000, guid: bb3ee3d2c63eebc449f29c631a1fbc49, type: 2}
-      count: 1
-      row: 0
-      unitLevel: 1
-    - enemyPrefab: {fileID: 4367385366119628093, guid: 3065521d068d75447b209a6866fe33c1, type: 3}
-      statsBase: {fileID: 11400000, guid: 2f60d89d09f7f644f837555f769b6fd5, type: 2}
-      count: 1
+    - enemyPrefab: {fileID: 7945851428904739630, guid: 7c26e09b9df5d7c44a7f02efa947aacf, type: 3}
+      statsBase: {fileID: 11400000, guid: 10fb6a8135370824dbabb7b952625e3b, type: 2}
+      count: 2
       row: 0
       unitLevel: 1
     - enemyPrefab: {fileID: 6411937674325925182, guid: 5bff2e5b095d3c842bd4db2fc620d638, type: 3}
-      statsBase: {fileID: 11400000, guid: c6cbf9fc280dc084d89b707c253af02a, type: 2}
+      statsBase: {fileID: 11400000, guid: 9303dd3cbb297264098ed70028d095c6, type: 2}
       count: 1
       row: 0
       unitLevel: 1

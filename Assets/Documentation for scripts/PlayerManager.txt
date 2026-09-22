@@ -269,10 +269,47 @@ UpdateTargetSelection() -> bool
 
   RULE 1b - THE ONE EXCEPTION: RE-BALANCE OFF A SHARED TARGET
       TryRebalance(), called only while the hero HAS a live target, at most every
-      RebalanceInterval (0.5s). It moves the hero only when BOTH hold:
+      RebalanceInterval (0.5s). It moves the hero only when ALL FOUR hold:
+        * the hero has NOT engaged yet (IsEngagedWithTarget false) - re-balance is
+          an APPROACH-time decision only, see the engagement lock below;
         * its current target is SHARED (myOthers > 0) - a hero fighting alone
-          never moves, so no fight is dropped on a whim; and
+          never moves, so no fight is dropped on a whim;
+        * the hero is NOT the closest one to that shared target
+          (TargetClaimRegistry.IsNearestClaimant) - see the nearest-claimant lock
+          below; and
         * some enemy has STRICTLY fewer other claimants.
+
+      THE NEAREST-CLAIMANT LOCK (Arash, 2026-09-22). Reported right after the
+      engagement lock went in, and it is the same bug one step earlier: the hero
+      that turned around had not reached melee yet, so nothing held it. A hero
+      walking at an enemy it was about to reach abandoned it for a brand-new
+      spawn across the field, handing the enemy to an ally standing further back.
+
+      Spreading out is the POINT of this method and Arash asked for it - but it
+      is only spread if the enemy left behind ends up covered at least as well.
+      Handing it to a hero further away is a straight downgrade: the enemy gets
+      free time while the new owner walks in, and the hero that left spends that
+      time walking too. Nobody gains.
+
+      Exactly one hero per target passes IsNearestClaimant, so a doubled-up group
+      still splits - the nearest keeps the fight, everybody behind it is free to
+      cover the new wave. That is the distribution that was wanted all along.
+
+      THE ENGAGEMENT LOCK (Arash, 2026-09-22). Reported from play: a hero already
+      in melee walked away from the enemy it was hitting the moment a NEW enemy
+      spawned. That was this method, and it was not a corner case - a fresh enemy
+      enters the field with ZERO claimants, so every hero on a shared target sees
+      a strict improvement in the same 0.5s tick and can leave a live fight with
+      the enemy still standing behind it.
+
+      The fix is a single early return on IsEngagedWithTarget. It removes ONLY the
+      half of rule 1b that abandons a joined fight; heroes that are still WALKING
+      re-balance exactly as freely as before - and walking is the case rule 1b was
+      actually written for (the deployment-1 heroes that doubled up while wave 2
+      marched in unopposed were marching, not fighting). It cannot deadlock: the
+      lock holds only while the target lives, the target dies, and rule 1 then
+      falls through to the persistent search, where the new enemy that triggered
+      all this is ranked normally.
 
       WHY IT WAS NEEDED. Rule 2 fires only at the moment of picking, and that
       moment is often too early. Measured on level 4 from the [TARGET] log
@@ -350,6 +387,24 @@ MOVEMENT
       level enough with it for the weapon box to overlap. Read by
       PlayerPursueTargetState and PlayerCombatState - they both call THIS, so
       they cannot disagree about whether the hero has arrived.
+
+  IsEngagedWithTarget -> bool  (property, added 2026-09-22)
+      "Has this hero JOINED the fight with currentTarget?" TRUE when the target
+      is alive AND any of: isPerformingAction / isInteracting (a swing is playing),
+      currentState == AttackState (mid-swing), or IsInAttackPosition() (standing
+      in melee). FALSE with no target or a dead one.
+
+      WHY IT IS NOT JUST A STATE TEST. A hero in a sustained fight is in
+      AttackState only for the frames it STARTS a swing - PlayerAttackState sets
+      isPerformingAction and PlayerCombatState holds it until currentRecoveryTimer
+      expires - so most of a fight is spent in PlayerCombatState. A state-only
+      test would read "not attacking" in precisely the gaps where the 0.5s
+      re-balance tick is most likely to land.
+
+      Deliberately excludes attackPlayerGate: a gate engagement is judged on
+      currentGateTarget and must not freeze this hero's ENEMY choice.
+
+      Sole consumer: TryRebalance's engagement lock (rule 1b).
 
   HandleMoveToTarget(bool canMove)
       No-ops if canMove is false or the Rigidbody2D is missing. Bails out on a

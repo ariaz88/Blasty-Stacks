@@ -1,0 +1,78 @@
+================================================================================
+  EarlyCampaignAuthoring.cs
+  Path : Assets/Scripts/Editor/EarlyCampaignAuthoring.cs
+  Type : static class, EDITOR ONLY  (menu: "Tools/Balance/Author Stages 5-10")
+  Layer: Editor / Balance tooling
+================================================================================
+
+PURPOSE
+-------
+One-shot balance authoring for the early campaign. Pressing the menu item
+REWRITES a set of ScriptableObject assets to the numbers hardcoded in this file:
+enemy growth curves, the upgrade cost tables, hero unlock milestones, hero base
+stats for units 5-8, and the wave layouts of stages 5-10.
+
+It is explicit authoring, never runs during a battle, and throws if invoked in
+Play mode.
+
+!! THIS IS A WRITER, NOT A READER. Any Inspector edit you make to the assets it
+!! touches will be silently reverted the next time someone runs the menu item.
+!! When you retune a value by hand, update the constant here in the same pass.
+
+ASSET ACCESSORS (static properties, used by the verification script too)
+------------------------------------------------------------------------
+  Database      UnitsDatabaseSO, found by type search
+  Stage(n)      Assets/Scriptable Objects/Spawner/Stage_{n:00}.asset
+  EnemyGrowth   .../Stats/Progression/EnemyProgression.asset
+  HeroGrowth    .../Stats/Progression/PlayerProgressionConfig.asset
+
+FLOW  (Apply())
+---------------
+  1. Enemy growth - rewrites atk/hp/def/atkSpd curves on EnemyProgression for
+     levels 5-10 from the 'increments' array {.10,.12,.10,.07,.06,.14}. CP is
+     multiplicative, so each increment is split sqrt-wise across ATK and HP.
+     Samples outside 5-10 are preserved from the existing curve.
+
+  2. Upgrade costs - rewrites UpgradeCostSO.asset:
+         authoredCoinCosts   = 50, 80, 200, 340, 580, 1000, 1700, 2900
+         authoredHeroXpCosts = 1, 2, 3, 4, 4, 5, 5, 6
+         pieces (the tail past the tables) = 1-15 x1.50, 16-25 x1.35, 26-50 x1.20
+         mode/baseCost/ratio/firstHeroXpCost/heroXpCostStep are still written, but
+         they are now only the FALLBACK reached if an authored table is emptied.
+
+  3. Hero unlocks - units 5-8 get requiredLevelIndex 1 and stage 8/12/16/20, and
+     each is given its OWN UnitStatsSO (Campaign_Hero_{id}.asset) cloned from its
+     current base, scaled so its CP is 1.10x the strongest starting hero evaluated
+     at level (id-3). Later heroes must not share a stats asset with the starters.
+
+  4. Stage waves - stages 5-10 get their waves rebuilt from Stage_04's entries as
+     templates, in AllTogetherGrid formation, with counts from
+     LevelBattleRules.EnemyWaveCounts(stage). Orc is introduced at stage 6+ and
+     Skeleton Crusader at stage 9+. Orc/Skeleton base stats are scaled to sit
+     1.15x above the previous tier at the level they appear.
+
+  5. AssetDatabase.SaveAssets(). Stage 1-4 assets are left untouched.
+
+HELPERS
+-------
+  Curve(original, increments, grow)  rebuilds a 50-key AnimationCurve, replacing
+                                     only levels 5-10.
+  FindEntry(prefabName)              locates an enemy prefab + its base stats asset.
+  ScaleAttackAndHp(stats, factor)    applies sqrt(factor) to attack and maxHP.
+  Power(stats, progression, level)   CP of a unit at a level, via ProgressionMath
+                                     + CPCalculator. Also used by the verifier.
+
+HOW IT CONNECTS
+---------------
+  - Writes UpgradeCostSO.asset, which PlayerProgressionService reads at runtime.
+  - The cost tables it writes are tuned against StageRewardCalculator.EarlyHeroXp
+    (the faucet). The two must change together.
+  - EarlyCampaignEconomyVerification.Run() reuses Database / HeroGrowth / Power
+    from here and asserts the economy these numbers produce.
+
+NOTES
+-----
+  - Uses Undo.RecordObject before each mutation, so a single Ctrl+Z in the Editor
+    rolls back the authoring pass.
+  - Every number in this file is a design decision with no other home. Treat it as
+    the source of truth for stages 5-10 balance, alongside Docs/balance/stages-5-10.md.

@@ -17,17 +17,17 @@ MonoBehaviour:
     m_Curve:
     - serializedVersion: 3
       time: 1
-      value: 0.08
+      value: 0.20157588
       inSlope: 0
-      outSlope: -0.0010204081
+      outSlope: 0
       tangentMode: 0
       weightedMode: 0
       inWeight: 0
       outWeight: 0
     - serializedVersion: 3
-      time: 50
-      value: 0.03
-      inSlope: -0.0010204081
+      time: 20
+      value: 0.20157588
+      inSlope: 0
       outSlope: 0
       tangentMode: 0
       weightedMode: 0
@@ -41,41 +41,17 @@ MonoBehaviour:
     m_Curve:
     - serializedVersion: 3
       time: 1
-      value: 0.1
+      value: 0.46067265
       inSlope: 0
-      outSlope: -0.0012244899
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 50
-      value: 0.04
-      inSlope: -0.0012244899
       outSlope: 0
       tangentMode: 0
       weightedMode: 0
       inWeight: 0
       outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  movePctByLevel:
-    serializedVersion: 2
-    m_Curve:
     - serializedVersion: 3
-      time: 1
-      value: 0.02
+      time: 20
+      value: 0.46067265
       inSlope: 0
-      outSlope: -0.00020408163
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 50
-      value: 0.01
-      inSlope: -0.00020408163
       outSlope: 0
       tangentMode: 0
       weightedMode: 0
@@ -115,7 +91,7 @@ MonoBehaviour:
       time: 1
       value: 0.02
       inSlope: 0
-      outSlope: -0.00030612245
+      outSlope: -0.00030612244
       tangentMode: 0
       weightedMode: 0
       inWeight: 0
@@ -123,31 +99,7 @@ MonoBehaviour:
     - serializedVersion: 3
       time: 50
       value: 0.005
-      inSlope: -0.00030612245
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  rangePctByLevel:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 1
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 50
-      value: 0
-      inSlope: 0
+      inSlope: -0.00030612244
       outSlope: 0
       tangentMode: 0
       weightedMode: 0

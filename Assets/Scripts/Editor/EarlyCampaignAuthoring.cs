@@ -30,9 +30,21 @@ public static class EarlyCampaignAuthoring
 
         var costs = AssetDatabase.LoadAssetAtPath<UpgradeCostSO>("Assets/Scripts/UI/UI-SOs/UgradeCost-SOs/UpgradeCostSO.asset");
         Undo.RecordObject(costs, "Author coin and hero XP costs");
+        // Authored integer tables for the first 8 upgrades; past those the coin cost
+        // continues from 2900 through the decaying ratio bands and the XP cost through
+        // floor(level/2)+2. baseCost/ratio/firstHeroXpCost/heroXpCostStep are the legacy
+        // fallback and are only reached if a table is emptied.
         costs.mode = UpgradeCostSO.Mode.Geometric;
         costs.baseCost = 40; costs.ratio = 1.5f;
         costs.firstHeroXpCost = 1; costs.heroXpCostStep = 1;
+        costs.authoredCoinCosts = new System.Collections.Generic.List<int> { 50, 80, 200, 340, 580, 1000, 1700, 2900 };
+        costs.authoredHeroXpCosts = new System.Collections.Generic.List<int> { 1, 2, 3, 4, 4, 5, 5, 6 };
+        costs.pieces = new System.Collections.Generic.List<UpgradeCostSO.Piece>
+        {
+            new UpgradeCostSO.Piece{ fromLevelInclusive = 1,  toLevelInclusive = 15, ratio = 1.50f },
+            new UpgradeCostSO.Piece{ fromLevelInclusive = 16, toLevelInclusive = 25, ratio = 1.35f },
+            new UpgradeCostSO.Piece{ fromLevelInclusive = 26, toLevelInclusive = 50, ratio = 1.20f },
+        };
         EditorUtility.SetDirty(costs);
 
         // Later heroes must not share a base asset with the starting roster.

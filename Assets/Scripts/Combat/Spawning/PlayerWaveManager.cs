@@ -417,6 +417,78 @@ public class PlayerWaveManager : MonoBehaviour
         _unitsDb = _gsm.unitsDatabase;
     }
 
+    // ---------- FINAL-STRETCH HERO BIAS (Arash, 2026-09-22) ----------
+
+    /// <summary>How many matches at the END of a stage favour the strongest heroes.</summary>
+    private const int FavourStrongestInLastMatches = 2;
+
+    /// <summary>How many of the deck's best heroes get the raised odds.</summary>
+    private const int StrongHeroCount = 2;
+
+    /// <summary>Their draw weight against every other hero's 1.</summary>
+    private const int StrongHeroWeight = 2;
+
+    /// <summary>
+    /// Picks one hero type for a deployment slot.
+    ///
+    /// Normally a flat random draw over the deployed roster, exactly as before.
+    /// In the LAST TWO matches of a stage the two HIGHEST-CP heroes are drawn at
+    /// 2:1 against the others, so the final push skews toward the deck's best -
+    /// with four heroes that is 2+2+1+1 = 6 shares, i.e. 33% each for the top two
+    /// and 17% each for the rest. It is a BIAS, not a guarantee: a weaker hero can
+    /// still turn up, which keeps the last matches from being fully deterministic.
+    ///
+    /// Ranking uses each type's BASE stats. Every hero shares one progression
+    /// curve, so the base ordering is the same as the upgraded ordering and this
+    /// stays correct at any upgrade level.
+    ///
+    /// With three or fewer deployed types the top two still get the weight, which
+    /// is what Arash asked for; at two or fewer it degenerates to a flat draw.
+    /// </summary>
+    private UnitDefinitionSO DrawHeroType(List<UnitDefinitionSO> pool, bool favourStrongest)
+    {
+        if (pool == null || pool.Count == 0) return null;
+        if (!favourStrongest || pool.Count <= StrongHeroCount)
+            return pool[UnityEngine.Random.Range(0, pool.Count)];
+
+        // Indices of the StrongHeroCount highest-CP entries. A selection pass
+        // rather than a sort, so the caller's pool order is left alone.
+        var strong = new List<int>(StrongHeroCount);
+        for (int pick = 0; pick < StrongHeroCount; pick++)
+        {
+            int best = -1;
+            double bestCp = double.MinValue;
+            for (int i = 0; i < pool.Count; i++)
+            {
+                if (strong.Contains(i)) continue;
+                double cp = BaseCpOf(pool[i]);
+                if (cp > bestCp) { bestCp = cp; best = i; }
+            }
+            if (best >= 0) strong.Add(best);
+        }
+
+        int totalWeight = 0;
+        for (int i = 0; i < pool.Count; i++)
+            totalWeight += strong.Contains(i) ? StrongHeroWeight : 1;
+
+        int roll = UnityEngine.Random.Range(0, totalWeight);
+        for (int i = 0; i < pool.Count; i++)
+        {
+            roll -= strong.Contains(i) ? StrongHeroWeight : 1;
+            if (roll < 0) return pool[i];
+        }
+        return pool[pool.Count - 1];
+    }
+
+    /// <summary>CP from a type's authored base stats, 0 when it has none.</summary>
+    private static double BaseCpOf(UnitDefinitionSO def)
+    {
+        if (!def || def.baseStats == null) return 0;
+        var s = new UnitStatsRuntime();
+        s.FromSO(def.baseStats);
+        return CPCalculator.UnitPower(s);
+    }
+
     private List<UnitDefinitionSO> GetDeployedUnitDefinitions()
     {
         var list = new List<UnitDefinitionSO>();
@@ -483,17 +555,27 @@ public class PlayerWaveManager : MonoBehaviour
             FailDeployment("No deployed hero types are available.");
             yield break;
         }
-        int max = LevelBattleRules.TotalHeroes(RuleLevel, LevelBattleRules.TotalPairs(RuleLevel));
-        for (int i = 0; i < max; i++)
+        // Rolled PER MATCH rather than as one flat list, because the LAST TWO
+        // matches of a stage bias the draw toward the strongest heroes - see
+        // DrawHeroType. plannedHeroes is still consumed in order by
+        // plannedSpawnIndex, so the totals are unchanged.
+        int totalMatches = LevelBattleRules.TotalPairs(RuleLevel);
+        for (int match = 1; match <= totalMatches; match++)
         {
-            var def = deployed[UnityEngine.Random.Range(0, deployed.Count)];
-            if (!def.runtimePrefab || !def.runtimePrefab.GetComponent<PlayerManager>() ||
-                !def.runtimePrefab.GetComponent<PlayerStatsApplier>())
+            bool finalStretch = match > totalMatches - FavourStrongestInLastMatches;
+
+            int forThisMatch = LevelBattleRules.HeroesForMatch(RuleLevel, match);
+            for (int i = 0; i < forThisMatch; i++)
             {
-                FailDeployment("A deployed type is missing its runtime prefab or stats components.");
-                yield break;
+                var def = DrawHeroType(deployed, finalStretch);
+                if (!def.runtimePrefab || !def.runtimePrefab.GetComponent<PlayerManager>() ||
+                    !def.runtimePrefab.GetComponent<PlayerStatsApplier>())
+                {
+                    FailDeployment("A deployed type is missing its runtime prefab or stats components.");
+                    yield break;
+                }
+                plannedHeroes.Add(def);
             }
-            plannedHeroes.Add(def);
         }
 
         for (int match = 1; running && match <= LevelBattleRules.TotalPairs(RuleLevel); match++)

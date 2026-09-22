@@ -31,13 +31,17 @@ public class StageRewardConfig
 // Shared calculator used by both Home screen and WinPanel.
 public static class StageRewardCalculator
 {
-    // Hero XP per stage win, stages 1-10. Stage 1 pays out like every other early
-    // stage - the player earns hero XP from their very first win.
-    // Four first upgrades (160 coins + 4 XP) are still gated by COINS at stage 5
-    // (200 coins banked by then, vs 140 after stage 4); the 4th XP now arrives one
-    // stage earlier, at stage 4, leaving 1 spare. Four second upgrades
-    // (240 coins + 8 XP) are funded after stage 9 exactly as before.
-    private static readonly int[] EarlyHeroXp = { 1, 1, 1, 1, 1, 1, 2, 2, 3, 3 };
+    // Hero XP per stage win, stages 1-10. 1 XP per win through stage 6, then 2 from
+    // stage 7 on (Arash, 2026-09-21). Cumulative: 5 by stage 5, 6 by stage 6, 12 by stage 9.
+    //
+    // This faucet is tuned together with the authored cost tables in UpgradeCostSO -
+    // changing one without the other breaks the two early-campaign milestones that
+    // EarlyCampaignEconomyVerification asserts:
+    //   - four heroes get their FIRST upgrade before stage 6  (4 XP + 200 coins of 5 / 200)
+    //   - four heroes get their SECOND upgrade by stage 9     (8 XP + 320 coins of 8 / 340)
+    // while a player funnelling everything into ONE hero is stopped at two upgrades
+    // (a third costs 200 coins on top of 130 already spent, against 270-324 banked).
+    private static readonly int[] EarlyHeroXp = { 1, 1, 1, 1, 1, 1, 2, 2, 2, 2 };
     public static WinPanel.RewardValues GetRewardForStageAndHpCase(
         int stage1Based,
         int hpCase,

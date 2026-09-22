@@ -86,10 +86,20 @@ public static class LevelBattleRules
         new[] { 2, 3 },     // level 5
         new[] { 2, 2, 2 },  // level 6: SIX enemies in THREE waves of two (Arash, 2026-09-21).
                             // Wave 1 is the returning pair; waves 2 and 3 are the new type only.
-        new[] { 3, 3 },     // level 7
-        new[] { 3, 3 },     // level 8: consolidate before the next increase
-        new[] { 3, 4 },     // level 9
-        new[] { 3, 4 },     // level 10
+        // Levels 7-10 re-authored 2026-09-22 (Arash). The new type introduced at
+        // stage 6 is the ONLY newcomer through stage 10 - no Orc, no Crusader - so
+        // the ramp is carried by count and by the per-stage CP curve instead.
+        new[] { 1, 2, 2, 2 },       // level 7  - 7 enemies
+        new[] { 1, 2, 2, 3 },       // level 8  - 8 enemies in FOUR waves (Arash,
+                                    //            2026-09-22). The old 5th wave was
+                                    //            dropped; the final wave is now the
+                                    //            3-slot one: skeleton, zombie, skeleton.
+        new[] { 1, 2, 2, 2, 2 },    // level 9  - 9 enemies (Arash, 2026-09-22).
+                                    //            The LAST TWO waves are two
+                                    //            skeletons each, nothing else.
+        new[] { 2, 2, 3, 4 },       // level 10 - 11 enemies in FOUR waves
+                                    //            (Arash, 2026-09-22, for testing).
+                                    //            Final wave is skeletons only.
     };
 
     /// <summary>Highest level this wave table covers.</summary>

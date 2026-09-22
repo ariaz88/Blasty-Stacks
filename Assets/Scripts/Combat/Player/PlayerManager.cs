@@ -789,6 +789,40 @@ public class PlayerManager : MonoBehaviour
     private float nextRebalanceTime;
 
     /// <summary>
+    /// TRUE once this hero has actually ENGAGED its target - it is in melee, or
+    /// swinging, or waiting out the recovery between swings. From this moment the
+    /// fight belongs to that enemy and nothing may take the hero off it; only the
+    /// enemy's death ends it (Arash, 2026-09-22).
+    ///
+    /// WHY ALL FOUR TERMS. "Am I attacking?" cannot be answered by the state alone,
+    /// because a hero in a fight is only in AttackState for the frames it is
+    /// actually starting a swing: PlayerAttackState sets isPerformingAction and
+    /// PlayerCombatState pulls it back until currentRecoveryTimer expires. So a
+    /// hero standing in range trading blows spends MOST of its time in
+    /// PlayerCombatState, and a state-only test would read "not attacking" in
+    /// exactly the gaps where the re-balance timer is most likely to fire.
+    ///   * IsInAttackPosition() - the fight has started: same predicate the combat
+    ///     and pursue states use to agree on "arrived", so this can never disagree
+    ///     with them about whether the hero is engaged.
+    ///   * currentState == AttackState - mid-swing.
+    ///   * isPerformingAction / isInteracting - the swing animation is still
+    ///     playing; leaving now would slide the hero away mid-animation.
+    ///
+    /// NOT included: attackPlayerGate. A gate engagement is judged on its own
+    /// target (currentGateTarget) and must not freeze this hero's ENEMY choice.
+    /// </summary>
+    public bool IsEngagedWithTarget
+    {
+        get
+        {
+            if (currentTarget == null || currentTarget.enemyIsdead) return false;
+            if (isPerformingAction || isInteracting) return true;
+            if (currentState == AttackState) return true;
+            return IsInAttackPosition();
+        }
+    }
+
+    /// <summary>
     /// RULE 1b - the only way a hero ever leaves a living enemy.
     ///
     /// WHY IT EXISTS. Rule 2 only fires at the moment a hero picks, and that
@@ -800,8 +834,13 @@ public class PlayerManager : MonoBehaviour
     /// at spawn" was simply not enough information.
     ///
     /// THE CONDITION, and why it cannot oscillate:
+    ///   * It never runs for a hero that has ENGAGED (IsEngagedWithTarget). A
+    ///     started fight is finished - see the engagement lock below.
     ///   * It only runs when this hero's target is SHARED (myOthers > 0). A hero
     ///     fighting alone never moves, so a fight is never abandoned on a whim.
+    ///   * It never runs for the hero CLOSEST to that shared target
+    ///     (TargetClaimRegistry.IsNearestClaimant) - a fight may only be handed
+    ///     to somebody nearer, never to somebody further back.
     ///   * It only moves to an enemy with STRICTLY fewer other claimants.
     ///   * OtherClaimants excludes self and is counted LIVE, so the instant this
     ///     hero leaves, its old target reads one claimant fewer for everybody.
@@ -823,10 +862,55 @@ public class PlayerManager : MonoBehaviour
         if (Time.time < nextRebalanceTime) return;
         nextRebalanceTime = Time.time + RebalanceInterval;
 
+        // =========================
+        // ENGAGEMENT LOCK (Arash, 2026-09-22) - re-balance is an APPROACH-time
+        // decision only.
+        // =========================
+        // Reported: a hero already in melee walked away from the enemy it was
+        // hitting the moment a new enemy spawned. That is this method - a fresh
+        // enemy enters with ZERO claimants, so any hero whose target happens to be
+        // shared sees a strict improvement and leaves, mid-fight, with the enemy
+        // it was beating on still alive and now free to hit its back.
+        //
+        // The rule this restores: a fight, once JOINED, is finished. Re-balancing
+        // is still exactly as free as it was for heroes that are walking - which
+        // is the case rule 1b was actually written for (heroes of deployment 1
+        // doubled up while wave 2 walked in unopposed; they were marching, not
+        // fighting). So this keeps the spread-out behaviour and removes only the
+        // half of it that abandons a live engagement.
+        //
+        // It cannot deadlock: the lock lasts only while the target lives, and the
+        // target dies. On its death rule 1 falls through to the persistent search
+        // and the hero re-picks with full claim-aware ranking - including the new
+        // enemy that triggered this in the first place.
+        if (IsEngagedWithTarget) return;
+
         // Alone on this enemy: nothing to fix, and this is also the guard that
         // makes the whole thing terminate.
         int myOthers = TargetClaimRegistry.OtherClaimants(currentTarget, this);
         if (myOthers <= 0) return;
+
+        // =========================
+        // NEAREST-CLAIMANT LOCK (Arash, 2026-09-22) - only leave a fight to
+        // somebody CLOSER than you.
+        // =========================
+        // Reported after the engagement lock above went in, and it is the same
+        // bug one step earlier: the hero that turns around had not reached melee
+        // yet, so nothing held it. A hero walking at an enemy it is about to
+        // reach would abandon it for a brand-new spawn on the far side of the
+        // field, handing the enemy to an ally that was standing further back.
+        //
+        // Spreading out is the POINT of this method and Arash asked for it - but
+        // it is only spread if the enemy left behind ends up covered at least as
+        // well. Handing it to a hero further away is a straight downgrade: the
+        // enemy gets free time while the new owner walks in, and the hero that
+        // left spends that time walking too. Nobody gains.
+        //
+        // Exactly one hero per target passes this, so a doubled-up group still
+        // splits - the nearest one keeps the fight and everybody behind it is
+        // free to go cover the new wave, which is the distribution that was
+        // wanted in the first place.
+        if (TargetClaimRegistry.IsNearestClaimant(currentTarget, this)) return;
 
         EnemyStats best = RankLivingEnemies(out int bestClaims, out float bestDistSq);
         if (best == null || best == currentTarget) return;

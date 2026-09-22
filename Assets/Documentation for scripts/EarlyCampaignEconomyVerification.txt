@@ -1,0 +1,80 @@
+================================================================================
+  EarlyCampaignEconomyVerification.cs
+  Path : Assets/Scripts/Editor/EarlyCampaignEconomyVerification.cs
+  Type : static class, EDITOR ONLY  (no menu item - call Run() explicitly)
+  Layer: Editor / Balance tooling
+================================================================================
+
+PURPOSE
+-------
+The project's only executable test of the early-campaign economy. It simulates
+clearing stages 1-9 at minimum HP, banks the rewards, spends them through the real
+PlayerProgressionService, and asserts that the intended progression milestones are
+exactly affordable and the unintended ones are exactly not.
+
+Runs entirely in the Editor with no Play mode, no scene, and no gameplay objects.
+There is no authored test suite in this repo - this stands in for one whenever
+UpgradeCostSO or StageRewardCalculator is retuned.
+
+HOW TO RUN
+----------
+  No menu item. Invoke EarlyCampaignEconomyVerification.Run() - e.g. from a
+  Unity_RunCommand snippet, or add a temporary [MenuItem]. It throws on the first
+  failed assertion with the failing milestone's name; on success it logs
+  "[Economy verification] PASS: ...".
+
+FLOW  (Run())
+-------------
+  Setup   Throws if in Play mode. Saves and detaches the real save: backs up the
+          GAME_SAVE_V1 PlayerPrefs key AND nulls SaveSystem's private _cache via
+          reflection, so the test cannot touch the player's actual progress.
+          Builds a throwaway inactive GameObject carrying a CurrencyManager, a
+          PlayerUnitsModel seeded from the units that startsDeployed, and a
+          PlayerProgressionService over the LIVE UpgradeCostSO asset.
+
+  1. Banks stages 1-5 rewards.  Asserts 200 coins / 5 heroXP.
+  2. Four heroes buy upgrade #1 (50 coins + 1 XP each). Asserts every unit reaches
+     level 2 and the wallet lands on exactly 0 coins / 1 XP.
+  3. Asserts a further TryUpgrade fails AND debits nothing (atomicity).
+  4. Banks stages 6-9. Asserts 340 coins / 8 heroXP.
+  5. Four heroes buy upgrade #2 (80 coins + 2 XP each) -> level 3, leaving 20 / 0.
+  6. Atomicity both ways: XP-short with 1000 coins fails and spends no coins;
+     coin-short with 20 XP fails and spends no XP.
+  7. Cost tables: GetHeroXpCostForLevel 1..10 follows 1,2,3,4,4,5,5,6,6,7 and
+     GetCostForLevel gives 50 / 80 / 200 / 2900 at 1 / 2 / 3 / 8.
+  8. Tail sanity: level 9 costs 4350 and level 49 stays under 5e8 - the decaying
+     ratio bands must keep the curve from overflowing int (a flat 1.5 ratio from
+     baseCost used to return -2147483648 at level 49).
+  9. TUNNELLING GUARD: for a wallet of 270 coins (stage-6 minimum-HP income) and
+     again 324 (all-full-HP income), a FRESH single hero can buy two upgrades
+     (130 coins, 3 XP) and the third is refused with nothing debited. This is the
+     assertion that protects the "spread across the deck" design intent.
+ 10. Level cap: a unit at levelCap reports CanUpgrade false with reason "AtCap".
+
+  Teardown  finally-block: destroys the temp GameObject, restores (or deletes) the
+            GAME_SAVE_V1 key, and puts SaveSystem's _cache back. Runs even on a
+            failed assertion, so a failure never corrupts the developer's save.
+
+HELPERS
+-------
+  Require(condition, message)   throws new Exception(message) when false.
+
+HOW IT CONNECTS
+---------------
+  - Reads the LIVE Assets/Scripts/UI/UI-SOs/UgradeCost-SOs/UpgradeCostSO.asset, so
+    it verifies what ships, not a copy.
+  - Reuses EarlyCampaignAuthoring.Database and .HeroGrowth.
+  - Exercises the real PlayerProgressionService / PlayerUnitsModel /
+    CurrencyManager.TrySpendUpgradeResources / StageRewardCalculator path.
+
+NOTES
+-----
+  - Every number in the Require(...) lines is a hardcoded expectation of the
+    current tuning. Retuning UpgradeCostSO's authored tables or
+    StageRewardCalculator.EarlyHeroXp WILL make this throw - that is the point.
+    Update the expectations in the same pass as the tuning.
+  - Reaches into SaveSystem's private _cache field by reflection. If that field is
+    ever renamed, this throws a NullReferenceException at setup rather than
+    silently writing to the real save.
+  - It models minimum-HP income only. The full-HP case appears solely as the 324
+    figure in the tunnelling guard.
