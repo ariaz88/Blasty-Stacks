@@ -110,6 +110,12 @@ public class WinPanel : MonoBehaviour
 
         hpCase = CalculateHpCase(hpPercent);
 
+        // The HUD's resource chips are hidden for the whole stage and come back
+        // the moment it is won (Arash, 2026-09-22) - revealed HERE, not on the
+        // claim press, so they are already on screen and settled by the time the
+        // claim animation flies coins/gems/XP into them.
+        HudCurrencyView.RevealResourcesForWin();
+
         CalculateAllRewards();
         UpdateRewardTexts();
         UpdateLevelHeaderText();
@@ -158,6 +164,18 @@ public class WinPanel : MonoBehaviour
         }
 
         totalRewardRow = StageRewardCalculator.GetRewardForStageAndHpCase(stage1Based, hpCase, cfg);
+
+        // REPLAYING A CLEARED STAGE PAYS COINS ONLY (Arash, 2026-09-22).
+        // Hero XP and gems are first-clear rewards; without this, a cleared
+        // stage 1 could be farmed forever and the authored upgrade-cost curve
+        // would bound a bad build in TIME only, not in resources.
+        // Zeroed on totalRewardRow, not just totalGiven, so the panel cannot
+        // advertise a reward it is not going to hand over.
+        if (!HomeManager.LastWinWasFirstClear)
+        {
+            totalRewardRow.heroXP = 0;
+            totalRewardRow.gems = 0;
+        }
 
         // What we actually give to the player (can be modified later if needed)
         totalGiven = new RewardValues

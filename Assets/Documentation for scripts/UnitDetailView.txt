@@ -31,7 +31,15 @@ INSPECTOR FIELDS  (grouped)
                       prefab gets instantiated
     currentVisualInstance (GameObject, runtime, not serialized)
     portraitImage, nameText, levelText
-    cpText, xpText, coinsText, coinsTextDelta
+    cpText
+    THE TWO "COST / OWNED" ROWS (each a "Resources-frame": icon + 2 texts)
+      coin row:     coinsTextDelta = green, holds the COST
+                    coinsText      = white, holds "/ owned"
+      hero XP row:  xpText         = green, holds the COST
+                    xpTextOwned    = white, holds "/ owned"   [added 2026-09-22]
+      coinsRow, heroXpRow (GameObject, OPTIONAL) - the whole row, for
+                    SetCostRowsVisible. Empty = the row is the text's parent.
+    !! THE SLASH IS WRITTEN BY CODE, never authored in the scene. See NOTES.
 
   Stats UI (Current / +Delta)
     hpText/hpDeltaText, atkText/atkDeltaText, defText/defDeltaText,
@@ -129,17 +137,36 @@ STAT ROWS
       NOTES).
 
   SetMeta(cp, coins, xp)
-      Sets cpText and xpText. NOTE: despite the parameter name 'coins', this
-      method never touches coinsText - only cp and xp are written.
+      Sets cpText ONLY. BOTH other parameters are ignored and kept purely so the
+      existing call sites compile: 'coins' never did anything, and the xpText
+      write was REMOVED on 2026-09-22 because it made two methods write one
+      label - see NOTES.
 
-  Compact(v)  [static]  formats large ints as "12.3K" / "1.25M" - defined but
-              not called from anywhere visible in this file (a ready-made
-              utility, currently unused).
+  Compact(v)  [static]  formats ints >= 1000 as "1.19K" / "30.66K" and >= 1e6 as
+              "1.25M"; 999 and below print in full. Now used by BOTH cost
+              setters, which is the "above 999 -> K" rule Arash asked for
+              (2026-09-22). It was dead code before that.
 
   SetCoinsCost(costNeeded, coinsOwned)
-      Writes "/ {coinsOwned}" into coinsText and costNeeded into
-      coinsTextDelta - an upgrade-cost display ("cost / owned" style), reusing
-      the "delta" field name for a different purpose (cost, not a stat delta).
+      coinsTextDelta = Compact(costNeeded)      (green, left)
+      coinsText      = "/ " + Compact(coinsOwned)  (white, right)
+      Reads on screen as "50 / 4" = costs 50, you have 4. The field name
+      "delta" is historical - it holds a COST, not a stat delta.
+
+  SetHeroXpCost(costNeeded, xpOwned)
+      The same split for the hero-XP row: xpText = Compact(costNeeded),
+      xpTextOwned = "/ " + Compact(xpOwned).
+
+  SetCostRowsVisible(visible)   [added 2026-09-22]
+      Shows/hides BOTH rows, icon included. The Unachieved panel passes false:
+      a locked hero cannot be upgraded, and it used to print a cost of 0 beside
+      the player's real balance, which read as "this costs nothing".
+
+  ResolveXpOwnedText()  [private]
+      Returns xpTextOwned, or - when it is not wired - the first sibling
+      TMP_Text of xpText under the same row, caching it. This is why the
+      2026-09-22 fix needed NO scene edit. An explicit xpTextOwned always wins;
+      wire it if a third text is ever added to that row.
 
   SetRequirementDetail(text)   sets requirementDetailText, empty-string safe
 
@@ -189,14 +216,40 @@ TOASTS
 
 HOW IT CONNECTS
 ---------------
-  - UnitsPanelController calls SetHeader, SetStatRows, SetMeta,
-    RefreshStatsPopupData and SetRequirementDetail after computing values from
+  - UnitsPanelController calls SetHeader, SetStatRows, SetMeta, SetCoinsCost,
+    SetHeroXpCost, SetCostRowsVisible, RefreshStatsPopupData and
+    SetRequirementDetail after computing values from
     PlayerProgressionService/CPCalculator - this view never computes anything
     itself.
   - UnitDefinitionSO supplies the visual prefab and scale for the header.
+  - Which panel gets which treatment (MenuScene / Canvas/Units Panel/DetailScreen):
+      Deployed    -> "UnitDetail"                 both cost rows, numbers live
+      Undeployed  -> "UnitDetailPanel_UnDeployed" NO cost row exists by design;
+                     it shows "UNDEPLOYED HERO CAN NOT BE UPGRADED." instead, and
+                     its xpText/coinsText refs are deliberately empty. The null
+                     guards in the setters are what make that safe - do not
+                     "fix" them by wiring something up.
+      Unachieved  -> "UnAchived"                  rows HIDDEN via SetCostRowsVisible
+    Three more UnitDetailViews sit in that screen with no refs wired at all
+    (UnitDetailPanel_UnDeploy, UnAchievedPanel, UnAchievedPanel2). UnAchievedPanel
+    holds the reference mock traced from Arash's art ("30.15 K" / "/5640"). None
+    is referenced by UnitsPanelController - they are dead layout leftovers.
 
 NOTES
 -----
+  - !! THE "1/6/200" BUG (found and fixed 2026-09-22). The hero-XP row has two
+    labels but only the green one was ever wired, so its WHITE label kept the
+    placeholder the scene was authored with, "/200". Meanwhile SetHeroXpCost
+    wrote the COMBINED string "{cost} / {owned}" into the green one. On screen
+    the two concatenated: "1 / 6" + "/200" = "1/6/200".
+    The rule that prevents it coming back: a slash that belongs to a value is
+    written by CODE into its own label. Never author a slash in the scene, and
+    never let one method write a two-part string into a label that sits next to
+    another label holding the second part.
+    Second writer on the same label, removed at the same time: SetMeta also set
+    xpText. On the Deployed path SetHeroXpCost overwrote it one line later, so
+    it was invisible; on the LOCKED path SetMeta was called and SetHeroXpCost
+    was not, so whatever SetMeta wrote stayed on screen beside the "/200".
   - A dead numbered sibling SetHeader1(displayName, portrait, level) remains -
     an earlier, simpler header setter that took raw values instead of a
     UnitDefinitionSO and never instantiated a visual prefab.

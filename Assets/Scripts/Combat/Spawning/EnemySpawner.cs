@@ -302,9 +302,7 @@ public class EnemySpawner : MonoBehaviour
         // drift: pressing Play directly on a stage scene, or any flow that reaches
         // a gameplay scene without HomeManager/DirectPlayBootstrap calling SetStage,
         // leaves CurrentStage pointing somewhere else - and then this stage fields
-        // ANOTHER stage's wave counts and enemy strength. Since SavePersistence
-        // forces LevelManager back to stage 1 on every run, that drift is now the
-        // normal case in editor testing rather than an edge case.
+        // ANOTHER stage's wave counts and enemy strength.
         //
         // ResolveLevel reads the "_Stage_N" suffix of the scene name first (the
         // gameplay scenes are Level_1_Stage_N), then the asset's own levelNumber -
@@ -422,10 +420,27 @@ public class EnemySpawner : MonoBehaviour
     /// persist into the project file. Every wave here is a fresh copy.
     /// </summary>
     private List<Wave> BuildWavesFromRules(int stageLevel)
+        => ResolveWavesForStage(levelConfig, stageLevel);
+
+    /// <summary>
+    /// The instance method above, as a pure function of (config, stage).
+    ///
+    /// Public and static so anything that needs to know WHAT A STAGE WILL FIELD
+    /// without running it can ask the same code the spawner obeys - the Home
+    /// screen's enemy-CP preview does exactly that. A second implementation of
+    /// this reshaping would drift from the real one the first time either the
+    /// wave table or the mix rule changed, and the preview would quietly start
+    /// lying about the fight the player is about to walk into.
+    ///
+    /// !! NEVER MUTATES THE ASSET - see the note on BuildWavesFromRules.
+    /// </summary>
+    public static List<Wave> ResolveWavesForStage(LevelConfig config, int stageLevel)
     {
+        if (!config) return new List<Wave>();
+
         var counts = LevelBattleRules.EnemyWaveCounts(stageLevel);
-        if (counts == null || counts.Length == 0 || levelConfig.waves.Count == 0)
-            return levelConfig.waves;
+        if (counts == null || counts.Length == 0 || config.waves.Count == 0)
+            return config.waves;
 
         var built = new List<Wave>(counts.Length);
 
@@ -434,7 +449,7 @@ public class EnemySpawner : MonoBehaviour
             // Template: the authored wave at the same index when there is one,
             // otherwise the last authored wave - so a two-wave level built from a
             // one-wave asset reuses that wave's look for its second wave.
-            var template = levelConfig.waves[Mathf.Min(i, levelConfig.waves.Count - 1)];
+            var template = config.waves[Mathf.Min(i, config.waves.Count - 1)];
             built.Add(CopyWaveWithTotal(template, counts[i], i));
         }
 

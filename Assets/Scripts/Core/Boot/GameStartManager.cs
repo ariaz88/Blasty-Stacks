@@ -8,6 +8,16 @@ public class GameStartManager : MonoBehaviour
 {
     public static GameStartManager Instance { get; private set; }
 
+    // A NEW PLAYER OWNS NOTHING (Arash, 2026-09-22).
+    // Deliberately NOT read from CurrencyManager's inspector values: "a new
+    // player starts at zero" is a game rule, and a rule that lives in a scene
+    // field can be quietly re-seeded by any scene - the HUD would then open on a
+    // number that looks like progress the player never earned. The menu must
+    // show what was actually won, and nothing is won before stage 1.
+    public const int FreshStartCoins = 0;
+    public const int FreshStartGems = 0;
+    public const int FreshStartHeroXp = 0;
+
 
 
 
@@ -15,6 +25,15 @@ public class GameStartManager : MonoBehaviour
     public UnitsDatabaseSO unitsDatabase;
    /* [SerializeField]*/ public UpgradeCostSO upgradeCostConfig;
    /* [SerializeField]*/ public ProgressionConfigSO progressionConfig;
+
+#if UNITY_EDITOR
+    [Header("Testing - EDITOR ONLY (this field does not exist in a build)")]
+    [Tooltip("TICKED: every time you press Play the whole save is wiped first, so " +
+             "the run boots as a brand-new player - stage 1, starting currency, and " +
+             "the first-run tutorial plays again.\n\n" +
+             "UNTICKED (normal): nothing is wiped and progress saves automatically.")]
+    [SerializeField] private bool resetProgressOnPlay = false;
+#endif
 
     [Header("Initial Unlocks (First Run Defaults)")]
     [Tooltip("Unit IDs to unlock at start (e.g., Warrior = 0).")]
@@ -42,9 +61,22 @@ public class GameStartManager : MonoBehaviour
             return;
         }
         Instance = this;
-        DontDestroyOnLoad(gameObject); 
+        DontDestroyOnLoad(gameObject);
 
-
+#if UNITY_EDITOR
+        // Must run BEFORE InitializeServices(), which is the first thing in the
+        // boot to read SaveSystem.Data - wiping afterwards would seed the roster
+        // and currency from the old save and only then throw the save away.
+        // Nothing else in StarterScene reads SaveSystem in Awake (CurrencyManager
+        // only applies its own serialized Starting* values), so this is early enough.
+        if (resetProgressOnPlay)
+        {
+            SaveSystem.WipeAllProgress();
+            Debug.Log("[GameStartManager] 'Reset Progress On Play' is TICKED: save wiped. " +
+                      "This run boots as a new player and the tutorial will play. " +
+                      "Untick it on GameStartManager in StarterScene to keep progress.");
+        }
+#endif
 
         InitializeServices();
 
@@ -176,21 +208,9 @@ public class GameStartManager : MonoBehaviour
 
         if (isFirstRunEconomy)
         {
-            if (SavePersistence.Enabled)
-            {
-                // Use starting values from CurrencyManager
-                loadedCoins = currencyMgr.StartingCoins;
-                loadedGems = currencyMgr.StartingGems;
-                loadedHeroXp = currencyMgr.StartingHeroXP;
-            }
-            else
-            {
-                // Debug gate: every run is a fresh player with nothing banked, so the
-                // CurrencyManager inspector seed (4/4/6) is bypassed.
-                loadedCoins = SavePersistence.FreshStartCoins;
-                loadedGems = SavePersistence.FreshStartGems;
-                loadedHeroXp = SavePersistence.FreshStartHeroXp;
-            }
+            loadedCoins = FreshStartCoins;
+            loadedGems = FreshStartGems;
+            loadedHeroXp = FreshStartHeroXp;
         }
         else
         {

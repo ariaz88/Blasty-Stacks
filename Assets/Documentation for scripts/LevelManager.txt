@@ -50,13 +50,12 @@ METHODS
       raises both events, then optionally loads the stage scene.
 
   PersistCurrentStage()  [static, added 2026-09-20]
-      The single write path for "LM.CurrentStage". No-ops when
-      SavePersistence.Enabled is false, or when Instance is null (which is the
-      normal case in Edit mode). Every previous inline
+      The single write path for "LM.CurrentStage". No-ops only when Instance is
+      null (the normal case in Edit mode). Every previous inline
       PlayerPrefs.SetInt + PlayerPrefs.Save pair now routes through here, so
-      the debug gate cannot be defeated by a stage change. Also called by
-      SavePersistence when saving is switched back ON, to commit the current
-      stage right away.
+      every stage change is saved automatically and nothing in the UI has to ask
+      for it. It used to also no-op while the SavePersistence debug gate was off;
+      that gate was deleted on 2026-09-22.
 
   LoadSceneForStage(stage)  [private]
       Uses stageSceneNames[stage-1] when a non-empty name exists, otherwise
@@ -80,12 +79,14 @@ METHODS
 
 PERSISTENCE
 -----------
-  Uses its OWN PlayerPrefs key: "LM.CurrentStage".
+  Uses its OWN PlayerPrefs key: "LM.CurrentStage". The constant was made PUBLIC
+  on 2026-09-22 so SaveSystem.WipeAllProgress() can delete it by name - a wipe
+  that forgets this key leaves an otherwise-fresh player standing on their old
+  stage.
 
-  DEBUG GATE (added 2026-09-20): Awake() reads that key only when
-  SavePersistence.Enabled is true; otherwise it boots at startingStage and
-  ignores whatever is stored. Combined with the SaveSystem gate, this makes
-  every Play run start at stage 1 with zero resources. See SavePersistence.
+  Awake() always reads that key now, falling back to startingStage when it is
+  absent (a fresh install, or right after a wipe). The 2026-09-20 debug gate
+  that made it ignore the key was deleted on 2026-09-22.
 
   !! NOTE: this is the one place in the project that persists outside
   !! SaveSystem. The current stage therefore lives in a different key from the

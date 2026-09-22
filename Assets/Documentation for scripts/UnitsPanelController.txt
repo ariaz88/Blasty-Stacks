@@ -176,16 +176,25 @@ STATS COMPUTATION
       neither cur nor nxt scales those fields). Computes NEXT-level stats the
       same way. Calls targetView.SetStatRows with all 12 values (though, per
       UnitDetailView's own doc, SetStatRows only actually DISPLAYS 3 of the 12
-      it is passed). Computes CP via CPCalculator, sets meta (xp hard-coded to
-      70 - a placeholder value, not derived from anything), sets the coins-cost
-      display, and finally calls RefreshStatsPopupData with fresh cpNow/cpNext
-      values (recomputing CP a second time for the "next" state) - the popup
-      IS fully correct since RefreshStatsPopupData uses all six stats properly.
+      it is passed). Computes CP via CPCalculator, sets meta, then fills BOTH
+      cost rows from UpgradeCostSO for the CURRENT level -
+      GetHeroXpCostForLevel -> SetHeroXpCost, GetCostForLevel -> SetCoinsCost,
+      each paired with the player's live balance from CurrencyManager - and
+      calls SetCostRowsVisible(true). Finally RefreshStatsPopupData with fresh
+      cpNow/cpNext values (recomputing CP a second time for the "next" state) -
+      the popup IS fully correct since RefreshStatsPopupData uses all six stats.
+      (The xp value passed to SetMeta was a hard-coded placeholder 70 at one
+      point; it is now the real cost, and SetMeta ignores it either way.)
 
   BuildLockedStats(unitId)
       Same shape but always at level 1 with zero deltas (locked units get no
       "next level" preview), and sets the requirement text via
       SetRequirementDetail.
+      2026-09-22: it no longer calls SetCoinsCost(0, owned) - that printed a
+      cost of ZERO beside the player's real balance, reading as "free". Both
+      rows are now hidden outright with SetCostRowsVisible(false), per Arash.
+      This is marked PROVISIONAL ("hide it for now") - if locked heroes ever get
+      a purchase price, re-show the rows and feed them the real numbers.
 
   GetLevelSafe(unitId)   floor 1, model-missing-safe.
 
@@ -404,5 +413,12 @@ NOTES / RISKS - IMPORTANT
     versions of the live save/unlock logic - HandleDeploySave1 in particular
     lacks the id-existence guards and the SaveSystem persistence calls the
     live version adds).
-  - BuildUnlockedStats's xp meta value is hard-coded to 70 for every unit at
-    every level - clearly a placeholder never wired to a real source.
+  - BuildUnlockedStats's xp meta value used to be hard-coded to 70 for every
+    unit at every level. It now comes from UpgradeCostSO.GetHeroXpCostForLevel,
+    and SetMeta ignores the argument anyway - SetHeroXpCost is the only writer
+    of that label (see UnitDetailView.txt, the "1/6/200" note).
+  - Cost tables as authored in UpgradeCostSO.asset (upgrade 1..10):
+      coins   50, 80, 200, 340, 580, 1000, 1700, 2900, 4350, 6525
+      hero XP  1,  2,   3,   4,   4,    5,    5,    6,    6,    7
+    Both are Arash's authored sequences (2026-09-21) - verify against him before
+    touching either, and do NOT widen a stat pass onto them.

@@ -3,43 +3,43 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// Editor-menu access to the <see cref="SavePersistence"/> debug gate, so it can be
-/// flipped without entering Play mode. Mirrors SavePersistenceDebugPanel.
+/// Testing tool: start the game over as a brand-new player.
+///
+/// Saving itself is UNCONDITIONAL (2026-09-22) - there is no on/off switch any
+/// more, in the editor menu or on screen, and every state change writes through
+/// SaveSystem straight away. What is still needed for testing is the opposite
+/// operation: erasing what was written, so the next Play boots a first run -
+/// stage 1, starting currency, and the first-run tutorial detour in MenuLoader.
 /// </summary>
 public static class SavePersistenceMenu
 {
-    private const string ToggleItem = "Tools/Save System/Save && Load Enabled";
     private const string WipeItem = "Tools/Save System/Wipe Saved Progress Now";
 
-    [MenuItem(ToggleItem, priority = 0)]
-    private static void ToggleSaving() => SavePersistence.Enabled = !SavePersistence.Enabled;
-
-    [MenuItem(ToggleItem, validate = true)]
-    private static bool ToggleSavingValidate()
-    {
-        Menu.SetChecked(ToggleItem, SavePersistence.Enabled);
-        return true;
-    }
-
     /// <summary>
-    /// Deletes the two PlayerPrefs keys all persistence funnels through. Needed once
-    /// after disabling the gate, because a save written earlier is still on disk -
-    /// the gate only stops new writes, it doesn't erase the old blob.
+    /// Deletes the two PlayerPrefs keys all persistence funnels through, which is
+    /// the whole save: units, currency, stars, completed tutorials and the stage.
     /// </summary>
-    [MenuItem(WipeItem, priority = 20)]
+    [MenuItem(WipeItem, priority = 0)]
     private static void WipeSavedProgress()
     {
         if (!EditorUtility.DisplayDialog(
                 "Wipe saved progress?",
-                "Deletes GAME_SAVE_V1 (units, currency, stars) and LM.CurrentStage.\n\nThis cannot be undone.",
+                "Deletes GAME_SAVE_V1 (units, currency, stars, completed tutorials) and " +
+                "LM.CurrentStage.\n\nThe next Play boots as a new player, tutorial included." +
+                "\n\nThis cannot be undone.",
                 "Wipe", "Cancel"))
             return;
 
-        PlayerPrefs.DeleteKey("GAME_SAVE_V1");
-        PlayerPrefs.DeleteKey("LM.CurrentStage");
-        PlayerPrefs.Save();
-        SaveSystem.ResetAll();   // drops the in-memory cache too
+        WipeNow();
+    }
 
-        Debug.Log("[SavePersistence] Saved progress wiped: stage 1, no resources.");
+    /// <summary>The wipe without the confirmation dialog, for scripted/automated runs.</summary>
+    public static void WipeNow()
+    {
+        // One implementation, shared with GameStartManager's "Reset Progress On
+        // Play" tickbox - so the menu and the checkbox can never wipe differently.
+        SaveSystem.WipeAllProgress();
+
+        Debug.Log("[SaveSystem] Saved progress wiped: next run is a first run (stage 1, tutorial plays).");
     }
 }

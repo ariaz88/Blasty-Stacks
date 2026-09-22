@@ -61,6 +61,10 @@ LIFECYCLE
       button, computes hpCase via CalculateHpCase, then
       CalculateAllRewards() -> UpdateRewardTexts() -> UpdateLevelHeaderText(),
       makes the canvasGroup fully visible/interactive, and activates the panel.
+      2026-09-22: it also calls HudCurrencyView.RevealResourcesForWin() to bring
+      back the HUD's coin/gem/XP chips, which are hidden for the whole stage.
+      Done HERE and not on the claim press, so the chips are already on screen
+      and settled by the time the claim animation flies resources into them.
 
   CalculateHpCase(hpPercent) -> int
       >= 99.99% -> 3 (full HP), >= 50% -> 2, else -> 1. The tiny epsilon on the
@@ -72,6 +76,22 @@ LIFECYCLE
       rewardConfigOverride, then to a hard warning + zeroed rewards if both are
       missing). Calls StageRewardCalculator.GetRewardForStageAndHpCase and
       copies the result into BOTH totalRewardRow and totalGiven.
+
+      REPLAY GATE (added 2026-09-22, Arash): replaying an already-cleared stage
+      pays COINS ONLY. If HomeManager.LastWinWasFirstClear is false, heroXP and
+      gems are zeroed.
+        - Zeroed on totalRewardRow, NOT just totalGiven, so the panel cannot
+          advertise a reward it is not going to hand over. UpdateRewardTexts
+          reads totalRewardRow; the displayed chips therefore show 0 on a
+          replay (they are not hidden - say so if that should change).
+        - WHY THE FLAG INSTEAD OF READING STARS HERE: LevelGameManager calls
+          HomeManager.NotifyStageWon BEFORE WinPanel.Show, so the stars for
+          this very clear are already saved by the time this runs. Checking
+          SaveSystem.GetStars here would report "already cleared" for EVERY
+          win, including the first. See HomeManager.LastWinWasFirstClear.
+        - WHY IT MATTERS: without it a cleared stage 1 can be farmed forever,
+          and the authored upgrade-cost curve bounds a bad build in TIME only,
+          not in resources.
 
   UpdateRewardTexts()
       Writes the three plain numbers into their TMP_Text fields.

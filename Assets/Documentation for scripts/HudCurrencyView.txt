@@ -23,6 +23,18 @@ INSPECTOR FIELDS
   Panels that affect HUD: bucketStatsPanelRoot, bucketStatsCanvas,
     swapPanelRoot, mainMenuPanelRoot, unitsDetailPanelRoot
 
+  Hide resources during a stage  [added 2026-09-22]
+    resourceVisibility (enum ResourceVisibility, default Auto)
+        Auto          - hide the chips while a stage is played, reveal on the
+                        win. Decided by whether the scene has a
+                        LevelGameManager, so the menu keeps its chips and all
+                        20 stages hide theirs with NOTHING authored per scene.
+        AlwaysVisible - never hidden.
+        HideUntilWin  - always hidden until a win, whatever the scene.
+    revealFadeDuration (float, default 0.35) seconds to fade in. 0 = pop.
+    resourceChips (GameObject[], OPTIONAL) the chips to hide. Empty = found
+        from the three currency labels, see ResolveResourceChips.
+
 SINGLETON
 ---------
   Instance  guard-and-destroy in Awake (no DontDestroyOnLoad - a fresh instance
@@ -31,6 +43,8 @@ SINGLETON
 RUNTIME STATE
 -------------
   isGameplayPaused (bool, public read via IsGameplayPaused)
+  chipsHidden      (bool) true while a stage is being played
+  _resolvedChips   (GameObject[]) cache for the label-walk fallback
 
 LIFECYCLE
 ---------
@@ -44,6 +58,71 @@ LIFECYCLE
       immediately calls HandleCurrencyChanged for all three currencies with
       delta 0 - forcing an initial label refresh rather than waiting for the
       next actual change.
+
+  Start()   [added 2026-09-22]
+      Calls HideResourceChips() when ShouldHideChipsDuringPlay() says so.
+      Start, not Awake: the Auto test searches the scene for a LevelGameManager,
+      and every scene object is guaranteed to exist by the first Start.
+
+RESOURCE CHIPS - HIDDEN DURING A STAGE  [all added 2026-09-22, Arash]
+---------------------------------------------------------------------
+The coin/gem/XP chips are invisible for the whole stage and come back the
+moment it is won, so the claim animation has somewhere to fly to.
+
+  !! THE PAUSE BUTTON IS NEVER HIDDEN. PauseImage is a CHILD of this HUD, so
+  !! hiding the HUD root would take pause away mid-stage. Only the three chips
+  !! are touched - that was an explicit decision, do not "simplify" it into
+  !! hiding hudCanvasGroup or the HUD GameObject.
+
+  CHIP LAYOUT - all three share ONE anchor  [fixed 2026-09-22, ASSET EDIT]
+      In the gameplay HUD the chips were on THREE DIFFERENT anchors: gem on
+      centre-top, coin on RIGHT-top, hero XP on LEFT-top. The Canvas scaler
+      matches HEIGHT only (reference 1125x2436, match 1.0), so the HUD's width
+      in canvas units changes with the device aspect - and edge-anchored chips
+      slid towards each other as it did. On the play-test device the coin ended
+      up 173 units from XP but 331 from the gem, i.e. overlapping the XP chip.
+      All three are now anchored top-centre (0.50, 1.00) so the group moves
+      TOGETHER, and the coin sits at the exact midpoint of the other two:
+          XPHerosResource  x = -107.8
+          CoinResource     x =  144.6   = (-107.8 + 397) / 2
+          GemResource      x =  397.0
+      XP and gem keep the on-screen positions they already had; only the coin
+      moved. Gaps are now 252.4 each side, equal at every aspect ratio.
+      !! This lives in Assets/PREFABS/Level Template/LevelTemplate.prefab, which
+      !! all 20 stage scenes instance - a PREFAB EDIT, invisible in the git diff.
+      !! MenuScene's HUD is a DIFFERENT prefab (Assets/PREFABS/UI/HUD/HUD.prefab)
+      !! whose instance already overrides all three onto centre-top; it was left
+      !! alone. The HUD.prefab ASSET still carries the old mixed anchors, so any
+      !! NEW instance of it will need the same fix.
+
+  ShouldHideChipsDuringPlay()  [private]
+      Reads resourceVisibility; Auto resolves to
+      FindObjectOfType<LevelGameManager>(true) != null.
+
+  RevealResourcesForWin()  [public STATIC]
+      What WinPanel.Show calls. No-op with no HUD, or if nothing was hidden.
+
+  HideResourceChips()
+      SetActive(false) on every chip.
+
+  RevealResourceChips()
+      SetActive(TRUE) on every chip, then fades a CanvasGroup 0 -> 1.
+      It ACTIVATES as well as fades because coins and hero XP are authored
+      INACTIVE in the stage scenes (only gems is on) - without this the claim
+      animation would fly coins at a chip that never appears.
+      The CanvasGroup is ADDED AT RUNTIME when missing, rather than authored on
+      each chip - same reasoning as the HealthBar damage trail: it beats editing
+      the same prefab across 20 scenes.
+      The fade uses .SetUpdate(true). A win pauses gameplay, so a timeScale-
+      driven tween would never finish - which is also why WinPanel waits in
+      real time.
+
+  ResolveResourceChips() / AddChipOf(label, into)  [private]
+      Returns the explicit resourceChips list, or walks UP from each currency
+      label to the child of THIS HUD that contains it, caching the result.
+      That walk is why the feature needed NO scene edit: the three labels were
+      already wired in both MenuScene and the stage scenes. Logs a warning if
+      it finds nothing.
 
   HandleCurrencyChanged(currency, newValue, delta)
       Switches on the currency name string and writes the matching label.

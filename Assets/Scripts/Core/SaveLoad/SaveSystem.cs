@@ -294,10 +294,6 @@ public static class SaveSystem
         {
             Data.savedAtUtc = System.DateTime.UtcNow.ToString("o");
 
-            // Debug gate: keep mutating the in-memory cache (so the running session
-            // behaves normally) but write nothing, so the next Play starts fresh.
-            if (!SavePersistence.Enabled) return;
-
             PlayerPrefs.SetString(KEY, JsonUtility.ToJson(Data));
             PlayerPrefs.Save();
         }
@@ -310,11 +306,25 @@ public static class SaveSystem
         _cache = null;
     }
 
+    /// <summary>
+    /// A true "new install": deletes BOTH keys progress lives in - this blob and
+    /// LevelManager's separate stage key - and drops the in-memory cache, so the
+    /// next read of <see cref="Data"/> returns a brand-new SaveData.
+    ///
+    /// completedTutorials rides in the same blob, so this also makes MenuLoader
+    /// replay the first-run tutorial. That is the point: "reset" means the player
+    /// starts where a fresh install would, at the tutorial.
+    /// </summary>
+    public static void WipeAllProgress()
+    {
+        PlayerPrefs.DeleteKey(KEY);
+        PlayerPrefs.DeleteKey(LevelManager.PlayerPrefsKey);
+        PlayerPrefs.Save();
+        _cache = null;
+    }
+
     private static SaveData LoadInternal()
     {
-        // Debug gate: ignore anything on disk, so every run boots as a new player.
-        if (!SavePersistence.Enabled) return new SaveData();
-
         if (!PlayerPrefs.HasKey(KEY)) return new SaveData();
         var json = PlayerPrefs.GetString(KEY);
         var loaded = JsonUtility.FromJson<SaveData>(json);
@@ -354,17 +364,18 @@ public static class SaveSystem
         // --- NEW: reset LevelManager stage progress ---
         LevelManager.ResetProgressToStart();
 
-        // Reset runtime currency. With persistence disabled a "fresh start" means
-        // zero resources, not the CurrencyManager inspector values - same rule
-        // GameStartManager applies on boot, so a mid-session reset matches a relaunch.
+        // Reset runtime currency to the new-player seed - the SAME constants
+        // GameStartManager applies on a first boot, so a mid-session reset lands
+        // on exactly the state a fresh install would have. Reading the
+        // CurrencyManager inspector values here instead would let a scene
+        // disagree with the boot path about what "new player" means.
         var currencyMgr = CurrencyManager.Instance;
         if (currencyMgr != null)
         {
-            bool zeroed = !SavePersistence.Enabled;
-            currencyMgr.SetGems(zeroed ? SavePersistence.FreshStartGems : currencyMgr.StartingGems);
-            currencyMgr.SetCoins(zeroed ? SavePersistence.FreshStartCoins : currencyMgr.StartingCoins, silent: true);
-            currencyMgr.SetHeroXP(zeroed ? SavePersistence.FreshStartHeroXp : currencyMgr.StartingHeroXP);
-            Debug.Log($"[SaveSystem] Reset runtime currency to {(zeroed ? "zero" : "starting")} values.");
+            currencyMgr.SetGems(GameStartManager.FreshStartGems);
+            currencyMgr.SetCoins(GameStartManager.FreshStartCoins, silent: true);
+            currencyMgr.SetHeroXP(GameStartManager.FreshStartHeroXp);
+            Debug.Log("[SaveSystem] Reset runtime currency to new-player values (0/0/0).");
         }
 
         // Reset player units to initial state

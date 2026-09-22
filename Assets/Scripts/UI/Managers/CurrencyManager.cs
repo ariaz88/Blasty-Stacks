@@ -11,9 +11,14 @@ public class CurrencyManager : MonoBehaviour
 {
     public static CurrencyManager Instance { get; private set; }
 
+    // A NEW PLAYER OWNS NOTHING (Arash, 2026-09-22). All three are 0 so the HUD
+    // at first boot shows what the player has actually earned - which is nothing
+    // until stage 1 is won - instead of a seeded number that looks like progress.
+    // The authored values on the CurrencyManager in StarterScene are what really
+    // apply; these initializers only matter for a scene that has none.
     [Header("Starting Balances (only used if no save is loaded)")]
-    [Min(0)] [SerializeField] private int startingGems = 10;
-    [Min(0)] [SerializeField] private int startingCoins = 10;
+    [Min(0)] [SerializeField] private int startingGems = 0;
+    [Min(0)] [SerializeField] private int startingCoins = 0;
     [Min(0)] [SerializeField] private int startingHeroXP = 0;   // NEW
 
     public int StartingCoins => startingCoins; // <— add

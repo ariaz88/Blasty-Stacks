@@ -9,54 +9,51 @@
 
 PURPOSE
 -------
-Editor-menu access to the SavePersistence debug gate, so it can be flipped
-WITHOUT entering Play mode, plus a one-click wipe of the two PlayerPrefs keys
-that hold all progress. The Play-mode twin of SavePersistenceDebugPanel.
+One-click wipe of all saved progress, so the next Play boots as a brand-new
+player: stage 1, starting currency, and the first-run tutorial.
+
+HISTORY (2026-09-22): this file used to ALSO hold a checkable "Save & Load
+Enabled" item that flipped the SavePersistence debug gate. Saving is now
+unconditional - SavePersistence, its on-screen SavePersistenceDebugPanel and the
+toggle item are all DELETED. Only the opposite operation, erasing what was
+written, is still needed for testing, and that is what remains here.
 
 MENU ITEMS
 ----------
-  Tools/Save System/Save && Load Enabled        (priority 0)   [checkable]
-      ToggleSaving()   - SavePersistence.Enabled = !SavePersistence.Enabled
-      ToggleSavingValidate()  [MenuItem(..., validate = true)]
-          Calls Menu.SetChecked(...) with the current gate value so the item
-          shows a tick when saving is on, then returns true (always clickable).
-      NOTE the doubled ampersand in the path: "&" is the Unity menu shortcut
-      escape, so "Save && Load Enabled" is what renders as "Save & Load
-      Enabled".
-
-  Tools/Save System/Wipe Saved Progress Now     (priority 20)
+  Tools/Save System/Wipe Saved Progress Now     (priority 0)
       WipeSavedProgress()
           Shows an EditorUtility.DisplayDialog confirmation first (the action
-          is irreversible), then:
-            1. PlayerPrefs.DeleteKey("GAME_SAVE_V1")   - units, currency,
-               stars/unlocks, tutorials, deploy stages, battle energy
-            2. PlayerPrefs.DeleteKey("LM.CurrentStage") - the global stage
-            3. PlayerPrefs.Save()
-            4. SaveSystem.ResetAll()  - drops the in-memory cache too, so a
-               later Save() in the same editor session cannot resurrect the
-               old blob from the still-loaded cache
-          Logs a confirmation line.
+          is irreversible), then calls WipeNow().
+
+METHODS
+-------
+  WipeNow()  [public static]
+      The wipe with NO dialog, for scripted / automated runs. Delegates to
+      SaveSystem.WipeAllProgress(), which deletes:
+        1. "GAME_SAVE_V1"    - units, currency, stars/unlocks, completed
+                               tutorials, deploy stages, battle energy
+        2. "LM.CurrentStage" - the global stage (LevelManager's own key)
+      and drops SaveSystem's in-memory cache, so a later Save() in the same
+      editor session cannot resurrect the old blob from the still-loaded cache.
+      Logs a confirmation line.
 
 HOW IT CONNECTS
 ---------------
-  - SavePersistence  - the gate being toggled.
-  - SaveSystem       - ResetAll(), and the "GAME_SAVE_V1" key it owns.
-  - LevelManager     - the "LM.CurrentStage" key it owns (deleted directly here
-                       rather than via LevelManager, because in Edit mode
-                       LevelManager.Instance does not exist).
+  - SaveSystem     - WipeAllProgress() is the single shared implementation.
+  - LevelManager   - owns "LM.CurrentStage"; WipeAllProgress references
+                     LevelManager.PlayerPrefsKey by name rather than a literal.
+  - GameStartManager - its EDITOR-ONLY "Reset Progress On Play" tickbox (on the
+                     GameStartManager object in StarterScene) calls the same
+                     SaveSystem.WipeAllProgress(), so the menu and the checkbox
+                     can never wipe differently. Use the checkbox for "every
+                     Play run starts fresh"; use this menu item for a one-off.
 
 NOTES
 -----
-  - WHY THE WIPE ITEM EXISTS: disabling the gate stops new writes and ignores
-    reads, but it does not erase a save that was already written. If you disable
-    saving and still want the on-disk blob gone (for example before handing the
-    project to someone else, or before re-enabling saving), run the wipe once.
-  - The two keys deleted here are hard-coded string literals rather than
-    references to the private constants in SaveSystem / LevelManager. If either
-    key name is ever changed, this file must be updated in lockstep - grep for
-    "GAME_SAVE_V1" and "LM.CurrentStage", which also appear in the Editor
-    verification harnesses (CPCombatVerification, EarlyCampaignVerification,
-    EarlyCampaignEconomyVerification).
-  - Menu.SetChecked is called from the validate function, which Unity invokes
-    every time the menu is opened - that is the standard idiom for a checkable
-    menu item and the same reason the item is cheap to leave always-enabled.
+  - Deleting a save cannot be undone from the editor. Before wiping real test
+    progress, copy PlayerPrefs "GAME_SAVE_V1" out first - on Windows it lives in
+    the registry under HKCU\Software\DefaultCompany\Stacky Warriors.
+  - Key names now come from SaveSystem / LevelManager constants, not literals.
+    They are still hard-coded in the Editor verification harnesses
+    (CPCombatVerification, EarlyCampaignVerification,
+    EarlyCampaignEconomyVerification) - grep there if a key is ever renamed.

@@ -1,0 +1,57 @@
+================================================================================
+  StageSpawnerIndexBuilder.cs
+  Path : Assets/Scripts/Editor/StageSpawnerIndexBuilder.cs
+  Type : static class, Editor-only (lives in an "Editor" folder)
+  Layer: Editor
+  Scenes: opens every Level_1_Stage_N scene while it runs
+  Added: 2026-09-22
+================================================================================
+
+PURPOSE
+-------
+Builds Assets/Resources/StageSpawnerIndex.asset by reading each stage scene's
+own EnemySpawner, then prints the enemy CP the Home screen will show for every
+indexed stage.
+
+MENU ITEMS
+----------
+  Tools/Blasty/Stage CP/Rebuild Stage Spawner Index      (priority 0)
+      1. Refuses to run in Play mode (it opens scenes) and offers to save
+         modified scenes first.
+      2. Snapshots the current editor scene setup, walks
+         Assets/Scenes/TestScenes/GamePlay Scenes for "Level_L_Stage_N.unity",
+         opens each one Single, and records the first EnemySpawner's
+         levelConfig.
+      3. RESTORES the original scene setup in a finally block - an exception
+         part-way through must not leave the user in stage 17.
+      4. Creates or updates the index asset, saves, clears the runtime cache,
+         then calls PrintStageCP().
+      Logs a stage -> config line for each scene, including
+      "<NO SPAWNER CONFIG>" where a stage has none.
+
+  Tools/Blasty/Stage CP/Print Stage Enemy CP             (priority 20)
+      Prints stage / config name / enemy count / total CP for every indexed
+      stage, so the numbers can be sanity-checked against the authored roster
+      WITHOUT entering Play mode. Safe to run any time.
+
+HOW IT CONNECTS
+---------------
+  - StageSpawnerIndexSO  - the asset it writes.
+  - EnemySpawner         - read from each scene (levelConfig is public).
+  - StageEnemyCP         - used for the printed table.
+
+NOTES
+-----
+  - WHY IT OPENS SCENES instead of matching asset names: the name mapping is
+    wrong for stages 1-2, which share "Spawner2". See StageSpawnerIndexSO.txt.
+  - The stage regex is anchored on ".unity" so the stray duplicate
+    "Level_1_Stage_1 1.unity" in that folder is NOT treated as a real stage -
+    the same rule DirectPlayMenu uses. If that file is ever deleted, this keeps
+    working unchanged.
+  - Only the STAGE number is used for the index; the LEVEL number in the scene
+    name is parsed but ignored, because byStage is a flat 1-based list. That is
+    fine while there is one level of 20 stages; a second level needs this and
+    StageSpawnerIndexSO.byStage reworked together.
+  - Opening 20 scenes takes a few seconds. It is a manual tool on purpose - a
+    post-processor that re-ran on every scene save would be far more expensive
+    than the problem it solves.

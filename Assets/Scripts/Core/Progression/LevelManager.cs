@@ -38,7 +38,10 @@ public class LevelManager : MonoBehaviour
 
     public event Action<int> OnStageChanged;                    // passes new stage
 
-    const string PlayerPrefsKey = "LM.CurrentStage";
+    // Public so SaveSystem.WipeAllProgress can clear it by name: the current stage
+    // is the one piece of progress that does NOT live in the GAME_SAVE_V1 blob, so
+    // a wipe that forgets it leaves a fresh player standing on their old stage.
+    public const string PlayerPrefsKey = "LM.CurrentStage";
     int _currentStage;
 
     void Awake()
@@ -47,11 +50,9 @@ public class LevelManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // load saved stage or start fresh. With persistence disabled the stored key
-        // is ignored so every Play run begins at startingStage.
-        _currentStage = SavePersistence.Enabled
-            ? PlayerPrefs.GetInt(PlayerPrefsKey, startingStage)
-            : startingStage;
+        // Load the saved stage, or startingStage when nothing has been saved yet
+        // (a fresh install, or right after a progress wipe).
+        _currentStage = PlayerPrefs.GetInt(PlayerPrefsKey, startingStage);
         _currentStage = Mathf.Clamp(_currentStage, 1, Mathf.Max(1, maxStage));
     }
 
@@ -144,12 +145,12 @@ public class LevelManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Write the current stage to PlayerPrefs. No-op while <see cref="SavePersistence"/>
-    /// is disabled, so the debug gate can't be defeated by a stage change.
+    /// Write the current stage to PlayerPrefs. Called from every stage change, so
+    /// progress is saved automatically - nothing in the UI has to ask for it.
     /// </summary>
     public static void PersistCurrentStage()
     {
-        if (Instance == null || !SavePersistence.Enabled) return;
+        if (Instance == null) return;
 
         PlayerPrefs.SetInt(PlayerPrefsKey, Instance._currentStage);
         PlayerPrefs.Save();

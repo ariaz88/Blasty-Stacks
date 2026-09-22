@@ -38,7 +38,12 @@ FLOW  (all inside the Start coroutine)
      works exactly the same. The tutorial scene's own TutorialTrigger is what
      sends the player on to MenuScene afterwards.
      The flag lives in SaveSystem, so this happens exactly once per save; clear
-     it with Tools/Tutorial/Reset Tutorial Progress to test again.
+     it with Tools/Tutorial/Reset Tutorial Progress (or Tools/Save System/Wipe
+     Saved Progress Now) to test again.
+     There is deliberately NO on/off switch on the component. An
+     "enableFirstRunTutorial" bool existed from 2026-08-31 to 2026-09-22 and was
+     REMOVED: the save flag is the only gate, so the tutorial can never be left
+     disabled by a stale serialized value in StarterScene.
   2. Optional WaitForSeconds(delaySeconds).
   3. Begin SceneManager.LoadSceneAsync in the chosen mode and immediately set
      allowSceneActivation = false, so Unity loads but does not switch yet.
@@ -64,3 +69,8 @@ NOTES
     slow.
   - The file has a duplicated block of using-directives near the top (a harmless
     leftover) and a large XML comment describing the older design.
+  - !! The first-run detour is SKIPPED when you press Play on any scene other
+    !! than StarterScene while Tools/Testing/Play Any Scene Directly is on (its
+    !! default). DirectPlayBootstrap DESTROYS this component to cancel the route
+    !! to the menu, and the tutorial check goes with it. To see the tutorial,
+    !! open StarterScene and press Play there.

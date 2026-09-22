@@ -57,9 +57,24 @@ public class UnitDetailView : MonoBehaviour
     [SerializeField] private TMP_Text levelText;
 
     [SerializeField] private TMP_Text cpText;
-    [SerializeField] private TMP_Text xpText;
-    [SerializeField] private TMP_Text coinsText;
-    [SerializeField] private TMP_Text coinsTextDelta;
+
+    // ---- The two "cost / owned" rows under the stats block -------------------
+    // Each row is a "Resources-frame" holding an icon + TWO texts: the green one
+    // on the left is the COST, the white one on the right is "/ owned". The
+    // SLASH IS WRITTEN BY CODE, never authored in the scene - a scene-authored
+    // slash is what produced the "1/6/200" bug (see NOTES in the doc).
+    [SerializeField] private TMP_Text xpText;            // hero XP row, green = cost
+    [SerializeField] private TMP_Text xpTextOwned;       // hero XP row, white = "/ owned"
+    [SerializeField] private TMP_Text coinsText;         // coin row,    white = "/ owned"
+    [SerializeField] private TMP_Text coinsTextDelta;    // coin row,    green = cost
+
+    [Tooltip("Optional. The whole coin row, hidden by SetCostRowsVisible(false). " +
+             "Left empty, the row is taken to be coinsText's parent.")]
+    [SerializeField] private GameObject coinsRow;
+
+    [Tooltip("Optional. The whole hero-XP row, hidden by SetCostRowsVisible(false). " +
+             "Left empty, the row is taken to be xpText's parent.")]
+    [SerializeField] private GameObject heroXpRow;
 
 
     [Header("Stats UI (Current / +Delta)")]
@@ -321,13 +336,20 @@ public class UnitDetailView : MonoBehaviour
         label.color = deltaColor;
     }
 
+    /// <summary>
+    /// The `xp` argument is IGNORED and kept only so the existing call sites
+    /// compile. It used to write xpText, which SetHeroXpCost then overwrote a
+    /// line later - two writers on one label, and the locked-unit path (which
+    /// calls SetMeta but not SetHeroXpCost) was left showing SetMeta's value
+    /// next to a scene-authored "/200". SetHeroXpCost is now the only writer.
+    /// </summary>
     public void SetMeta(int cp, int coins, int xp)
     {
         if (cpText) cpText.text = cp.ToString();
-        if (xpText) xpText.text = xp.ToString();
     }
 
-    // Compact 12_300 -> "12.3K", 1_250_000 -> "1.25M"
+    // Compact 12_300 -> "12.3K", 1_250_000 -> "1.25M". Anything up to 999 is
+    // printed in full, which is the rule Arash asked for (2026-09-22).
     private static string Compact(int v)
     {
         if (v >= 1_000_000) return (v / 1_000_000f).ToString("0.##") + "M";
@@ -337,16 +359,55 @@ public class UnitDetailView : MonoBehaviour
 
     public void SetCoinsCost(int costNeeded, int coinsOwned)
     {
-        if (!coinsText) return;
-        if (!coinsTextDelta) return;
-
-        coinsText.text = $"/ {coinsOwned}" ;
-        coinsTextDelta.text = costNeeded.ToString();
+        if (coinsTextDelta) coinsTextDelta.text = Compact(costNeeded);
+        if (coinsText) coinsText.text = $"/ {Compact(coinsOwned)}";
     }
 
-    public void SetHeroXpCost(int needed, int owned)
+    public void SetHeroXpCost(int costNeeded, int xpOwned)
     {
-        if (xpText) xpText.text = $"{needed} / {owned}";
+        if (xpText) xpText.text = Compact(costNeeded);
+
+        var owned = ResolveXpOwnedText();
+        if (owned) owned.text = $"/ {Compact(xpOwned)}";
+    }
+
+    /// <summary>
+    /// Shows or hides BOTH cost rows (icon included). Used by the Unachieved
+    /// panel, where a locked hero cannot be upgraded so the numbers are
+    /// meaningless - it was previously printing a cost of 0.
+    /// </summary>
+    public void SetCostRowsVisible(bool visible)
+    {
+        var coins = coinsRow ? coinsRow : RowOf(coinsText);
+        var xp = heroXpRow ? heroXpRow : RowOf(xpText);
+
+        if (coins) coins.SetActive(visible);
+        if (xp) xp.SetActive(visible);
+    }
+
+    private static GameObject RowOf(TMP_Text label)
+        => label && label.transform.parent ? label.transform.parent.gameObject : null;
+
+    /// <summary>
+    /// The white "/ owned" half of the hero-XP row. The coin row has always had
+    /// both halves wired; the XP row only ever had the green half, so its white
+    /// label kept whatever placeholder the scene was authored with ("/200") and
+    /// printed it after the code's own text. Falling back to the sibling means
+    /// the fix needs no scene edit, and an explicit xpTextOwned still wins.
+    /// </summary>
+    private TMP_Text ResolveXpOwnedText()
+    {
+        if (xpTextOwned) return xpTextOwned;
+        if (!xpText || !xpText.transform.parent) return null;
+
+        foreach (Transform sibling in xpText.transform.parent)
+        {
+            if (sibling == xpText.transform) continue;
+
+            var label = sibling.GetComponent<TMP_Text>();
+            if (label) { xpTextOwned = label; return label; }
+        }
+        return null;
     }
 
 

@@ -141,6 +141,21 @@ STAGE SELECTION
       WinPanel's own reward-claiming flow - then queues the NEXT stage for
       selection. Called by LevelGameManager.OnEnemyGateDestroyed BEFORE
       WinPanel.Show is even invoked (per LevelGameManager's own doc).
+      2026-09-22: it now also sets LastWinWasFirstClear, ONE LINE BEFORE the
+      RecordStageResult call. See below - the order is the whole point.
+
+  LastWinWasFirstClear  (static bool, get-only)  [added 2026-09-22]
+      Was the win just recorded the FIRST clear of that stage?
+      !! WinPanel CANNOT WORK THIS OUT FOR ITSELF. LevelGameManager calls
+      NotifyStageWon BEFORE it shows the panel, so by the time the panel
+      calculates rewards the stars for this very clear are already written and
+      EVERY win would look like a replay. It is captured here because this is
+      the only moment the answer still exists.
+      Test used: SaveSystem.GetStars(...) <= 0. A win always scores at least
+      one star (the gate survived), so "no stars yet" is a reliable "never
+      cleared before".
+      Read by WinPanel.CalculateAllRewards to make hero XP and gems
+      first-clear-only rewards.
 
   Hp01ToStars(hp01)  [static, private]
       >= 0.999 -> 3, >= 0.5 -> 2, > 0 -> 1, else -> 0. Note this is a
@@ -162,8 +177,31 @@ CARD MANAGEMENT
 
   HandleSelectionChanged(selectedIndex)
       Updates stageTitle, computes whether the selected stage is within the
-      unlocked range, and updates startButton.interactable /
-      startLockedOverlay / startLabel accordingly.
+      unlocked range, updates startButton.interactable / startLockedOverlay /
+      startLabel accordingly, and calls RefreshStageEnemyCp.
+
+  RefreshStageEnemyCp(stage1Based)   [added 2026-09-22]
+      Writes the SELECTED stage's real total enemy CP into the "TOTAL CP"
+      number: StageSpawnerIndexSO.Get().ConfigFor(stage) -> StageEnemyCP.
+      TotalForStage. Prints "-" when there is no index or no config for that
+      stage - a dash is honest, a stale number is not.
+      Recomputed on every selection change rather than cached: the value moves
+      with the enemy stat assets and the wave table, so a cache would be the
+      same lie in a slower form. Cost is a few dozen multiplications over data
+      already in memory.
+      Before this, "TOTAL CP" was the literal "3460" typed into MenuScene and
+      bound to no script - it said the same thing on stage 1 and stage 20.
+
+  ResolveStageEnemyCpText()   [private]
+      Returns stageEnemyCpText, or finds the child named "Total CP Number" and
+      caches it. The fallback is why the feature needed NO scene edit: the
+      label had existed all along, just unreferenced. An explicit inspector
+      assignment always wins.
+
+INSPECTOR FIELD ADDED 2026-09-22
+--------------------------------
+  stageEnemyCpText  (TMP_Text, OPTIONAL)
+      The number beside "TOTAL CP:". Empty = found by name, see above.
 
   RefreshAllVisuals()
       For every StageCard: sets locked state (index > highestUnlocked) and

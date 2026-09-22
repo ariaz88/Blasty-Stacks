@@ -1,0 +1,73 @@
+================================================================================
+  StageEnemyCP.cs
+  Path : Assets/Scripts/Data/CombatPower/StageEnemyCP.cs
+  Type : static class (pure functions, no MonoBehaviour, no state)
+  Layer: Data / CombatPower
+  Scenes: none - called from MenuScene by HomeManager
+  Added: 2026-09-22
+================================================================================
+
+PURPOSE
+-------
+Answers "how strong is the enemy side of stage N?" WITHOUT loading stage N, so
+the Home screen can print the real number for the stage the player is about to
+start. Replaces the literal "3460" that was typed into MenuScene and bound to
+no script.
+
+METHODS
+-------
+  TotalForStage(stage1Based, config, weights)  -> int
+      Total CP of every enemy the stage fields. 0 when config is null, which the
+      caller must treat as "unknown", not "harmless" (HomeManager prints "-").
+
+  CountForStage(stage1Based, config)  -> int
+      How many enemies, across all waves. 1400 CP over four enemies is a very
+      different fight from 1400 over eleven, so the count is worth showing or
+      logging beside the CP.
+
+  UnitCpFor(entry, stage1Based, weights)  [private]  -> int
+      One enemy's CP at that stage. Mirrors EnemyManager.RebuildFromBase steps
+      1, 2 and 5:
+        1. UnitStatsRuntime.FromSO(base stats)
+        2. multiply atk/def/maxHP/attackSpeed by
+           ProgressionMath.GetGrowthMultipliers(STAGE, that type's progression)
+        5. CPCalculator.UnitCP(stats, stage, weights)
+      Steps 3 (runtime multipliers) and 4 (push HP into the health bar) have no
+      meaning before the enemy exists, so they are skipped.
+      Stats source order matches the spawner: the WaveEntry's statsBase override
+      wins, else the prefab's EnemyManager.statsBase. Same for cpWeights.
+
+HOW IT CONNECTS
+---------------
+  - EnemySpawner.ResolveWavesForStage  - THE wave shape. This is the same call
+    the spawner makes, not a copy of it. See NOTES.
+  - LevelBattleRules.EnemyWaveCounts   - reached through ResolveWavesForStage.
+  - EnemyManager                       - read off the prefab for statsBase /
+                                         progression / cpWeights.
+  - CPCalculator.UnitCP                - the same score the battle reports.
+  - StageSpawnerIndexSO                - supplies the LevelConfig per stage.
+  - HomeManager.RefreshStageEnemyCp    - the only gameplay caller.
+  - StageSpawnerIndexBuilder           - prints a whole table of these for
+                                         checking without entering Play mode.
+
+NOTES
+-----
+  - IT IS A PREVIEW, NOT A SECOND IMPLEMENTATION. Everything that decides the
+    number is borrowed: wave shape from the spawner, growth from the enemy's own
+    progression asset, score from CPCalculator. Change any of those and this
+    follows automatically. That was the whole point of extracting
+    EnemySpawner.ResolveWavesForStage rather than re-deriving wave counts here -
+    a private copy would drift the first time either the wave table or the mix
+    rule changed, and the preview would quietly start lying about the fight the
+    player is walking into.
+  - TWO THINGS IT DELIBERATELY DOES NOT MODEL, because neither is knowable
+    before the battle runs:
+      1. the stage-6 full-clear bonus enemy (LevelBattleRules.FinalWaveCount) -
+         decided when the FINAL wave spawns, from how much board the player has
+         cleared by then;
+      2. any runtime multiplier applied to an individual spawned enemy.
+    Both make the real fight equal to or HARDER than this number, never easier,
+    which is the safe direction for a preview to be wrong in.
+  - Levels past LevelBattleRules.MaxAuthoredEnemyLevel use the asset's own
+    waves verbatim, exactly as the spawner does, so the preview stays correct
+    there too.

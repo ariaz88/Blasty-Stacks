@@ -57,6 +57,14 @@ public class HomeManager : MonoBehaviour
     [Header("Stage Label (center selection)")]
     [SerializeField] private TMP_Text stageTitle;             // e.g., "STAGE 1-18"
 
+    [Tooltip("The number beside \"TOTAL CP:\" - shows the SELECTED stage's real " +
+             "total enemy CP. Optional: left empty, the child named \"" +
+             StageEnemyCpLabelName + "\" is used.")]
+    [SerializeField] private TMP_Text stageEnemyCpText;
+
+    /// <summary>Scene name of the TOTAL CP number, for the no-wiring fallback.</summary>
+    private const string StageEnemyCpLabelName = "Total CP Number";
+
     [Header("Scene Loading")]
     [Tooltip("Format: first arg = levelId, second = stage 1-based. Example: Level_2_Stage_11")]
     [SerializeField] private string sceneNamePattern = "Level_{0}_Stage_{1}";
@@ -381,6 +389,18 @@ public class HomeManager : MonoBehaviour
 
 
 
+    /// <summary>
+    /// Was the win that <see cref="NotifyStageWon"/> last recorded the FIRST
+    /// clear of that stage?
+    ///
+    /// WinPanel cannot work this out for itself. LevelGameManager calls
+    /// NotifyStageWon BEFORE it shows the panel, so by the time the panel
+    /// calculates rewards the stars for this very clear are already written and
+    /// every win would look like a replay. This is captured at the only moment
+    /// the answer still exists - one line before the write.
+    /// </summary>
+    public static bool LastWinWasFirstClear { get; private set; }
+
     public static void NotifyStageWon(float hp01)
     {
         int levelId = CurrentLevelId;
@@ -390,6 +410,10 @@ public class HomeManager : MonoBehaviour
 
         int stars = Hp01ToStars(hp01);   // ✅ CORRECT conversion
 
+        // MUST be read before RecordStageResult - see LastWinWasFirstClear.
+        // A win always scores at least 1 star (the gate survived), so "no stars
+        // yet" is a reliable "never cleared before".
+        LastWinWasFirstClear = SaveSystem.GetStars(levelId, idx0) <= 0;
 
         SaveSystem.RecordStageResult(levelId, idx0, stars);
 
@@ -424,6 +448,54 @@ public class HomeManager : MonoBehaviour
         if (startButton) startButton.interactable = unlocked;
         if (startLockedOverlay) startLockedOverlay.SetActive(!unlocked);
         if (startLabel) startLabel.text = unlocked ? "START" : "LOCKED";
+
+        RefreshStageEnemyCp(selectedIndex + 1);
+    }
+
+    /// <summary>
+    /// "TOTAL CP" on the Home screen = the real total CP of the enemies the
+    /// SELECTED stage will field (Arash, 2026-09-22). It was a literal "3460"
+    /// typed into the scene and bound to no script, so it said the same thing on
+    /// stage 1 and stage 20.
+    ///
+    /// The number is recomputed on every selection change rather than cached,
+    /// because it moves with the enemy stat assets and the wave table - a cache
+    /// would be the same lie in a slower form. It is cheap: a few dozen
+    /// multiplications over data already in memory.
+    /// </summary>
+    private void RefreshStageEnemyCp(int stage1Based)
+    {
+        var label = ResolveStageEnemyCpText();
+        if (!label) return;
+
+        var index = StageSpawnerIndexSO.Get();
+        var config = index ? index.ConfigFor(stage1Based) : null;
+
+        if (!config)
+        {
+            // Say nothing rather than a number that is not true. A missing index
+            // already logs once from StageSpawnerIndexSO.Get().
+            label.text = "-";
+            return;
+        }
+
+        label.text = StageEnemyCP.TotalForStage(stage1Based, config, index.cpWeights).ToString();
+    }
+
+    /// <summary>
+    /// The "TOTAL CP" number label. Falls back to finding it by name under this
+    /// panel when it has not been wired, so the feature works without a scene
+    /// edit - the object it needs has existed all along, just unreferenced.
+    /// </summary>
+    private TMP_Text ResolveStageEnemyCpText()
+    {
+        if (stageEnemyCpText) return stageEnemyCpText;
+
+        foreach (var t in GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (t.name == StageEnemyCpLabelName) { stageEnemyCpText = t; return t; }
+        }
+        return null;
     }
 
     private void RefreshAllVisuals()

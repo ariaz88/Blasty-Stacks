@@ -1,14 +1,47 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 public class HudCurrencyView : MonoBehaviour
 {
+    /// <summary>When the coin/gem/XP chips are allowed to be on screen.</summary>
+    public enum ResourceVisibility
+    {
+        /// <summary>Hidden during a stage, revealed on the win - decided by whether
+        /// this scene has a LevelGameManager. Correct for both the menu and all
+        /// 20 stage scenes without anything being authored per scene.</summary>
+        Auto = 0,
+        /// <summary>Never hidden (the menu's behaviour).</summary>
+        AlwaysVisible = 1,
+        /// <summary>Always hidden until a win, whatever scene this is.</summary>
+        HideUntilWin = 2,
+    }
+
     [Header("Currency UI")]
     [SerializeField] TMP_Text coinsText;
     [SerializeField] TMP_Text gemsText;
     [SerializeField] TMP_Text heroXpText;
     [SerializeField] Button pauseButton;
+
+    [Header("Hide resources during a stage")]
+    [Tooltip("Auto = hide the coin/gem/XP chips while a stage is being played and " +
+             "reveal them when it is won. The PAUSE BUTTON IS NEVER HIDDEN - it is " +
+             "a child of this HUD but the player needs it mid-stage.")]
+    [SerializeField] private ResourceVisibility resourceVisibility = ResourceVisibility.Auto;
+
+    [Tooltip("Seconds the chips take to fade in on a win. 0 = pop in.")]
+    [SerializeField] private float revealFadeDuration = 0.35f;
+
+    [Tooltip("Optional. The chips to hide. Left empty they are found from the three " +
+             "currency labels above - each chip is the child of this HUD that " +
+             "contains one of them.")]
+    [SerializeField] private GameObject[] resourceChips;
+
+    /// <summary>True while a stage is being played and the chips are hidden.</summary>
+    private bool chipsHidden;
+    private GameObject[] _resolvedChips;
 
     [Header("Main HUD root / canvas")]  
 
@@ -68,6 +101,126 @@ public class HudCurrencyView : MonoBehaviour
     {
         if (CurrencyManager.Instance != null)
             CurrencyManager.Instance.OnCurrencyChanged -= HandleCurrencyChanged;
+    }
+
+    // ------------------------------------------------------------------
+    //  Resource chips: hidden while a stage is played, revealed on the win
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Start() rather than Awake(): the Auto test looks for a LevelGameManager
+    /// anywhere in the scene, and every scene object is guaranteed to exist by
+    /// the time any Start runs.
+    /// </summary>
+    void Start()
+    {
+        if (ShouldHideChipsDuringPlay()) HideResourceChips();
+    }
+
+    private bool ShouldHideChipsDuringPlay()
+    {
+        switch (resourceVisibility)
+        {
+            case ResourceVisibility.AlwaysVisible: return false;
+            case ResourceVisibility.HideUntilWin: return true;
+
+            // A LevelGameManager means "this scene is a stage being played".
+            // It is the project's authority on battle state already, so the menu
+            // (which has none) keeps its chips and all 20 stages hide theirs
+            // with nothing authored per scene.
+            default: return FindObjectOfType<LevelGameManager>(true) != null;
+        }
+    }
+
+    /// <summary>
+    /// Reveals the chips after a stage is won. Static so WinPanel can call it
+    /// without holding a reference; harmless when there is no HUD or the chips
+    /// were never hidden.
+    /// </summary>
+    public static void RevealResourcesForWin()
+    {
+        if (Instance) Instance.RevealResourceChips();
+    }
+
+    public void HideResourceChips()
+    {
+        chipsHidden = true;
+
+        foreach (var chip in ResolveResourceChips())
+        {
+            if (!chip) continue;
+            chip.SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// Brings the chips back, fading them in. They are ACTIVATED as well as
+    /// faded because two of the three (coins and hero XP) are authored inactive
+    /// in the stage scenes - without this the claim animation would fly coins
+    /// towards a chip that never appears.
+    /// </summary>
+    public void RevealResourceChips()
+    {
+        if (!chipsHidden) return;
+        chipsHidden = false;
+
+        foreach (var chip in ResolveResourceChips())
+        {
+            if (!chip) continue;
+
+            chip.SetActive(true);
+
+            if (revealFadeDuration <= 0f) continue;
+
+            // Added at runtime rather than authored on each chip: this is the
+            // only thing that needs one, and cloning/adding beats editing the
+            // same prefab in 20 scenes.
+            var cg = chip.GetComponent<CanvasGroup>();
+            if (!cg) cg = chip.AddComponent<CanvasGroup>();
+
+            cg.alpha = 0f;
+            cg.DOKill();
+            // SetUpdate(true): the win pauses gameplay, and a timeScale-driven
+            // tween would never finish. WinPanel waits in real time for the
+            // same reason.
+            cg.DOFade(1f, revealFadeDuration).SetUpdate(true);
+        }
+    }
+
+    /// <summary>
+    /// The chips, from the explicit list or - when it is empty - by walking up
+    /// from each currency label to the child of THIS HUD that contains it.
+    /// That walk is what makes the feature need no scene edit: the labels were
+    /// already wired in both the menu and the stage scenes.
+    /// </summary>
+    private GameObject[] ResolveResourceChips()
+    {
+        if (resourceChips != null && resourceChips.Length > 0) return resourceChips;
+        if (_resolvedChips != null) return _resolvedChips;
+
+        var found = new List<GameObject>(3);
+        AddChipOf(coinsText, found);
+        AddChipOf(gemsText, found);
+        AddChipOf(heroXpText, found);
+
+        _resolvedChips = found.ToArray();
+
+        if (_resolvedChips.Length == 0)
+            Debug.LogWarning("[HudCurrencyView] No resource chips found - assign " +
+                             "resourceChips, or the currency labels above.", this);
+
+        return _resolvedChips;
+    }
+
+    private void AddChipOf(TMP_Text label, List<GameObject> into)
+    {
+        if (!label) return;
+
+        var t = label.transform;
+        while (t.parent != null && t.parent != transform) t = t.parent;
+        if (t.parent != transform) return;          // not under this HUD at all
+
+        if (!into.Contains(t.gameObject)) into.Add(t.gameObject);
     }
 
     void HandleCurrencyChanged(string currency, int newValue, int delta)

@@ -102,19 +102,30 @@ SAVING
       Stamps savedAtUtc, serializes Data to JSON, writes the PlayerPrefs key and
       calls PlayerPrefs.Save(). Wrapped in a recursion guard: if saveDepth
       exceeds 10 it logs an error and returns instead of saving.
-      DEBUG GATE (added 2026-09-20): if SavePersistence.Enabled is false it
-      still stamps savedAtUtc and still leaves the in-memory cache mutated, but
-      returns BEFORE touching PlayerPrefs. The running session therefore behaves
-      completely normally - progress is live, just volatile. See SavePersistence.
+      UNCONDITIONAL since 2026-09-22. The SavePersistence debug gate that used to
+      short-circuit this method (2026-09-20 to 2026-09-22) is DELETED - every
+      call writes to disk, so saving is fully automatic and nothing in the UI has
+      to ask for it.
 
   ResetAll()
-      Deletes the PlayerPrefs key and nulls the cache - a true wipe.
+      Deletes the "GAME_SAVE_V1" key and nulls the cache. NOTE it does NOT touch
+      LevelManager's separate "LM.CurrentStage" - use WipeAllProgress for that.
+
+  WipeAllProgress()  [added 2026-09-22]
+      A true "new install": deletes BOTH progress keys ("GAME_SAVE_V1" and
+      LevelManager.PlayerPrefsKey), flushes PlayerPrefs and nulls the cache, so
+      the next read of Data returns a brand-new SaveData. Because
+      completedTutorials rides in the same blob, this also makes MenuLoader
+      replay the first-run tutorial - which is the point of "reset".
+      Two callers, one implementation: Tools/Save System/Wipe Saved Progress Now
+      (SavePersistenceMenu.WipeNow) and GameStartManager's editor-only
+      resetProgressOnPlay tickbox in StarterScene.
 
   LoadInternal()  [private]
-      DEBUG GATE: if SavePersistence.Enabled is false it returns a brand-new
-      SaveData immediately, ignoring whatever blob is on disk - this is what
-      makes every Play run boot as a new player.
       Returns a fresh SaveData if no key exists. Otherwise deserializes the JSON.
+      Always reads disk since 2026-09-22 (the SavePersistence gate that used to
+      make it ignore the blob is deleted). A "new player" run therefore means an
+      ACTUALLY EMPTY key - wipe it with Tools/Save System/Wipe Saved Progress Now.
       Then runs a version-gated migration: for saves with version < 2 it forces
       isDeployed = false on every locked unit, sets version = 2, assigns _cache
       and calls Save(). The _cache assignment MUST stay before Save() - see the
@@ -124,16 +135,14 @@ SAVING
       Full "new game" reset used by debug tooling: ResetAll(), then
       LevelManager.ResetProgressToStart(), then resets CurrencyManager, then
       re-seeds PlayerUnits from the units database.
-      Currency reset is gate-aware: with SavePersistence disabled it writes
-      SavePersistence.FreshStart* (0/0/0) instead of CurrencyManager's
-      Starting* inspector values, so a mid-session reset produces exactly the
-      same state as a relaunch. It also resets heroXP, which it previously
-      missed.
+      Currency reset writes GameStartManager.FreshStartCoins/Gems/HeroXp - ALL
+      ZERO, and the SAME constants the boot path uses, so a mid-session reset
+      and a fresh install cannot disagree about what "new player" means.
+      It deliberately does NOT read CurrencyManager's Starting* inspector
+      values. It also resets heroXP, which it previously missed.
 
 HOW IT CONNECTS
 ---------------
-  - SavePersistence gates both Save() and LoadInternal() - see that doc first
-    if saving appears to do nothing.
   - CurrencyManager mirrors its balances here.
   - GameStartManager reads units[] on boot and writes the seeded roster back.
   - WinPanel / LevelGameManager call RecordStageResult when a stage is won.
@@ -158,8 +167,10 @@ NOTES / RISKS
   - Numbered leftover methods: SetUnitDeployed1 and RecordStageResul1 (note the
     typo) still exist and are still uncalled - the un-numbered versions are the
     live ones. Save1, ResetAllIfRequested1 and ResetAllIfRequested2 were DELETED
-    on 2026-09-20 after confirming no call sites; deleting Save1 also removed an
-    ungated second write path that would have bypassed SavePersistence.
+    on 2026-09-20 after confirming no call sites; deleting Save1 also removed a
+    second write path that bypassed the (now removed) SavePersistence gate.
+  - completedTutorials lives in this blob, so wiping the save also makes the
+    first-run tutorial play again - which is exactly what MenuLoader keys off.
   - A brand-new SaveData is created with version = 1, so the very first load of
     a fresh save also runs the migration branch. Harmless but wasteful.
   - PlayerPrefs on Android/iOS is not a secure store. Anyone can edit currency.

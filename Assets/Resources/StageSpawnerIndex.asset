@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 84b73c0008a8c1c45be15aa786f212d9, type: 3}
+  m_Name: StageSpawnerIndex
+  m_EditorClassIdentifier: Assembly-CSharp::StageSpawnerIndexSO
+  byStage:
+  - {fileID: 11400000, guid: af42dd120e5940847a875e1508e5d55e, type: 2}
+  - {fileID: 11400000, guid: af42dd120e5940847a875e1508e5d55e, type: 2}
+  - {fileID: 11400000, guid: 955dbe5933e80c549958e25a1b71d1ea, type: 2}
+  - {fileID: 11400000, guid: 4bfd3e8ac5c526e4d9fc45ea350f2336, type: 2}
+  - {fileID: 11400000, guid: 27cfca678e4bf0e489d05f0dfdadab0e, type: 2}
+  - {fileID: 11400000, guid: 58bb7e9938a006347840e1fde02370c6, type: 2}
+  - {fileID: 11400000, guid: 027840dabb0b927419f0a6f538a96c6b, type: 2}
+  - {fileID: 11400000, guid: 9ca482523ac412d47b50c443fdbc5326, type: 2}
+  - {fileID: 11400000, guid: 56472ab07ed67104197b8d0ff99ef8f0, type: 2}
+  - {fileID: 11400000, guid: 3f3735f96d586584b9ddb22f1989f6ef, type: 2}
+  - {fileID: 11400000, guid: e0231c22dfd77024aaa44158e508bb69, type: 2}
+  - {fileID: 11400000, guid: 7defb7eb666cb8b4683f393a6ccf1121, type: 2}
+  - {fileID: 11400000, guid: 0413afd5407c0164587ed4fb0a98a5b6, type: 2}
+  - {fileID: 11400000, guid: e81154d79e308064a97b5326a5b26d78, type: 2}
+  - {fileID: 11400000, guid: 84c03ee16f3c085418e922ff11275cd0, type: 2}
+  - {fileID: 11400000, guid: 7cfa3401841b7934f9b79935f6b70bfd, type: 2}
+  - {fileID: 11400000, guid: 251fe581517c58641b3b203095dc2542, type: 2}
+  - {fileID: 11400000, guid: 373c72e92d2516d4c964ec72884671ef, type: 2}
+  - {fileID: 11400000, guid: 93d1b43dbff7ae34a842be8d95e5b585, type: 2}
+  - {fileID: 11400000, guid: 2eb7ac93337d8fb46a310f0db6b8f791, type: 2}
+  cpWeights: {fileID: 0}

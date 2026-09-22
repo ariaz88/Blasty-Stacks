@@ -220,10 +220,19 @@ MAIN LOOP
          ResolveLevel - so the stage deciding wave counts and enemy stat growth
          could differ from the stage the battle was set up for. Any flow that
          reaches a gameplay scene without HomeManager/DirectPlayBootstrap calling
-         SetStage drifts, and since SavePersistence forces LevelManager back to
-         stage 1 every run, that drift is now the NORMAL case in editor testing.
-         Both call sites now resolve identically, from authored data that cannot
-         move at runtime.
+         SetStage drifts. Both call sites now resolve identically, from authored
+         data that cannot move at runtime.
+
+  ResolveWavesForStage(config, stageLevel)  [public STATIC, added 2026-09-22]
+      BuildWavesFromRules as a pure function of (config, stage), with the
+      instance method now a one-line delegate to it.
+      It was extracted so the HOME SCREEN's enemy-CP preview (StageEnemyCP) can
+      ask the same code the spawner obeys, without loading the stage. A second
+      implementation of this reshaping would drift from the real one the first
+      time either the wave table or the mix rule changed, and the preview would
+      quietly start lying about the fight the player is walking into.
+      Same guarantees as before: never mutates the asset, and returns the
+      asset's own waves unchanged past the authored range.
       2. Waits levelConfig.startDelay (pause-aware).
       3. For each wave in order:
            - waits wave.delayBeforeWave if set (pause-aware)

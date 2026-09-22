@@ -15,12 +15,29 @@ UI can stay in sync without polling.
 
 INSPECTOR FIELDS
 ----------------
-  startingGems  (int, min 0, default 10)  used ONLY if no save is loaded
-  startingCoins (int, min 0, default 10)
+  startingGems  (int, min 0, default 0)  applied in Awake before any save loads
+  startingCoins (int, min 0, default 0)
   startingHeroXP (int, min 0, default 0)
   StartingCoins / StartingGems / StartingHeroXP  (public read-only accessors)
-    - read by GameStartManager and SaveSystem.ResetAllIfRequested when seeding
-    a fresh save
+
+  !! THESE NO LONGER DECIDE WHAT A NEW PLAYER OWNS (changed 2026-09-22).
+  A NEW PLAYER OWNS NOTHING, and that rule now lives in code as
+  GameStartManager.FreshStartCoins/Gems/HeroXp (all 0). Both the boot path
+  (GameStartManager.InitializeServices) and the reset path
+  (SaveSystem.ResetAllIfRequested) use those constants and IGNORE the fields
+  above. The C# defaults were changed to 0 to match, so the two cannot visibly
+  disagree.
+  WHY: "a new player starts at zero" is a game rule, and a rule living in a
+  scene field can be quietly re-seeded by any scene. That is exactly what went
+  wrong - removing the SavePersistence gate flipped the fresh-run seed from
+  0/0/0 to StarterScene's authored 4/4/6, and the menu began showing currency
+  the player had never earned.
+  Awake() still applies these fields, but GameStartManager overwrites all three
+  a moment later on every boot (both the first-run and the loaded-save branch),
+  so the authored values are effectively dead for the boot path. The remaining
+  references to StartingCoins/StartingGems are in GameStartManager's DEAD
+  numbered siblings InitializeServices1/InitializeServices2, which nothing
+  calls - do not take them as evidence the old seeding is still live.
 
 RUNTIME STATE (public, read-only)
 --------------------------------------

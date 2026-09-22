@@ -27,6 +27,16 @@ INSPECTOR FIELDS
     upgradeCostConfig   (UpgradeCostSO)     gem prices
     progressionConfig   (ProgressionConfigSO) stat growth curves
 
+  Testing - EDITOR ONLY  [added 2026-09-22]
+    resetProgressOnPlay (bool, default false)
+        Wrapped in #if UNITY_EDITOR, so the field does not exist in a player
+        build and a build can never ship with it on.
+        TICKED  -> every Play press wipes the whole save first
+                   (SaveSystem.WipeAllProgress), so the run boots as a new
+                   player: stage 1, starting currency, tutorial plays again.
+        UNTICKED (normal) -> nothing is wiped; progress saves automatically.
+        Lives on the GameStartManager object in StarterScene.
+
   Initial Unlocks (First Run Defaults)
     initiallyUnlockedUnitIds (int[], default {0})
         Unit ids unlocked AND deployed on a fresh save.
@@ -42,9 +52,19 @@ FLOW
 ----
   Awake()
       1. Singleton guard + DontDestroyOnLoad.
-      2. InitializeServices().
-      (The old "resetBool = true; OnResetButtonClicked();" boot wipe was
-       REMOVED in commit c94a908, 2026-09-20 - see NOTES.)
+      2. EDITOR ONLY: if resetProgressOnPlay is ticked, SaveSystem.WipeAllProgress()
+         and log it loudly. This MUST come before step 3 - InitializeServices is
+         the first thing in the boot to read SaveSystem.Data, so wiping after it
+         would seed the roster and currency from the old save and only then throw
+         that save away. Nothing else in StarterScene reads SaveSystem in Awake
+         (CurrencyManager only applies its own serialized Starting* values), so
+         this is early enough without touching script execution order - which must
+         NOT be changed, because InitializeServices needs CurrencyManager.Instance
+         and would LogError-and-return if GameStartManager ran first.
+      3. InitializeServices().
+      (The old unconditional "resetBool = true; OnResetButtonClicked();" boot wipe
+       was REMOVED in commit c94a908, 2026-09-20 - see NOTES. resetProgressOnPlay
+       is its deliberate, opt-in, editor-only replacement.)
 
   OnEnable() -> WaitForLevelManager() coroutine
       Polls each frame until LevelManager.Instance exists, then subscribes to
@@ -65,14 +85,17 @@ FLOW
       4. Currency: works out isFirstRunEconomy (no saved units AND coins, gems
          and heroXp are all zero). If so it seeds starting balances; otherwise
          it loads the saved values - including legitimate zeros.
-         DEBUG GATE (2026-09-20): the first-run branch now splits on
-         SavePersistence.Enabled -
-           enabled  -> CurrencyManager.Starting* (the inspector values, which in
-                       StarterScene.unity are gems 4 / coins 4 / heroXP 6)
-           disabled -> SavePersistence.FreshStart* (0 / 0 / 0)
-         With the gate off, SaveSystem always hands back an empty SaveData, so
-         isFirstRunEconomy is ALWAYS true and every run boots with nothing
-         banked. See SavePersistence.
+         The first-run seed is GameStartManager.FreshStartCoins/Gems/HeroXp -
+         ALL ZERO. A NEW PLAYER OWNS NOTHING (Arash, 2026-09-22): the HUD must
+         open on what was actually earned, and nothing is earned before stage 1.
+         !! It deliberately does NOT read CurrencyManager.Starting* any more.
+         "A new player starts at zero" is a game RULE; a rule living in a scene
+         field can be quietly re-seeded by any scene, and that is exactly what
+         happened - removing the SavePersistence gate earlier the same day
+         silently switched the seed from 0/0/0 to the scene's 4/4/6, and the
+         menu started showing currency the player had never won.
+         The constants are public so SaveSystem.ResetAllIfRequested applies the
+         same numbers - a mid-session reset and a fresh install must agree.
       5. Constructs PlayerProgressionService a SECOND time with the same
          arguments (redundant - the first construction at step 2 is discarded).
 
@@ -95,11 +118,14 @@ NOTES / CRITICAL ISSUES
     OnResetButtonClicked(), wiping all progress on every launch. Both the field
     and the call are gone; saves now persist normally.
     Follow-on: because progress suddenly persisted, Play runs started resuming
-    at stage 6 with banked resources during the stage 5-10 balance pass. Rather
-    than restoring the blunt boot wipe, the SavePersistence debug gate was added
-    - it makes runs start clean WITHOUT deleting the save, and can be switched
-    off from an in-game button or Tools > Save System. See SavePersistence,
-    SavePersistenceDebugPanel and SavePersistenceMenu.
+    at stage 6 with banked resources during the stage 5-10 balance pass. The
+    2026-09-20 answer was the SavePersistence debug gate (runs start clean
+    WITHOUT deleting the save, flipped from an on-screen panel or Tools > Save
+    System). That whole gate was DELETED on 2026-09-22 at Arash's request -
+    saving must be automatic and unswitchable, and the game must boot from the
+    tutorial as a new player. What replaced it: the editor-only
+    resetProgressOnPlay tickbox above, plus Tools/Save System/Wipe Saved
+    Progress Now for a one-off. See SavePersistenceMenu.
 
   - InitializeServices() constructs PlayerProgressionService twice. Harmless but
     wasteful; the second one is the instance actually kept.

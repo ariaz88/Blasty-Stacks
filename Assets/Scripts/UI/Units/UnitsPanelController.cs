@@ -554,13 +554,18 @@ public class UnitsPanelController : MonoBehaviour
         // meta
         int cp = CPCalculator.UnitCP(cur, level, cpWeights);
         int xp = upgradeCost ? upgradeCost.GetHeroXpCostForLevel(level) : 0;
-        targetView.SetMeta(cp, 0, xp); // don't let SetMeta overwrite coins line
+        targetView.SetMeta(cp, 0, xp);
         targetView.SetHeroXpCost(xp, _currency ? _currency.HeroXP : 0);
 
-        // Show “needed / owned” for coins
+        // Show “cost / owned” for coins
         int coinsOwned = _currency ? _currency.Coins : 0;
         int costNeeded = upgradeCost ? upgradeCost.GetCostForLevel(level) : 0;
         targetView.SetCoinsCost(costNeeded, coinsOwned);
+
+        // An upgradeable hero always shows both rows - the Unachieved panel hides
+        // them, and these are separate panels, but stating it here keeps the two
+        // paths symmetrical if a panel is ever reused.
+        targetView.SetCostRowsVisible(true);
 
 
         // >>> ADD THESE LINES (feeds the popup buffer) <<<
@@ -607,12 +612,13 @@ public class UnitsPanelController : MonoBehaviour
             cur.attackRange, dRNG
         );
 
-        // Meta + coins (you can tune these if you want)
         int cp = CPCalculator.UnitCP(cur, level, cpWeights);
         unAchivedDetailView.SetMeta(cp, 0, 0);
 
-        int coinsOwned = _currency ? _currency.Coins : 0;
-        unAchivedDetailView.SetCoinsCost(0, coinsOwned);
+        // A locked hero cannot be upgraded, so both cost rows are hidden rather
+        // than printed (Arash, 2026-09-22). They used to show a cost of 0 beside
+        // the player's real balance, which read as "this costs nothing".
+        unAchivedDetailView.SetCostRowsVisible(false);
 
         // Requirement text
         unAchivedDetailView.SetRequirementDetail(def.GetRequirementText());

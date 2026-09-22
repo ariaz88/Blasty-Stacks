@@ -1,0 +1,67 @@
+================================================================================
+  StageSpawnerIndexSO.cs
+  Path : Assets/Scripts/Data/CombatPower/StageSpawnerIndexSO.cs
+  Type : ScriptableObject  (Create > Blasty > Stage Spawner Index)
+  Layer: Data / CombatPower
+  Asset: Assets/Resources/StageSpawnerIndex.asset   <- MUST live under Resources
+  Added: 2026-09-22
+================================================================================
+
+PURPOSE
+-------
+Which LevelConfig each stage fights, in one asset the MENU can read.
+
+A stage's enemies are authored on the EnemySpawner inside that stage's SCENE, so
+normally the only way to know stage 7's roster is to load Level_1_Stage_7. Home
+must show that number before the stage starts and cannot load twenty scenes to
+do it. This asset is the lookup table that makes the preview possible.
+
+FIELDS
+------
+  ResourcePath  (const string "StageSpawnerIndex")
+      Filename under Assets/Resources, without extension.
+
+  byStage  (LevelConfig[])
+      INDEX 0 = STAGE 1. Rebuilt by the editor tool - do not hand-edit.
+
+  cpWeights  (CPWeightsConfigSO, optional)
+      Weights for the preview. Left empty, each enemy prefab's own cpWeights is
+      used, which is what the battle itself does - so empty is the correct
+      default, not an oversight.
+
+METHODS
+-------
+  Get()  [static]
+      The asset via Resources.Load, or null. Caches the MISS as well as the hit,
+      so a project without the asset does not hit Resources every time the
+      player scrolls past a stage. Logs one warning naming the rebuild tool.
+
+  ConfigFor(stage1Based)
+      Null-safe, range-safe lookup.
+
+  ClearCache()  [static]
+      Drops the cache so a rebuild is picked up without a domain reload. Called
+      by the builder.
+
+HOW IT CONNECTS
+---------------
+  - StageSpawnerIndexBuilder  - writes it (Tools/Blasty/Stage CP/...).
+  - HomeManager.RefreshStageEnemyCp - the only gameplay reader.
+  - StageEnemyCP              - receives the LevelConfig this hands out.
+
+NOTES
+-----
+  - !! THE MAPPING IS NOT DERIVABLE FROM THE ASSET NAME. Stages 1 and 2 share
+    one config ("Spawner2"); stages 3+ use their own Stage_NN asset. Anything
+    that assumes "stage N -> Stage_NN.asset" is wrong for the first two stages,
+    and would be wrong again for any future stage that reuses another's config.
+    The builder reads each stage SCENE, which is the only place that decides.
+  - !! IT MUST STAY UNDER A Resources FOLDER. Resources.Load is what lets the
+    menu reach it with no inspector wiring. A menu that silently shows nothing
+    because someone forgot to drag an asset is worse than one that logs.
+  - RE-RUN THE BUILDER whenever a stage's spawner config changes, or the index
+    goes stale and Home shows the old stage's CP. It is not automatic.
+  - The asset is a build dependency: everything under Resources ships, so this
+    also pulls the referenced LevelConfigs (and their enemy prefabs) into the
+    build. They were already reachable through the stage scenes, so this costs
+    nothing extra - but do not add unrelated heavy assets to this file.
