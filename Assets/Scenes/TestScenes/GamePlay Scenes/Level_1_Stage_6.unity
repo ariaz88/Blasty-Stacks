@@ -321,6 +321,14 @@ PrefabInstance:
       propertyPath: m_AnchorMax.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 601193383783424486, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
+      propertyPath: currentHP
+      value: 2400
+      objectReference: {fileID: 0}
+    - target: {fileID: 601193383783424486, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
+      propertyPath: maxHealth
+      value: 2400
+      objectReference: {fileID: 0}
     - target: {fileID: 975240980139745779, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
       propertyPath: m_Name
       value: LevelTemplate
@@ -344,6 +352,14 @@ PrefabInstance:
     - target: {fileID: 3179443167027866901, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
       propertyPath: movesAllowed
       value: 7
+      objectReference: {fileID: 0}
+    - target: {fileID: 3638395018391487190, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
+      propertyPath: currentHP
+      value: 2500
+      objectReference: {fileID: 0}
+    - target: {fileID: 3638395018391487190, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
+      propertyPath: maxHealth
+      value: 2500
       objectReference: {fileID: 0}
     - target: {fileID: 5411853211264133090, guid: a09157aa9aa859040bc156f425aaf3a9, type: 3}
       propertyPath: m_LocalPosition.x

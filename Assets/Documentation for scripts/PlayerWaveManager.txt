@@ -44,12 +44,23 @@ PHASE 2 PART 2 (same day) - HEROES NOW REACH THE FIELD AGAIN, VIA LOADS
   - `EarnedBatches` keeps each match's heroes SEPARATE (earnedBatches), because
     HeroDeploymentSequencer releases them one batch per 6s load. earnedHeroes
     remains the flat roster for anything wanting only the total.
-  - `deployGateHold` (Inspector, default 1.20s) - how long a deployed hero STANDS
-    ON THE GATE before it leaps. The first version jumped on the spawn frame,
-    which read as the hero teleporting past the platform; 1.20 is the existing
-    reinforcementGateHold (0.75, which belongs to the gem buy-back and is
-    unchanged) +60%. HoldOnGateThenJump now takes the hold as a PARAMETER so the
-    two paths can differ.
+  - `deployGateHold` (Inspector, **0.30s** since 2026-09-23) - how long a
+    deployed hero STANDS ON THE GATE before it leaps. HoldOnGateThenJump takes
+    the hold as a PARAMETER so the two paths can differ.
+    FULL HISTORY, because this value has now been moved in BOTH directions and
+    a future session should not "restore" it:
+      v1  0.00  jumped on the spawn frame - read as teleporting past the platform
+      v2  0.75  = reinforcementGateHold
+      v3  1.20  (= 0.75 +60%) after the first deployment play-test, because the
+                leap read as instant
+      v4  0.30  Arash, 2026-09-23 - at 1.20 the hero read as STUCK on the turret.
+                He first asked for 0.1-0.2, then raised it to 0.30 on being told
+                the real value was 1.20 and not the ~0.5 he had assumed.
+    The LEAP itself was NOT touched: FrogJumpTransformOnly.jumpDuration is still
+    0.50s on every hero prefab, so what v4 removed is dead standing time, not the
+    jump animation that v3 was protecting. Gate-to-landed went ~1.70s -> ~0.80s.
+    !! The live value is serialized in LevelTemplate.prefab, so changing only the
+    !! C# initializer does nothing - both were set. ASSET EDIT, invisible in git.
   - `DeployBatch(batch)` [public] spawns one batch: each hero on a RANDOM free
     gate (round-robin fallback when all gates are busy, so an earned hero is
     never silently dropped), then jumps to the REAR lane via GetRearLaneY - the

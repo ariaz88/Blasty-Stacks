@@ -71,6 +71,17 @@ Max 3 lines each — long form goes to `SESSIONS-ARCHIVE.md`._
   3-20 `Stage_NN`). RE-RUN `Tools/Blasty/Stage CP/Rebuild Stage Spawner Index` whenever a stage's
   spawner config changes**, or Home's "TOTAL CP" silently shows the old stage's enemy CP.
 
+### Open design questions — base HP only half-controls base durability
+
+- **[2026-09-23] The PLAYER base ignores its own HP while any hero lives.** `PlayerGateStats`
+  replaces the blow with `maxHealth * LevelBattleRules.BaseChipPerBlow` (0.01) — **exactly 100 blows
+  to fell it, at ANY HP.** Raising HP only lengthens the phase after the army is already dead. The
+  knob for the defended phase is `BaseChipPerBlow`; Arash has not been asked to change it yet.
+- **[2026-09-23] The ENEMY base is fully IMMUNE while any enemy lives** (`EnemyGateStats
+  .ApplyDamageToEnemy` early-returns on `CPBattleController.HasLivingDefenders`). So its whole HP bar
+  is spent by the SURVIVING heroes after the field is clear — that is where "many attackers at once"
+  bites hardest, and it is why the enemy base was sized at 4× rather than 3×.
+
 ### Never played — compile / edit-mode verified only
 
 _Each of these compiles clean and has NEVER been in Play mode. Detail + what to judge: archive._
@@ -83,9 +94,8 @@ _Each of these compiles clean and has NEVER been in Play mode. Detail + what to 
   (portrait + "xN" + cyan fill). None of it has run. 4 matches = 24s before the last hero lands.
 - **[2026-09-21] The new upgrade cost tables are Editor-verified but UNPLAYED.** `EarlyCampaignEconomyVerification.Run()`
   passes, so the wallet math is proven — what is NOT known is how a deck of four level-3 heroes actually
-  fares in stage 6-9 combat now that upgrade #1 costs 50 instead of 40. Also open: hero XP is still granted
-  on EVERY win (`WinPanel` ~L369, no first-clear gate), so replaying cleared stages farms it and the cost
-  curve bounds a bad build in time only. Gating it is a separate, unmade decision.
+  fares in stage 6-9 combat now that upgrade #1 costs 50 instead of 40. (The "hero XP is farmable by
+  replaying" half of this thread was CLOSED 2026-09-22: replays now pay coins only.)
 - **[2026-09-14] `StageDeploymentPlanSO` asset does not exist yet.** Until one is created
   (Create ▸ Blasty ▸ Stage Deployment Plan) and assigned on `[PlayerWaveManager]` in
   `LevelTemplate.prefab`, every level uses the random-type fallback. The authored path has never run.
@@ -269,6 +279,10 @@ Reasoning in full: `SESSIONS-ARCHIVE.md`._
 ---
 
 ## Session Log
+
+- **2026-09-23** — **Base HP authored for stages 1-10 at ≥4× the hits needed to kill one unit of that side. SCENE EDITS ×10 — will not read in the git diff.** Found: **enemy base was 350 FLAT on all ten stages** (from stage 4 on it died faster than a single regular enemy — ratio 0.9 falling to 0.6), and the player base was 500/1000/1500/2000/3000 for 1-5 then **collapsed back to the template's 500 for 6-10**. Damage model is `max(1, ATK × 100/(100+DEF))`; both gates have DEF 80. New enemy base **1150/1300/1400/1550/1650/2400/2550/2700/2850/3000**, player base **1600/1750/1900/2100/2300/2500/2750/3000/3300/3600**; verified every ratio ≥4.0 and strictly increasing. The stage-6 jump (1650→2400) is real — his stage-6 enemies carry DEF 44.9, so a hero needs 11.8 hits per enemy there vs 8.1 at stage 5. **The raw 4× requirement for the PLAYER base is a constant ~1577 at level-1 heroes — enemy ATK cancels out of `4 × (heroHP/enemyDmgVsHero) × enemyDmgVsGate` — so its rise is by his "must increase per stage" rule, not by derivation.** ⚠ **TWO STRUCTURAL RULES LIMIT ALL OF THIS, see Open Threads.** NOT play-tested.
+
+- **2026-09-23** — **Hero gate pose cut 1.20s → 0.30s. ASSET EDIT (`LevelTemplate.prefab`) — will not read in the git diff.** Arash: the hero reads as STUCK on the turret. He first asked for 0.1-0.2, then **raised it to 0.30 once told the real value was 1.20**, not the ~0.5 he had assumed — which is why he was given the measurement before the edit. Measured: `deployGateHold` **1.20s**, `reinforcementGateHold` 0.75s (gem buy-back, **unchanged**), `FrogJumpTransformOnly.jumpDuration` 0.50s on every hero prefab. Gate-to-landed ~1.70s → ~0.80s. **The leap was NOT touched** — only dead standing time was removed, so the "leap reads as instant" complaint that RAISED this to 1.20 in the first place cannot return. **This value has now moved in both directions (0 → 0.75 → 1.20 → 0.30); the full history is in `PlayerWaveManager.txt` so nobody "restores" it.** Set in BOTH the C# initializer and the prefab (the serialized one is what runs); verified 0.300 in the prefab and in stages 1/20. NOT play-tested.
 
 _Newest first, **one line each**. Full write-up of any entry: search `SESSIONS-ARCHIVE.md` for its date._
 

@@ -141,10 +141,16 @@ public class PlayerWaveManager : MonoBehaviour
     [SerializeField] private StageDeploymentPlanSO deploymentPlan;
 
     [Tooltip("How long a deployed hero STANDS ON THE GATE before it leaps into the " +
-             "battlefield, in seconds. Separate from reinforcementGateHold (0.75) " +
-             "which belongs to the gem buy-back: 1.20 is that beat +60%, asked for " +
-             "after the first deployment play-test because the leap read as instant.")]
-    [SerializeField, Min(0f)] private float deployGateHold = 1.2f;
+             "battlefield, in seconds. Separate from reinforcementGateHold, which " +
+             "belongs to the gem buy-back.\n\n" +
+             "HISTORY, so this is not 'restored' by mistake: it was 0.75 -> 1.20 " +
+             "(+60%) after the first deployment play-test, because the leap read as " +
+             "instant. Arash reversed that on 2026-09-23 - the pause read as the " +
+             "hero being STUCK on the turret - and set 0.30 once he saw the real " +
+             "value was 1.20 and not the ~0.5 he had assumed. The leap still reads " +
+             "because FrogJumpTransformOnly.jumpDuration (0.50s) is untouched: what " +
+             "was removed is dead standing time, not the jump.")]
+    [SerializeField, Min(0f)] private float deployGateHold = 0.3f;
 
     private readonly List<UnitDefinitionSO> earnedHeroes = new();
 
