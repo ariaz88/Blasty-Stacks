@@ -1,0 +1,156 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f8c1f6a5be446b342ae44f848a279bc7, type: 3}
+  m_Name: Tut_Onboard_UnitsUpgrade
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialSequenceSO
+  tutorialId: onboard_upgrade_hero
+  playOnce: 1
+  steps:
+  - rid: 7311204558210105601
+  - rid: 7311204558210105602
+  - rid: 7311204558210105603
+  - rid: 7311204558210105604
+  references:
+    version: 2
+    RefIds:
+    - rid: 7311204558210105601
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: 1 - open the Units tab
+        tooltip: Upgrade heroes for greater challenges
+        tooltipSide: 1
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: menu_nav_units
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 12, y: 12}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 4
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.5
+    - rid: 7311204558210105602
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: 2 - pick the first deployed hero
+        tooltip: Pick this hero
+        tooltipSide: 0
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_first_deployed_card
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 10, y: 10}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 4
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.35
+    - rid: 7311204558210105603
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: 3 - upgrade. Ends on UnitUpgraded, not on the click.
+        tooltip: Upgrade to make them stronger
+        tooltipSide: 1
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_upgrade_button
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 14, y: 14}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 6
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.5
+    - rid: 7311204558210105604
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: 4 - go back. Last step, so the gate is released.
+        tooltip: Go back
+        tooltipSide: 1
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_detail_back
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 14, y: 14}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 4
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 0
+        settleAfter: 0

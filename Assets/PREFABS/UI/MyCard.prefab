@@ -535,6 +535,7 @@ GameObject:
   - component: {fileID: 7127688685956590995}
   - component: {fileID: 4779658403836075874}
   - component: {fileID: 3105686671474623127}
+  - component: {fileID: 7788990011223344556}
   m_Layer: 5
   m_Name: Button
   m_TagString: Untagged
@@ -1184,3 +1185,23 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &7788990011223344556
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5629186995862570379}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f306f2e9f8c61c4459edf9dd86d1b664, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  target: {fileID: 3677179891263654565}
+  normalScale: {x: 1, y: 1, z: 1}
+  pressedScale: {x: 0.9, y: 0.9, z: 1}
+  pressDuration: 0.08
+  releaseDuration: 0.12
+  pressEase: 6
+  releaseEase: 6
+  onlyWhenInteractable: 1

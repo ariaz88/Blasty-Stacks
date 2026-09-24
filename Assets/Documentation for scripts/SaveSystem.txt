@@ -174,3 +174,23 @@ NOTES / RISKS
   - A brand-new SaveData is created with version = 1, so the very first load of
     a fresh save also runs the migration branch. Harmless but wasteful.
   - PlayerPrefs on Android/iOS is not a secure store. Anyone can edit currency.
+
+ADDED FOR THE ONBOARDING TEST SANDBOX (2026-09-23)
+--------------------------------------------------
+  SuppressWrites (static bool, default FALSE)
+      While true, Save() returns immediately: the in-memory cache stays current
+      but NOTHING is written to PlayerPrefs. Save() is the single choke point
+      every persistence path funnels through, so one guard here covers currency,
+      unit levels, stars and tutorial flags alike.
+
+  ReloadFromDisk()
+      Drops the in-memory cache (_cache = null), so the next Data read comes
+      from disk again.
+
+  THIS IS NOT the save/load toggle deleted on 2026-09-22. That one was a
+  user-facing switch that could silently disable saving in the real game. This
+  is set ONLY by TutorialSandbox, which lives in the OnBoarding Test scene,
+  refuses to arm itself outside the Editor, and in OnDestroy both clears the
+  flag AND calls ReloadFromDisk - because by then the cache is full of fake
+  numbers and a later save in the same Editor session would otherwise write the
+  sandbox wallet into the player's real progress.

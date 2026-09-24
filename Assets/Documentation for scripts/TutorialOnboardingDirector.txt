@@ -1,0 +1,74 @@
+================================================================================
+  TutorialOnboardingDirector.cs
+  Path : Assets/Scripts/Tutorial/TutorialOnboardingDirector.cs
+  Type : MonoBehaviour
+  Layer: Tutorial
+  Scenes: Level_1_Stage_6 ("Onboarding Rig")
+================================================================================
+
+PURPOSE
+-------
+Starts the onboarding chain the first time a particular stage is LOST.
+
+It listens on LevelGameManager.OnGameStateChanged rather than on the panel,
+because that event fires ONE LINE BEFORE revivePanel.ShowLosePanel()
+(LevelGameManager.cs:204 / :209) - so we are already counting before the panel
+has even been switched on, and there is no frame in which REPLAY is reachable
+before the gate closes.
+
+The second half of the chain lives in MenuScene and is armed purely by this
+sequence's save flag, through TutorialTrigger.requiresTutorialId. Nothing is
+carried across the scene load in memory.
+
+INSPECTOR FIELDS
+----------------
+  sequence      (TutorialSequenceSO)  Tut_Onboard_LoseStage6
+  overlay       (TutorialOverlay)     empty = found in the scene
+  levelId       (int) 1
+  stage1Based   (int) 6
+  requireNeverCleared (bool) only fire when the stage has never been beaten
+  panelSettleDelay    (float) 0.55 unscaled, outlasts RevivePanel's 0.35s fade
+  requireUpgradeAffordable (bool) the precondition below
+  forceReplayInEditor (bool) EDITOR ONLY
+
+FLOW
+----
+  OnEnable/OnDisable   subscribe / unsubscribe OnGameStateChanged
+  HandleStateChanged   state == Lost
+                       && HomeManager.CurrentStage1Based == stage1Based
+                       && SaveSystem.GetStars(levelId, stage-1) == 0
+                       && !TutorialManager.IsTutorialDone(id)
+                       && !TutorialManager.Get().IsPlaying
+                       && CanStartUpgradeChain()
+                       -> PlayAfterPanel()
+  PlayAfterPanel       WaitForSecondsRealtime, then TutorialManager.Get().Play
+
+CanStartUpgradeChain
+--------------------
+THE gate for "is this a good moment to teach upgrading". Asks
+PlayerProgressionService.CanUpgrade for each deployed hero card, falling back to
+every unit in UnitsDatabaseSO when the roster panel is not in this scene.
+
+If it returns false the director does NOTHING AND WRITES NO FLAG, so the lesson
+stays pending and can fire on a later defeat. Kept as one named method on
+purpose: moving the onboarding to a different trigger point later should be a
+change here and nowhere else.
+
+HOW IT CONNECTS
+---------------
+  - LevelGameManager.OnGameStateChanged (static Action<GameState>)
+  - HomeManager.CurrentStage1Based, SaveSystem.GetStars
+  - GameStartManager.Instance.ProgressionService, .unitsDatabase
+  - UnitsPanelController.DeployedContainer + UnitCardView.UnitId
+  - TutorialManager.Get().Play
+
+NOTES
+-----
+  - OnGameStateChanged is STATIC, so OnDisable MUST unsubscribe or the delegate
+    leaks across every scene load for the rest of the session.
+  - WaitForSecondsRealtime, not WaitForSeconds: ShowLosePanel has already set
+    Time.timeScale to 0, so a scaled wait would never finish.
+  - Stars are written on a WIN only, which is why zero stars really does mean
+    "never beaten" and makes a good first-defeat test.
+  - Stage 6 only, by design. To cover another stage, drop the same rig object
+    into that stage's scene and change stage1Based.

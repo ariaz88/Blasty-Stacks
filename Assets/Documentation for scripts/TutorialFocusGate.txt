@@ -1,0 +1,165 @@
+================================================================================
+  TutorialFocusGate.cs
+  Path : Assets/Scripts/Tutorial/TutorialFocusGate.cs
+  Type : MonoBehaviour
+  Layer: Tutorial
+  Scenes: lives on the TutorialOverlay prefab instance (built at runtime when the
+          prefab does not carry one)
+================================================================================
+
+PURPOSE
+-------
+Makes exactly ONE thing on screen touchable and everything else dead - the
+"only this button is clickable" half of the guided onboarding.
+
+Four full-bleed raycast targets (top / bottom / left / right) are laid out so
+that together they cover the whole canvas EXCEPT a rectangle around the focused
+element. Nothing under the four plates can be clicked; the hole is a plain gap,
+so the real button underneath receives the tap through its own wiring with
+nothing about it changed.
+
+WHY A HOLE, NOT "PROMOTE THE TARGET"
+------------------------------------
+The obvious alternative is to put one blocker over everything and lift the
+allowed target above it with a Canvas + GraphicRaycaster (what
+_Legacy/ModalCanvasUtil does). Rejected because:
+  - it adds and removes components on somebody else's GameObject, so every
+    abort path has to restore them correctly or the UI is left corrupted;
+  - it leaves the whole screen live for the moment between one beat releasing
+    its target and the next beat promoting its own - and beat 2 -> 3 of the
+    onboarding spans a 0.35s panel tween;
+  - ModalCanvasUtil.RemoveOverlayCanvas destroys the Canvas unconditionally,
+    which would break any target that already had one.
+This component owns nothing outside itself, so an abort - or a scene load -
+cannot strand the player behind a locked screen.
+
+INSPECTOR FIELDS
+----------------
+  top / bottom / left / right (Image)  the four plates; built at runtime if empty
+  fadeTime            (float) scrim fade, unscaled. 0.2 by default
+  blockedTapsToAbort  (int)   DEFAULT 0 = OFF. See the 2026-09-23 note below.
+
+PUBLIC API
+----------
+  IsBlocking                                   true while THIS gate is shut
+  static AnyBlocking                           true while ANY gate is shut
+  event OnAbortRequested                       the escape hatch fired
+  Configure(Canvas)                            called by TutorialOverlay
+  BlockAll(dimAlpha)                           shut the screen, no hole
+  FocusOn(Func<Rect?> screenRect, padding, dimAlpha)
+  Release()                                    give the screen back (idempotent)
+
+FLOW
+----
+  Awake            build the plates, alpha 0, plates off
+  BlockAll/FocusOn store the provider, switch the plates on
+  LateUpdate       fade toward the target alpha, then re-lay the four bands from
+                   whatever the provider returns THIS frame
+  OnDisable        Release()
+
+HOW IT CONNECTS
+---------------
+  - TutorialOverlay owns it, calls Configure in Awake, and routes the old
+    SetBlockInput(bool) API through it.
+  - TutorialFocusTapStep drives it: BlockAll while waiting for its target,
+    FocusOn once the target is usable, Release or BlockAll when the beat ends.
+  - TutorialRunner subscribes to OnAbortRequested and aborts the sequence.
+
+NOTES
+-----
+  - THE TRANSPARENCY TRAP: an Image with color.a == 0 AND
+    cullTransparentMesh == 1 has its mesh culled, and a culled mesh is invisible
+    to the GraphicRaycaster. That is exactly why the overlay prefab's original
+    `Blocker` never blocked anything. Every plate is built with
+    cullTransparentMesh = false, and Begin() floors the alpha at 1/255.
+  - The provider returning null means "the target is gone right now", which
+    shuts the screen COMPLETELY rather than opening it. Failing closed is
+    correct: the alternative hands the player a live menu mid-lesson.
+  - The hole is a RECTANGLE, so anything else inside that rectangle stays
+    clickable. Fine for the isolated targets the onboarding uses; do not point a
+    hole at a dense cluster of buttons.
+  - pointerClick bubbles up the hierarchy, so one IPointerClickHandler on the
+    gate covers all four plates without a component on each.
+  - All timing is unscaled: the first beat of the chain plays on the Lose panel,
+    where GameplayPause has set Time.timeScale to 0.
+
+2026-09-23 FIX — THE TAP-TO-ESCAPE HATCH IS OFF, AND MUST STAY OFF
+------------------------------------------------------------------
+It shipped at 6 taps and was WRONG. The very first play-test produced "I click
+any other button and it reacts, it even opens a level" — because the gate WAS
+working, the tester tapped around to check the lock, the 6th blocked tap fired
+OnAbortRequested, the tutorial aborted, and the whole screen unlocked. The
+console said so outright:
+
+    [Tutorial] Player tapped the blocked area 6 times - releasing the screen
+               and aborting the tutorial.
+
+The requirement is absolute: a tap outside the highlight does NOTHING. Anything
+that turns a pile of stray taps into an unlock defeats the feature. The only
+thing that now hands the screen back on its own is the time-based
+TutorialRunner.hardStopSeconds (600s); per-step giveUpAfterSeconds is authored
+to 0 in both onboarding sequence assets.
+
+Fixed in the same pass: Begin() set _currentAlpha but never called ApplyAlpha,
+so the plates sat at a literal alpha of 0. They still blocked (cullTransparentMesh
+is off), but that was luck rather than design — Begin now applies immediately.
+
+VERIFIED by EventSystem.RaycastAll in a live Play session: probes at the screen
+centre and at the START button both return ScrimTop / ScrimRight as the top hit
+at sorting order 1100, while a probe at the Units button returns the real
+"Units Icon". Blocked outside, live inside.
+
+2026-09-23 FIX #2 — THE HOLE IS FROZEN WHILE A FINGER IS DOWN
+--------------------------------------------------------------
+Reported as "the button press shrink/grow animation is disabled on every button
+I click". The animation was not disabled — measured live, the button still went
+scale 1.000 -> 0.900 on press. The hole was the problem:
+
+    button screen rect at rest   305.66 x 189.79
+    button screen rect pressed   275.09 x 170.81     (exactly 90%)
+
+Every UI button here carries UIButtonPressScaler, which DOScale's the button's
+OWN transform to 0.9 on press. The hole is measured from that same transform via
+TutorialAnchor.TryGetScreenRect -> GetWorldCorners, so the scrim closed inward by
+10% the instant the player pressed. Unless they hit the dead centre, a scrim
+plate slid under the cursor mid-press, the button received OnPointerExit, and at
+release the EventSystem did not deliver the click (currentOverGo was no longer
+the pressed object). Visible result: a half-squish and nothing happening.
+
+LayoutPlates now reuses the last measured rect for as long as PointerIsDown().
+Nothing legitimately moves during a press, so holding the rect is safe. The
+freeze is cleared in FocusOn (new target) and in Release.
+
+Ordering note on why this is enough: the EventSystem processes the release and
+the click during Update, while the plates are re-laid in LateUpdate — so at the
+moment the click is delivered the plates are still in their frozen, full-size
+positions.
+
+CAVEAT: the freeze is driven by legacy Input.GetMouseButton/touch, which a
+script cannot fake, so this specific path could NOT be verified by simulated
+events - only the compile, the geometry and the no-regression probes were.
+It needs a real press to confirm.
+
+2026-09-24 — FOCUS RECT EXPOSED, AND THE DIM NOW FADES OUT
+-----------------------------------------------------------
+  TryGetFocus(out targetScreen, out holeScreen)
+      The focused target and the clickable hole (target + holePadding), in
+      screen space. True only while shut WITH a hole - false while open, while
+      fading out, and between beats (BlockAll, no hole). Written in LayoutPlates,
+      so it is frozen during a press exactly like the plates are.
+  CanvasRect / UiCamera
+      What TutorialFocusFx converts through, so the halo and the burst use the
+      same coordinate space as the plates.
+
+  Release(bool instant)  (Release() == Release(false))
+      Input is handed back on the SAME frame either way - the plates stop being
+      raycast targets immediately. `instant` only decides whether the darkness
+      snaps off or fades over fadeTime. With the onboarding now authored at
+      dimAlpha 0.42, snapping it off in one frame read as a flicker.
+      OnDisable uses Release(true): a disabled component cannot run the fade.
+
+  !! During the fade-out the layout is NOT refreshed. The provider is gone, and
+     re-laying would collapse to "cover everything", briefly darkening the very
+     target the player just pressed.
+  !! Begin() during a fade-out continues from the current darkness instead of
+     restarting at 0, so re-shutting between beats does not blink.

@@ -1,0 +1,124 @@
+================================================================================
+  TutorialFocusFx.cs
+  Path : Assets/Scripts/Tutorial/TutorialFocusFx.cs
+  Type : MonoBehaviour
+  Layer: Tutorial (VFX)
+  Scenes: none authored - TutorialOverlay builds it at runtime as the "FocusFx"
+          child, directly above the FocusGate plates
+================================================================================
+
+PURPOSE
+-------
+The "juice" of a guided step, matching the onboarding reference video
+(Assets/Arts/Reference videos/OnBoarding/OnBoarding 1.mkv, analysed at 15 fps):
+
+  TARGET GLOW  a soft golden halo hugging the highlighted element, breathing
+               gently for as long as the step points at it.
+  TAP BURST    where the player's finger actually lands inside the highlight: a
+               white soft disc that gives way to an expanding yellow ring.
+
+The spotlight DIM that goes with them is not here - it is TutorialFocusGate's
+plates at dimAlpha 0.42, authored per step in the sequence assets.
+
+REFERENCE BEATS (15 fps, frames in the session scratchpad onb2/)
+----------------------------------------------------------------
+  Dim     measured on every step: non-target areas -39% .. -44% luminance
+          (home scenery 114 -> 67, Start Battle 176 -> 98, cards 104 -> 62).
+          => black at alpha 0.42.
+  Glow    fr.24-27 (hero card), fr.45 (Upgrade button): gold rim, and the target
+          reads +19% brighter while the step is active (161.6 vs 135.7).
+  Burst   fr.46  t=0.00  white soft disc at the fingertip, ~85 canvas units
+          fr.47  t=0.07  disc gone, thin yellow ring ~130 units, expanding
+          fr.48  t=0.13  gone
+
+INSPECTOR FIELDS
+----------------
+  Target glow
+    glowEnabled, glowColor (1, 0.82, 0.25)
+    glowGap      2    units between the target edge and the brightest line
+    glowFadeIn   0.18 s,  glowFadeOut 0.15 s
+    pulseHz      1.2,  pulseMin 0.65,  pulseGrow 4 units
+  Tap burst
+    burstEnabled, discColor (white), ringColor (1, 0.86, 0.3)
+    discDiameter 85, discStartScale 0.6, discDuration 0.08
+    ringDelay 0.03, ringDuration 0.19, ringStartDiameter 70, ringEndDiameter 160
+    ringStartAlpha 0.95
+    burstPool 2   (covers a fast double-tap; the oldest is recycled beyond that)
+
+PUBLIC API
+----------
+  Bind(TutorialFocusGate)          called by TutorialOverlay
+  PlayBurstAt(Vector2 screenPos)   play a burst as if the player pressed there
+  EvaluateBurst(float t)           the whole burst timeline as one pure function
+  BurstDuration                    total lifetime of one burst (0.22 s)
+  struct BurstFrame                discOn / discDiameter / discAlpha /
+                                   ringOn / ringDiameter / ringAlpha
+
+FLOW
+----
+  Awake       EnsureArt() builds the three procedural sprites once (static),
+              BuildGlow(), BuildBursts()
+  Update      press detection: on the frame a finger/mouse goes DOWN, if the
+              press is inside the gate's CLICKABLE HOLE -> SpawnBurst
+  LateUpdate  TickGlow: if the gate has a focus rect, move the halo onto it and
+              fade/pulse it; otherwise fade it out holding the last position.
+              TickBursts: advance each live burst, draw from EvaluateBurst(t).
+
+HOW IT CONNECTS
+---------------
+  - Reads everything from TutorialFocusGate.TryGetFocus(target, hole) plus the
+    gate's CanvasRect / UiCamera, so the halo and the burst hit-test always agree
+    with the hole the player can actually press.
+  - TutorialOverlay.EnsureParts builds it and places it at the gate's sibling
+    index + 1: above the dim, below caption / tooltip / hand.
+  - No step or sequence knows about it. Every TutorialFocusTapStep gets it free.
+
+MEASURED (live, OnBoarding Test sandbox, 2026-09-24)
+----------------------------------------------------
+  dim plate alpha              0.420        target 0.420
+  glow margin per side         36.1 u       target 36..40 (34 halo + 2 gap + breath)
+  glow centre vs target        (0.00, 0.00)
+  glow alpha (at a trough)     0.657        target 0.65..1.00
+  1 texture px == 1 canvas u   sprite ppu 100, canvas refPPU 100, image ppu 1
+  halo alpha vs units outside  d=34:0.00 26:0.05 17:0.21 9:0.45 4:0.67 2:1.00
+                               inside d=-2:0.26 -4:0.11 -6:0.00
+  burst (EvaluateBurst)        t=0.000 disc 51/1.00
+                               t=0.067 disc 84/0.30  ring 113/0.69
+                               t=0.133            ring 151/0.29
+                               t=0.219            ring 160/0.00   duration 0.220 s
+  Screenshot of the Game view confirmed dim + gold rim + burst + tooltip + hand
+  all drawing, in that order.
+
+NOTES
+-----
+  !! NOT A PARTICLESYSTEM, on purpose. The house method (VFX-Playbook) builds
+     world-space ParticleSystems. The tutorial overlay is a Screen-Space-OVERLAY
+     canvas, which draws after every camera, and a particle renderer is drawn BY
+     a camera - a ParticleSystem here would be invisible. Same idea, UI Graphics
+     instead: built in code, no prefab, no asset.
+  !! No Shader.Find anywhere: UI/Default only, so NOTHING was added to
+     Graphics > Always Included Shaders. No project setting changed.
+  !! Everything is on Time.unscaledDeltaTime. The first beat of the onboarding is
+     on the Lose panel, where GameplayPause has set Time.timeScale to 0.
+  !! The procedural textures are NON-READABLE (Apply(false, true)) to free the CPU
+     copy. To inspect them, Blit to a RenderTexture and ReadPixels - GetPixel
+     throws.
+  !! The glow sprite is created at 100 px/unit so that, on a canvas with the
+     default referencePixelsPerUnit (100), one texture pixel is one canvas unit.
+     The 9-slice border (40 = 34 halo + 6 inward bleed) relies on that. Change
+     either number and the halo width changes with it.
+  !! A press OUTSIDE the hole gets no burst. That is deliberate: a tap on the
+     dimmed area must do "nothing at all", and that includes feedback.
+  !! Burst press detection uses legacy Input (GetMouseButtonDown / TouchPhase.
+     Began), like TutorialHand and TutorialFocusGate - the project ships
+     activeInputHandler = Both. It cannot be faked from a script; PlayBurstAt and
+     EvaluateBurst exist so the effect can be tested without a real press.
+  - The halo is a square-cornered frame (distance field of a sharp box): it reads
+    as a clean frame but does not hug a rounded button. A rounded version would
+    need a corner radius in BuildGlowTexture's distance function.
+  - Compared with the reference the burst runs a little LONG: the reference ring
+    is gone by fr.48 (0.133 s) while ours is still at alpha 0.29 there. It matches
+    the approved 0.22 s timeline; ringDuration 0.19 -> 0.13 closes the gap.
+  - The halo bleeds 6 units INTO the target instead of laying a brightening fill
+    over it: a rectangle of white over an irregular button (the nav tab) would
+    show its corners. That warm edge is what stands in for the reference's +19%.

@@ -53,3 +53,33 @@ NOTES
     stranded on a board with no way out.
   - forceReplayInEditor is inside #if UNITY_EDITOR, so it can never affect a
     build even if it is left ticked.
+
+ADDED FOR THE GUIDED ONBOARDING (2026-09-23)
+--------------------------------------------
+  requiresTutorialId (string, Inspector)
+      Only play once THIS tutorial id is already completed. Empty = no
+      prerequisite.
+
+  Checked at the top of Play(), which RETURNS OUTRIGHT when unmet - it does not
+  go through HandleComplete, because "not my turn yet" is not "finished" and no
+  loadSceneOnComplete must fire.
+
+  This is how a chain crosses a scene load: the runner dies with its scene, but
+  the save flag does not. MenuScene's rig uses
+  requiresTutorialId = "onboard_leave_stage" so the Units/Upgrade half only
+  plays after the player has been through the stage-6 defeat beat.
+
+2026-09-23 FIX — startDelay IS NO LONGER AN UNGUARDED WINDOW
+-------------------------------------------------------------
+Start() now calls WillPlay() first, and when the answer is yes it shuts the
+screen (overlay.SetBlockInput(true)) for the WHOLE of startDelay.
+
+WHY: startDelay is 0.9s on the menu rig. That was 0.9s in which nothing was
+blocked and the player could press anything — long enough to start a battle
+before the first beat had begun. The first step re-asserts the block itself, so
+the hand-over is seamless; the block is released again only when Play() did NOT
+actually start a tutorial, so a failed start cannot strand the player.
+
+WillPlay() asks the same three questions Play() does (sequence assigned,
+requiresTutorialId satisfied, not already seen / forceReplayInEditor) with no
+side effects.

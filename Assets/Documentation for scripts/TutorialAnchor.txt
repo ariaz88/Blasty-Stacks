@@ -3,7 +3,8 @@
   Path : Assets/Scripts/Tutorial/TutorialAnchor.cs
   Type : MonoBehaviour
   Layer: Tutorial
-  Scenes: none yet - it exists for the tutorials that come after the board one
+  Scenes: none authored - TutorialAutoAnchors adds them at runtime in MenuScene,
+          Level_1_Stage_6 and OnBoarding Test
 ================================================================================
 
 PURPOSE
@@ -16,33 +17,69 @@ Works for BOTH kinds of object:
   a world object (Transform)      resolved through the world camera
   a UI element (RectTransform)    resolved through its own Canvas
 
-Drop one on a button, a HUD icon, a castle gate - anything a future tutorial
-needs to point at - then reference it by id from TutorialTarget.SceneAnchor, or
-from TutorialCondition.AnchorClicked.
+Drop one on a button, a HUD icon, a castle gate - anything a tutorial needs to
+point at - then reference it by id from TutorialTarget.SceneAnchor, or from
+TutorialCondition.AnchorClicked.
+
+DUPLICATE IDS ARE ALLOWED, ON PURPOSE
+-------------------------------------
+Find() returns the first ENABLED anchor with that id, and the menu is full of
+pairs where exactly one of the two is ever active:
+  UnitsButton_InActive / UnitsButton_Selected   (MainMenuPanelController swaps)
+  UpgradeButton / UpgradeButton_DISABLED        (WireUpgradeButton swaps)
+Giving both halves the same id is the cleanest way to say "whichever of these is
+currently on screen", and it is what makes a guided step survive the swap.
 
 INSPECTOR FIELDS
 ----------------
-  anchorId   (string) e.g. "battle_button"
+  anchorId              (string) e.g. "battle_button"
+  pointAtOverride       (Transform) resolve to THIS instead of my own transform
+  interactableCheckRoot (Transform) stop walking up for blocking CanvasGroups
+                        here. Empty = walk to the root
 
 PUBLIC API
 ----------
   AnchorId
-  static Find(id)                                enabled anchors only
+  static Find(id)                       enabled + activeInHierarchy anchors only
+  SetTargetProvider(Func<Transform>)    used by TutorialChildAnchor
+  SetAnchorId(string)                   for anchors added at runtime
+  ResolveTransform()                    provider ?? override ?? self
+  ResolveButton()                       GetComponentInChildren<Button>
+  IsInteractableNow()                   present AND able to take a click
   TryGetScreenPosition(worldCamera, out screenPos)
+  TryGetScreenRect(worldCamera, fallbackSize, out screenRect)
 
 FLOW
 ----
-  OnEnable / OnDisable maintain a static list of live anchors. Find walks it.
+  OnEnable / OnDisable maintain a static list of live anchors. Find walks it and
+  additionally skips anchors whose GameObject is not activeInHierarchy.
 
 HOW IT CONNECTS
 ---------------
-  - TutorialTarget.SceneAnchor resolves through Find + TryGetScreenPosition.
-  - TutorialCondition.AnchorClicked looks for a Button on the anchor.
+  - TutorialTarget.SceneAnchor resolves through Find + TryGetScreenPosition, and
+    TryResolveScreenRect through Find + TryGetScreenRect.
+  - TutorialCondition.AnchorClicked subscribes to ResolveButton()'s onClick, and
+    re-hooks every Tick so a swapped pair is followed.
+  - TutorialFocusTapStep waits on IsInteractableNow() before showing anything.
+  - TutorialChildAnchor installs the provider.
+  - TutorialAutoAnchors creates and ids them at runtime.
 
 NOTES
 -----
+  - ResolveButton uses GetComponentInChildren, NOT GetComponent. A hero card
+    (MyCard.prefab) has NO Button on its root - its only Button is on a child
+    literally named "Button". Looking only at the root is why an AnchorClicked
+    condition on a card would silently never fire.
+  - TryGetScreenPosition uses rt.TransformPoint(rt.rect.center), not
+    rt.position: rt.position is the PIVOT, so a button authored with a corner
+    pivot would send the hand to its corner.
+  - IsInteractableNow walks up for a CanvasGroup with blocksRaycasts or
+    interactable off. That is what makes a step wait out
+    MainMenuPanelController's 0.35s panel slide, which turns blocksRaycasts off
+    on the whole panel while it tweens. Writing to those CanvasGroups is
+    pointless - the controller rewrites them on every tab change - so the
+    tutorial waits rather than fights.
   - A plain List, not a Dictionary: there are only ever a handful, and duplicate
-    ids should be visible rather than silently overwritten. Find returns the
-    first match.
-  - UI anchors read their own Canvas render mode, so they work whether that
+    ids are meaningful here rather than a mistake.
+  - UI anchors read their own root Canvas render mode, so they work whether that
     canvas is Overlay or Screen-Space-Camera.

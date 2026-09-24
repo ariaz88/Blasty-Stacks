@@ -45,3 +45,20 @@ NOTES
 -----
   - pixelOffset is in SCREEN pixels, so it does not scale with resolution. Prefer
     cellOffset for board work.
+
+ADDED FOR THE GUIDED ONBOARDING (2026-09-23)
+--------------------------------------------
+  fallbackRectSize (Vector2)
+      Rect size in screen pixels used when the target has no RectTransform of
+      its own (a board cell, a world point). Ignored for UI anchors, which
+      report their real rectangle. Defaults to 180x180 when left at zero.
+
+  TryResolveScreenRect(worldCamera, board, out Rect screenRect)
+      The target's whole RECTANGLE in screen space - what TutorialFocusGate
+      punches a hole in and what TutorialTooltip hangs off.
+
+      A SceneAnchor on a UI element reports its real rect (via
+      TutorialAnchor.TryGetScreenRect -> GetWorldCorners), so the spotlight
+      frames the ENTIRE button, or the entire hero card, rather than a fixed box
+      around its centre. Everything else falls back to a square around the
+      resolved point.

@@ -286,8 +286,26 @@ public static class SaveSystem
     }
 
 
+    /// <summary>
+    /// TEST ONLY. While true, Save() keeps the in-memory cache current but writes
+    /// NOTHING to disk, so a sandbox scene can spend fake currency and level heroes
+    /// up without touching the player's real progress.
+    ///
+    /// This is NOT the old save/load toggle that was deleted on 2026-09-22 - that
+    /// one was a user-facing switch that silently disabled saving in the real game.
+    /// This is set by TutorialSandbox only, lives for one Play session, and is off
+    /// by default. Anything that turns it on is expected to call ReloadFromDisk()
+    /// when it is done.
+    /// </summary>
+    public static bool SuppressWrites { get; set; }
+
+    /// <summary>Drops the in-memory cache, so the next Data read comes from disk again.</summary>
+    public static void ReloadFromDisk() => _cache = null;
+
     public static void Save()
     {
+        if (SuppressWrites) return;   // sandbox: in-memory only, disk untouched
+
         if (saveDepth > 10) { Debug.LogError("[SaveSystem] Recursion guard: Skipping save"); return; }
         saveDepth++;
         try

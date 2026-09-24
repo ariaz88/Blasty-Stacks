@@ -59,7 +59,15 @@ public class UnitsPanelController : MonoBehaviour
     [SerializeField] private Button deployButton;                     // undeployed only
     [SerializeField] private Button undeployButton;                   // deployed only
 
-
+    // --- Tutorial hooks -------------------------------------------------
+    // Read-only views of references this controller already owns, so the onboarding
+    // can attach TutorialAnchors without matching GameObject names in the scene
+    // (there are two objects called "DEPLOYEDGridLayout (1)" and several BackButtons).
+    // Nothing here changes behaviour - they are getters, not new state.
+    public Transform DeployedContainer => deployedContainer;
+    public Button UpgradeButton => upgradeButton;
+    public Button UpgradeDisabledButton => upgradeDisabledButton;
+    public Button DetailBackButton => backButton;
 
     [Header("Bucket Slot Holders (positions, not content)")]
     [SerializeField] private RectTransform undeployedParentHolder;  // where Undeployed group normally sits

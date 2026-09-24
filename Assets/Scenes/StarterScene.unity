@@ -613,6 +613,7 @@ MonoBehaviour:
   unitsDatabase: {fileID: 11400000, guid: 1eead485eb9802f4c8d136eaf6de630f, type: 2}
   upgradeCostConfig: {fileID: 11400000, guid: 5f2195571d450ac4ebb1677cb0f2c791, type: 2}
   progressionConfig: {fileID: 11400000, guid: 3665f1da392e42549934aab9a641a619, type: 2}
+  resetProgressOnPlay: 0
   initiallyUnlockedUnitIds: 01000000020000000300000004000000
   initiallyUndeployedIds: 0600000005000000
 --- !u!4 &1074223250

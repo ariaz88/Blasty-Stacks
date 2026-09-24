@@ -1,0 +1,72 @@
+================================================================================
+  TutorialAutoAnchors.cs
+  Path : Assets/Scripts/Tutorial/TutorialAutoAnchors.cs
+  Type : MonoBehaviour
+  Layer: Tutorial
+  Scenes: MenuScene ("Onboarding Rig"), Level_1_Stage_6 ("Onboarding Rig"),
+          OnBoarding Test ("OnBoarding Test Rig")
+================================================================================
+
+PURPOSE
+-------
+Attaches every TutorialAnchor the onboarding needs, at runtime, by reading the
+references the game's own controllers already hold. Also spawns the
+TutorialOverlay when the scene has none, so adding the whole onboarding to a
+scene is "drop in one GameObject with this component".
+
+WHY NOT AUTHOR THE ANCHORS IN THE SCENE
+---------------------------------------
+The targets are awkward to address by hand:
+  - TWO different GameObjects are called "DEPLOYEDGridLayout (1)" (the second is
+    under CardsScreen_Redundaunt and is not the one the controller uses);
+  - FIVE objects are called "BackButton";
+  - several names carry a trailing space ("UnitsButton_Selected ").
+Hand-placing components in a 74k-line scene file to hit the right one of each is
+exactly the kind of edit that silently targets the wrong object.
+MainMenuPanelController and UnitsPanelController already have the correct
+references wired in the Inspector, so this reads those and is right by
+construction.
+
+INSPECTOR FIELDS
+----------------
+  overlayPrefab        (TutorialOverlay) spawned when the scene has none
+  navUnitsId           default "menu_nav_units"
+  firstDeployedCardId  default "units_first_deployed_card"
+  upgradeButtonId      default "units_upgrade_button"
+  detailBackId         default "units_detail_back"
+  loseLeaveStageId     default "lose_leave_stage"
+  extraPasses          (int) extra binding passes after the first
+
+FLOW
+----
+  Awake   EnsureOverlay(), then Bind()
+  Start   Bind() again once per frame for `extraPasses` frames, so a controller
+          that wires its references in Start is still picked up
+  Bind    BindMenu + BindUnits + BindLosePanel
+
+  BindMenu       MainMenuPanelController.UnitsButton / UnitsSelectedButton
+  BindUnits      UnitsPanelController.UpgradeButton / UpgradeDisabledButton /
+                 DetailBackButton, plus DeployedContainer -> TutorialAnchor +
+                 TutorialChildAnchor
+  BindLosePanel  LoseGame.MainMenuButton
+
+HOW IT CONNECTS
+---------------
+  - Reads accessors added for this feature: MainMenuPanelController.UnitsButton /
+    UnitsSelectedButton, UnitsPanelController.DeployedContainer / UpgradeButton /
+    UpgradeDisabledButton / DetailBackButton, LoseGame.MainMenuButton.
+  - The ids must match the anchorIds in Tut_Onboard_LoseStage6.asset and
+    Tut_Onboard_UnitsUpgrade.asset.
+
+NOTES
+-----
+  - Anchors are added to objects that may be INACTIVE at the time (the Units
+    panel and the Lose panel both start switched off). That is fine and
+    intended: TutorialAnchor.Find skips anchors that are not active in the
+    hierarchy, so each one becomes findable at the moment its screen appears.
+  - Both halves of a swapped pair get the SAME id on purpose
+    (UnitsButton/UnitsSelectedButton, UpgradeButton/UpgradeButton_DISABLED),
+    because exactly one of each pair is ever active and Find returns that one.
+  - Attach() never stomps an anchor id somebody authored by hand - it warns
+    instead.
+  - FindObjectOfType(true) everywhere, for the inactive-panel reason above.

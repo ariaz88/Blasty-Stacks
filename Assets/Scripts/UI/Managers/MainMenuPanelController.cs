@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
@@ -39,7 +40,34 @@ public class MainMenuPanelController : MonoBehaviour
     [SerializeField] private float toastFadeInDuration = 0.2f;
     [SerializeField, Range(0f, 1f)] private float toastGrayAt = 0.5f;
     [SerializeField, Range(0f, 1f)] private float toastFadeOutAt = 0.9f;
+    [Header("Tab selection pop")]
+    [Tooltip("When a tab becomes selected, its icon swells briefly and settles - a " +
+             "small 'this is the selected tab now' bounce instead of an instant swap.")]
+    [SerializeField] private bool tabPopEnabled = true;
+    [Tooltip("Only pop while a tutorial is running. Off = on every tab change. " +
+             "On by decision (2026-09-24): normal tab switching stays instant.")]
+    [SerializeField] private bool tabPopOnlyDuringTutorial = true;
+    [SerializeField] private float tabPopFrom = 0.88f;
+    [SerializeField] private float tabPopPeak = 1.08f;
+    [SerializeField] private float tabPopUpTime = 0.10f;
+    [SerializeField] private float tabPopSettleTime = 0.12f;
+
     private Vector2 homeButtonDefaultAnchoredPos;
+
+    // Tab-pop state. The FIRST UpdateButtonVisuals call is Start() choosing the
+    // default tab, which must not pop - only a real change should.
+    private bool _tabVisualsInitialized;
+    private MenuTab _lastVisualTab;
+    private readonly Dictionary<Button, RectTransform> _tabIcons = new Dictionary<Button, RectTransform>();
+
+    // --- Tutorial hooks -------------------------------------------------
+    // Read-only views of the two Units nav buttons. UpdateButtonVisuals swaps which
+    // one is active, and several of these GameObjects carry a trailing space in
+    // their name, so the onboarding reads the wired references instead of matching
+    // names in the scene.
+    public Button UnitsButton => unitsButton;
+    public Button UnitsSelectedButton => unitsSelectedButton;
+
     private enum MenuTab { Home = 0, Units = 1, Test = 2 }
     private MenuTab currentTab = MenuTab.Home;
     private bool isAnimating;
@@ -202,6 +230,67 @@ public class MainMenuPanelController : MonoBehaviour
         if (unitsSelectedButton) unitsSelectedButton.gameObject.SetActive(unitsSelected);
         if (testButton) testButton.gameObject.SetActive(!testSelected);
         if (testSelectedButton) testSelectedButton.gameObject.SetActive(testSelected);
+
+        // Pop only on a real change: SelectMenu calls this even when the tapped tab
+        // is already the current one, and Start() calls it to set the default.
+        bool changed = _tabVisualsInitialized && tab != _lastVisualTab;
+        _tabVisualsInitialized = true;
+        _lastVisualTab = tab;
+
+        if (changed)
+        {
+            Button selected = homeSelected ? homeSelectedButton
+                            : unitsSelected ? unitsSelectedButton
+                            : testSelectedButton;
+            PlayTabPop(selected);
+        }
+    }
+
+    /// <summary>
+    /// Swells the selected tab's ICON and settles it. The icon, not the button:
+    /// every nav button carries UIButtonPressScaler, which owns the button root's
+    /// scale (its OnEnable resets it), so tweening the root would fight it.
+    /// Unscaled, so it behaves the same if the menu is ever shown while paused.
+    /// </summary>
+    private void PlayTabPop(Button selected)
+    {
+        if (!tabPopEnabled || !selected) return;
+        if (tabPopOnlyDuringTutorial &&
+            !(TutorialManager.Instance && TutorialManager.Instance.IsPlaying)) return;
+
+        var icon = TabIconOf(selected);
+        if (!icon) return;
+
+        icon.DOKill();
+        icon.localScale = Vector3.one * tabPopFrom;
+        DOTween.Sequence()
+               .Append(icon.DOScale(tabPopPeak, tabPopUpTime).SetEase(Ease.OutQuad))
+               .Append(icon.DOScale(1f, tabPopSettleTime).SetEase(Ease.InOutQuad))
+               .SetUpdate(true)
+               .SetTarget(icon);
+    }
+
+    /// <summary>
+    /// The largest Image among the button's direct children. All three Selected
+    /// buttons name their icon "Home Icon" (a copy-paste), so size is the reliable
+    /// signal - the siblings are a label and two small arrows.
+    /// </summary>
+    private RectTransform TabIconOf(Button button)
+    {
+        if (_tabIcons.TryGetValue(button, out var cached) && cached) return cached;
+
+        RectTransform best = null;
+        float bestArea = 0f;
+        foreach (Transform child in button.transform)
+        {
+            if (!child.GetComponent<Image>()) continue;
+            var rt = (RectTransform)child;
+            float area = rt.rect.width * rt.rect.height;
+            if (area > bestArea) { bestArea = area; best = rt; }
+        }
+
+        _tabIcons[button] = best;
+        return best;
     }
     private void NudgeInactiveHomeWhenTest(MenuTab tab)
     {

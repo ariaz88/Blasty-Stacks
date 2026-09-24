@@ -60,6 +60,18 @@ public class TutorialCaption : MonoBehaviour
         if (!group) return;
 
         if (_fade != null) StopCoroutine(_fade);
+
+        // A coroutine cannot start on an inactive object, and ClearAll() is called
+        // from OnDisable - which used to log "Coroutine couldn't be started because
+        // the game object 'Caption' is inactive!" every time a tutorial ended.
+        // Nothing is on screen at that point anyway, so snap instead of fading.
+        if (!isActiveAndEnabled)
+        {
+            group.alpha = target;
+            _fade = null;
+            return;
+        }
+
         _fade = StartCoroutine(FadeTo(target));
     }
 

@@ -129,7 +129,11 @@ public class TutorialHand : MonoBehaviour
 
     private void Update()
     {
-        if (!hideWhilePointerDown) { _suppressed = false; return; }
+        // While a focus gate holds the screen, a touch CANNOT be the player
+        // dragging something - everything outside the highlight is dead. Hiding
+        // then would restart the demonstration cycle on every stray tap, which
+        // reads as the hand animation glitching and resetting.
+        if (!hideWhilePointerDown || TutorialFocusGate.AnyBlocking) { _suppressed = false; return; }
 
         bool down = PointerIsDown();
 

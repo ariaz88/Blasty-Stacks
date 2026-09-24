@@ -178,6 +178,151 @@ public class TutorialMatchGuideStep : TutorialStep
     }
 }
 
+/// <summary>
+/// One beat of a GUIDED chain: a tooltip and a pointing hand on ONE element, with
+/// every other pixel of the screen dead. This is the "press exactly this" beat the
+/// onboarding is built from.
+///
+/// Three things make it survive the real menu rather than only a tidy test scene:
+///
+///  - It WAITS for the target to be present AND able to take a click.
+///    MainMenuPanelController turns blocksRaycasts off on the whole panel for the
+///    0.35s of its slide, so a hand shown on arrival would be pointing at a dead
+///    button for a third of a second. Fighting those CanvasGroups is useless - the
+///    controller rewrites them on every tab change - so the step simply holds.
+///
+///  - Target, hole and tooltip are resolved through a LIVE lookup every frame,
+///    never cached: the first deployed card is Instantiated fresh on every panel
+///    open, and the Upgrade button is two different GameObjects that swap by
+///    affordability. Both stay correct because nothing is remembered.
+///
+///  - The gate stays shut BETWEEN beats (keepGateAfter). Releasing it per step
+///    would hand the player a fully live screen during the panel tween that the
+///    next beat is still waiting on.
+/// </summary>
+[Serializable]
+public class TutorialFocusTapStep : TutorialStep
+{
+    [TextArea(1, 3)]
+    [Tooltip("Bubble text shown next to the target. Empty = no bubble.")]
+    public string tooltip = "";
+
+    public TutorialTooltipSide tooltipSide = TutorialTooltipSide.Auto;
+
+    [Tooltip("The ONE thing the player may touch. Use SceneAnchor.")]
+    public TutorialTarget at;
+
+    [Tooltip("Screen pixels of slack around the target when punching the hole.")]
+    public Vector2 holePadding = new Vector2(16f, 16f);
+
+    [Tooltip("Darkness of the blocked area. 0 = block without darkening - which is " +
+             "what the Lose panel wants, since it already draws its own 0.75 scrim.")]
+    [Range(0f, 1f)] public float dimAlpha = 0f;
+
+    public TutorialHandLoopTimings timings = TutorialHandLoopTimings.Default;
+
+    [Tooltip("What ends the beat. AnchorClicked for a plain button; UnitUpgraded " +
+             "where the tap can be refused by the game.")]
+    public TutorialCondition until = new TutorialCondition { kind = TutorialCondition.Kind.AnchorClicked };
+
+    [Tooltip("Give up waiting for the target to APPEAR, unscaled seconds. 0 = forever.")]
+    public float resolveTimeout = 10f;
+
+    [Tooltip("Give up waiting for the player to ACT, unscaled seconds. 0 = forever.")]
+    public float giveUpAfterSeconds = 90f;
+
+    [Tooltip("Keep the screen shut after this beat - the next one re-aims the hole. " +
+             "Turn OFF on the last step of a sequence.")]
+    public bool keepGateAfter = true;
+
+    [Tooltip("Dead time after the tap, so a panel swap settles before the next beat.")]
+    public float settleAfter = 0f;
+
+    public override IEnumerator Run(TutorialRunner runner)
+    {
+        var gate = runner.Focus;
+
+        // Shut the screen FIRST, before anything is resolved. On the Lose panel this
+        // IS the requirement - REPLAY must never be pressable - and the panel is
+        // still fading in at this point.
+        if (gate) gate.BlockAll(dimAlpha);
+
+        float waited = 0f;
+        while (!runner.IsTargetReady(at))
+        {
+            if (runner.AbortRequested) yield break;
+
+            waited += Time.unscaledDeltaTime;
+            if (resolveTimeout > 0f && waited >= resolveTimeout)
+            {
+                Debug.LogWarning($"[Tutorial] Focus step '{note}' gave up waiting for target " +
+                                 $"'{Describe()}' to become usable - releasing the screen.");
+                if (gate) gate.Release();
+                runner.AbortSequence();
+                yield break;
+            }
+
+            yield return null;
+        }
+
+        // One live lookup, shared by the hole and the bubble so they can never
+        // disagree about where the target is.
+        TutorialTarget target = at;
+        Func<Rect?> rect = () => runner.TryResolveRect(target, out var r) ? r : (Rect?)null;
+
+        if (gate) gate.FocusOn(rect, holePadding, dimAlpha);
+        if (!string.IsNullOrEmpty(tooltip)) runner.ShowTooltip(tooltip, rect, tooltipSide);
+
+        if (runner.Hand != null)
+        {
+            runner.Hand.StartTapLoop(() =>
+            {
+                if (!runner.TryResolve(target, out var p)) return TutorialDragPoints.None;
+                return TutorialDragPoints.At(p, p);
+            }, timings);
+        }
+
+        // Convenience: an AnchorClicked condition with no id of its own watches the
+        // very anchor this step is pointing at, which is what it always means.
+        TutorialCondition condition = until;
+        if (condition.kind == TutorialCondition.Kind.AnchorClicked &&
+            string.IsNullOrEmpty(condition.anchorId) &&
+            at.kind == TutorialTarget.Kind.SceneAnchor)
+        {
+            condition.anchorId = at.anchorId;
+        }
+
+        var wait = new TutorialWaitResult();
+        yield return runner.WaitFor(condition, giveUpAfterSeconds, wait);
+
+        if (runner.Hand != null) runner.Hand.StopAndHide();
+        runner.HideTooltip();
+
+        if (wait.timedOut)
+        {
+            Debug.LogWarning($"[Tutorial] Focus step '{note}' timed out waiting for the player " +
+                             $"on '{Describe()}' - releasing the screen.");
+            if (gate) gate.Release();
+            runner.AbortSequence();
+            yield break;
+        }
+
+        if (runner.AbortRequested) yield break;
+
+        if (gate)
+        {
+            if (keepGateAfter) gate.BlockAll(dimAlpha);
+            else gate.Release();
+        }
+
+        if (settleAfter > 0f)
+            yield return runner.WaitFor(TutorialCondition.ForDuration(settleAfter));
+    }
+
+    private string Describe()
+        => at.kind == TutorialTarget.Kind.SceneAnchor ? $"anchor '{at.anchorId}'" : at.kind.ToString();
+}
+
 /// <summary>Dead time. Useful for letting a blast animation finish before the next beat.</summary>
 [Serializable]
 public class TutorialWaitStep : TutorialStep

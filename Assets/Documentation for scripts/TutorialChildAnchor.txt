@@ -1,0 +1,55 @@
+================================================================================
+  TutorialChildAnchor.cs
+  Path : Assets/Scripts/Tutorial/TutorialChildAnchor.cs
+  Type : MonoBehaviour  [RequireComponent(TutorialAnchor)]
+  Layer: Tutorial
+  Scenes: added at runtime by TutorialAutoAnchors onto UnitsPanelController's
+          deployedContainer
+================================================================================
+
+PURPOSE
+-------
+Lets a tutorial point at "the Nth item in this list" when the items are
+Instantiated and Destroyed under our feet.
+
+The hero roster is the case this exists for. UnitsPanelController destroys and
+re-creates every card on every OnEnable (BuildCardsIntoBuckets), and keeps the
+containers, the spawned-card list and the card lookup all private. A
+TutorialAnchor authored on a card would die with the card; an accessor on the
+controller would mean editing a 1300-line file we otherwise never touch.
+
+So the anchor id lives on the CONTAINER, which is a scene object and never goes
+away, and this component re-points that anchor at child N on demand.
+
+INSPECTOR FIELDS
+----------------
+  container   (Transform) the list to read. Empty = this transform
+  childIndex  (int) which item. 0 = the first one
+  skipInactive(bool) skip inactive children, so a hidden layout spacer can never
+              become "the first card"
+
+PUBLIC API
+----------
+  Configure(listContainer, index)    wiring helper for runtime-added anchors
+
+FLOW
+----
+  Awake   GetComponent<TutorialAnchor>().SetTargetProvider(ResolveChild)
+  (then)  ResolveChild runs every time a step, the gate or the tooltip asks -
+          never cached, so the rebuild is simply invisible to the tutorial
+
+HOW IT CONNECTS
+---------------
+  - TutorialAnchor.ResolveTransform() calls the provider this installs.
+  - TutorialAnchor.ResolveButton() then does GetComponentInChildren<Button>,
+    which is what finds MyCard.prefab's clickable child (a GameObject literally
+    named "Button" - the card ROOT has no Button at all).
+  - TutorialAutoAnchors adds and configures it.
+
+NOTES
+-----
+  - Returning null when the list is empty is deliberate: TutorialFocusTapStep
+    treats "not resolvable yet" as "keep waiting", and TutorialFocusGate keeps
+    the screen shut meanwhile.
+  - Generic on purpose - reusable for any future "point at the first item in
+    this list" step.

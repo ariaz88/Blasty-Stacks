@@ -28,6 +28,13 @@ public class LoseGame : MonoBehaviour
     [Header("Scenes")]
     [SerializeField] private string menuSceneName = "MenuScene";
 
+    // --- Tutorial hooks -------------------------------------------------
+    // The onboarding points at "LEAVE STAGE!" the first time stage 6 is lost. It
+    // reads the wired reference rather than the GameObject name, which is the
+    // legacy "No Thanks Button" from when this panel offered a revive.
+    public Button MainMenuButton => mainMenuButton;
+    public Button PlayAgainButton => playAgainButton;
+
     private void Awake()
     {
         // Make sure the Lose panel starts enabled & visible when this script is active.

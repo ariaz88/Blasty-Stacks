@@ -1,0 +1,102 @@
+================================================================================
+  TutorialTooltip.cs
+  Path : Assets/Scripts/Tutorial/TutorialTooltip.cs
+  Type : MonoBehaviour (+ enum TutorialTooltipSide)
+  Layer: Tutorial
+  Scenes: lives on the TutorialOverlay prefab instance (built at runtime when the
+          prefab does not carry one)
+================================================================================
+
+PURPOSE
+-------
+A speech bubble that FOLLOWS a target, as opposed to TutorialCaption, which is
+one fixed line under the board.
+
+Both live on the overlay and neither knows about the other: a board lesson goes
+on using the caption, a guided chain uses this, and TutorialOverlay.ClearAll
+hides both. Keeping them separate is why adding this needed no change at all to
+the board tutorial.
+
+TutorialTooltipSide: Auto = 0, Above = 1, Below = 2.
+
+INSPECTOR FIELDS
+----------------
+  bubble / label / tail / group     parts; built at runtime when empty
+  bubbleSprite  (Sprite) optional 9-sliced rounded rect. Empty = sharp rectangle
+  tailSprite    (Sprite) optional triangle. Empty = a small square
+  bubbleColor / textColor / font / fontSize
+  maxWidth      (float) 760   wrap width before padding
+  padding       (Vector2) 46 x 30
+  gap           (float) 28    target edge -> tip of the tail
+  edgeMargin    (float) 40    closest the bubble may come to the canvas edge
+  tailSize      (Vector2) 34 x 20
+  fadeTime      (float) 0.22  unscaled
+
+PUBLIC API
+----------
+  Configure(Canvas)                                  called by TutorialOverlay
+  Show(text, Func<Rect?> targetScreenRect, side)
+  Hide()
+
+FLOW
+----
+  Show        resize the bubble to the text, store the provider, fade in
+  LateUpdate  fade toward the target alpha; while visible, re-ask the provider
+              and reposition
+  Reposition  pick the side, clamp the bubble inside the canvas, then slide the
+              tail along the bubble edge so it still points at the target
+
+HOW IT CONNECTS
+---------------
+  - TutorialOverlay exposes it as .Tooltip and clears it in ClearAll.
+  - TutorialRunner.ShowTooltip / HideTooltip wrap it.
+  - TutorialFocusTapStep passes the SAME Func<Rect?> to the tooltip and to
+    TutorialFocusGate, so the hole and the bubble can never disagree about where
+    the target is.
+
+NOTES
+-----
+  - Auto side picks BELOW when the target sits high on screen and ABOVE
+    otherwise, so the bubble never leaves the screen.
+  - The horizontal clamp is why the tail is positioned separately: the Units nav
+    button sits in the bottom-left corner, so the bubble gets pushed inward and
+    a centred tail would no longer be over the button.
+  - Sizing uses label.GetPreferredValues then sets sizeDelta explicitly, rather
+    than a ContentSizeFitter - deterministic, and no layout-rebuild timing
+    surprises at timeScale 0.
+  - Fades are a manual unscaled loop copying TutorialCaption, NOT DOTween, which
+    would freeze at timeScale 0 unless every tween got SetUpdate(true).
+  - A null result from the provider fades the bubble out rather than leaving it
+    stranded over an element that has gone away.
+
+2026-09-23 FIX — NEVER USE ?? WITH A UnityEngine.Object
+--------------------------------------------------------
+Reported three times as "the 'Go back' tooltip stays on screen after I press
+Back". Live inspection showed the cause immediately:
+
+    tooltip go='Tooltip' activeInHierarchy=True  cg=NULL  alpha=-1
+
+There was NO CanvasGroup on the Tooltip object at all, because EnsureParts did:
+
+    group = gameObject.GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+
+`??` uses plain reference equality and BYPASSES UnityEngine.Object's overloaded
+==, so Unity's "fake null" was accepted as a real component and AddComponent was
+never called. Every later `if (group)` — which DOES use the overload — then
+evaluated false, so the fade in LateUpdate never ran, and because
+SetPartsActive(false) lived INSIDE the fade branch the bubble was never switched
+off. It stayed on screen, fully opaque, for the rest of the session.
+
+Two changes:
+  1. EnsureParts now does an explicit two-step null check instead of `??`.
+  2. SetPartsActive(false) moved OUT of the fade branch, and LateUpdate has an
+     else-branch that honours Hide() even with no CanvasGroup at all. Hiding must
+     not depend on the fade succeeding.
+
+RULE: in this codebase, never write `??`, `?.` or `??=` against a
+UnityEngine.Object. Use `if (!x)`, which respects the overloaded operator.
+
+VERIFIED end to end by driving all four steps through ExecuteEvents in a live
+session: after the Back click, tooltip alpha 0, Bubble and Tail inactive, runner
+stopped, gate released, all four scrim plates inactive, and the tutorial flag
+written.

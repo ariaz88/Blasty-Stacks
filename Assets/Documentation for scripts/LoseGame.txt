@@ -80,3 +80,18 @@ NOTES
   - Relies entirely on RevivePanel to activate losePanel and start the correct
     visual state before this script's own logic runs; LoseGame itself does not
     initiate its own appearance, only its exit.
+
+ADDED FOR THE GUIDED ONBOARDING (2026-09-23)
+--------------------------------------------
+  MainMenuButton / PlayAgainButton (read-only properties)
+      Expose the already-wired serialized Button references so TutorialAutoAnchors
+      can attach a TutorialAnchor without matching GameObject names. The main-menu
+      button's object is still called "No Thanks Button" (legacy, from when this
+      panel offered a revive) and its label reads "LEAVE STAGE!", so name
+      matching would be a trap.
+
+      The onboarding points at MainMenuButton the first time stage 6 is lost.
+      REPLAY needs no special handling: the focus gate blocks everything outside
+      the hole, so it stays visible but dead for that one beat.
+
+      Getters only - no behaviour change.

@@ -422,3 +422,22 @@ NOTES / RISKS - IMPORTANT
       hero XP  1,  2,   3,   4,   4,    5,    5,    6,    6,    7
     Both are Arash's authored sequences (2026-09-21) - verify against him before
     touching either, and do NOT widen a stat pass onto them.
+
+ADDED FOR THE GUIDED ONBOARDING (2026-09-23)
+--------------------------------------------
+  DeployedContainer / UpgradeButton / UpgradeDisabledButton / DetailBackButton
+      Read-only properties over references this controller already owns, so
+      TutorialAutoAnchors can attach TutorialAnchors without matching GameObject
+      names in the scene. Name matching would be a trap here: TWO objects are
+      called "DEPLOYEDGridLayout (1)" (the other is under CardsScreen_Redundaunt)
+      and FIVE are called "BackButton".
+
+      Getters only - no behaviour change, no new state.
+
+  Two existing behaviours the onboarding has to work around, unchanged:
+    - BuildCardsIntoBuckets destroys and re-creates every card on each OnEnable,
+      so the tutorial anchors the CONTAINER and resolves child 0 on demand
+      (TutorialChildAnchor).
+    - WireUpgradeButton SetActive-swaps UpgradeButton / UpgradeButton_DISABLED by
+      affordability, and re-runs on every currency change. Both get the SAME
+      anchor id, and the step re-resolves every frame.

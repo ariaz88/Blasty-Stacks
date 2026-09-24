@@ -1,0 +1,61 @@
+================================================================================
+  TutorialSandbox.cs
+  Path : Assets/Scripts/Tutorial/TutorialSandbox.cs
+  Type : MonoBehaviour  [DefaultExecutionOrder(-1000)]
+  Layer: Tutorial (test harness)
+  Scenes: OnBoarding Test ONLY
+================================================================================
+
+PURPOSE
+-------
+Turns the scene it sits in into a throwaway playground for the onboarding, so
+the whole flow can be watched end to end without grinding for resources and
+without touching the player's real progress.
+
+Two things, and both matter:
+
+  1) IT STOPS THE GAME WRITING TO DISK. SaveSystem.SuppressWrites is switched on
+     in Awake, before anything else runs, so every upgrade, every coin spent and
+     every tutorial "already seen" flag stays in memory and dies with Play mode.
+     SaveSystem.Save() is the single choke point every persistence path funnels
+     through, which is what makes this leak-proof rather than best-effort.
+
+  2) IT HANDS OUT FAKE RESOURCES. Coins, gems and Hero XP are set to a big round
+     number so the Upgrade button is always affordable.
+
+INSPECTOR FIELDS
+----------------
+  coins / gems / heroXp        999999 / 99999 / 9999
+  forgetTutorialsOnEntry (bool) SaveSystem.ResetTutorials() in memory, so the
+                                chain replays on every Play
+  topUpWindowSeconds     (float) 2 - how long to keep re-applying the wallet
+
+FLOW
+----
+  Awake      (editor only) SuppressWrites = true, optionally ResetTutorials
+  Start      re-apply the fake wallet every frame for topUpWindowSeconds, then
+             warn if no CurrencyManager ever appeared
+  OnDestroy  SuppressWrites = false AND SaveSystem.ReloadFromDisk()
+
+HOW IT CONNECTS
+---------------
+  - SaveSystem.SuppressWrites / ReloadFromDisk (both added for this).
+  - CurrencyManager.Instance SetCoins / SetGems / SetHeroXP.
+  - Sits beside TutorialAutoAnchors and a TutorialTrigger on the same rig object.
+  - Relies on DirectPlayBootstrap to boot StarterScene's managers first - enable
+    Tools/Testing/Play Any Scene Directly, or there is no GameStartManager and
+    no CurrencyManager to talk to.
+
+NOTES
+-----
+  - THIS IS NOT the save/load toggle deleted on 2026-09-22. That one was a
+    user-facing switch that could silently disable saving in the real game. This
+    is a per-scene test harness that restores the flag in OnDestroy and refuses
+    to arm itself outside the Editor (#if !UNITY_EDITOR -> warn and return).
+  - OnDestroy MUST drop the cache as well as clear the flag: the in-memory
+    SaveData is full of fake numbers by then, and a later save in the same
+    Editor session would otherwise write the sandbox wallet into the real save.
+  - The top-up runs for a window rather than once because boot order is not ours
+    to control - GameStartManager may still be loading currency from the save
+    when this scene's Start runs.
+  - DefaultExecutionOrder(-1000) so SuppressWrites is set before other Awakes.

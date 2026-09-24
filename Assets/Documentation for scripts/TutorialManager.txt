@@ -61,3 +61,15 @@ NOTES
   - The runner lives on the OVERLAY, not on the manager, so unloading the scene
     kills a half-finished tutorial instead of leaving a coroutine pointed at
     destroyed objects.
+
+ADDED FOR THE GUIDED ONBOARDING (2026-09-23)
+--------------------------------------------
+  Awake now subscribes to SceneManager.sceneLoaded; OnDestroy unsubscribes.
+
+  HandleSceneLoaded clears IsPlaying / PlayingId when a scene loads and the
+  runner is gone. WHY: the runner lives on the overlay and dies with its scene,
+  but this manager is DontDestroyOnLoad - so IsPlaying would stay true forever
+  after a tutorial was cut short by a scene load, and Play() would then refuse
+  EVERY later tutorial. That matters here because the onboarding chain
+  deliberately spans a scene load (Level_1_Stage_6 -> MenuScene); without this
+  the second half could never start.

@@ -4,57 +4,88 @@
   Type : MonoBehaviour
   Layer: Tutorial
   Prefab: Assets/PREFABS/Tutorial/TutorialOverlay.prefab
-  Scenes: Tutorial_Board_01
+  Scenes: Tutorial_Board_01 (authored); MenuScene, Level_1_Stage_6 and
+          OnBoarding Test get one spawned at runtime by TutorialAutoAnchors
 ================================================================================
 
 PURPOSE
 -------
-The tutorial screen furniture: one canvas holding the pointing hand, the caption,
-a dimmer and a full-screen input blocker. Drop the prefab into any scene that
-needs a tutorial - it is the ONLY scene-side dependency of the whole system.
+The tutorial screen furniture: one canvas holding the pointing hand, the fixed
+caption, the anchored tooltip, a dimmer and the focus gate. Drop the prefab into
+any scene that needs a tutorial - it is the ONLY scene-side dependency of the
+whole system.
 
 PREFAB CONTENTS
 ---------------
-  TutorialOverlay   Canvas (Screen Space - Overlay, sortingOrder 100),
+  TutorialOverlay   Canvas (sortingOrder forced to 1100 at runtime),
                     CanvasScaler 1125x2436 match=1 (same as the gameplay
                     canvases), GraphicRaycaster, TutorialOverlay, TutorialRunner
     Dimmer          full-screen black Image + CanvasGroup, INACTIVE
-    Blocker         full-screen transparent raycast target, INACTIVE
+    Blocker         full-screen transparent raycast target, INACTIVE - BROKEN,
+                    see NOTES. Superseded by FocusGate
     Caption         TMP text + CanvasGroup, anchoredPosition (0, -520),
                     font LILITAONE-REGULAR SDF, size 58, white, centred
     Hand            TutorialHand -> Ripple, HandSprite
+  Built at runtime when the prefab does not carry them:
+    FocusGate       TutorialFocusGate + four scrim plates (first sibling)
+    Tooltip         TutorialTooltip -> Bubble -> Label, Tail
 
 INSPECTOR FIELDS
 ----------------
-  canvas, hand, caption, dimmer, blocker
+  canvas, hand, caption, tooltip, focusGate, dimmer, blocker
+  forceSortingOrder (int) 1100. Negative = leave whatever the prefab says
 
 PUBLIC API
 ----------
-  Canvas / Hand / Caption
+  Canvas / Hand / Caption / Tooltip / Focus
   SetDim(alpha)        0 = fully lit board
-  SetBlockInput(bool)
-  ClearAll()           back to "nothing showing"
+  SetBlockInput(bool)  now routed through the focus gate
+  ClearAll()           back to "nothing showing", AND gives input back
   static FindInScene()
 
 FLOW
 ----
   Awake -> if the canvas is Screen-Space-Camera with no camera, claim Camera.main
            (a prefab cannot reference a scene camera, so such a canvas would
-           render nothing) -> hand.Configure(canvas) -> dim 0, blocker off
+           render nothing)
+        -> force the sorting order
+        -> EnsureParts() builds FocusGate and Tooltip if missing
+        -> hand/tooltip/focusGate .Configure(canvas)
+        -> dim 0, input unblocked
 
 HOW IT CONNECTS
 ---------------
   - TutorialManager finds it (FindInScene) when a trigger does not name one, and
     puts a TutorialRunner on it.
+  - TutorialAutoAnchors spawns it when a scene has none.
+  - TutorialRunner exposes Hand / Tooltip / Focus from here to the steps.
 
 NOTES
 -----
-  - The dimmer and blocker exist but are switched OFF. The first tutorial matches
-    the reference video, which keeps the board fully lit and fully playable. They
-    are here so a later "spotlight this button" tutorial needs no new prefab.
-  - The canvas is Screen-Space-OVERLAY on purpose: always on top, and no
-    dependency on a camera being assigned. Note that means camera-render
-    screenshots (Unity MCP capture) will NOT show the tutorial layer - that is
-    expected, not a bug.
+  - THE BLOCKER WAS BROKEN FROM THE START. In the prefab its Image has
+    color.a = 0 AND m_CullTransparentMesh: 1, so Unity culls the mesh and the
+    GraphicRaycaster never sees it - SetBlockInput(true) did literally nothing
+    for as long as it existed. SetBlockInput now delegates to TutorialFocusGate,
+    which builds its plates with cullTransparentMesh off and floors the alpha at
+    1/255. The old `blocker` object is force-disabled and never relied on.
+  - forceSortingOrder = 1100 is not arbitrary. It must clear MenuScene's
+    TopCanvas (99), the combat health bars (HealthBar.onTopSortingOrder = 500)
+    and the roguelite card panel (RogueliteManager.panelSortingOrder = 1000).
+    The prefab's authored 100 was under three of those.
+  - EnsureParts puts FocusGate FIRST and the Hand LAST, because sibling order is
+    draw order: a scrim drawn over the hand would hide the very thing it points
+    with.
+  - Camera-render screenshots (Unity MCP capture) may not show the tutorial
+    layer - that is expected, not a bug.
   - Caption y = -520 sits just under the board, which spans canvas y -340..+340
-    in Tutorial_Board_01. Re-check it if the board framing changes.
+    in Tutorial_Board_01. Re-check it if the board framing changes. The guided
+    onboarding does not use the caption at all - it uses Tooltip.
+
+2026-09-24 — FocusFx
+--------------------
+  New field focusFx (TutorialFocusFx) + property Fx, built at runtime by
+  EnsureParts when the prefab does not carry one, and bound to the gate.
+  It is placed at the gate's sibling index + 1, so draw order is:
+      FocusGate, FocusFx, Dimmer, Blocker, Caption, Tooltip, Hand
+  (verified live). The halo must draw ABOVE the dim plates - it spills onto the
+  darkened area and must not be darkened itself - but under the tooltip and hand.

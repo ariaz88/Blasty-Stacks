@@ -19,17 +19,33 @@ RUNTIME STATE
   _board        lazily FindObjectOfType<BoardGridXY>(); null in non-board scenes
   _sequence     the running coroutine
 
+INSPECTOR FIELDS
+----------------
+  hardStopSeconds (float) 600. Ceiling on a WHOLE sequence, unscaled. The ONLY
+                  automatic release left — see the note at the end. 0 = none
+
 PUBLIC API
 ----------
-  Bind(overlay)            attach to an overlay and clear it
+  Bind(overlay)            attach to an overlay, clear it, hook the gate's abort
   Run(sequence, onDone)    run to the end, then call onDone
   Stop()                   cut it short (does NOT call onDone)
+  AbortSequence()          ask it to stop; onDone is NOT called, so no flag
+  AbortRequested
   IsRunning
+  Overlay / Hand / Tooltip / Focus
   TryResolve(target, out screenPos)     TutorialTarget -> screen position
+  TryResolveRect(target, out screenRect) -> the target's whole rectangle
+  IsTargetReady(target)                 on screen AND able to take a click
   ShowCaption / HideCaption
+  ShowTooltip(text, Func<Rect?>, side) / HideTooltip
   WaitFor(condition)                    coroutine that blocks on a condition
+  WaitFor(condition, timeoutSeconds, TutorialWaitResult)
   ResolveMatchHint()                    the gesture to demonstrate right now
   ResolveMatchHint(preferred, sticky, out chosenMover)
+
+  class TutorialWaitResult { bool timedOut; }
+      Out-parameter for WaitFor, which cannot have one because it is a coroutine.
+      A step must not treat "gave up" as "the player did it".
 
 RESOLVEMATCHHINT
 ----------------
@@ -51,11 +67,30 @@ HOW IT CONNECTS
 ---------------
   - TutorialManager creates/binds it on the overlay and calls Run.
   - Steps call back into it; TutorialBoardHints does the board reasoning.
+  - Bind subscribes to TutorialFocusGate.OnAbortRequested. That hatch is DISABLED
+    by default (blockedTapsToAbort = 0) and must stay that way.
 
 NOTES
 -----
   - WaitFor wraps its loop in try/finally. That matters: if the coroutine is
     stopped mid-wait, End() still runs and the watcher lets go of the STATIC
     MatchResolver.OnBlast hook, which would otherwise survive a scene load.
+  - RunSequence ALSO wraps the whole step loop in try/finally { ClearAll() }.
+    An exception thrown inside a step must never leave the focus gate shut with
+    the player locked out of their own game. OnDisable clears it too.
+  - An aborted sequence does NOT call onFinished. onFinished is what writes the
+    "already seen" save flag, and a lesson that was cut short has not been seen.
+  - hardStopSeconds is measured with Time.unscaledTime, not by accumulating
+    deltas: a step that yields one long nested coroutine only pumps once per
+    completion, so an accumulator would under-measure by whole minutes.
   - It lives on the overlay so unloading the scene takes a half-finished
     tutorial with it, rather than leaving a coroutine pointed at dead objects.
+
+2026-09-23 — hardStopSeconds IS NOW THE ONLY AUTOMATIC RELEASE
+---------------------------------------------------------------
+Raised 180 -> 600. Per-step giveUpAfterSeconds is authored to 0 in both
+onboarding sequences and TutorialFocusGate.blockedTapsToAbort defaults to 0, so
+this is the single remaining thing that will ever hand the screen back without
+the player completing the lesson. Keep it long, and do NOT add another
+"helpfully let them out" path — see the note in TutorialFocusGate.txt about the
+6-tap hatch that unlocked the game during the first play-test.

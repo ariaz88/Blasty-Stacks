@@ -3014,3 +3014,88 @@ _Durable choices with their reasons, so no session reopens them blindly._
 | 2026-09-06 | **A stage scene is ONE prefab instance (`LevelTemplate.prefab`) plus that stage's board pieces — not a folder of per-feature prefabs.** The board (`BoardGridXY` size, `BoardGhostMask.mask`, the `Blocks` groups) stays a per-instance override; everything else is shared. | A prefab cannot serialize a reference to a scene object, and this level's wiring crosses every boundary a "sensible" split would draw: `BattlePhaseTransition` alone reaches the camera, the Puzzle Board, `Top Shadow` and four Canvas panels; `PlayerWaveManager` reaches `BoardStages` under PlayerCastle, `Jump positions`, `EnemySpawner` and `MatchResolver`. Splitting into `LevelTemplate_UI` + `LevelTemplate_World` would have nulled those arrays silently — they would look fine in the Inspector of the prefab and be empty in the scene. The monolith is the only shape where "edit once, applies to all 20 levels" is actually true. Accepted cost: editing a stage means entering prefab mode or applying single properties, and **"Apply All" on an instance is destructive** (it publishes that stage's board to every other stage). |
 | 2026-09-06 | **Stages 2 and 3 adopted Stage 1's world layout wholesale — castle positions, camera framing, board world position — keeping only their own board *contents*.** | The user's rule was "everything except the table layout and the enemy progression comes from Level 1", and the base distance had just been retuned in Stage 1 (commit `b147e5e`). Stage 2's gates were 9.64 apart against Stage 1's 13.83, so keeping the old spacing would have meant Stage 1's camera move (`+7.12 +2`) framing the wrong thing. Piece positions are local to `BoardBG`, so moving the board to Stage 1's spot preserves which cell every piece occupies — the authored layout survives, only its placement on screen changed. Enemy difficulty needed no per-scene work at all: `EnemySpawner.RunLevel()` already reads `LevelManager.CurrentStage`. |
 
+
+## 2026-09-23 — Guided onboarding: focus gate, anchored tooltip, sandbox test scene
+
+**Goal.** Reproduce, for Blasty-Stacks, the pattern in `Assets/Arts/Reference videos/OnBoarding/OnBoarding 1.mkv`
+from second 8 on: a tooltip bubble and a pointing finger on exactly ONE UI element, with the entire rest
+of the screen non-clickable. Chain: first loss on stage 6 → LEAVE STAGE! → MenuScene → Units tab →
+first deployed hero card → Upgrade → Back.
+
+**Decisions taken by Arash.** (1) If the player cannot afford the upgrade, the chain does NOT start and
+no flag is consumed — he will say later when to bring it instead. (2) Tapping outside the highlight does
+nothing at all: no dim, no nudge. (3) REPLAY stays visible but dead on that first loss. (4) Quitting
+mid-chain restarts it from the Units step (one flag for the whole menu half).
+
+**Gate mechanism — a hole, not a promotion.** The approved plan said "blocker + promote the target above
+it with an overrideSorting Canvas". Switched to a four-plate scrim (top/bottom/left/right) that covers
+everything except a rectangle over the target, because: promotion adds and removes components on the
+game's own GameObjects so every abort path has to restore them; `ModalCanvasUtil.RemoveOverlayCanvas`
+destroys the Canvas unconditionally; and promotion leaves the whole screen live in the gap between one
+beat releasing and the next promoting — beat 2→3 spans a 0.35s tween. The scrim owns nothing outside
+itself, so an abort or a scene load cannot strand the player.
+
+**Three latent bugs found and fixed.**
+1. `TutorialOverlay.prefab`'s `Blocker` has `color.a = 0` AND `m_CullTransparentMesh: 1`. Unity culls the
+   mesh and `GraphicRaycaster` skips it, so `SetBlockInput(true)` had been a silent no-op since the
+   feature shipped in `a52ad7f`. `SetBlockInput` now routes through the focus gate, whose plates are
+   built with `cullTransparentMesh = false` and an alpha floor of 1/255.
+2. `TutorialConditionWatcher` hooked `anchor.GetComponent<Button>()`. `MyCard.prefab` has NO Button on
+   its root — its only Button is on a child literally named `Button` — so `AnchorClicked` could never
+   have fired on a hero card. Now `TutorialAnchor.ResolveButton()` (GetComponentInChildren).
+3. `TutorialManager.IsPlaying` was never cleared when the runner died with a scene load, and the manager
+   is DontDestroyOnLoad. Since this chain deliberately spans a scene load, the MenuScene half would have
+   been refused forever. Fixed with a `sceneLoaded` guard.
+
+**Sorting.** The overlay canvas was authored at `sortingOrder: 100`, under MenuScene's `TopCanvas` (99 —
+one point of margin), the combat health bars (`HealthBar.onTopSortingOrder = 500`) and the roguelite card
+panel (`RogueliteManager.panelSortingOrder = 1000`). `TutorialOverlay.forceSortingOrder` now forces 1100
+at runtime, so the prefab is not re-authored.
+
+**Anchors are wired at runtime, not in the scenes.** The targets are hostile to name matching: TWO objects
+are called `DEPLOYEDGridLayout (1)`, FIVE are called `BackButton`, and `UnitsButton_Selected ` carries a
+trailing space. `MainMenuPanelController` and `UnitsPanelController` already hold the right references in
+the Inspector, so read-only accessors were added (`UnitsButton`, `UnitsSelectedButton`,
+`DeployedContainer`, `UpgradeButton`, `UpgradeDisabledButton`, `DetailBackButton`, `LoseGame.MainMenuButton`)
+and `TutorialAutoAnchors` attaches the anchors from those. Getters only — no behaviour change. It also
+spawns the overlay prefab when a scene has none, so adding the onboarding to a scene is one GameObject.
+
+**Two swap hazards, handled the same way.** `UnitsButton_InActive → _Selected` and
+`UpgradeButton → UpgradeButton_DISABLED` are SetActive-swaps. Both halves of each pair get the SAME anchor
+id — `TutorialAnchor.Find` returns the first ENABLED one — and `AnchorClicked` re-hooks every `Tick`.
+
+**Beat 3 ends on `UnitUpgraded`, not on a click.** New condition kind riding the existing
+`PlayerProgressionService.OnUnitUpgraded`. A tap the game refuses cannot advance the chain, and it does not
+race `WireUpgradeButton`'s `onClick.RemoveAllListeners()`.
+
+**Waiting, not fighting.** `MainMenuPanelController.SelectMenu` sets `blocksRaycasts = false` on Home/Units/
+TestMenu for the whole slide and rewrites those CanvasGroups on every tab change, so writing to them is
+pointless. `TutorialAnchor.IsInteractableNow()` walks up for a blocking CanvasGroup and the step simply
+holds until the target can really take a click.
+
+**Escape hatches (three, independent).** 6 taps on the blocked area → `OnAbortRequested` → abort;
+per-step `resolveTimeout` (10s) and `giveUpAfterSeconds` (90-120s); `TutorialRunner.hardStopSeconds` (180s)
+over the whole sequence. Plus `try/finally { ClearAll() }` around the step loop and `Release()` in
+`OnDisable`. **An abort never calls `onFinished`, so it never writes the "seen" flag** — the lesson retries.
+
+**Sandbox test scene.** `Assets/Scenes/TestScenes/OnBoarding Test.unity` is a copy of MenuScene plus one
+rig object (`TutorialSandbox` + `TutorialAutoAnchors` + `TutorialTrigger` with no prerequisite and
+`forceReplayInEditor`). `TutorialSandbox` sets `SaveSystem.SuppressWrites = true` in Awake — `Save()` is the
+single choke point every persistence path funnels through, so one guard covers currency, unit levels, stars
+and tutorial flags — and grants 999999/99999/9999. `OnDestroy` clears the flag AND calls the new
+`SaveSystem.ReloadFromDisk()`, because the in-memory cache is full of fake numbers by then and a later save
+in the same Editor session would otherwise write the sandbox wallet into the real save. It is
+`#if UNITY_EDITOR`-guarded and warns-and-returns outside the Editor. **This is NOT the save/load toggle
+deleted on 2026-09-22** — that was user-facing and could disable saving in the real game.
+
+**Scene edits (hand-written YAML, will read as noise in the diff).** One root "Onboarding Rig" GameObject
+added to `MenuScene.unity` (fileIDs 812000x, `requiresTutorialId: onboard_leave_stage`) and to
+`Level_1_Stage_6.unity` (8130003/4, the loss director). The lose-side rig went into the STAGE SCENE rather
+than `LevelTemplate.prefab` — stage 6 is the only stage that needs it, and prefab-instance surgery is far
+riskier than a scene root object. To cover another stage later, copy the rig and change `stage1Based`.
+
+**Verified via Unity MCP, not by playing:** zero compile errors; both sequence assets import; all 4+1
+`SerializeReference` steps deserialize to `TutorialFocusTapStep` with the right anchors and condition kinds
+(including `UnitUpgraded`); all 6 new script GUIDs and all 3 scenes resolve; every new accessor exists;
+`SuppressWrites` is False at rest. **NOT play-tested — nobody has watched the hand, the bubble or the gate
+on screen.**

@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// The entry point of the tutorial system, and the owner of the "player has
@@ -34,6 +35,29 @@ public class TutorialManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        SceneManager.sceneLoaded += HandleSceneLoaded;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) SceneManager.sceneLoaded -= HandleSceneLoaded;
+    }
+
+    /// <summary>
+    /// The runner lives on the overlay, which dies with its scene - but this manager
+    /// is DontDestroyOnLoad, so IsPlaying would stay true forever after a tutorial
+    /// was cut short by a scene load, and Play() would then refuse every later
+    /// tutorial. That matters here: the onboarding chain deliberately spans a scene
+    /// load, so without this the second half could never start.
+    /// </summary>
+    private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (!IsPlaying || _runner) return;
+
+        Debug.Log($"[Tutorial] '{PlayingId}' lost its runner to a scene load - clearing the playing flag.");
+        IsPlaying = false;
+        PlayingId = null;
     }
 
     /// <summary>

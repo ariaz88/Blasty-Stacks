@@ -17,25 +17,32 @@ KINDS
   MatchBlasted   the board blasted a group, `requiredCount` times (0 counts as 1)
   BoardEmpty     no occupied cells left on the BoardGridXY
   AnchorClicked  a UI Button carrying a TutorialAnchor was pressed
+  UnitUpgraded   a hero actually LEVELLED UP (not just "the button was tapped")
   Never          never satisfied on its own; useful while authoring
 
 FIELDS
 ------
-  kind, seconds, requiredCount, anchorId
+  kind, seconds, requiredCount, anchorId, unitId
   static ForDuration(s), static ForMatch(count)
+  unitId: UnitUpgraded only. 0 or less = any hero.
 
 TUTORIALCONDITIONWATCHER
 ------------------------
   Begin(condition, board)   subscribes
-  Tick(unscaledDeltaTime)   polls; sets IsSatisfied
+  Tick(unscaledDeltaTime)   polls; sets IsSatisfied; RE-HOOKS swapped targets
   End()                     unsubscribes
 
 HOW IT CONNECTS
 ---------------
-  - TutorialRunner.WaitFor drives the watcher, wrapped in try/finally.
+  - TutorialRunner.WaitFor drives the watcher, wrapped in try/finally. There is
+    also a WaitFor(condition, timeoutSeconds, TutorialWaitResult) overload for
+    guided steps that must not hang forever.
   - MatchBlasted rides the EXISTING static hook MatchResolver.OnBlast, so nothing
     in the puzzle code had to change to support it.
   - BoardEmpty uses the existing BoardGridXY.HasAnyOccupiedCells().
+  - AnchorClicked goes through TutorialAnchor.ResolveButton().
+  - UnitUpgraded rides the EXISTING PlayerProgressionService.OnUnitUpgraded,
+    reached through GameStartManager.Instance.ProgressionService.
 
 NOTES
 -----
@@ -44,5 +51,41 @@ NOTES
     why TutorialRunner.WaitFor uses try/finally rather than a plain loop.
   - TapAnywhere reads legacy Input (the project ships activeInputHandler = Both,
     and BoardInputController is legacy too), so it behaves like the rest of the
-    game.
-  - AnchorClicked logs a warning if the named anchor has no Button on it.
+    game. AnchorClicked by contrast rides Button.onClick, i.e. the real
+    EventSystem pipeline (InputSystemUIInputModule).
+  - AnchorClicked calls HookAnchorButton EVERY Tick, not just in Begin. The
+    button an anchor stands for can be SWAPPED under us: UnitsButton_InActive ->
+    UnitsButton_Selected, and UpgradeButton -> UpgradeButton_DISABLED. The hook
+    is a no-op when nothing changed.
+  - ResolveButton (not GetComponent<Button>) is what makes AnchorClicked work on
+    a hero card, whose only Button is on a child named "Button".
+  - UnitUpgraded exists so beat 3 of the onboarding cannot be advanced by a tap
+    the game REFUSES. It also avoids racing WireUpgradeButton, which calls
+    onClick.RemoveAllListeners() whenever it re-evaluates affordability.
+  - HookProgression is also re-run every Tick, because GameStartManager builds
+    the service during boot and it may not exist on the first frames of a
+    directly-opened scene.
+
+2026-09-23 FIX — AnchorClicked RE-ADDS ITS LISTENER EVERY TICK
+---------------------------------------------------------------
+Reported as "after the upgrade I press Back and the 'Go back' tooltip stays on
+screen". The Back click worked (the panel's own handler ran and the screen
+changed) but the tutorial never noticed, so step 4 waited forever.
+
+CAUSE: UnitsPanelController.WireBackButton does
+    backButton.onClick.RemoveAllListeners();          (UnitsPanelController.cs:415)
+and WireUpgradeButton does the same on its two buttons. Those run again on every
+currency change and after every upgrade — HandleUnitUpgraded calls
+ShowDetail_Deployed, which calls WireBackButton. So OUR subscription was wiped
+moments after step 4 added it.
+
+HookAnchorButton used to early-out with "if (button == _hookedButton) return;",
+which is not enough: the Button COMPONENT is still the same object while its
+listener list is emptied underneath us. It now does Remove-then-Add on every
+Tick, which costs nothing measurable and cannot be silently unsubscribed.
+Remove-then-Add (not bare Add) is required — UnityEvent would otherwise stack a
+duplicate listener every frame.
+
+GENERAL RULE for this codebase: never assume a UnityEvent subscription survives.
+Several UI controllers here re-wire their buttons with RemoveAllListeners on
+routine state changes.

@@ -40,3 +40,14 @@ NOTES
   - Plain white text, no outline. TMP does not work with the UI Outline/Shadow
     components, so an outline would mean a material instance baked into the
     prefab - not worth it while the backdrop stays dark.
+
+2026-09-23 FIX — NO MORE "COROUTINE COULDN'T BE STARTED" ERROR
+---------------------------------------------------------------
+StartFade now snaps the alpha instead of starting a coroutine when the component
+is not activeAndEnabled.
+
+TutorialOverlay.ClearAll() is called from TutorialRunner.OnDisable, by which
+point the Caption GameObject can already be inactive — which logged
+"Coroutine couldn't be started because the the game object 'Caption' is
+inactive!" as a red console error every single time a tutorial ended. Nothing is
+on screen at that moment, so there is nothing to fade.

@@ -52,6 +52,11 @@ public struct TutorialTarget
     [Tooltip("Final nudge in screen pixels, applied after resolving.")]
     public Vector2 pixelOffset;
 
+    [Tooltip("Rect size in screen pixels used when the target has no RectTransform " +
+             "of its own (a board cell, a world point). Ignored for UI anchors, " +
+             "which report their real rectangle.")]
+    public Vector2 fallbackRectSize;
+
     /// <summary>
     /// Resolves to a screen-space position. Returns false when the target
     /// cannot be resolved right now (no board, anchor not in the scene, ...),
@@ -109,6 +114,39 @@ public struct TutorialTarget
         }
 
         screenPos += pixelOffset;
+        return true;
+    }
+
+    /// <summary>
+    /// The target's whole RECTANGLE in screen space - what the focus gate punches a
+    /// hole in and what the tooltip hangs off.
+    ///
+    /// A SceneAnchor on a UI element reports its real rect, so the spotlight frames
+    /// the entire button (or the entire hero card) rather than a fixed box around
+    /// its centre. Everything else has no rect of its own and falls back to a square
+    /// around the resolved point.
+    /// </summary>
+    public bool TryResolveScreenRect(Camera worldCamera, BoardGridXY board, out Rect screenRect)
+    {
+        screenRect = default;
+
+        Vector2 fallback = fallbackRectSize.x > 0f && fallbackRectSize.y > 0f
+            ? fallbackRectSize
+            : new Vector2(180f, 180f);
+
+        if (kind == Kind.SceneAnchor)
+        {
+            var anchor = TutorialAnchor.Find(anchorId);
+            if (!anchor) return false;
+            if (!anchor.TryGetScreenRect(worldCamera, fallback, out screenRect)) return false;
+
+            screenRect.position += pixelOffset;
+            return true;
+        }
+
+        if (!TryResolveScreen(worldCamera, board, out var center)) return false;
+
+        screenRect = new Rect(center - fallback * 0.5f, fallback);
         return true;
     }
 

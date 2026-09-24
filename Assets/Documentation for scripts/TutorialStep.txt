@@ -45,14 +45,41 @@ THE STEPS
       firstPairAtCell names the stack to teach first, because the shortest drag
       is not always the clearest first lesson.
 
+  TutorialFocusTapStep            <- what the guided ONBOARDING uses
+      tooltip, tooltipSide, at (TutorialTarget), holePadding, dimAlpha, timings,
+      until (default AnchorClicked), resolveTimeout, giveUpAfterSeconds,
+      keepGateAfter, settleAfter
+      A tooltip and a pointing hand on ONE element, with every other pixel of the
+      screen dead. Three things make it survive the real menu:
+
+        1) IT WAITS for the target to be present AND able to take a click.
+           MainMenuPanelController turns blocksRaycasts off on the whole panel
+           for the 0.35s of its slide, so a hand shown on arrival would point at
+           a dead button for a third of a second. Fighting those CanvasGroups is
+           useless - the controller rewrites them on every tab change - so the
+           step simply holds.
+
+        2) Target, hole and tooltip are resolved through a LIVE lookup every
+           frame, never cached: the first deployed card is Instantiated fresh on
+           every panel open, and the Upgrade button is two different GameObjects
+           that swap by affordability.
+
+        3) The gate stays shut BETWEEN beats (keepGateAfter). Releasing it per
+           step would hand the player a fully live screen during the panel tween
+           the next beat is still waiting on. Turn it OFF on the last step.
+
+      An AnchorClicked `until` with no anchorId of its own defaults to the
+      anchor the step is pointing at, which is what it always means.
+
   TutorialWaitStep
       seconds. Dead time, e.g. to let a blast animation finish.
 
 HOW IT CONNECTS
 ---------------
   - Lives inside TutorialSequenceSO.steps.
-  - Calls back into TutorialRunner for target resolving, the hand, the caption
-    and condition waiting. See TutorialRunner and TutorialBoardHints.
+  - Calls back into TutorialRunner for target resolving, the hand, the caption,
+    the tooltip, the focus gate and condition waiting. See TutorialRunner,
+    TutorialFocusGate, TutorialTooltip and TutorialBoardHints.
 
 NOTES
 -----
@@ -60,3 +87,7 @@ NOTES
     tutorial instead of one asset per step.
   - Because [SerializeReference] matches by type name, renaming a step class
     silently empties that row in every existing sequence asset.
+  - TutorialFocusTapStep NEVER treats a timeout as success. Both resolveTimeout
+    (target never appeared) and giveUpAfterSeconds (player never acted) release
+    the screen and call runner.AbortSequence(), which deliberately does not mark
+    the tutorial as seen - so it gets another chance later.

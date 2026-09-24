@@ -151,3 +151,49 @@ NOTES
     used to live here - MainMenuPanelController1 through 6 - were removed in
     the 2026-08-20 duplicate-class cleanup, reducing the file from roughly
     1,000 lines to under 300).
+
+ADDED FOR THE GUIDED ONBOARDING (2026-09-23)
+--------------------------------------------
+  UnitsButton / UnitsSelectedButton (read-only properties)
+      Expose the two wired Units nav buttons so TutorialAutoAnchors can attach
+      TutorialAnchors without matching GameObject names - one of them is
+      literally called "UnitsButton_Selected " with a trailing space.
+      UpdateButtonVisuals SetActive-swaps the pair, so both get the SAME anchor
+      id and TutorialAnchor.Find returns whichever is currently active.
+
+      Getters only - no behaviour change.
+
+  One existing behaviour the onboarding has to work around, unchanged:
+    SelectMenu sets interactable/blocksRaycasts = false on Home/Units/TestMenu
+    for the whole 0.35s slide (restored in the tween's OnComplete), and rewrites
+    those CanvasGroups on every SelectMenu and PositionPanelsForCurrent. Writing
+    to them from outside is therefore pointless - the tutorial WAITS for
+    TutorialAnchor.IsInteractableNow() instead of trying to force the issue.
+
+2026-09-24 — TAB SELECTION POP
+------------------------------
+When a nav tab becomes selected, its icon swells briefly and settles instead of
+the old instant swap: scale 0.88 -> 1.08 (0.10 s, OutQuad) -> 1.00 (0.12 s,
+InOutQuad), unscaled (SetUpdate(true)). Matches the reference video's Hero tab.
+
+  Fields: tabPopEnabled (true), tabPopOnlyDuringTutorial (TRUE - decided
+  2026-09-24: normal tab switching stays instant; false = every tab change),
+  tabPopFrom 0.88, tabPopPeak 1.08, tabPopUpTime 0.10,
+  tabPopSettleTime 0.12.
+
+  Driven from the end of UpdateButtonVisuals, the single live path for tab
+  selection (reached only through SelectMenu; no numbered duplicate exists).
+
+  !! Pops only on a REAL change. UpdateButtonVisuals is also called by Start() to
+     set the default tab, and by SelectMenu when the tapped tab is already the
+     current one - neither may pop. Tracked by _tabVisualsInitialized and
+     _lastVisualTab.
+  !! Animates the ICON CHILD, never the button root. Every nav button carries
+     UIButtonPressScaler, which owns the root's scale (its OnEnable resets it and
+     its press tween drives it) - tweening the root would fight it.
+  !! The icon is found as the LARGEST Image among the button's direct children,
+     not by name: all three Selected buttons call their icon "Home Icon" (a
+     copy-paste), and the other children are a label and two small arrows.
+  - NOT measured frame by frame: the per-frame probe was blocked first by the
+    tutorial's pre-roll (correctly) and then by a live user session in the same
+    editor. Verified by compile and by code path only.
