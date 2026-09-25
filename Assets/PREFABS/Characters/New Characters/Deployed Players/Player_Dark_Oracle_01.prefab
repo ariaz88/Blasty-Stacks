@@ -1026,6 +1026,7 @@ GameObject:
   - component: {fileID: 3289561233294917892}
   - component: {fileID: 8330400894131005343}
   - component: {fileID: 616977421940963590}
+  - component: {fileID: 4718546652211559122}
   m_Layer: 7
   m_Name: Player_Dark_Oracle_01
   m_TagString: Player
@@ -1103,13 +1104,11 @@ MonoBehaviour:
   moveSpeed: 0.6
   canMove: 1
   isUnlocked: 0
-  marchSpeedBoost: 1.3
   actualMoveSpeed: 0
   intendedMoveSpeed: 0
   forwardProgress: 0
   isFormationStepping: 0
   faceCenterOnStart: 1
-  retargetHysteresis: 0.2
   anchorSwitchHysteresis: 0.3
   facingDeadZoneX: 0.12
   enemyIsInLeft: 0
@@ -1225,10 +1224,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 64
   use2D: 1
-  allowNearestSwitch: 0
-  onlySwitchIfInFront: 1
   respectFOV: 0
-  retargetHysteresis: 0.35
 --- !u!114 &3289561233294917892
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1325,6 +1321,26 @@ MonoBehaviour:
   unitsDatabase: {fileID: 11400000, guid: 1eead485eb9802f4c8d136eaf6de630f, type: 2}
   progressionConfig: {fileID: 11400000, guid: 3665f1da392e42549934aab9a641a619, type: 2}
   unitId: 2
+--- !u!114 &4718546652211559122
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9103145304014492134}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10b4e56c061373b49ab7c9ea3f0ebeeb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HeroAttackVfx
+  vfxPrefab: {fileID: 5856580400523806944, guid: c4421e7655560054eb409ee82eb1e119, type: 3}
+  offset: {x: 0.139, y: 0.285}
+  scale: 1
+  sortingLayerName: Default
+  sortingOrder: 20
+  replacedRenderers:
+  - {fileID: 987108435777160448}
+  poolSize: 3
 --- !u!1001 &3049830829443268735
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1523,6 +1539,11 @@ PrefabInstance:
 --- !u!95 &62325218528966818 stripped
 Animator:
   m_CorrespondingSourceObject: {fileID: 3066459382179428573, guid: 7ed760b00eb3fc547aff637ae070438f, type: 3}
+  m_PrefabInstance: {fileID: 3049830829443268735}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &987108435777160448 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 2873794776242210175, guid: 7ed760b00eb3fc547aff637ae070438f, type: 3}
   m_PrefabInstance: {fileID: 3049830829443268735}
   m_PrefabAsset: {fileID: 0}
 --- !u!1 &4061019863923031584 stripped

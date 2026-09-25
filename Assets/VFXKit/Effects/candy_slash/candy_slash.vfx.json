@@ -1,0 +1,310 @@
+{
+ "name": "candy_slash",
+ "loop": false,
+ "duration": 0.4,
+ "prewarm": false,
+ "notes": "Green/red striped double arc (candy-cane look). Frame-by-frame read of ScreenRecorderProject524.mkv #653-662 21.77-22.07s and #724-734 24.13-24.47s; timing table in make_arc.py.txt. 4-5 parallel brush stripes (dark-green outer, thick red inner, thin green/red between), holds 0.067s, sweeps ~70 deg clockwise at 0.1s turning lime, thins and goes green by 0.2s, thin lime streak at the bottom, gone 0.33s. NOT wired to a hero: built on the generic Spriter-rig swing, use HeroAttackVfx offset (0.139,0.285), scale 1. Arc outer radius 0.90 = size 1.9.",
+ "reference": "Assets/Arts/Reference videos/ScreenRecorderProject524.mkv @21.77-22.07s, 24.13-24.47s",
+ "view": {
+  "center": [
+   0.0,
+   -0.0001
+  ],
+  "size": 2.1851
+ },
+ "layers": [
+  {
+   "name": "arc",
+   "enabled": true,
+   "texture": "candy_arc.png",
+   "tiles": [
+    4,
+    4
+   ],
+   "flipbook_cycles": 1,
+   "shader": "alpha",
+   "intensity": 1.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.33,
+    0.33
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    1.9,
+    1.9
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 1,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 1,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "point",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 1.0,
+     "c": "#ffffff",
+     "a": 1.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "lime_sparks",
+   "enabled": true,
+   "texture": "spark",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 2.5,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "stretched",
+   "length_scale": 1.0,
+   "velocity_scale": 0.06,
+   "delay": 0.0,
+   "lifetime": [
+    0.12,
+    0.25
+   ],
+   "speed": [
+    1.0,
+    2.4
+   ],
+   "size": [
+    0.03,
+    0.05
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.4,
+   "max": 80,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0.09,
+     "count": 10,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "circle",
+    "radius": 0.82,
+    "angle": 0.0,
+    "arc": 80.0,
+    "thickness": 0.2,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     90.0,
+     0.0,
+     -110.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#f4ffc0",
+     "a": 1.0
+    },
+    {
+     "t": 0.4,
+     "c": "#a0e030",
+     "a": 0.9
+    },
+    {
+     "t": 1.0,
+     "c": "#e03020",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 1.5,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  }
+ ],
+ "textures": [
+  {
+   "id": "candy_arc.png",
+   "file": "candy_arc.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  },
+  {
+   "id": "spark",
+   "file": "spark.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  }
+ ]
+}

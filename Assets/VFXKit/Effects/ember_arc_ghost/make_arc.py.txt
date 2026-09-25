@@ -1,0 +1,48 @@
+"""Ember arc GHOST variant (Reaper, blue-white) of the thin crescent line - single static texture, colours baked.
+
+Frame-by-frame read of ScreenRecorderProject524.mkv, thin red arc in front of the
+lava demon (2.50-3.60 s, e.g. #75-#96 then #99-#108):
+  - one STATIC crescent line, opening toward the character; thin at the tips,
+    slightly thicker in the middle; semi-transparent red (~#c83a20) with a soft glow.
+  - appears in ~2 frames, HOLDS ~0.7 s with a slight flicker, gone in ~2 frames,
+    re-appears on the next attack. Reads as a strike / reach mark.
+The fade-in, flicker and fade-out live in the particle's colour gradient (spec),
+so this texture is just the shape. Texture space [-1,1]^2, y up, arc centred at
+(0,0) spanning -70..70 deg (the bulge faces +X = the hero's facing).
+"""
+import os
+import numpy as np
+from PIL import Image
+
+N = 256
+R_OUT = 0.95
+
+
+def smooth(e0, e1, x):
+    t = np.clip((x - e0) / (e1 - e0), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+ys, xs = np.mgrid[0:N, 0:N]
+x = (xs + 0.5) / N * 2 - 1
+y = 1 - (ys + 0.5) / N * 2
+r = np.hypot(x, y)
+th = np.degrees(np.arctan2(y, x))
+u = (th + 70) / 140
+inside = (u >= 0) & (u <= 1)
+thick = 0.012 + 0.05 * np.sin(np.pi * np.clip(u, 0, 1)) ** 1.2
+d = (R_OUT - r) / thick
+line = smooth(-0.35, 0.0, d) * (1 - smooth(0.7, 1.2, d))
+glow = np.exp(-((R_OUT - thick * 0.5 - r) / 0.07) ** 2) * 0.35
+a = np.clip(line * 0.85 + glow, 0, 1) * inside * smooth(0.0, 0.1, u) * (1 - smooth(0.9, 1.0, u))
+RED = np.array([0.45, 0.62, 0.95]); HOT = np.array([0.88, 0.95, 1.0])
+k = np.clip(line, 0, 1)[..., None]
+c = RED * (1 - k) + HOT * k
+img = np.dstack([c, a])
+here = os.path.dirname(os.path.abspath(__file__))
+os.makedirs(os.path.join(here, "textures"), exist_ok=True)
+Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8), "RGBA").save(os.path.join(here, "textures", "ember_arc_ghost.png"))
+bg = np.array([0.43, 0.30, 0.18])
+comp = img[..., :3] * img[..., 3:] + bg * (1 - img[..., 3:])
+Image.fromarray((comp * 255).astype(np.uint8)).save(os.path.join(here, "arc_preview.png"))
+print("ok")

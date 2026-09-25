@@ -1,0 +1,145 @@
+"""CowMinotaur_2 slash: arc flipbook + starburst flipbook (both 4x4, colours baked).
+
+Frame-by-frame read of ScreenRecorderProject524.mkv, pink slash with starburst
+(crescent #262-#276 8.73-9.20 s; starburst #268-#275 8.93-9.17 s). Times relative
+to the crescent's first frame:
+  CRESCENT
+  0.000-0.033  appears over the head: white core, hot-pink rim, head moving.
+  0.067-0.133  full crescent (~140 deg), lens-shaped, jagged pink cuts inside.
+  0.167        head reaches the bottom, crescent thins.
+  0.200-0.233  only the lower part left, turning CREAM-ORANGE, breaks into fragments.
+  0.267-0.367  orange sparks + small zig-zag fragments at the bottom.
+  0.430        gone.
+  STARBURST (on the enemy that is hit, 0.167 s after the crescent starts)
+  0.000-0.067  white-pink flash, spiky rays, one tall spike upward.
+  0.100        opens into a RING of pink lightning, centre clears.
+  0.133-0.200  faint red jagged ring, slightly larger. Gone at 0.23 s.
+
+Geometry = CowMinotaur_2's Slashing clip (same Spriter rig as the Dark Oracle):
+blade-tip circle centre (0.139, 0.285) from the hero root, r 0.682; event at clip
+0.05 s with the tip at ~160 deg; strike reaches -13 deg ~0.06 s real later.
+Texture space: [-1,1]^2, y up, arc centred at (0,0).
+"""
+import os
+import numpy as np
+from PIL import Image
+
+N = 256
+TILES = (4, 4)
+LIFE = 0.43
+A_START, A_END = 165.0, -95.0
+WINDOW = 150.0
+R_OUT = 0.95
+T_HEAD = 0.34
+
+WHITE = np.array([1.00, 0.97, 0.97])
+PINK = np.array([1.00, 0.22, 0.47])
+CREAM = np.array([1.00, 0.88, 0.62])
+ORANGE = np.array([1.00, 0.55, 0.18])
+
+STAR_LIFE = 0.23
+
+
+def smooth(e0, e1, x):
+    t = np.clip((x - e0) / (e1 - e0), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+ys, xs = np.mgrid[0:N, 0:N]
+x = (xs + 0.5) / N * 2 - 1
+y = 1 - (ys + 0.5) / N * 2
+r = np.hypot(x, y)
+th0 = np.degrees(np.arctan2(y, x))
+th = np.where(th0 < A_END - 20, th0 + 360, th0)
+ang = np.radians(th0)
+rng = np.random.default_rng(7)
+phases = rng.uniform(0, 2 * np.pi, 8)
+
+
+def head_deg(t):
+    return float(np.interp(t, [0.0, 0.033, 0.067, 0.133, 0.20, 0.43], [115, 15, -40, -78, -90, -95]))
+
+
+def burn(t):   # 0 = white/pink, 1 = cream/orange fragments
+    return float(np.interp(t, [0.0, 0.13, 0.20, 0.27], [0.0, 0.0, 0.7, 1.0]))
+
+
+def strength(t):
+    return float(np.interp(t, [0.0, 0.017, 0.20, 0.27, 0.36, 0.42], [0.85, 1.0, 1.0, 0.8, 0.35, 0.0]))
+
+
+def window(t):  # the arc shortens as it burns (only the lower part is left)
+    return WINDOW * float(np.interp(t, [0.0, 0.13, 0.20, 0.27, 0.43], [1.0, 1.0, 0.55, 0.35, 0.25]))
+
+
+def arc_frame(t):
+    h = head_deg(t)
+    u = (th - h) / window(t)
+    inside = (u >= -0.02) & (u <= 1.0) & (th <= A_START)
+    uc = np.clip(u, 0, 1)
+    thick = 0.012 + T_HEAD * (1 - 0.6 * burn(t)) * np.sin(np.pi * np.clip(1 - uc, 0, 1) ** 2.0) ** 0.8
+    d = (R_OUT - r) / thick
+    band = smooth(-0.05, 0.0, d) * (1 - smooth(0.9, 1.05, d)) * inside
+    band *= smooth(-0.02, 0.04, u) * (1 - smooth(0.85, 1.0, u))
+    b = burn(t)
+    # fragmentation along the arc once it burns
+    frag = 0.5 + 0.5 * np.sin(ang * 23 + phases[0] + 3 * np.sin(ang * 7)) * np.sin(ang * 9 + phases[1])
+    band *= 1 - b * smooth(0.62, 0.5, frag)
+    core = smooth(0.1, 0.3, d) * (1 - smooth(0.72, 0.95, d)) * (1 - 0.5 * b)
+    base = PINK * (1 - b) + ORANGE * b
+    hi = WHITE * (1 - b) + CREAM * b
+    c = base[None, None, :] * (1 - core[..., None]) + hi[None, None, :] * core[..., None]
+    cuts = np.zeros_like(r)
+    for k in range(4):
+        cuts += np.exp(-(np.sin(ang * (10 + 3 * k) + phases[2 + k]) / 0.07) ** 2) * np.exp(-((d - (0.3 + 0.12 * k)) / 0.05) ** 2)
+    cuts = np.clip(cuts, 0, 1) * core * (1 - b)
+    c = c * (1 - 0.85 * cuts[..., None]) + PINK * 0.85 * cuts[..., None]
+    glow = np.exp(-(np.clip(-d, 0, None) * thick / 0.05) ** 2) * (d < 0) * inside * (1 - smooth(0.7, 1.0, uc))
+    a = np.clip(band * 0.97 + 0.5 * glow, 0, 1) * strength(t)
+    c = np.where((glow > band)[..., None], (PINK * (1 - b) + ORANGE * b) * 0.95, c)
+    return np.dstack([np.clip(c, 0, 1), a])
+
+
+def star_frame(t):
+    """Starburst at the centre of its own texture: flash -> lightning ring -> faint red ring."""
+    rr = r / 0.9
+    flash = float(np.interp(t, [0.0, 0.02, 0.07, 0.11], [0.9, 1.0, 0.8, 0.0]))
+    ring = float(np.interp(t, [0.05, 0.10, 0.16, 0.23], [0.0, 1.0, 0.5, 0.0]))
+    ring_r = float(np.interp(t, [0.05, 0.23], [0.45, 0.72]))
+    # spiky rays: many thin spikes of random length, plus one tall spike upward
+    spikes = np.zeros_like(r)
+    for k in range(10):
+        a0 = phases[k % 8] + k * 0.63
+        spikes += np.exp(-((np.sin((ang - a0) / 2)) / 0.035) ** 2) * (rr < 0.35 + 0.25 * ((k * 37) % 7) / 7)
+    up = np.exp(-((ang - np.pi / 2) / 0.05) ** 2) * (rr < 0.9)
+    body = np.exp(-(rr / 0.42) ** 2)
+    f_a = np.clip(body * 1.2 + 0.8 * spikes + 0.9 * up, 0, 1) * flash
+    f_c = WHITE * smooth(0.38, 0.05, rr)[..., None] + PINK * (1 - smooth(0.38, 0.05, rr))[..., None]
+    # jagged lightning ring
+    jag = ring_r + 0.04 * np.sin(ang * 13 + phases[3]) + 0.03 * np.sin(ang * 29 + phases[4])
+    ring_a = np.exp(-((rr - jag) / 0.035) ** 2) * ring
+    ring_a *= 0.55 + 0.45 * (np.sin(ang * 7 + phases[5]) > -0.3)
+    ring_c = PINK * (1 - smooth(0.12, 0.2, t)) + np.array([0.85, 0.12, 0.2]) * smooth(0.12, 0.2, t)
+    a = np.clip(f_a + ring_a, 0, 1)
+    c = (f_c * f_a[..., None] + ring_c * ring_a[..., None]) / np.maximum(f_a + ring_a, 1e-4)[..., None]
+    return np.dstack([np.clip(c, 0, 1), a])
+
+
+def sheet(fn, life, name, here):
+    n = TILES[0] * TILES[1]
+    frames = [fn(life * i / n) for i in range(n)]
+    sh = np.zeros((N * TILES[1], N * TILES[0], 4))
+    for i, f in enumerate(frames):
+        rr_, cc = divmod(i, TILES[0])
+        sh[rr_ * N:(rr_ + 1) * N, cc * N:(cc + 1) * N] = f
+    Image.fromarray((np.clip(sh, 0, 1) * 255).astype(np.uint8), "RGBA").save(os.path.join(here, "textures", name + ".png"))
+    bg = np.array([0.43, 0.30, 0.18])
+    comp = sh[..., :3] * sh[..., 3:] + bg * (1 - sh[..., 3:])
+    Image.fromarray((comp * 255).astype(np.uint8)).save(os.path.join(here, name + "_preview.png"))
+
+
+here = os.path.dirname(os.path.abspath(__file__))
+os.makedirs(os.path.join(here, "textures"), exist_ok=True)
+sheet(arc_frame, LIFE, "cow_arc", here)
+sheet(star_frame, STAR_LIFE, "cow_star", here)
+print("ok")

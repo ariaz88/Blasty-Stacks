@@ -1,0 +1,453 @@
+{
+ "name": "mino_slash",
+ "loop": false,
+ "duration": 0.5,
+ "prewarm": false,
+ "notes": "Minotaur_02 hammer hit. Frame-by-frame read of ScreenRecorderProject524.mkv purple effects (crescent #666-675 22.20-22.50s, spinning ring #672-683 22.40-22.77s); full timing table in make_arc.py.txt. Arc: drawn head-first along the hammer path in ~0.055s, vivid purple with white-lilac outer rim, holds, turns deep purple/black at 0.2s, fades start->end, gone 0.3s. Ring: 3 crescents burst and spin clockwise (ease-out) into a ring, white-violet leading tips, black-purple tails, 2 arcs from 0.12s, thin/fade by 0.4s; placed where the hammer lands (-17 deg on the r0.80 hammer circle), delay 0.05s. Geometry = Minotaur_02 Attacking clip: hammer-head circle centre (0.159,0.392) from hero root, r 0.803; arc outer radius 0.95 = size 2.0. shape.position is [x,0,y] (z = world up).",
+ "reference": "Assets/Arts/Reference videos/ScreenRecorderProject524.mkv @22.20-22.77s",
+ "view": {
+  "center": [
+   0.1725,
+   0.0
+  ],
+  "size": 2.6967
+ },
+ "layers": [
+  {
+   "name": "arc",
+   "enabled": true,
+   "texture": "mino_arc.png",
+   "tiles": [
+    4,
+    4
+   ],
+   "flipbook_cycles": 1,
+   "shader": "alpha",
+   "intensity": 1.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.3,
+    0.3
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    2.0,
+    2.0
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 1,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 1,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "point",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 1.0,
+     "c": "#ffffff",
+     "a": 1.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "violet_flecks",
+   "enabled": true,
+   "texture": "dot",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 2.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.2,
+    0.35
+   ],
+   "speed": [
+    0.2,
+    0.7
+   ],
+   "size": [
+    0.025,
+    0.045
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": -0.05,
+   "max": 60,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0.04,
+     "count": 12,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "circle",
+    "radius": 0.72,
+    "angle": 0.0,
+    "arc": 150.0,
+    "thickness": 0.15,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     90.0,
+     0.0,
+     -20.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#f0d8ff",
+     "a": 1.0
+    },
+    {
+     "t": 0.5,
+     "c": "#b050f0",
+     "a": 0.8
+    },
+    {
+     "t": 1.0,
+     "c": "#6a20a0",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.8,
+   "noise": {
+    "strength": 0.6,
+    "frequency": 1.2,
+    "scroll": 0.5
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "ring",
+   "enabled": true,
+   "texture": "mino_ring.png",
+   "tiles": [
+    4,
+    4
+   ],
+   "flipbook_cycles": 1,
+   "shader": "alpha",
+   "intensity": 1.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.05,
+   "lifetime": [
+    0.4,
+    0.4
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    1.15,
+    1.15
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 1,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 1,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "point",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.77,
+     0.0,
+     -0.23
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 1.0,
+     "c": "#ffffff",
+     "a": 1.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  }
+ ],
+ "textures": [
+  {
+   "id": "dot",
+   "file": "dot.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  },
+  {
+   "id": "mino_arc.png",
+   "file": "mino_arc.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  },
+  {
+   "id": "mino_ring.png",
+   "file": "mino_ring.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  }
+ ]
+}

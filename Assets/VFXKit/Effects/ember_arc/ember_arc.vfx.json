@@ -1,0 +1,331 @@
+{
+ "name": "ember_arc",
+ "loop": false,
+ "duration": 0.9,
+ "prewarm": false,
+ "notes": "Thin red crescent line, static. Read of ScreenRecorderProject524.mkv 2.50-3.60s (#75-96, #99-108): appears in ~2 frames, HOLDS ~0.7s with a slight flicker, gone in ~2 frames; semi-transparent red with a soft glow; thin tips, thicker middle; bulge faces the hero's facing (+X). The fade/flicker is in the colour gradient. NOT wired to a hero: use HeroAttackVfx offset ~(0.35, 0.3) so the line sits in front of the hero at reach. Size 1.6 = line radius ~0.76.",
+ "reference": "Assets/Arts/Reference videos/ScreenRecorderProject524.mkv @2.50-3.60s",
+ "view": {
+  "center": [
+   0.0,
+   0.0
+  ],
+  "size": 1.863
+ },
+ "layers": [
+  {
+   "name": "arc",
+   "enabled": true,
+   "texture": "ember_arc.png",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "alpha",
+   "intensity": 1.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.8,
+    0.8
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    1.6,
+    1.6
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 1,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 1,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "point",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 0.0
+    },
+    {
+     "t": 0.08,
+     "c": "#ffffff",
+     "a": 0.75
+    },
+    {
+     "t": 0.3,
+     "c": "#ffffff",
+     "a": 0.6
+    },
+    {
+     "t": 0.5,
+     "c": "#ffffff",
+     "a": 0.75
+    },
+    {
+     "t": 0.72,
+     "c": "#ffffff",
+     "a": 0.6
+    },
+    {
+     "t": 0.9,
+     "c": "#ffffff",
+     "a": 0.7
+    },
+    {
+     "t": 1.0,
+     "c": "#ffffff",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "glow",
+   "enabled": true,
+   "texture": "ember_arc.png",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 0.6,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.8,
+    0.8
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    1.62,
+    1.62
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 1,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 1,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "point",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ff5a30",
+     "a": 0.0
+    },
+    {
+     "t": 0.08,
+     "c": "#ff5a30",
+     "a": 0.35
+    },
+    {
+     "t": 0.9,
+     "c": "#c83a20",
+     "a": 0.25
+    },
+    {
+     "t": 1.0,
+     "c": "#c83a20",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  }
+ ],
+ "textures": [
+  {
+   "id": "ember_arc.png",
+   "file": "ember_arc.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  }
+ ]
+}

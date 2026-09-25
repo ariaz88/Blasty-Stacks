@@ -718,6 +718,7 @@ GameObject:
   - component: {fileID: 5791225568383036754}
   - component: {fileID: 415443907802284971}
   - component: {fileID: 5790015690467145779}
+  - component: {fileID: 8260539330298790473}
   m_Layer: 6
   m_Name: Enemy_Reaper_Man_01
   m_TagString: Enemy
@@ -787,12 +788,15 @@ MonoBehaviour:
   rotationSpeed: 12
   faceCenterOnStart: 1
   playerIsInLeft: 0
+  behindTolerance: 0.35
+  retaliationMemory: 3
   reachedGate: 0
   gateStopPosition: {x: 0, y: 0}
   gateStopDistance: 0.6
   facingDeadZoneX: 0.05
   actualMoveSpeed: 0
   intendedMoveSpeed: 0
+  firstStrikeGrace: 3
 --- !u!114 &5845360971744291272
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -910,6 +914,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 848dae37a10c6a1448df8fba6c340e13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &8260539330298790473
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4367385366119628093}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10b4e56c061373b49ab7c9ea3f0ebeeb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HeroAttackVfx
+  vfxPrefab: {fileID: 5315174873730505444, guid: a903d8b720d86924087f12357f08a469, type: 3}
+  offset: {x: 0.139, y: 0.285}
+  scale: 1
+  sortingLayerName: Default
+  sortingOrder: 20
+  replacedRenderers:
+  - {fileID: 4405796425153008036}
+  poolSize: 3
 --- !u!1 &4906258336897589582
 GameObject:
   m_ObjectHideFlags: 0

@@ -1,0 +1,455 @@
+{
+ "name": "oracle_slash",
+ "loop": false,
+ "duration": 0.35,
+ "prewarm": false,
+ "notes": "Dark_Oracle_1 attack hit. Frame-by-frame read of ScreenRecorderProject524.mkv crimson scythe slash (#578-587 19.27-19.57s and #598-606 19.93-20.20s); full timing table in make_arc.py.txt. Moving-window arc: white-hot head with pink rim + jagged cuts, tail turns to black smoke; head sweeps ~110 -> -80 deg clockwise, the body burns to smoke by 0.13s, only black shards left at 0.2s, gone 0.27s. All arc motion is in the oracle_arc flipbook; the particle is static. Geometry = Dark Oracle staff-tip circle, centre (0.139,0.285) from hero root, r 0.682; arc outer radius 0.90 world = size 1.9 (R_OUT 0.95 in texture). Unity circle shape: rotation z = lowest angle, arc = span counter-clockwise.",
+ "reference": "Assets/Arts/Reference videos/ScreenRecorderProject524.mkv @19.27-19.57s, 19.93-20.20s",
+ "view": {
+  "center": [
+   0.0,
+   -0.0027
+  ],
+  "size": 2.1911
+ },
+ "layers": [
+  {
+   "name": "arc",
+   "enabled": true,
+   "texture": "oracle_arc.png",
+   "tiles": [
+    4,
+    4
+   ],
+   "flipbook_cycles": 1,
+   "shader": "alpha",
+   "intensity": 1.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.27,
+    0.27
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    1.9,
+    1.9
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 1,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 1,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "point",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 1.0,
+     "c": "#ffffff",
+     "a": 1.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "head_sparks",
+   "enabled": true,
+   "texture": "spark",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 2.5,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "stretched",
+   "length_scale": 1.0,
+   "velocity_scale": 0.06,
+   "delay": 0.0,
+   "lifetime": [
+    0.12,
+    0.22
+   ],
+   "speed": [
+    1.4,
+    2.8
+   ],
+   "size": [
+    0.035,
+    0.06
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.3,
+   "max": 80,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0.02,
+     "count": 7,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "circle",
+    "radius": 0.85,
+    "angle": 0.0,
+    "arc": 60.0,
+    "thickness": 0.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     90.0,
+     0.0,
+     -45.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 0.4,
+     "c": "#ff6a8a",
+     "a": 0.9
+    },
+    {
+     "t": 1.0,
+     "c": "#c01040",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 1.5,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "black_shards",
+   "enabled": true,
+   "texture": "spark",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "alpha",
+   "intensity": 1.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "stretched",
+   "length_scale": 3.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.16,
+    0.26
+   ],
+   "speed": [
+    0.6,
+    1.6
+   ],
+   "size": [
+    0.07,
+    0.13
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 80,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0.07,
+     "count": 12,
+     "cycles": 1,
+     "interval": 0.1
+    },
+    {
+     "time": 0.11,
+     "count": 10,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "circle",
+    "radius": 0.88,
+    "angle": 0.0,
+    "arc": 140.0,
+    "thickness": 0.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     90.0,
+     0.0,
+     -85.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#1a080c",
+     "a": 0.95
+    },
+    {
+     "t": 0.6,
+     "c": "#12060a",
+     "a": 0.8
+    },
+    {
+     "t": 1.0,
+     "c": "#12060a",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 2.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  }
+ ],
+ "textures": [
+  {
+   "id": "oracle_arc.png",
+   "file": "oracle_arc.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  },
+  {
+   "id": "spark",
+   "file": "spark.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  }
+ ]
+}

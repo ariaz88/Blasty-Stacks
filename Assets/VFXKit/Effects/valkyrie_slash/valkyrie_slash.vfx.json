@@ -1,0 +1,592 @@
+{
+ "name": "valkyrie_slash",
+ "loop": false,
+ "duration": 0.5,
+ "prewarm": false,
+ "notes": "Valkir3 attack hit, v3. Frame-by-frame read of ScreenRecorderProject524.mkv 2.0-3.0s (only slash: #6 2.200 .. #17 2.567). The reference is the ARC ONLY - no sparks, no flash. All motion lives in the valk_arc flipbook (make_arc.py.txt next to this file has the full timing table): appears with its head on the sword tip, head jumps to the swing end in ~1 frame, 0.2 s hold while the start end retracts, drop to ~30% at 0.30 s, head end vanishes last at 0.40 s. Widest at the head. Geometry = the Valkyrie's sword-tip circle (centre (0.139,0.264) from the hero root, r 0.684); arc outer radius 0.80 world = size 1.68 (R_OUT 0.95 in texture). Prefab origin = arc centre; HeroAttackVfx.offset puts it on the hero. v3.1 (user request): tiny sparks + embers added back on top of the arc. Unity circle shape: rotation z = lowest angle, arc = span counter-clockwise; radius 0.75 = on the band.",
+ "reference": "Assets/Arts/Reference videos/ScreenRecorderProject524.mkv @2.20-2.57s",
+ "view": {
+  "center": [
+   0.0,
+   0.0
+  ],
+  "size": 1.932
+ },
+ "layers": [
+  {
+   "name": "arc",
+   "enabled": true,
+   "texture": "valk_arc.png",
+   "tiles": [
+    4,
+    4
+   ],
+   "flipbook_cycles": 1,
+   "shader": "alpha",
+   "intensity": 1.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.4,
+    0.4
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    1.68,
+    1.68
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 1,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 1,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "point",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 1.0,
+     "c": "#ffffff",
+     "a": 1.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "sparks_start",
+   "enabled": true,
+   "texture": "spark",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 2.5,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "stretched",
+   "length_scale": 1.0,
+   "velocity_scale": 0.06,
+   "delay": 0.0,
+   "lifetime": [
+    0.16,
+    0.3
+   ],
+   "speed": [
+    1.4,
+    3.0
+   ],
+   "size": [
+    0.04,
+    0.07
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.6,
+   "max": 80,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0.0,
+     "count": 8,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "circle",
+    "radius": 0.75,
+    "angle": 0.0,
+    "arc": 35.0,
+    "thickness": 0.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     90.0,
+     0.0,
+     62.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 0.4,
+     "c": "#ffe35a",
+     "a": 0.9
+    },
+    {
+     "t": 1.0,
+     "c": "#e0962a",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 1.5,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "sparks_hit",
+   "enabled": true,
+   "texture": "spark",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 2.5,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "stretched",
+   "length_scale": 1.0,
+   "velocity_scale": 0.06,
+   "delay": 0.0,
+   "lifetime": [
+    0.16,
+    0.3
+   ],
+   "speed": [
+    1.4,
+    3.0
+   ],
+   "size": [
+    0.04,
+    0.07
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.6,
+   "max": 80,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0.02,
+     "count": 12,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "circle",
+    "radius": 0.75,
+    "angle": 0.0,
+    "arc": 55.0,
+    "thickness": 0.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     90.0,
+     0.0,
+     -13.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 0.4,
+     "c": "#ffe35a",
+     "a": 0.9
+    },
+    {
+     "t": 1.0,
+     "c": "#e0962a",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 1.5,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "embers",
+   "enabled": true,
+   "texture": "dot",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 2.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.3,
+    0.45
+   ],
+   "speed": [
+    0.2,
+    0.6
+   ],
+   "size": [
+    0.025,
+    0.05
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": -0.05,
+   "max": 60,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0.04,
+     "count": 10,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "circle",
+    "radius": 0.72,
+    "angle": 0.0,
+    "arc": 154.0,
+    "thickness": 0.2,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     90.0,
+     0.0,
+     -13.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#fff6b0",
+     "a": 1.0
+    },
+    {
+     "t": 1.0,
+     "c": "#e0962a",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.8,
+   "noise": {
+    "strength": 0.6,
+    "frequency": 1.2,
+    "scroll": 0.5
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  }
+ ],
+ "textures": [
+  {
+   "id": "dot",
+   "file": "dot.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  },
+  {
+   "id": "spark",
+   "file": "spark.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  },
+  {
+   "id": "valk_arc.png",
+   "file": "valk_arc.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  }
+ ]
+}

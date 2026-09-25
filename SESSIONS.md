@@ -76,6 +76,10 @@ Max 3 lines each — long form goes to `SESSIONS-ARCHIVE.md`._
   6 it let a tester unlock the whole game by tapping around. `TutorialSandbox` is EDITOR-ONLY, keep it so.
   **Re-check (2026-09-25):** a sandbox session once showed the gate BLOCKING with no tutorial running.
 
+- **[2026-09-25] Attack VFX: 4 Deployed heroes + the 3 enemy types of stages 1-10 wired** (via `HeroAttackVfx`, also
+  called from `EnemyAnimatorManager`). Still NO attack VFX: non-deployed heroes (Golem_3, Fallen_*, Dark_Oracle_3) and
+  enemies from stage 13+ (Orc, Golem_01/02). Generators: `Assets/VFXKit/Effects/<name>/make_arc.py.txt`.
+
 - **[2026-09-22] `Assets/Resources/StageSpawnerIndex.asset` is BUILT and correct (1-2 `Spawner2`,
   3-20 `Stage_NN`). RE-RUN `Tools/Blasty/Stage CP/Rebuild Stage Spawner Index` whenever a stage's
   spawner config changes**, or Home's "TOTAL CP" silently shows the old stage's enemy CP.
@@ -290,6 +294,10 @@ Reasoning in full: `SESSIONS-ARCHIVE.md`._
 ## Session Log
 
 - **2026-09-25** — **Onboarding now upgrades ALL 4 deployed heroes** (pick card N → Upgrade → Back, ×4; only the last Back releases the screen). `Tut_Onboard_UnitsUpgrade` 4→13 steps; `TutorialAutoAnchors` adds helper anchors for cards 2-4 beside the container; new `TutorialFocusTapStep.ifHeroNotUpgradable` guard (hero 1 abort/unmarked, heroes 2-4 end/marked) + `TutorialRunner.FinishSequence()`. **Play-mode verified in OnBoarding Test** (13 beats, units 1-4 in deck order, gate released, 0 errors); guard paths (unaffordable / short deck) NOT exercised.
+
+- **2026-09-25** — **Enemy attack VFX (stages 1-10)**: `EnemyAnimatorManager.EnableEnemyDamageCollier` now plays an optional `HeroAttackVfx`. Reaper → `ember_arc_ghost` (new blue recolour), Zombie villager → `candy_slash`, Skeleton_Crusader_1 (= stage-6 Swordsman) → `ember_arc`; SlashFX hidden on all three. Play-tested in Level_1_Stage_6 and Stage_1.
+- **2026-09-25** — **Attack VFX for the rest of the ref clip** (frame-by-frame, same flipbook method): `oracle_slash` (Dark_Oracle_1, crimson head + black smoke/shards), `cow_slash` (CowMinotaur_2, pink crescent → orange fragments + starburst/lightning ring), `mino_slash` (Minotaur_02, purple hammer arc + spinning ring), plus unwired `candy_slash` (green/red stripes) and `ember_arc` (thin red lingering line). All 4 heroes play-tested 1v1 via MCP in Level_1_Stage_1.
+- **2026-09-25** — **Valkyrie attack VFX v3**: re-read ref 2.0-3.0s frame by frame (only slash #6-#17, 2.20-2.57s; timing table in `make_arc.py.txt`). Arc-only (no sparks), widest at the sword tip, head end last to fade; centred on her sword-tip circle (0.139,0.264) r0.684. Captured in-game at the ref's frame moments. v3.1: user asked for the tiny particles back — `sparks_start` (82° at spawn) + `sparks_hit` (-13° at 0.02s) follow the head, `embers` along the arc. v2: static arc drawn head-first along her real sword path then faded start→end, via a baked 4x4 flipbook (`Assets/VFXKit/Effects/valkyrie_slash/`, generator `make_arc.py.txt`). `Combat/VFX/HeroAttackVfx.cs` now parents the effect under the hero and hides her Spriter `SlashFX` (sprite=null; `enabled=false` is undone by `EntityRenderer.OnEnable`). Play-tested via MCP, Level_1_Stage_1, 1 Valkyrie vs 1 Reaper.
 
 - **2026-09-25** — **`UnitUpgradeFx` v4** after v3 was rejected (peak too small, stats didn't cover the numbers): rebuilt off the **SECOND** upgrade (m67..m95) with measured luminance curves — portrait-wide wash + column over the CP bar, ONE broad strip left of centre + big head sparkles; stats RowGlow + 1.6× diamonds cover the whole row, 1.4 s haze. Side-by-side verified in edit mode (scratchpad upfx4/). **Not play-tested.**
 - **2026-09-25** — **`UnitUpgradeFx` REBUILT after Arash's play-test rejected v1** ("four vertical lines on the character"; stats "too minimal"). Re-read the clip one frame per image, upscaled; rebuilt both effects frame by frame (lemon column + lumpy cloud → broad bands with the pale column lit behind → bold rising sparkles; joined diamonds → lens beam → lime spindles → smoky haze/wisps + tight digit edge), then **verified by rendering ours at the reference key-frame times and comparing side by side** (n7..n34). Rules in `UnitUpgradeFx.txt` HISTORY/NOTES. **Edit-mode verified only — Arash to test with Play mode stopped first** (a running Play session blocks recompiles).

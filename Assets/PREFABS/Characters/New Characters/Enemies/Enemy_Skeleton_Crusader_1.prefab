@@ -696,6 +696,7 @@ GameObject:
   - component: {fileID: 2256704908069253638}
   - component: {fileID: 1856335461199248289}
   - component: {fileID: 5769645705720837941}
+  - component: {fileID: 834909893121443980}
   m_Layer: 6
   m_Name: Enemy_Skeleton_Crusader_1
   m_TagString: Enemy
@@ -765,12 +766,15 @@ MonoBehaviour:
   rotationSpeed: 12
   faceCenterOnStart: 1
   playerIsInLeft: 0
+  behindTolerance: 0.35
+  retaliationMemory: 3
   reachedGate: 0
   gateStopPosition: {x: 0, y: 0}
   gateStopDistance: 0.6
   facingDeadZoneX: 0.05
   actualMoveSpeed: 0
   intendedMoveSpeed: 0
+  firstStrikeGrace: 3
 --- !u!114 &9029769300877065159
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -888,6 +892,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 848dae37a10c6a1448df8fba6c340e13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &834909893121443980
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7945851428904739630}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10b4e56c061373b49ab7c9ea3f0ebeeb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HeroAttackVfx
+  vfxPrefab: {fileID: 6100109336906166613, guid: 5d5dd0efc726e704c878ad3c9a4f359e, type: 3}
+  offset: {x: 0.139, y: 0.264}
+  scale: 1
+  sortingLayerName: Default
+  sortingOrder: 20
+  replacedRenderers:
+  - {fileID: 3150808712178215144}
+  poolSize: 3
 --- !u!1001 &6335844852795330748
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1166,6 +1190,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   anim: {fileID: 3628788080566053103}
+--- !u!212 &3150808712178215144 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 8958955464805906516, guid: 4caf0f334cf508c4eadef532673ec126, type: 3}
+  m_PrefabInstance: {fileID: 6335844852795330748}
+  m_PrefabAsset: {fileID: 0}
 --- !u!95 &3628788080566053103 stripped
 Animator:
   m_CorrespondingSourceObject: {fileID: 7327773151093717075, guid: 4caf0f334cf508c4eadef532673ec126, type: 3}

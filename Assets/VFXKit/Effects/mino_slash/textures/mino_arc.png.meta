@@ -1,0 +1,546 @@
+fileFormatVersion: 2
+guid: 43d41c7644e26034eb8f116ccbb5f4ed
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 8416233059659489159
+    second: mino_arc_0
+  - first:
+      213: 4780398174067034264
+    second: mino_arc_1
+  - first:
+      213: -5622192019763229322
+    second: mino_arc_2
+  - first:
+      213: -4108807418993488255
+    second: mino_arc_3
+  - first:
+      213: -3180451628700827354
+    second: mino_arc_4
+  - first:
+      213: 2324344589513944344
+    second: mino_arc_5
+  - first:
+      213: 5251624633307694978
+    second: mino_arc_6
+  - first:
+      213: 6488981971033167019
+    second: mino_arc_7
+  - first:
+      213: -4304492810442271887
+    second: mino_arc_8
+  - first:
+      213: -4916562015735933329
+    second: mino_arc_9
+  - first:
+      213: -4009952445754518051
+    second: mino_arc_10
+  - first:
+      213: -690493903900863760
+    second: mino_arc_11
+  - first:
+      213: -1195313788823199297
+    second: mino_arc_12
+  - first:
+      213: -4503120097695837842
+    second: mino_arc_13
+  - first:
+      213: -8687510479549184335
+    second: mino_arc_14
+  - first:
+      213: 5423579869968511205
+    second: mino_arc_15
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 1
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 0
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: mino_arc_0
+      rect:
+        serializedVersion: 2
+        x: 33
+        y: 975
+        width: 63
+        height: 47
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 78f17eb60677cc470800000000000000
+      internalID: 8416233059659489159
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_1
+      rect:
+        serializedVersion: 2
+        x: 289
+        y: 966
+        width: 175
+        height: 58
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 898013acfc2675240800000000000000
+      internalID: 4780398174067034264
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_2
+      rect:
+        serializedVersion: 2
+        x: 545
+        y: 896
+        width: 224
+        height: 128
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 67d0afa4526f9f1b0800000000000000
+      internalID: -5622192019763229322
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_3
+      rect:
+        serializedVersion: 2
+        x: 801
+        y: 849
+        width: 223
+        height: 175
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 18e476cfb659af6c0800000000000000
+      internalID: -4108807418993488255
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_4
+      rect:
+        serializedVersion: 2
+        x: 33
+        y: 593
+        width: 224
+        height: 176
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 62189fd2814ccd3d0800000000000000
+      internalID: -3180451628700827354
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_5
+      rect:
+        serializedVersion: 2
+        x: 289
+        y: 593
+        width: 224
+        height: 176
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 81d6499d61bb14020800000000000000
+      internalID: 2324344589513944344
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_6
+      rect:
+        serializedVersion: 2
+        x: 545
+        y: 593
+        width: 224
+        height: 176
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2870ff997c481e840800000000000000
+      internalID: 5251624633307694978
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_7
+      rect:
+        serializedVersion: 2
+        x: 801
+        y: 593
+        width: 223
+        height: 176
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ba49859f8be7d0a50800000000000000
+      internalID: 6488981971033167019
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_8
+      rect:
+        serializedVersion: 2
+        x: 33
+        y: 337
+        width: 224
+        height: 176
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1739d57589e5344c0800000000000000
+      internalID: -4304492810442271887
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_9
+      rect:
+        serializedVersion: 2
+        x: 289
+        y: 337
+        width: 224
+        height: 176
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f6691ef45ecd4cbb0800000000000000
+      internalID: -4916562015735933329
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_10
+      rect:
+        serializedVersion: 2
+        x: 545
+        y: 338
+        width: 224
+        height: 175
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dd5d7980f79c958c0800000000000000
+      internalID: -4009952445754518051
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_11
+      rect:
+        serializedVersion: 2
+        x: 802
+        y: 338
+        width: 222
+        height: 175
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0f29a6ae37fda66f0800000000000000
+      internalID: -690493903900863760
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_12
+      rect:
+        serializedVersion: 2
+        x: 108
+        y: 83
+        width: 143
+        height: 168
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: fb1211e2174696fe0800000000000000
+      internalID: -1195313788823199297
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_13
+      rect:
+        serializedVersion: 2
+        x: 409
+        y: 83
+        width: 98
+        height: 164
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e61dae33124b181c0800000000000000
+      internalID: -4503120097695837842
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_14
+      rect:
+        serializedVersion: 2
+        x: 707
+        y: 83
+        width: 56
+        height: 139
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1b6ccfb4f33cf6780800000000000000
+      internalID: -8687510479549184335
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mino_arc_15
+      rect:
+        serializedVersion: 2
+        x: 1002
+        y: 83
+        width: 17
+        height: 75
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5e0be68082d644b40800000000000000
+      internalID: 5423579869968511205
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      mino_arc_0: 8416233059659489159
+      mino_arc_1: 4780398174067034264
+      mino_arc_10: -4009952445754518051
+      mino_arc_11: -690493903900863760
+      mino_arc_12: -1195313788823199297
+      mino_arc_13: -4503120097695837842
+      mino_arc_14: -8687510479549184335
+      mino_arc_15: 5423579869968511205
+      mino_arc_2: -5622192019763229322
+      mino_arc_3: -4108807418993488255
+      mino_arc_4: -3180451628700827354
+      mino_arc_5: 2324344589513944344
+      mino_arc_6: 5251624633307694978
+      mino_arc_7: 6488981971033167019
+      mino_arc_8: -4304492810442271887
+      mino_arc_9: -4916562015735933329
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

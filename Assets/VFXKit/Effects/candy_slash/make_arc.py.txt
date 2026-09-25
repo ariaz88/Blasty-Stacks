@@ -1,0 +1,97 @@
+"""Candy slash (green/red striped double arc) flipbook, 4x4, colours baked.
+
+Frame-by-frame read of ScreenRecorderProject524.mkv, green/red arc (#653-#662
+21.77-22.07 s and #724-#734 24.13-24.47 s). Times relative to the first frame:
+  0.000-0.067  big arc over the top (~150 -> ~-20 deg), made of 4-5 PARALLEL brush
+               stripes: thin dark-green outer, thick bright-red inner, more thin
+               green/red lines between. Semi-transparent; holds 3 frames.
+  0.100        whole stroke sweeps ~70 deg clockwise; outer edge turns bright lime,
+               inner stays red.
+  0.133-0.200  keeps sweeping down, thins, green dominates, red fades.
+  0.233-0.300  only a thin lime streak left at the bottom, fading.
+  0.330        gone.
+Not wired to a hero yet: built on the generic Spriter-rig swing (tip circle centre
+(0.139, 0.285) from the hero root, r ~0.68), so offset (0.139, 0.285) fits
+Valkyrie / Dark Oracle / CowMinotaur-style rigs.
+Texture space: [-1,1]^2, y up, arc centred at (0,0).
+"""
+import os
+import numpy as np
+from PIL import Image
+
+N = 256
+TILES = (4, 4)
+LIFE = 0.33
+R_OUT = 0.95
+
+LIME = np.array([0.62, 0.92, 0.18])
+DGREEN = np.array([0.22, 0.52, 0.10])
+RED = np.array([1.00, 0.14, 0.10])
+DRED = np.array([0.70, 0.06, 0.05])
+
+
+def smooth(e0, e1, x):
+    t = np.clip((x - e0) / (e1 - e0), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+ys, xs = np.mgrid[0:N, 0:N]
+x = (xs + 0.5) / N * 2 - 1
+y = 1 - (ys + 0.5) / N * 2
+r = np.hypot(x, y)
+th = np.degrees(np.arctan2(y, x))
+th = np.where(th < -150, th + 360, th)
+
+# stripes across the band: (position 0=outer..1=inner, width, colour-early, colour-late, weight)
+STRIPES = [
+    (0.05, 0.07, DGREEN, LIME, 1.0),
+    (0.18, 0.04, LIME, LIME, 0.6),
+    (0.36, 0.17, RED, DRED, 1.0),
+    (0.55, 0.05, DGREEN, LIME, 0.6),
+    (0.70, 0.10, RED, RED, 0.8),
+    (0.86, 0.04, LIME, LIME, 0.5),
+]
+
+
+def frame(t):
+    rot = float(np.interp(t, [0.0, 0.067, 0.10, 0.20, 0.33], [0, 0, 70, 115, 130]))
+    lead = -20.0 - rot          # leading (lower) end, moves clockwise
+    span = float(np.interp(t, [0.0, 0.067, 0.10, 0.20, 0.30], [170, 170, 160, 120, 60]))
+    u = (th - lead) / span      # 0 at the leading end, 1 at the trailing (upper) end
+    inside = (u >= 0) & (u <= 1)
+    uc = np.clip(u, 0, 1)
+    thick = 0.04 + 0.42 * np.sin(np.pi * uc) ** 0.8 * float(np.interp(t, [0.0, 0.1, 0.2, 0.3], [1, 0.9, 0.55, 0.25]))
+    d = (R_OUT - r) / thick
+    green_shift = smooth(0.08, 0.2, t)            # green takes over as it sweeps
+    red_fade = 1 - 0.8 * smooth(0.1, 0.22, t)
+    a_tot = np.zeros_like(r); c_tot = np.zeros(r.shape + (3,))
+    for pos, w, c0, c1, wt in STRIPES:
+        # stripes wobble slightly along the arc like brush strokes
+        p = pos + 0.03 * np.sin(np.radians(th) * 3 + pos * 9)
+        s = np.exp(-((d - p) / w) ** 2) * wt
+        is_red = c0 is RED or c0 is DRED
+        if is_red:
+            s *= red_fade
+        col = c0 * (1 - green_shift) + c1 * green_shift
+        c_tot = c_tot * (1 - s[..., None]) + col * s[..., None]
+        a_tot = a_tot + s * (1 - a_tot)
+    ends = smooth(0.0, 0.08, uc) * (1 - smooth(0.75, 1.0, uc))
+    strength = float(np.interp(t, [0.0, 0.02, 0.2, 0.28, 0.33], [0.8, 0.85, 0.8, 0.4, 0.0]))
+    a = np.clip(a_tot, 0, 1) * inside * ends * strength
+    c = c_tot / np.maximum(a_tot, 1e-4)[..., None]
+    return np.dstack([np.clip(c, 0, 1), a])
+
+
+n = TILES[0] * TILES[1]
+frames = [frame(LIFE * i / n) for i in range(n)]
+sh = np.zeros((N * TILES[1], N * TILES[0], 4))
+for i, f in enumerate(frames):
+    rr, cc = divmod(i, TILES[0])
+    sh[rr * N:(rr + 1) * N, cc * N:(cc + 1) * N] = f
+here = os.path.dirname(os.path.abspath(__file__))
+os.makedirs(os.path.join(here, "textures"), exist_ok=True)
+Image.fromarray((np.clip(sh, 0, 1) * 255).astype(np.uint8), "RGBA").save(os.path.join(here, "textures", "candy_arc.png"))
+bg = np.array([0.43, 0.30, 0.18])
+comp = sh[..., :3] * sh[..., 3:] + bg * (1 - sh[..., 3:])
+Image.fromarray((comp * 255).astype(np.uint8)).save(os.path.join(here, "arc_sheet_preview.png"))
+print("ok")

@@ -18,11 +18,15 @@ FIELDS
   PlayerManager  found in Awake with GetComponentInParent - note "InParent",
                  because the Animator usually lives on a child visual object
                  while PlayerManager sits on the root.
+  attackVfx      optional HeroAttackVfx, found in Awake with
+                 GetComponentInParent. Null on heroes that have no swing VFX.
 
 ANIMATION EVENT METHODS
 -----------------------
   EnableDamageCollier()    [sic - typo for "Collider"]
-      Enables PlayerManager.playerDamageCollider.
+      Enables PlayerManager.playerDamageCollider, then calls attackVfx.Play()
+      if the hero has a HeroAttackVfx - so the swing VFX lands on the exact
+      frame the hitbox opens (added 2026-09-25).
   DisableDamageCollider()
       Disables it.
 

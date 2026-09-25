@@ -16,11 +16,15 @@ FIELDS
 ------
   locomotion           (EnemyLocomotionManager) found in parents
   enemyDamageCollider  (EnemyDamageCollider) found in children
+  attackVfx            (HeroAttackVfx) optional, found in parents. Null on
+                       enemies with no swing VFX.
 
 ANIMATION EVENT METHODS
 -----------------------
   EnableEnemyDamageCollier()   [sic - typo for "Collider"]
-      Enables enemyDamageCollider.enemyDmgCollider.
+      Enables enemyDamageCollider.enemyDmgCollider, then calls attackVfx.Play()
+      if the enemy has a HeroAttackVfx (added 2026-09-25) - same component and
+      same hitbox-frame timing the heroes use.
   DisableEnemyDamageCollider()
       Disables it.
 

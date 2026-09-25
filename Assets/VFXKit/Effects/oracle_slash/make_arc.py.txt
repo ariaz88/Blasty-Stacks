@@ -1,0 +1,121 @@
+"""Dark Oracle slash arc flipbook (4x4 = 16 frames over LIFE s), colours baked.
+
+Frame-by-frame read of ScreenRecorderProject524.mkv, crimson scythe slash
+(two instances: #578-#587 19.27-19.57 s and #598-#606 19.93-20.20 s), times
+relative to the first visible frame:
+  0.000  crescent over the head; HEAD white-hot with pink rim, tail over the top
+         already BLACK SMOKE. Sweep is clockwise.
+  0.067  head at lower-right: widest, white core with jagged dark-pink cuts,
+         strong crimson glow on the outer edge; black smoke tail upper-left.
+  0.133  head keeps sweeping down (past the weapon's end); the body is now thick
+         black smoke with thin cream highlight lines; black shards fly off.
+  0.200  arc gone - only black shards/flecks drifting outward.
+  0.267  nothing.
+It is a MOVING WINDOW: the head travels ~110 deg -> ~-80 deg, the tail follows
+~170 deg behind and is always the smoke end.
+
+Geometry = the Dark Oracle's own Slashing clip (sampled in Unity): staff tip
+circle centred (0.139, 0.285) from the hero root, r 0.682. Event
+(EnableDamageCollier) at clip 0.05 s with the tip at ~160 deg; the strike reaches
+-13 deg at clip 0.14 s = ~0.06 s real at ClipSpeed 1.5.
+Texture space: [-1,1]^2, y up, arc centred at (0,0).
+"""
+import os
+import numpy as np
+from PIL import Image
+
+N = 256
+TILES = (4, 4)
+LIFE = 0.27
+A_START, A_END = 165.0, -85.0     # parameter range, clockwise
+WINDOW = 170.0                     # degrees of arc behind the head
+R_OUT = 0.95
+T_HEAD = 0.36
+
+WHITE = np.array([1.00, 0.97, 0.95])
+PINK = np.array([1.00, 0.25, 0.45])
+CRIMSON = np.array([0.55, 0.05, 0.16])
+SMOKE = np.array([0.07, 0.03, 0.05])
+CREAM = np.array([1.00, 0.92, 0.80])
+
+
+def smooth(e0, e1, x):
+    t = np.clip((x - e0) / (e1 - e0), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+ys, xs = np.mgrid[0:N, 0:N]
+x = (xs + 0.5) / N * 2 - 1
+y = 1 - (ys + 0.5) / N * 2
+r = np.hypot(x, y)
+th = np.degrees(np.arctan2(y, x))
+th = np.where(th < A_END - 20, th + 360, th)   # unwrap so the range is continuous
+rng = np.random.default_rng(3)
+# fixed per-pixel jitter along the arc, for the jagged cuts / smoke breakup
+cuts_phase = rng.uniform(0, 2 * np.pi, 8)
+
+
+def head_deg(t):
+    return float(np.interp(t, [0.0, 0.033, 0.067, 0.10, 0.133, 0.27], [110, 20, -40, -68, -80, -85]))
+
+
+def burn(t):
+    # how far the smoke has eaten toward the head (0 = only the tail is smoke)
+    return float(np.interp(t, [0.0, 0.07, 0.10, 0.133, 0.17], [0.0, 0.0, 0.35, 0.62, 0.9]))
+
+
+def strength(t):
+    return float(np.interp(t, [0.0, 0.017, 0.133, 0.17, 0.20, 0.21], [0.85, 1.0, 1.0, 0.7, 0.25, 0.0]))
+
+
+def frame(t):
+    h = head_deg(t)
+    u = (th - h) / WINDOW                       # 0 at head, 1 at tail end (clockwise sweep)
+    inside = (u >= -0.02) & (u <= 1.0) & (th <= A_START)
+    uc = np.clip(u, 0, 1)
+    # lens-shaped crescent: pointed at both ends, widest ~25% behind the head
+    thick = 0.015 + T_HEAD * np.sin(np.pi * np.clip(1 - uc, 0, 1) ** 2.4) ** 0.8 + 0.08 * burn(t) * np.sin(np.pi * uc)
+    d = (R_OUT - r) / thick                     # 0 outer edge, 1 inner edge
+    soft = 0.04 + 0.25 * uc                     # smoke end is blurrier
+    band = smooth(-soft, 0.0, d) * (1 - smooth(1 - soft * 2, 1.0 + soft, d))
+    band *= inside * smooth(-0.02, 0.03, u) * (1 - smooth(0.8, 1.0, u))
+
+    # colour ramp along the arc, shifted toward smoke by burn(t)
+    v = np.clip(uc + burn(t), 0, 1.3)
+    core = smooth(0.42, 0.12, v) * smooth(0.02, 0.22, d) * (1 - smooth(0.78, 0.97, d))  # white core in the band's middle
+    c = np.where(v[..., None] < 0.45,
+                 PINK * (1 - smooth(0.25, 0.45, v)[..., None]) + CRIMSON * smooth(0.25, 0.45, v)[..., None],
+                 CRIMSON * (1 - smooth(0.45, 0.75, v)[..., None]) + SMOKE * smooth(0.45, 0.75, v)[..., None])
+    c = c * (1 - core[..., None]) + WHITE * core[..., None]
+    # jagged dark-pink cuts inside the white head
+    ang = np.radians(th)
+    cuts = np.zeros_like(r)
+    for k, ph in enumerate(cuts_phase[:5]):
+        cuts += np.exp(-((np.sin(ang * (9 + 3 * k) + ph)) / 0.08) ** 2) * np.exp(-((d - (0.3 + 0.1 * k)) / 0.05) ** 2)
+    cuts = np.clip(cuts, 0, 1) * core
+    c = c * (1 - 0.8 * cuts[..., None]) + PINK * 0.8 * cuts[..., None]
+    # cream highlight lines inside the smoke once it burns
+    hl = np.exp(-((d - 0.35) / 0.04) ** 2) * smooth(0.45, 0.8, v) * (1 - smooth(1.0, 1.25, v))
+    hl *= smooth(-0.2, 0.3, np.sin(ang * 7 + 1.3))
+    c = c * (1 - hl[..., None]) + CREAM * hl[..., None]
+    # outer crimson glow (outside the band, head part only)
+    glow = np.exp(-(np.clip(-d, 0, None) * thick / 0.06) ** 2) * (d < 0) * inside * smooth(0.6, 0.1, v)
+    a = np.clip(band * (0.95 - 0.2 * smooth(0.5, 1.0, v)) + 0.55 * glow + 0.9 * hl * band, 0, 1) * strength(t)
+    c = np.where((glow > band)[..., None], PINK * 0.9, c)
+    return np.dstack([np.clip(c, 0, 1), a])
+
+
+n = TILES[0] * TILES[1]
+frames = [frame(LIFE * i / n) for i in range(n)]
+sheet = np.zeros((N * TILES[1], N * TILES[0], 4))
+for i, f in enumerate(frames):
+    rr, cc = divmod(i, TILES[0])
+    sheet[rr * N:(rr + 1) * N, cc * N:(cc + 1) * N] = f
+
+here = os.path.dirname(os.path.abspath(__file__))
+os.makedirs(os.path.join(here, "textures"), exist_ok=True)
+Image.fromarray((np.clip(sheet, 0, 1) * 255).astype(np.uint8), "RGBA").save(os.path.join(here, "textures", "oracle_arc.png"))
+bg = np.array([0.43, 0.30, 0.18])
+comp = sheet[..., :3] * sheet[..., 3:] + bg * (1 - sheet[..., 3:])
+Image.fromarray((comp * 255).astype(np.uint8)).save(os.path.join(here, "arc_sheet_preview.png"))
+print("ok")

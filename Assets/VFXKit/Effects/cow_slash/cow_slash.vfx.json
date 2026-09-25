@@ -1,0 +1,459 @@
+{
+ "name": "cow_slash",
+ "loop": false,
+ "duration": 0.5,
+ "prewarm": false,
+ "notes": "CowMinotaur_2 attack hit. Frame-by-frame read of ScreenRecorderProject524.mkv pink slash (crescent #262-276 8.73-9.20s) + starburst on the hit enemy (#268-275). Full timing table in make_arc.py.txt. Arc: white core / hot-pink rim, moving window, head sweeps ~115 -> -95 deg clockwise; at 0.2s it burns to cream-orange fragments, gone 0.43s. Starburst: white-pink flash with rays and an upward spike -> pink lightning ring -> faint red ring, 0.23s, placed where the blade ends (angle -13 deg on the r0.68 tip circle), delay 0.06s = when the blade gets there (ClipSpeed 1.5). Geometry = CowMinotaur_2 Slashing clip, blade-tip circle centre (0.139,0.285) from hero root; arc outer radius 0.90 = size 1.9. Unity circle shape: rotation z = lowest angle, arc = span counter-clockwise; shape.position [x,0,y] (z = world up).",
+ "reference": "Assets/Arts/Reference videos/ScreenRecorderProject524.mkv @8.73-9.23s",
+ "view": {
+  "center": [
+   0.1925,
+   -0.0015
+  ],
+  "size": 2.6277
+ },
+ "layers": [
+  {
+   "name": "arc",
+   "enabled": true,
+   "texture": "cow_arc.png",
+   "tiles": [
+    4,
+    4
+   ],
+   "flipbook_cycles": 1,
+   "shader": "alpha",
+   "intensity": 1.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.43,
+    0.43
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    1.9,
+    1.9
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 1,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 1,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "point",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 1.0,
+     "c": "#ffffff",
+     "a": 1.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "orange_sparks",
+   "enabled": true,
+   "texture": "spark",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 2.5,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "stretched",
+   "length_scale": 1.0,
+   "velocity_scale": 0.06,
+   "delay": 0.0,
+   "lifetime": [
+    0.15,
+    0.3
+   ],
+   "speed": [
+    0.8,
+    2.2
+   ],
+   "size": [
+    0.03,
+    0.055
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.5,
+   "max": 80,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0.07,
+     "count": 10,
+     "cycles": 1,
+     "interval": 0.1
+    },
+    {
+     "time": 0.2,
+     "count": 12,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "circle",
+    "radius": 0.8,
+    "angle": 0.0,
+    "arc": 70.0,
+    "thickness": 0.3,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     90.0,
+     0.0,
+     -95.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#fff3c0",
+     "a": 1.0
+    },
+    {
+     "t": 0.4,
+     "c": "#ffae40",
+     "a": 0.9
+    },
+    {
+     "t": 1.0,
+     "c": "#e05a18",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 1.5,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "starburst",
+   "enabled": true,
+   "texture": "cow_star.png",
+   "tiles": [
+    4,
+    4
+   ],
+   "flipbook_cycles": 1,
+   "shader": "alpha",
+   "intensity": 1.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.06,
+   "lifetime": [
+    0.23,
+    0.23
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    1.35,
+    1.35
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 1,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 1,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "point",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.66,
+     0.0,
+     -0.15
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 1.0,
+     "c": "#ffffff",
+     "a": 1.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  }
+ ],
+ "textures": [
+  {
+   "id": "cow_arc.png",
+   "file": "cow_arc.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  },
+  {
+   "id": "cow_star.png",
+   "file": "cow_star.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  },
+  {
+   "id": "spark",
+   "file": "spark.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  }
+ ]
+}

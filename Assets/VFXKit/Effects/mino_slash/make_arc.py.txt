@@ -1,0 +1,128 @@
+"""Minotaur_02 hammer hit: purple arc flipbook + spinning ring flipbook (4x4 each, colours baked).
+
+Frame-by-frame read of ScreenRecorderProject524.mkv, purple effects (21.8-28 s; read at
+#666-#683, 22.20-22.77 s). Times relative to each part's first frame:
+  CRESCENT (#666-#675)
+  0.000        thin white-violet sliver.
+  0.033-0.167  full crescent: vivid purple body, white-lilac rim on the OUTER edge,
+               darker purple inner edge, small violet flecks drifting off.
+  0.200-0.233  turns deep purple / black, only a thin rim left.
+  0.300        gone.
+  SPINNING RING (#672-#683)
+  0.000        three crescents burst out in a spiral.
+  0.033-0.100  they SPIN clockwise into a ring; leading tips white-violet, trailing
+               bodies purple -> black.
+  0.133-0.267  ring holds with two arcs, thinning.
+  0.300-0.400  thin black/white fragments, then gone.
+
+Geometry = Minotaur_02's Attacking clip (sampled in Unity): hammer-head circle
+centre (0.159, 0.392) from the hero root, r 0.803. Event at clip 0.20 s with the
+head at 124 deg; the strike reaches -17 deg at clip 0.28 s (~0.055 s real at
+ClipSpeed 1.5). The ring sits where the hammer lands.
+Texture space: [-1,1]^2, y up, centred at (0,0).
+"""
+import os
+import numpy as np
+from PIL import Image
+
+N = 256
+TILES = (4, 4)
+ARC_LIFE = 0.30
+RING_LIFE = 0.40
+A_START, A_END = 135.0, -20.0
+R_OUT = 0.95
+T_HEAD = 0.36
+
+RIM = np.array([0.96, 0.88, 1.00])
+VIOLET = np.array([0.66, 0.20, 0.90])
+DEEP = np.array([0.30, 0.07, 0.50])
+DARK = np.array([0.10, 0.02, 0.14])
+
+
+def smooth(e0, e1, x):
+    t = np.clip((x - e0) / (e1 - e0), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+ys, xs = np.mgrid[0:N, 0:N]
+x = (xs + 0.5) / N * 2 - 1
+y = 1 - (ys + 0.5) / N * 2
+r = np.hypot(x, y)
+th0 = np.degrees(np.arctan2(y, x))
+rng = np.random.default_rng(11)
+ph = rng.uniform(0, 2 * np.pi, 8)
+
+
+def s_of(a):
+    return (A_START - a) / (A_START - A_END)
+
+
+def arc_frame(t):
+    s = s_of(th0)
+    sc = np.clip(s, 0, 1)
+    head = s_of(float(np.interp(t, [0.0, 0.02, 0.035, 0.055], [110, 50, 5, A_END])))
+    tail = float(np.interp(t, [0.0, 0.17, 0.23, 0.27, 0.30], [-0.1, -0.1, 0.25, 0.6, 1.05]))
+    dark = float(np.interp(t, [0.0, 0.16, 0.22], [0.0, 0.0, 1.0]))
+    strength = float(np.interp(t, [0.0, 0.03, 0.22, 0.28, 0.30], [0.75, 1.0, 1.0, 0.5, 0.0]))
+    thick = 0.015 + T_HEAD * (1 - 0.5 * dark) * np.sin(np.pi * np.clip(sc, 0, 1) ** 0.75) ** 0.9 * (0.35 + 0.65 * sc)
+    d = (R_OUT - r) / thick
+    band = smooth(-0.05, 0.0, d) * (1 - smooth(0.85, 1.05, d)) * ((s > -0.02) & (s < 1.02))
+    band *= 1 - smooth(head - 0.01, head + 0.01, s)
+    band *= smooth(tail, tail + 0.25, s)
+    rim = np.exp(-(np.clip(d, 0, None) / (0.14 if dark < 0.5 else 0.08)) ** 2)
+    k = np.clip(d, 0, 1)[..., None]
+    body = VIOLET * (1 - k) + DEEP * k
+    body = body * (1 - dark) + DARK * dark
+    c = body * (1 - rim[..., None]) + RIM * rim[..., None]
+    glow = np.exp(-(np.clip(-d, 0, None) * thick / 0.045) ** 2) * (d < 0) * ((s > 0) & (s < head)) * (1 - dark)
+    a = np.clip(band * (0.92 - 0.1 * k[..., 0]) + 0.45 * glow, 0, 1) * strength
+    c = np.where((glow > band)[..., None], VIOLET, c)
+    return np.dstack([np.clip(c, 0, 1), a])
+
+
+def ring_frame(t):
+    """2-3 crescents on a circle, spinning clockwise with ease-out; leading tip bright."""
+    rot = float(np.interp(t, [0.0, 0.035, 0.10, 0.20, 0.40], [0, 110, 230, 290, 320]))
+    n_arcs = 3 if t < 0.12 else 2
+    Rr = float(np.interp(t, [0.0, 0.07, 0.40], [0.55, 0.80, 0.88]))
+    strength = float(np.interp(t, [0.0, 0.02, 0.25, 0.33, 0.40], [0.8, 1.0, 1.0, 0.45, 0.0]))
+    thin = float(np.interp(t, [0.0, 0.1, 0.27, 0.40], [1.0, 1.0, 0.55, 0.35]))
+    a_tot = np.zeros_like(r); c_tot = np.zeros(r.shape + (3,))
+    for k in range(n_arcs):
+        lead = 90 + k * 360 / n_arcs - rot                   # leading tip angle (moves clockwise)
+        span = 115.0 if n_arcs == 3 else 140.0
+        u = ((th0 - lead) % 360) / span                      # 0 at the leading tip, 1 at the tail
+        inside = u <= 1
+        uc = np.clip(u, 0, 1)
+        thick = (0.02 + 0.20 * thin * np.sin(np.pi * np.clip(1 - uc, 0, 1) ** 2.2))
+        rad = Rr - 0.05 * k
+        d = (rad - r) / thick
+        band = smooth(-0.08, 0.0, d) * (1 - smooth(0.8, 1.05, d)) * inside
+        lead_hot = smooth(0.35, 0.0, uc)                      # white-violet leading tip
+        body = VIOLET * (1 - smooth(0.3, 0.7, uc))[..., None] + DARK * smooth(0.3, 0.7, uc)[..., None]
+        c = body * (1 - lead_hot[..., None]) + RIM * lead_hot[..., None]
+        a = band * (0.95 - 0.15 * uc)
+        c_tot = c_tot * (1 - a[..., None]) + c * a[..., None]
+        a_tot = a_tot + a * (1 - a_tot)
+    c_out = c_tot / np.maximum(a_tot, 1e-4)[..., None]
+    return np.dstack([np.clip(c_out, 0, 1), np.clip(a_tot * strength, 0, 1)])
+
+
+def sheet(fn, life, name, here):
+    n = TILES[0] * TILES[1]
+    frames = [fn(life * i / n) for i in range(n)]
+    sh = np.zeros((N * TILES[1], N * TILES[0], 4))
+    for i, f in enumerate(frames):
+        rr_, cc = divmod(i, TILES[0])
+        sh[rr_ * N:(rr_ + 1) * N, cc * N:(cc + 1) * N] = f
+    Image.fromarray((np.clip(sh, 0, 1) * 255).astype(np.uint8), "RGBA").save(os.path.join(here, "textures", name + ".png"))
+    bg = np.array([0.43, 0.30, 0.18])
+    comp = sh[..., :3] * sh[..., 3:] + bg * (1 - sh[..., 3:])
+    Image.fromarray((comp * 255).astype(np.uint8)).save(os.path.join(here, name + "_preview.png"))
+
+
+here = os.path.dirname(os.path.abspath(__file__))
+os.makedirs(os.path.join(here, "textures"), exist_ok=True)
+sheet(arc_frame, ARC_LIFE, "mino_arc", here)
+sheet(ring_frame, RING_LIFE, "mino_ring", here)
+print("ok")

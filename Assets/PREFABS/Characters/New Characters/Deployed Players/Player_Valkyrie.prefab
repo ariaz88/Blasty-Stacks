@@ -533,6 +533,7 @@ GameObject:
   - component: {fileID: 6754472656292991665}
   - component: {fileID: 5280443927497147295}
   - component: {fileID: 5979214223697036316}
+  - component: {fileID: 1878545309364356332}
   m_Layer: 7
   m_Name: Player_Valkyrie
   m_TagString: Player
@@ -610,13 +611,11 @@ MonoBehaviour:
   moveSpeed: 0.6
   canMove: 1
   isUnlocked: 0
-  marchSpeedBoost: 1.3
   actualMoveSpeed: 0
   intendedMoveSpeed: 0
   forwardProgress: 0
   isFormationStepping: 0
   faceCenterOnStart: 1
-  retargetHysteresis: 0.2
   anchorSwitchHysteresis: 0.3
   facingDeadZoneX: 0.12
   enemyIsInLeft: 0
@@ -732,10 +731,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 64
   use2D: 1
-  allowNearestSwitch: 0
-  onlySwitchIfInFront: 1
   respectFOV: 0
-  retargetHysteresis: 0.35
 --- !u!114 &6754472656292991665
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -832,6 +828,26 @@ MonoBehaviour:
   unitsDatabase: {fileID: 11400000, guid: 1eead485eb9802f4c8d136eaf6de630f, type: 2}
   progressionConfig: {fileID: 11400000, guid: 3665f1da392e42549934aab9a641a619, type: 2}
   unitId: 1
+--- !u!114 &1878545309364356332
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5051905532455708016}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10b4e56c061373b49ab7c9ea3f0ebeeb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HeroAttackVfx
+  vfxPrefab: {fileID: 2023302339195252324, guid: 88314dab04206ef4397f814577c27141, type: 3}
+  offset: {x: 0.139, y: 0.264}
+  scale: 1
+  sortingLayerName: Default
+  sortingOrder: 20
+  replacedRenderers:
+  - {fileID: 4324634194745581972}
+  poolSize: 3
 --- !u!1 &5410875624706130909
 GameObject:
   m_ObjectHideFlags: 0
@@ -1657,6 +1673,11 @@ MonoBehaviour:
 --- !u!95 &3966511655671647423 stripped
 Animator:
   m_CorrespondingSourceObject: {fileID: 7820183493052725628, guid: ee806aa7e908d8d4bb92646e7eee140c, type: 3}
+  m_PrefabInstance: {fileID: 6596997344716568003}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &4324634194745581972 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 7460513786216567895, guid: ee806aa7e908d8d4bb92646e7eee140c, type: 3}
   m_PrefabInstance: {fileID: 6596997344716568003}
   m_PrefabAsset: {fileID: 0}
 --- !u!4 &5004745777708881757 stripped

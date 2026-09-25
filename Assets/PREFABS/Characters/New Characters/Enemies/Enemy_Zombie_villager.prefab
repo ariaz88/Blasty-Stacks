@@ -530,6 +530,7 @@ GameObject:
   - component: {fileID: 3716230156392340115}
   - component: {fileID: 5318879165087649457}
   - component: {fileID: 2373179787930776701}
+  - component: {fileID: 8880500680529515815}
   m_Layer: 6
   m_Name: Enemy_Zombie_villager
   m_TagString: Enemy
@@ -599,12 +600,15 @@ MonoBehaviour:
   rotationSpeed: 12
   faceCenterOnStart: 1
   playerIsInLeft: 0
+  behindTolerance: 0.35
+  retaliationMemory: 3
   reachedGate: 0
   gateStopPosition: {x: 0, y: 0}
   gateStopDistance: 0.6
   facingDeadZoneX: 0.05
   actualMoveSpeed: 0
   intendedMoveSpeed: 0
+  firstStrikeGrace: 3
 --- !u!114 &4275896446966869335
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -722,6 +726,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 848dae37a10c6a1448df8fba6c340e13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &8880500680529515815
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6411937674325925182}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10b4e56c061373b49ab7c9ea3f0ebeeb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HeroAttackVfx
+  vfxPrefab: {fileID: 8755082831771748156, guid: 6e751404281c3d54caa2ac6344c53cf1, type: 3}
+  offset: {x: 0.139, y: 0.285}
+  scale: 1
+  sortingLayerName: Default
+  sortingOrder: 20
+  replacedRenderers:
+  - {fileID: 3613972558791104966}
+  poolSize: 3
 --- !u!1 &6906827340268352859
 GameObject:
   m_ObjectHideFlags: 0
@@ -1153,6 +1177,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   anim: {fileID: 7198720490863737659}
+--- !u!212 &3613972558791104966 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 5303305523072401929, guid: ea45edaae7e54b64d86461ee588c48f4, type: 3}
+  m_PrefabInstance: {fileID: 8916644178983246799}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &5649990409250017336 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 3879434316617337847, guid: ea45edaae7e54b64d86461ee588c48f4, type: 3}
