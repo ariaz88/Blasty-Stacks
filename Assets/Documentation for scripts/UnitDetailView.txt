@@ -261,3 +261,16 @@ NOTES
   - "commingSoonText" and "DesigeredTextSize" are both misspelled field names
     that are otherwise functioning correctly - noted here only so a future
     search for "ComingSoon" or "DesiredTextSize" does not miss them.
+
+ADDED 2026-09-25 — UPGRADE FX HOOKS
+-----------------------------------
+  VisualRoot / CurrentVisual / LevelText / HpText / AtkText / DefText
+      Read-only properties over existing fields, for UnitUpgradeFx: the hero
+      (pillar anchor + measured bounds) and the stat texts (flare positions; their
+      common parent "StatsFrame" is the stats bar). Getters only - no behaviour
+      change.
+
+  !! SetHeader destroys and re-instantiates the hero visual on EVERY refresh,
+     and Destroy is deferred to the end of the frame. Anything that measures the
+     hero right after an upgrade must wait one frame (UnitUpgradeFx does).
+  - SetHeader1 has no callers; SetHeader is the live variant.

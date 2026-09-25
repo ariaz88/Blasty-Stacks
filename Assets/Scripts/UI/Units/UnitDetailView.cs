@@ -52,6 +52,16 @@ public class UnitDetailView : MonoBehaviour
     [SerializeField] private RectTransform visualRoot;   // empty UI container
     private GameObject currentVisualInstance;
 
+    // --- Upgrade FX hooks -----------------------------------------------
+    // Read-only views of what UnitUpgradeFx anchors to: the hero (for the light
+    // pillar) and the four stat texts (for the stats-row flash). Getters only.
+    public RectTransform VisualRoot => visualRoot;
+    public GameObject CurrentVisual => currentVisualInstance;
+    public TMP_Text LevelText => levelText;
+    public TMP_Text HpText => hpText;
+    public TMP_Text AtkText => atkText;
+    public TMP_Text DefText => defText;
+
     [SerializeField] private Image portraitImage;
     [SerializeField] private TMP_Text nameText;
     [SerializeField] private TMP_Text levelText;

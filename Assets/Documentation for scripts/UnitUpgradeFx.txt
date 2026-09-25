@@ -1,0 +1,125 @@
+================================================================================
+  UnitUpgradeFx.cs
+  Path : Assets/Scripts/UI/Units/UnitUpgradeFx.cs
+  Type : MonoBehaviour, self-bootstrapping (RuntimeInitializeOnLoadMethod)
+  Layer: UI / VFX
+  Scenes: none - creates its own DontDestroyOnLoad "UnitUpgradeFx" object at runtime
+================================================================================
+
+PURPOSE
+-------
+The two "you just levelled up" effects from the onboarding reference video
+(Assets/Arts/Reference videos/OnBoarding/OnBoarding 1.mkv, SECOND upgrade, peak at
+13.80 s, CP 836), played on EVERY successful hero upgrade in the Units detail screen
+(decided 2026-09-25 - not tutorial-only):
+
+  HERO   a wide wash over the whole portrait + a pale column + a lemon core column
+         (top of screen down over the CP bar), then ONE broad bright strip just left
+         of centre with two big sparkles at the head, thinning out by ~0.4 s
+  STATS  a big white glow + joined white diamonds swallow the WHOLE row -> translucent
+         diamonds with a white lens beam -> lime spindles on the values -> a lingering
+         lime smoky haze, short wisps and a faint warm edge on the digits (~1.4 s)
+
+HISTORY - READ BEFORE CHANGING THE LOOK
+---------------------------------------
+v1 (contact sheets, 15 fps) FAILED: "four vertical lines drawn on the characters",
+stats "too minimal". v2/v3 were built from the FIRST upgrade frame by frame and
+FAILED again: "only three bold vertical lines on the character", stats "doesn't
+clearly cover all the numbers". The user's reference is the SECOND upgrade's peak.
+v4 (2026-09-25) was rebuilt from the second upgrade (frames m67..m95, 30 fps,
+scratchpad onb4/) using MEASURED luminance curves, and verified side by side with
+the reference on every key frame (scratchpad upfx4/: hero_grid2.png, stats_grid.png).
+Always verify a change the same way - against the reference, frame by frame.
+
+MEASURED CURVES (mean luminance of the region, second upgrade)
+--------------------------------------------------------------
+  hero : 165 -> 204 204 200 194 177 172 169 169 167 ... 165 (back to base by m78)
+  stats:  71 -> 197 197 156 129  95  98  93  93  87  86 85 84 ... 76 @ 0.93 s
+  -> HeroT/HeroV and StatT/StatV tables; Curve() interpolates them piecewise-linear.
+
+KEY FRAMES (t = 0 is m67)
+-------------------------
+  HERO
+   m67  0.00  whole portrait washed cream; pale column ~50% width; lemon core ~35%
+              from the top of the screen DOWN OVER the CP bar; hero a faint ghost
+   m69  0.07  same, core slightly narrower, hero a little more visible
+   m70  0.10  column still bright, streaky inside (bands 3-5)
+   m71  0.13  column gone; one BROAD bright strip just left of centre (~12% width)
+              + faint strips at each body edge; two BIG 4-point sparkles at the head
+   m72-73     the main strip is the brightest thing on screen, feet to top of screen
+   m75  0.27  main strip narrower; one sparkle left
+   m78  0.37  thin strip, tiny sparkles; gone right after
+  STATS
+   m67  0.00  big white glow + joined diamonds (1.6x bar height) cover EVERYTHING from
+              the level number to the end of the bar; needle starts on the level number
+   m69-70     diamonds translucent (~0.35), white lens beam + bulges on the values
+   m71  0.13  thin lime line + lime spindles on each value
+   m72+       spindles gone; full-height lime smoky haze, wisps, warm digit edge;
+              still faintly visible at 0.93 s, gone at 1.4 s
+
+INSPECTOR FIELDS
+----------------
+  effectEnabled, totalDuration (1.4 s), heroSortingOrder (1)
+  Hero column: innerOfHeroWidth 0.80, minInnerOfScreen 0.28, maxInnerOfScreen
+               0.40, outerOfInner 1.42
+  Colours: lemon (1,.95,.18), paleYellow (1,.92,.50), cloud (1,.98,.82),
+           band (1,.93,.35), sparkle (1,.97,.70), lime (.90,1,.35),
+           digitGlow (1,.90,.35)
+  Static tables (code):
+    BandX/BandW/BandA/BandEnd - band 0 is THE main strip (x -0.16 of the outer
+      half-width, 15% of screen width, alpha 1, ends 0.42 s); 1-2 faint side strips;
+      3-5 only the streaks inside the column on m70.
+    SparkDx/SparkH/SparkStart/SparkSize - SparkSize is a FRACTION OF SCREEN WIDTH.
+
+PUBLIC API
+----------
+  Duration, PlayOn(UnitDetailView), SampleAt(float t)
+  SampleAt freezes the effect at any time - it is how the effect is verified
+  WITHOUT Play mode (open MenuScene additively, SetHeader a real hero, PlayOn,
+  SampleAt at the key-frame times, render through the Main Camera).
+
+FLOW
+----
+  Bootstrap (AfterSceneLoad) -> Update keeps subscribed to
+  GameStartManager.Instance.ProgressionService.OnUnitUpgraded -> handler marks
+  "play next frame" -> LateUpdate finds the shown UnitDetailView, PlayOn, then
+  advances every playing rig on unscaled time.
+  Apply(t) = ApplyHero(t) + ApplyStats(t); Measure() reads the portrait rect
+  (rootTop/rootBottom/W), hero bounds (feet/heroTop/cx) and stats glyph rects.
+
+HOW IT CONNECTS
+---------------
+  - Trigger: PlayerProgressionService.OnUnitUpgraded - fired only by TryUpgrade,
+    whose only runtime caller is the Upgrade button (UnitsPanelController).
+  - Anchors: UnitDetailView.VisualRoot / CurrentVisual / LevelText / HpText /
+    AtkText / DefText (getters added for this). Stats bar = common parent of the
+    stat texts ("StatsFrame"); hero layer under VisualRoot's parent (TopBG).
+  - Built objects: TopBG/UpgradeFx_Hero (nested Canvas, override, order 1:
+    Wash, OuterColumn, InnerColumn, Band0-5, Cloud, Sparks) and
+    StatsFrame/UpgradeFx_Stats (last sibling: digit glows, smoke, wisps, spindles,
+    RowGlow, LensBeam, bulges, line, fringes, diamonds). Both LayoutElement.ignoreLayout.
+
+NOTES
+-----
+  !! ONE-FRAME DELAY IS REQUIRED: UnitDetailView.SetHeader destroys and
+     re-instantiates the hero on every refresh; Destroy is deferred, so on the
+     upgrade frame both heroes exist.
+  !! The hero is a SpriteRenderer rig (order 0) -> hero layer is a NESTED CANVAS at
+     order 1 (above the sprites, under the stats popup at 5).
+  !! The PEAK MUST BE BIG: wash over the full portrait width + column down over the
+     CP bar. A column the size of the body read as "three lines" to the user.
+  !! After the column, ONE broad strip dominates. Many thin strips (v1-v3) read as
+     "lines drawn on the character". Keep side strips faint and few.
+  !! Strips run off the TOP of the screen (second upgrade), not to head height.
+  !! Stats peak must cover the WHOLE row incl. the numbers (RowGlow + 1.6x diamonds).
+  !! Stats layers all sit OVER the values (last sibling). A haze built BEHIND them
+     was hidden by the stat slot plates.
+  !! Smoke must be low-contrast, low-frequency noise. High y-frequency with hard
+     contrast produced parallel "speed lines".
+  !! UI/Default only, no Shader.Find, no project setting changed. Procedural,
+     non-readable textures (s_wash, s_column, s_band, s_cloud, s_sparkle,
+     s_ellipse, s_softRect, s_diamond, s_fringe, s_lens, s_needle, s_smoke).
+  - The reference background is gold, ours is blue, so the wash reads as a pale
+    cream veil over blue rather than a brighter gold.
+  - Our stat digits are yellow (the game's text colour); the reference's are white.
+  - Verified in edit mode only (SampleAt renders). Not yet play-tested on device.
