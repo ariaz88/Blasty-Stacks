@@ -31,6 +31,9 @@ PUBLIC API
   Stop()                   cut it short (does NOT call onDone)
   AbortSequence()          ask it to stop; onDone is NOT called, so no flag
   AbortRequested
+  FinishSequence()         end EARLY BUT AS COMPLETED: remaining steps skipped,
+                           onDone IS called, so the flag is written. Used by the
+                           hero-upgrade loop once the next hero is unaffordable.
   IsRunning
   Overlay / Hand / Tooltip / Focus
   TryResolve(target, out screenPos)     TutorialTarget -> screen position

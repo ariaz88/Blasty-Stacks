@@ -48,7 +48,7 @@ THE STEPS
   TutorialFocusTapStep            <- what the guided ONBOARDING uses
       tooltip, tooltipSide, at (TutorialTarget), holePadding, dimAlpha, timings,
       until (default AnchorClicked), resolveTimeout, giveUpAfterSeconds,
-      keepGateAfter, settleAfter
+      keepGateAfter, settleAfter, ifHeroNotUpgradable (Off/AbortChain/EndChain)
       A tooltip and a pointing hand on ONE element, with every other pixel of the
       screen dead. Three things make it survive the real menu:
 
@@ -70,6 +70,21 @@ THE STEPS
 
       An AnchorClicked `until` with no anchorId of its own defaults to the
       anchor the step is pointing at, which is what it always means.
+
+      HERO GUARD (ifHeroNotUpgradable) - for steps that point at a hero CARD.
+      Once the card is ready, and before the hand shows, it asks
+      PlayerProgressionService.CanUpgrade(card.UnitId). On a definite "no" it
+      releases the screen and stops the chain, because the next beat would put
+      the finger on a greyed-out Upgrade button with everything else locked (a
+      10-minute lockout until the runner's hard stop). A card that is still
+      missing 0.6 s after its anchor went live (deck shorter than the index)
+      counts as "no" too.
+        AbortChain - runner.AbortSequence(): NOT marked as seen. Used on hero 1,
+                     where nothing has been taught yet.
+        EndChain   - runner.FinishSequence(): marked as seen. Used on heroes 2-4,
+                     where the lesson has already landed.
+      Anything it cannot read (no progression service, target not a card)
+      counts as "yes" - it only ever stops on a definite "no".
 
   TutorialWaitStep
       seconds. Dead time, e.g. to let a blast animation finish.

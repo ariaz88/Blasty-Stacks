@@ -34,6 +34,11 @@ public class TutorialAutoAnchors : MonoBehaviour
     [Header("Anchor ids (must match the sequence assets)")]
     [SerializeField] private string navUnitsId = "menu_nav_units";
     [SerializeField] private string firstDeployedCardId = "units_first_deployed_card";
+
+    [Tooltip("Anchors for deployed cards 2, 3, 4... in deck order. Element 0 is the " +
+             "SECOND card - the first keeps its own id above.")]
+    [SerializeField] private string[] moreDeployedCardIds =
+        { "units_deployed_card_2", "units_deployed_card_3", "units_deployed_card_4" };
     [SerializeField] private string upgradeButtonId = "units_upgrade_button";
     [SerializeField] private string detailBackId = "units_detail_back";
     [SerializeField] private string loseLeaveStageId = "lose_leave_stage";
@@ -107,6 +112,40 @@ public class TutorialAutoAnchors : MonoBehaviour
         Attach(units.DetailBackButton, detailBackId);
 
         BindFirstDeployedCard(units.DeployedContainer);
+        BindMoreDeployedCards(units.DeployedContainer);
+    }
+
+    /// <summary>
+    /// Cards 2..N. A GameObject carries only ONE TutorialAnchor, and the container
+    /// already holds card 1's, so each extra card gets an empty helper object.
+    ///
+    /// The helpers sit BESIDE the container (under its parent), never inside it:
+    /// UnitsPanelController.ClearContainer destroys EVERY child of the container on
+    /// each rebuild, and a helper inside would also be counted as a card. The parent
+    /// ("Deployed") is a plain RectTransform with no layout group, and the helpers
+    /// get ignoreLayout anyway in case that ever changes.
+    /// </summary>
+    private void BindMoreDeployedCards(Transform container)
+    {
+        if (!container || !container.parent || moreDeployedCardIds == null) return;
+
+        for (int i = 0; i < moreDeployedCardIds.Length; i++)
+        {
+            string id = moreDeployedCardIds[i];
+            if (string.IsNullOrEmpty(id)) continue;
+
+            string helperName = "TutorialAnchor_" + id;
+            if (container.parent.Find(helperName)) continue;   // bound on an earlier pass
+
+            var go = new GameObject(helperName, typeof(RectTransform), typeof(LayoutElement));
+            go.GetComponent<LayoutElement>().ignoreLayout = true;
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(container.parent, false);
+            rt.sizeDelta = Vector2.zero;
+
+            go.AddComponent<TutorialAnchor>().SetAnchorId(id);
+            go.AddComponent<TutorialChildAnchor>().Configure(container, i + 1);
+        }
     }
 
     private void BindFirstDeployedCard(Transform container)

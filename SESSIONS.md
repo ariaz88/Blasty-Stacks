@@ -289,6 +289,8 @@ Reasoning in full: `SESSIONS-ARCHIVE.md`._
 
 ## Session Log
 
+- **2026-09-25** — **Onboarding now upgrades ALL 4 deployed heroes** (pick card N → Upgrade → Back, ×4; only the last Back releases the screen). `Tut_Onboard_UnitsUpgrade` 4→13 steps; `TutorialAutoAnchors` adds helper anchors for cards 2-4 beside the container; new `TutorialFocusTapStep.ifHeroNotUpgradable` guard (hero 1 abort/unmarked, heroes 2-4 end/marked) + `TutorialRunner.FinishSequence()`. **Play-mode verified in OnBoarding Test** (13 beats, units 1-4 in deck order, gate released, 0 errors); guard paths (unaffordable / short deck) NOT exercised.
+
 - **2026-09-25** — **`UnitUpgradeFx` v4** after v3 was rejected (peak too small, stats didn't cover the numbers): rebuilt off the **SECOND** upgrade (m67..m95) with measured luminance curves — portrait-wide wash + column over the CP bar, ONE broad strip left of centre + big head sparkles; stats RowGlow + 1.6× diamonds cover the whole row, 1.4 s haze. Side-by-side verified in edit mode (scratchpad upfx4/). **Not play-tested.**
 - **2026-09-25** — **`UnitUpgradeFx` REBUILT after Arash's play-test rejected v1** ("four vertical lines on the character"; stats "too minimal"). Re-read the clip one frame per image, upscaled; rebuilt both effects frame by frame (lemon column + lumpy cloud → broad bands with the pale column lit behind → bold rising sparkles; joined diamonds → lens beam → lime spindles → smoky haze/wisps + tight digit edge), then **verified by rendering ours at the reference key-frame times and comparing side by side** (n7..n34). Rules in `UnitUpgradeFx.txt` HISTORY/NOTES. **Edit-mode verified only — Arash to test with Play mode stopped first** (a running Play session blocks recompiles).
 

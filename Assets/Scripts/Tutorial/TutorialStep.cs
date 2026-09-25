@@ -238,6 +238,20 @@ public class TutorialFocusTapStep : TutorialStep
     [Tooltip("Dead time after the tap, so a panel swap settles before the next beat.")]
     public float settleAfter = 0f;
 
+    public enum HeroGuard { Off, AbortChain, EndChain }
+
+    [Tooltip("For a step that points at a HERO CARD. Checked before the hand appears: " +
+             "if that hero cannot be upgraded right now (or the deck has no card " +
+             "there), the chain must not walk the player to a greyed-out Upgrade " +
+             "button with the screen locked.\n" +
+             "AbortChain - stop, NOT marked as seen (the first hero: nothing taught yet).\n" +
+             "EndChain   - stop, marked as seen (heroes 2-4: the lesson already landed).")]
+    public HeroGuard ifHeroNotUpgradable = HeroGuard.Off;
+
+    // A card that is still missing this long after the panel is up is not coming:
+    // the deck is shorter than this step's index.
+    private const float MissingCardGrace = 0.6f;
+
     public override IEnumerator Run(TutorialRunner runner)
     {
         var gate = runner.Focus;
@@ -248,9 +262,21 @@ public class TutorialFocusTapStep : TutorialStep
         if (gate) gate.BlockAll(dimAlpha);
 
         float waited = 0f;
+        float cardMissingFor = 0f;
         while (!runner.IsTargetReady(at))
         {
             if (runner.AbortRequested) yield break;
+
+            if (ifHeroNotUpgradable != HeroGuard.Off && IsListUpButCardMissing())
+            {
+                cardMissingFor += Time.unscaledDeltaTime;
+                if (cardMissingFor >= MissingCardGrace)
+                {
+                    StopForHeroGuard(runner, "the deck has no card here");
+                    yield break;
+                }
+            }
+            else cardMissingFor = 0f;
 
             waited += Time.unscaledDeltaTime;
             if (resolveTimeout > 0f && waited >= resolveTimeout)
@@ -263,6 +289,12 @@ public class TutorialFocusTapStep : TutorialStep
             }
 
             yield return null;
+        }
+
+        if (ifHeroNotUpgradable != HeroGuard.Off && !TargetHeroUpgradable())
+        {
+            StopForHeroGuard(runner, "that hero cannot be upgraded right now");
+            yield break;
         }
 
         // One live lookup, shared by the hole and the bubble so they can never
@@ -321,6 +353,54 @@ public class TutorialFocusTapStep : TutorialStep
 
     private string Describe()
         => at.kind == TutorialTarget.Kind.SceneAnchor ? $"anchor '{at.anchorId}'" : at.kind.ToString();
+
+    // ------------------------------------------------------------------
+    //  Hero guard
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// The anchor is live (so its panel is open) but resolves to nothing - the
+    /// list exists and has no item at this index.
+    /// </summary>
+    private bool IsListUpButCardMissing()
+    {
+        if (at.kind != TutorialTarget.Kind.SceneAnchor) return false;
+        var anchor = TutorialAnchor.Find(at.anchorId);
+        return anchor && !anchor.ResolveTransform();
+    }
+
+    /// <summary>
+    /// True when the card this step points at belongs to a hero the player can
+    /// upgrade right now. Anything we cannot read (no progression service, e.g. a
+    /// stripped test scene; a target that is not a card) counts as "yes" - the
+    /// guard only ever stops the chain on a definite "no".
+    /// </summary>
+    private bool TargetHeroUpgradable()
+    {
+        if (at.kind != TutorialTarget.Kind.SceneAnchor) return true;
+
+        var anchor = TutorialAnchor.Find(at.anchorId);
+        var t = anchor ? anchor.ResolveTransform() : null;
+        var card = t ? t.GetComponentInChildren<UnitCardView>(true) : null;
+        if (!card) return true;
+
+        var gsm = GameStartManager.Instance;
+        var progression = gsm ? gsm.ProgressionService : null;
+        if (progression == null) return true;
+
+        return progression.CanUpgrade(card.UnitId, out _);
+    }
+
+    private void StopForHeroGuard(TutorialRunner runner, string why)
+    {
+        bool end = ifHeroNotUpgradable == HeroGuard.EndChain;
+        Debug.Log($"[Tutorial] Focus step '{note}': {why} - " +
+                  (end ? "ending the chain here (marked as seen)." : "aborting (NOT marked as seen)."));
+
+        if (runner.Focus) runner.Focus.Release();
+        if (end) runner.FinishSequence();
+        else runner.AbortSequence();
+    }
 }
 
 /// <summary>Dead time. Useful for letting a blast animation finish before the next beat.</summary>

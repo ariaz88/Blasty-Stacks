@@ -32,6 +32,8 @@ INSPECTOR FIELDS
   overlayPrefab        (TutorialOverlay) spawned when the scene has none
   navUnitsId           default "menu_nav_units"
   firstDeployedCardId  default "units_first_deployed_card"
+  moreDeployedCardIds  default { "units_deployed_card_2", "_3", "_4" } - cards
+                       2..N in deck order (element 0 = the SECOND card)
   upgradeButtonId      default "units_upgrade_button"
   detailBackId         default "units_detail_back"
   loseLeaveStageId     default "lose_leave_stage"
@@ -47,7 +49,8 @@ FLOW
   BindMenu       MainMenuPanelController.UnitsButton / UnitsSelectedButton
   BindUnits      UnitsPanelController.UpgradeButton / UpgradeDisabledButton /
                  DetailBackButton, plus DeployedContainer -> TutorialAnchor +
-                 TutorialChildAnchor
+                 TutorialChildAnchor (card 1), plus one helper GameObject per
+                 moreDeployedCardIds entry (cards 2..N)
   BindLosePanel  LoseGame.MainMenuButton
 
 HOW IT CONNECTS
@@ -70,3 +73,10 @@ NOTES
   - Attach() never stomps an anchor id somebody authored by hand - it warns
     instead.
   - FindObjectOfType(true) everywhere, for the inactive-panel reason above.
+  !! Cards 2..N need HELPER objects ("TutorialAnchor_<id>"): a GameObject holds
+     only one TutorialAnchor and the container already has card 1's. The helpers
+     sit BESIDE the container (under "Deployed", a plain RectTransform with no
+     layout), NEVER inside it - UnitsPanelController.ClearContainer destroys every
+     child of the container on each rebuild, and a helper inside would also be
+     counted as a card by TutorialChildAnchor. They carry LayoutElement.ignoreLayout
+     in case a layout group is ever added to that parent.

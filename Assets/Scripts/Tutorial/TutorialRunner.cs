@@ -89,6 +89,7 @@ public class TutorialRunner : MonoBehaviour
     {
         Stop();
         _abortRequested = false;
+        _finishRequested = false;
         _sequence = StartCoroutine(RunSequence(sequence, onFinished));
     }
 
@@ -117,6 +118,20 @@ public class TutorialRunner : MonoBehaviour
     /// <summary>True once something has asked the sequence to stop.</summary>
     public bool AbortRequested => _abortRequested;
 
+    /// <summary>
+    /// Ends the sequence EARLY BUT AS COMPLETED: the remaining steps are skipped and
+    /// onFinished still runs, so the tutorial is marked as seen. For a lesson that
+    /// has already made its point, e.g. the hero-upgrade loop once the player can no
+    /// longer afford the next hero.
+    /// </summary>
+    public void FinishSequence()
+    {
+        _finishRequested = true;
+        if (_overlay) _overlay.ClearAll();
+    }
+
+    private bool _finishRequested;
+
     private void HandleAbortRequested() => AbortSequence();
 
     private IEnumerator RunSequence(TutorialSequenceSO sequence, Action onFinished)
@@ -138,7 +153,7 @@ public class TutorialRunner : MonoBehaviour
             {
                 for (int i = 0; i < sequence.steps.Count; i++)
                 {
-                    if (_abortRequested) break;
+                    if (_abortRequested || _finishRequested) break;
 
                     var step = sequence.steps[i];
                     if (step == null) continue;   // an empty row in the SerializeReference list
@@ -146,7 +161,7 @@ public class TutorialRunner : MonoBehaviour
                     var running = step.Run(this);
                     while (running.MoveNext())
                     {
-                        if (_abortRequested) break;
+                        if (_abortRequested || _finishRequested) break;
 
                         if (hardStopSeconds > 0f && Time.unscaledTime - startedAt >= hardStopSeconds)
                         {

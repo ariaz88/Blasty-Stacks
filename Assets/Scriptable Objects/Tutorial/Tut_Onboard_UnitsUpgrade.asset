@@ -19,6 +19,15 @@ MonoBehaviour:
   - rid: 7311204558210105602
   - rid: 7311204558210105603
   - rid: 7311204558210105604
+  - rid: 7311204558210105605
+  - rid: 7311204558210105606
+  - rid: 7311204558210105607
+  - rid: 7311204558210105608
+  - rid: 7311204558210105609
+  - rid: 7311204558210105610
+  - rid: 7311204558210105611
+  - rid: 7311204558210105612
+  - rid: 7311204558210105613
   references:
     version: 2
     RefIds:
@@ -55,10 +64,11 @@ MonoBehaviour:
         giveUpAfterSeconds: 0
         keepGateAfter: 1
         settleAfter: 0.5
+        ifHeroNotUpgradable: 0
     - rid: 7311204558210105602
       type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
       data:
-        note: 2 - pick the first deployed hero
+        note: hero 1 - pick card 1. Not affordable = abort, not marked as seen.
         tooltip: Pick this hero
         tooltipSide: 0
         at:
@@ -88,10 +98,11 @@ MonoBehaviour:
         giveUpAfterSeconds: 0
         keepGateAfter: 1
         settleAfter: 0.35
+        ifHeroNotUpgradable: 1
     - rid: 7311204558210105603
       type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
       data:
-        note: 3 - upgrade. Ends on UnitUpgraded, not on the click.
+        note: hero 1 - upgrade. Ends on UnitUpgraded, not on the click.
         tooltip: Upgrade to make them stronger
         tooltipSide: 1
         at:
@@ -121,10 +132,317 @@ MonoBehaviour:
         giveUpAfterSeconds: 0
         keepGateAfter: 1
         settleAfter: 0.5
+        ifHeroNotUpgradable: 0
     - rid: 7311204558210105604
       type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
       data:
-        note: 4 - go back. Last step, so the gate is released.
+        note: hero 1 - go back. Gate stays shut for the next hero.
+        tooltip: Go back
+        tooltipSide: 1
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_detail_back
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 14, y: 14}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 4
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.35
+        ifHeroNotUpgradable: 0
+    - rid: 7311204558210105605
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: hero 2 - pick card 2. Not affordable / no card = end here, marked as seen.
+        tooltip: Pick this hero
+        tooltipSide: 0
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_deployed_card_2
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 10, y: 10}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 4
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.35
+        ifHeroNotUpgradable: 2
+    - rid: 7311204558210105606
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: hero 2 - upgrade. Ends on UnitUpgraded, not on the click.
+        tooltip: Upgrade to make them stronger
+        tooltipSide: 1
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_upgrade_button
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 14, y: 14}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 6
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.5
+        ifHeroNotUpgradable: 0
+    - rid: 7311204558210105607
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: hero 2 - go back. Gate stays shut for the next hero.
+        tooltip: Go back
+        tooltipSide: 1
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_detail_back
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 14, y: 14}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 4
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.35
+        ifHeroNotUpgradable: 0
+    - rid: 7311204558210105608
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: hero 3 - pick card 3. Not affordable / no card = end here, marked as seen.
+        tooltip: Pick this hero
+        tooltipSide: 0
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_deployed_card_3
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 10, y: 10}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 4
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.35
+        ifHeroNotUpgradable: 2
+    - rid: 7311204558210105609
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: hero 3 - upgrade. Ends on UnitUpgraded, not on the click.
+        tooltip: Upgrade to make them stronger
+        tooltipSide: 1
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_upgrade_button
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 14, y: 14}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 6
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.5
+        ifHeroNotUpgradable: 0
+    - rid: 7311204558210105610
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: hero 3 - go back. Gate stays shut for the next hero.
+        tooltip: Go back
+        tooltipSide: 1
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_detail_back
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 14, y: 14}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 4
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.35
+        ifHeroNotUpgradable: 0
+    - rid: 7311204558210105611
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: hero 4 - pick card 4. Not affordable / no card = end here, marked as seen.
+        tooltip: Pick this hero
+        tooltipSide: 0
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_deployed_card_4
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 10, y: 10}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 4
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.35
+        ifHeroNotUpgradable: 2
+    - rid: 7311204558210105612
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: hero 4 - upgrade. Ends on UnitUpgraded, not on the click.
+        tooltip: Upgrade to make them stronger
+        tooltipSide: 1
+        at:
+          kind: 1
+          boardCell: {x: 0, y: 0}
+          cellOffset: {x: 0, y: 0}
+          anchorId: units_upgrade_button
+          screenPoint01: {x: 0, y: 0}
+          worldPoint: {x: 0, y: 0, z: 0}
+          pixelOffset: {x: 0, y: 0}
+          fallbackRectSize: {x: 0, y: 0}
+        holePadding: {x: 14, y: 14}
+        dimAlpha: 0.42
+        timings:
+          appearTime: 0.15
+          pressTime: 0.12
+          travelTime: 0.85
+          releaseTime: 0.2
+          pauseTime: 0.45
+        until:
+          kind: 6
+          seconds: 0
+          requiredCount: 0
+          anchorId:
+          unitId: 0
+        resolveTimeout: 10
+        giveUpAfterSeconds: 0
+        keepGateAfter: 1
+        settleAfter: 0.5
+        ifHeroNotUpgradable: 0
+    - rid: 7311204558210105613
+      type: {class: TutorialFocusTapStep, ns: , asm: Assembly-CSharp}
+      data:
+        note: hero 4 - go back. Last step, so the gate is released.
         tooltip: Go back
         tooltipSide: 1
         at:
@@ -154,3 +472,4 @@ MonoBehaviour:
         giveUpAfterSeconds: 0
         keepGateAfter: 0
         settleAfter: 0
+        ifHeroNotUpgradable: 0
