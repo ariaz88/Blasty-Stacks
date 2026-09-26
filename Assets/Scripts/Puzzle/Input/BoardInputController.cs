@@ -35,14 +35,14 @@ public class BoardInputController : MonoBehaviour
     [SerializeField, Min(1)] private int maxSubStepsPerFrame = 64;
 
     [Tooltip("NO-SNAP MODE. ON: the piece does not move at all when released - it stays exactly " +
-             "where the finger left it, and reserves every cell its body overlaps so nothing " +
-             "visually overlaps and matching still works. Cost: a piece dropped between cells " +
-             "takes up 2 cells instead of 1, so the board fills faster. " +
+             "where the finger left it and books the cell each of its blocks mostly covers. " +
+             "Collision is against the other pieces' REAL bodies, so pieces can always be pushed " +
+             "flush together wherever they rest. " +
              "OFF: the piece eases onto the nearest cell over settleDuration (up to half a cell).")]
     [SerializeField] private bool restExactlyWhereReleased = false;
 
-    [Tooltip("Seconds spent easing onto the exact cell center after the pointer is released. " +
-             "Unused when Rest Exactly Where Released is on.")]
+    [Tooltip("Seconds spent easing onto the resting position after the pointer is released " +
+             "(the cell center, or in no-snap mode just dropping the drag lift).")]
     [SerializeField, Range(0f, 0.3f)] private float settleDuration = 0.10f;
 
     [Tooltip("When a piece is walled on the axis it is being pushed along, it may be pulled onto " +
@@ -55,6 +55,7 @@ public class BoardInputController : MonoBehaviour
     private PieceSimple activePiece;
     private Vector2Int lastValidAnchor;
     private Vector2Int dragStartAnchor;   // anchor the piece sat on when it was picked up
+    private Vector2 dragStartFree;        // CONTINUOUS position it was picked up from
     private Vector2 freeAnchor;           // CONTINUOUS anchor, in cell units
     private Vector2 grabOffsetLocal;      // pieceLocal - pointerLocal at pickup (board-local units)
     private float boardLocalZ;            // board plane depth in board-local space
@@ -66,6 +67,14 @@ public class BoardInputController : MonoBehaviour
     private float settleT;
 
     private readonly List<Vector2Int> tmpFootprint = new();
+
+    // ---- collision snapshot, taken at pickup ----
+    // Min corner of every 1x1 box the held piece may not overlap, in CONTINUOUS cell
+    // units: the other pieces' blocks where they REALLY are (possibly between cells),
+    // plus blocked/ghost cells. Nothing else moves while a piece is held, so one
+    // snapshot per drag is exact.
+    private readonly List<Vector2> obstacleBoxes = new();
+    private Vector2 anchorMin, anchorMax;   // anchor range that keeps the whole shape on the board
 
     private void Reset()
     {
@@ -202,25 +211,72 @@ public class BoardInputController : MonoBehaviour
     }
 
     /// <summary>
-    /// Legality of a CONTINUOUS anchor. A piece sitting between cells overlaps the
-    /// union of its footprints at the surrounding integer anchors, so testing the
-    /// (up to) four floor/ceil corners is exact.
+    /// Snapshots everything the held piece can collide with, in continuous cell units.
+    /// Other pieces are read from their TRANSFORMS, not from the cells they booked: a
+    /// piece resting at x = 2.5 books one column but its body spans 2.5 -> 3.5, and
+    /// colliding with the booked cells instead is what left an unclosable gap beside
+    /// every piece dropped between cells.
+    /// </summary>
+    private void BuildCollisionSnapshot(PieceSimple mover)
+    {
+        obstacleBoxes.Clear();
+
+        foreach (var p in PieceSimple.AllRegistered)
+        {
+            if (!p || p == mover || !p.IsPlaced || !p.gameObject.activeInHierarchy) continue;
+            if (p.Board && p.Board != board) continue;
+
+            Vector2 a = SnapNearWhole(board.WorldToContinuousAnchor(p.transform.position));
+            var offs = p.ShapeOffsets;
+            for (int i = 0; i < offs.Count; i++)
+                obstacleBoxes.Add(new Vector2(a.x + offs[i].x, a.y + offs[i].y));
+        }
+
+        for (int x = 0; x < board.Width; x++)
+            for (int y = 0; y < board.Height; y++)
+            {
+                var c = new Vector2Int(x, y);
+                if (board.IsBlocked(c) || board.IsGhost(c)) obstacleBoxes.Add(c);
+            }
+
+        // The anchor range that keeps every block of the shape on the board.
+        var shape = mover.ShapeOffsets;
+        int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+        for (int i = 0; i < shape.Count; i++)
+        {
+            minX = Mathf.Min(minX, shape[i].x); maxX = Mathf.Max(maxX, shape[i].x);
+            minY = Mathf.Min(minY, shape[i].y); maxY = Mathf.Max(maxY, shape[i].y);
+        }
+        anchorMin = new Vector2(-minX, -minY);
+        anchorMax = new Vector2(board.Width - 1 - maxX, board.Height - 1 - maxY);
+    }
+
+    /// <summary>
+    /// Legality of a CONTINUOUS anchor: every block of the piece is a 1x1 box at
+    /// anchor + offset, and none may overlap an obstacle box. Exactly touching
+    /// (distance 1 on an axis) is legal - that is what lets two pieces sit flush.
     /// </summary>
     private bool IsFreeAnchorLegal(Vector2 anchor, PieceSimple piece)
     {
         // A value a hair off a whole cell must count as being ON that cell, or float
-        // noise flips the corner set between one column and two and the piece
-        // shivers against every wall it touches.
+        // noise reads a flush contact as a sliver of overlap and the piece shivers
+        // against every wall it touches.
         anchor = SnapNearWhole(anchor);
 
-        int x0 = Mathf.FloorToInt(anchor.x), x1 = Mathf.CeilToInt(anchor.x);
-        int y0 = Mathf.FloorToInt(anchor.y), y1 = Mathf.CeilToInt(anchor.y);
+        if (anchor.x < anchorMin.x - AnchorEpsilon || anchor.x > anchorMax.x + AnchorEpsilon) return false;
+        if (anchor.y < anchorMin.y - AnchorEpsilon || anchor.y > anchorMax.y + AnchorEpsilon) return false;
 
-        if (!IsAnchorLegal(new Vector2Int(x0, y0), piece)) return false;
-        if (x1 != x0 && !IsAnchorLegal(new Vector2Int(x1, y0), piece)) return false;
-        if (y1 != y0 && !IsAnchorLegal(new Vector2Int(x0, y1), piece)) return false;
-        if (x1 != x0 && y1 != y0 && !IsAnchorLegal(new Vector2Int(x1, y1), piece)) return false;
-
+        var offs = piece.ShapeOffsets;
+        for (int i = 0; i < offs.Count; i++)
+        {
+            float bx = anchor.x + offs[i].x, by = anchor.y + offs[i].y;
+            for (int j = 0; j < obstacleBoxes.Count; j++)
+            {
+                var c = obstacleBoxes[j];
+                if (Mathf.Abs(bx - c.x) < 1f - AnchorEpsilon && Mathf.Abs(by - c.y) < 1f - AnchorEpsilon)
+                    return false;
+            }
+        }
         return true;
     }
 
@@ -288,6 +344,8 @@ public class BoardInputController : MonoBehaviour
         lastValidAnchor = anchor;
         dragStartAnchor = anchor;
 
+        BuildCollisionSnapshot(piece);
+
         // Seed the continuous position from where the piece ACTUALLY is, not from the
         // whole-cell anchor. In no-snap mode a piece can legitimately be resting
         // between cells, and seeding from the anchor would teleport it onto its cell
@@ -295,6 +353,7 @@ public class BoardInputController : MonoBehaviour
         Vector3 restLocal = board.transform.InverseTransformPoint(piece.transform.position);
         freeAnchor = LocalToAnchor(new Vector2(restLocal.x, restLocal.y));
         if (!IsFreeAnchorLegal(freeAnchor, piece)) freeAnchor = anchor;
+        dragStartFree = freeAnchor;
 
         // Keep the sub-cell grab point: the piece must not jump under the finger.
         // Measure the offset against where the piece is ABOUT to be drawn, not
@@ -418,50 +477,112 @@ public class BoardInputController : MonoBehaviour
         if (other == 1 && !activePiece.AllowsY) return;
 
         float perp = Axis(freeAnchor, other);
-        float lane = RoundWhole(perp);
+        CollectLanes(perp, other);
+
+        // Nearest lane first, so the piece is displaced as little as possible.
+        tmpLanes.Sort((a, b) => Mathf.Abs(a - perp).CompareTo(Mathf.Abs(b - perp)));
+
+        for (int i = 0; i < tmpLanes.Count; i++)
+        {
+            Vector2 aligned = WithAxis(freeAnchor, other, tmpLanes[i]);
+            if (!IsFreeAnchorLegal(aligned, activePiece)) continue;
+
+            float retry = ResolveAxis(aligned, axis, target);
+            if (Mathf.Approximately(retry, Axis(aligned, axis))) continue;  // still walled - don't nudge for nothing
+
+            freeAnchor = WithAxis(aligned, axis, retry);
+
+            // Hold the lane for the rest of the frame. Otherwise the perpendicular
+            // resolve later in this same frame drags the piece straight back off the
+            // line it was just helped onto, and the two fight sub-step by sub-step.
+            laneLockedAxis = other;
+            return;
+        }
+    }
+
+    private readonly List<float> tmpLanes = new();
+
+    /// <summary>
+    /// Candidate perpendicular positions within gapAssistCells of <paramref name="perp"/>:
+    /// the nearest whole cell line, plus every position that lines the piece up flush
+    /// with an obstacle edge. The second kind matters once pieces rest between cells -
+    /// a corridor between two of them need not sit on a whole cell line at all.
+    /// </summary>
+    private void CollectLanes(float perp, int perpAxis)
+    {
+        tmpLanes.Clear();
+        TryAddLane(RoundWhole(perp), perp);
+
+        var offs = activePiece.ShapeOffsets;
+        for (int i = 0; i < offs.Count; i++)
+        {
+            float off = perpAxis == 0 ? offs[i].x : offs[i].y;
+            for (int j = 0; j < obstacleBoxes.Count; j++)
+            {
+                float c = Axis(obstacleBoxes[j], perpAxis);
+                TryAddLane(c + 1f - off, perp);
+                TryAddLane(c - 1f - off, perp);
+            }
+        }
+    }
+
+    private void TryAddLane(float lane, float perp)
+    {
         float drift = Mathf.Abs(perp - lane);
         if (drift <= AnchorEpsilon || drift > gapAssistCells) return;
-
-        Vector2 aligned = WithAxis(freeAnchor, other, lane);
-        if (!IsFreeAnchorLegal(aligned, activePiece)) return;
-
-        float retry = ResolveAxis(aligned, axis, target);
-        if (Mathf.Approximately(retry, Axis(aligned, axis))) return;  // still walled - don't nudge for nothing
-
-        freeAnchor = WithAxis(aligned, axis, retry);
-
-        // Hold the lane for the rest of the frame. Otherwise the perpendicular
-        // resolve later in this same frame drags the piece straight back off the
-        // line it was just helped onto, and the two fight sub-step by sub-step.
-        laneLockedAxis = other;
+        for (int i = 0; i < tmpLanes.Count; i++)
+            if (Mathf.Abs(tmpLanes[i] - lane) <= AnchorEpsilon) return;
+        tmpLanes.Add(lane);
     }
 
     /// <summary>
-    /// Moves one axis of <paramref name="anchor"/> toward <paramref name="target"/>,
-    /// stopping flush against the obstruction. Blocking boundaries always fall on
-    /// whole cells, so the flush position is the integer boundary ahead.
+    /// Sweeps one axis of <paramref name="anchor"/> toward <paramref name="target"/>
+    /// and stops EXACTLY flush against the first obstacle in the way, wherever that
+    /// obstacle's edge is - on a cell line or halfway between two. Obstacles only
+    /// count if they overlap the piece on the perpendicular axis (a piece exactly
+    /// level with the row above slides past it).
     /// </summary>
     private float ResolveAxis(Vector2 anchor, int axis, float target)
     {
-        float current = axis == 0 ? anchor.x : anchor.y;
+        float current = Axis(anchor, axis);
         if (Mathf.Approximately(current, target)) return current;
 
-        Vector2 test = anchor;
-        if (axis == 0) test.x = target; else test.y = target;
-        if (IsFreeAnchorLegal(test, activePiece)) return target;
-
         bool forward = target > current;
-        float boundary = forward ? Mathf.Ceil(current) : Mathf.Floor(current);
+        float limit = forward ? Mathf.Min(target, Axis(anchorMax, axis))
+                              : Mathf.Max(target, Axis(anchorMin, axis));
 
-        // Ceil/Floor of a legal position is itself legal (it overlaps fewer cells),
-        // but guard anyway rather than trusting the invariant blindly.
-        if (forward ? boundary <= target : boundary >= target)
+        int perp = 1 - axis;
+        float anchorPerp = Axis(anchor, perp);
+        var offs = activePiece.ShapeOffsets;
+
+        for (int i = 0; i < offs.Count; i++)
         {
-            if (axis == 0) test.x = boundary; else test.y = boundary;
-            if (IsFreeAnchorLegal(test, activePiece)) return boundary;
+            float offA = axis == 0 ? offs[i].x : offs[i].y;
+            float offP = axis == 0 ? offs[i].y : offs[i].x;
+            float boxA = current + offA;
+            float boxP = anchorPerp + offP;
+
+            for (int j = 0; j < obstacleBoxes.Count; j++)
+            {
+                var c = obstacleBoxes[j];
+                if (Mathf.Abs(boxP - Axis(c, perp)) >= 1f - AnchorEpsilon) continue;
+
+                float cA = Axis(c, axis);
+                if (forward)
+                {
+                    if (cA >= boxA + 1f - AnchorEpsilon) limit = Mathf.Min(limit, cA - 1f - offA);
+                }
+                else
+                {
+                    if (cA + 1f <= boxA + AnchorEpsilon) limit = Mathf.Max(limit, cA + 1f - offA);
+                }
+            }
         }
 
-        return current;
+        // Never let the sweep push the piece backwards (already flush, or starting
+        // in a bad overlap): stay put instead.
+        if (forward ? limit < current : limit > current) return current;
+        return limit;
     }
 
     // ------------------------ Release ------------------------
@@ -505,58 +626,48 @@ public class BoardInputController : MonoBehaviour
     }
 
     /// <summary>
-    /// NO-SNAP RELEASE. Leaves the piece exactly where the finger left it and books
-    /// every cell its body overlaps, so the occupancy grid still tells the truth and
-    /// matching, blocked cells and the move budget all keep working unchanged.
-    /// Returns false if the board refuses the reservation, in which case the caller
-    /// falls back to the ordinary snap-to-cell path.
+    /// NO-SNAP RELEASE. Leaves the piece exactly where the finger left it (only the
+    /// drag lift eases off) and books, per block, the ONE cell that block mostly covers
+    /// (the rounded anchor's footprint). Collision never reads these bookings - it uses
+    /// real bodies - so the bookings only feed match candidates, tutorial hints and
+    /// "is the board empty". Two pieces whose bodies do not overlap always round to
+    /// different cells (round(x + 1) == round(x) + 1), so bookings cannot collide.
+    /// Always returns true.
     /// </summary>
     private bool TryRestInPlace(PieceSimple p)
     {
-        BuildOverlappedCells(freeAnchor, p, tmpFootprint);
+        Vector2 releasedAt = freeAnchor;
+        Vector2 rest = freeAnchor;
 
-        if (!p.TryPlaceExact(lastValidAnchor, tmpFootprint, snapRootToAnchor: false))
-            return false;
+        Vector2Int restAnchor = RoundAnchor(SnapNearWhole(rest));
+        board.ShapeToCells(restAnchor, p.ShapeOffsets, tmpFootprint);
 
-        // Drop the drag lift, but do NOT touch X/Y - that is the whole point.
-        p.transform.position = AnchorToWorld(freeAnchor);
+        if (p.TryPlaceExact(restAnchor, tmpFootprint, snapRootToAnchor: false))
+        {
+            if (moveBudget && restAnchor != dragStartAnchor)
+                moveBudget.RegisterMove();
+        }
+        else
+        {
+            // Only reachable through float noise on an exact x.5 boundary. The piece
+            // never released its old booking, so slide it back to where it was
+            // picked up rather than snapping it anywhere.
+            rest = dragStartFree;
+        }
 
-        if (moveBudget && lastValidAnchor != dragStartAnchor)
-            moveBudget.RegisterMove();
+        freeAnchor = rest;
 
-        var resolver = GetComponent<MatchResolver>() ?? FindObjectOfType<MatchResolver>();
-        if (resolver) resolver.ResolveFrom(p);
+        // Ease off the drag lift through the same settle as snap mode;
+        // CompleteSettle runs match resolution on landing.
+        settlePiece = p;
+        settleFrom = AnchorToWorld(releasedAt) + board.BoardPlaneNormal() * liftWhileDragging;
+        settleTo = AnchorToWorld(rest);
+        settleT = 0f;
+
+        if (settleDuration <= 0f) CompleteSettle();
+        else p.transform.position = settleFrom;
 
         return true;
-    }
-
-    /// <summary>
-    /// Every cell a piece at a CONTINUOUS anchor overlaps: the union of its footprint
-    /// at the surrounding whole anchors. A piece straddling a boundary covers both
-    /// sides, so it must reserve both.
-    /// </summary>
-    private void BuildOverlappedCells(Vector2 anchor, PieceSimple piece, List<Vector2Int> outCells)
-    {
-        anchor = SnapNearWhole(anchor);
-
-        int x0 = Mathf.FloorToInt(anchor.x), x1 = Mathf.CeilToInt(anchor.x);
-        int y0 = Mathf.FloorToInt(anchor.y), y1 = Mathf.CeilToInt(anchor.y);
-
-        outCells.Clear();
-        AddCorner(x0, y0, piece, outCells);
-        if (x1 != x0) AddCorner(x1, y0, piece, outCells);
-        if (y1 != y0) AddCorner(x0, y1, piece, outCells);
-        if (x1 != x0 && y1 != y0) AddCorner(x1, y1, piece, outCells);
-    }
-
-    private static void AddCorner(int ax, int ay, PieceSimple piece, List<Vector2Int> outCells)
-    {
-        var offsets = piece.ShapeOffsets;
-        for (int i = 0; i < offsets.Count; i++)
-        {
-            var c = new Vector2Int(ax + offsets[i].x, ay + offsets[i].y);
-            if (!outCells.Contains(c)) outCells.Add(c);
-        }
     }
 
     private void TickSettle()

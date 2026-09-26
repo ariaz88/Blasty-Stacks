@@ -83,6 +83,12 @@ public class PieceSimple : MonoBehaviour
     {
         return Registry.TryGetValue(id, out var p) ? p : null;
     }
+
+    /// <summary>Every piece that has run Start (and so has an id). Read-only use.</summary>
+    public static IEnumerable<PieceSimple> AllRegistered => Registry.Values;
+
+    /// <summary>True while the piece holds cells on the board (false once a match releases it).</summary>
+    public bool IsPlaced => _isPlaced;
     private void Awake()
     {
         if (!board) board = FindObjectOfType<BoardGridXY>();

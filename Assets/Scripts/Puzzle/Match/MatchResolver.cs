@@ -47,6 +47,7 @@ public class MatchResolver : MonoBehaviour
 
     private readonly List<Vector2Int> _footprint = new();
     private readonly HashSet<Vector2Int> _neighborCells = new();
+    private readonly List<PieceSimple> _candidates = new();
 
     // NOTE: the collapse beat deliberately allocates its own lists per piece - see
     // CollapseThenBurst. They used to be shared scratch fields here, which silently broke
@@ -178,32 +179,44 @@ public class MatchResolver : MonoBehaviour
             var cur = q.Dequeue();
             result.Add(cur);
 
-            // Build the 4-neighbor cell set around cur's footprint
-            // Use the cells the piece ACTUALLY holds, not anchor + offsets. A piece
-            // resting between cells reserves every cell it overlaps, and looking at
-            // the nominal footprint there would probe the wrong cells and miss matches.
-            if (cur.OccupiedCells != null && cur.OccupiedCells.Count > 0)
-                BuildCellNeighbors4(cur.OccupiedCells, _neighborCells);
-            else
-                BuildFootprintNeighbors4(cur.Anchor, cur.ShapeOffsets, _neighborCells);
-
-            foreach (var nCell in _neighborCells)
+            // Candidates. With the geometric touch test on, EVERY placed piece is a
+            // candidate and ArePiecesTouching decides: a piece resting between cells
+            // books only the cell each block mostly covers, so two bodies that
+            // genuinely touch can book cells that are diagonal or two apart, and a
+            // 4-neighbour cell sweep would miss them. The board holds a few dozen
+            // pieces, so the brute-force scan costs nothing.
+            _candidates.Clear();
+            if (requireGeometricTouch)
             {
-                if (!board.IsInside(nCell)) continue;
+                foreach (var p in PieceSimple.AllRegistered)
+                    if (p && p != cur && p.IsPlaced && p.gameObject.activeInHierarchy)
+                        _candidates.Add(p);
+            }
+            else
+            {
+                if (cur.OccupiedCells != null && cur.OccupiedCells.Count > 0)
+                    BuildCellNeighbors4(cur.OccupiedCells, _neighborCells);
+                else
+                    BuildFootprintNeighbors4(cur.Anchor, cur.ShapeOffsets, _neighborCells);
 
-                int occ = board.GetOccupant(nCell);
-                if (occ <= 0) continue;
+                foreach (var nCell in _neighborCells)
+                {
+                    if (!board.IsInside(nCell)) continue;
+                    int occ = board.GetOccupant(nCell);
+                    if (occ <= 0) continue;
+                    var byCell = PieceSimple.GetById(occ);
+                    if (byCell != null && !_candidates.Contains(byCell)) _candidates.Add(byCell);
+                }
+            }
 
-                var piece = PieceSimple.GetById(occ);
-                if (piece == null) continue;
+            foreach (var piece in _candidates)
+            {
                 if (seen.Contains(piece)) continue;
 
                 if (/*piece.ShapeId == seed.ShapeId &&*/ AreShapesMatchCompatible(piece.ShapeId, seed.ShapeId) && piece.ColorId == seed.ColorId)
                 {
-                    // The cell sweep above is only a CANDIDATE filter. A piece resting
-                    // between cells reserves every cell it overlaps, so that sweep
-                    // reaches further than the piece actually extends and would match
-                    // across a visible gap. Confirm the bodies genuinely touch.
+                    // Candidates are only a broad phase. Where pieces rest between
+                    // cells, only the real bodies say whether they touch.
                     if (requireGeometricTouch && !ArePiecesTouching(cur, piece)) continue;
 
                     seen.Add(piece);

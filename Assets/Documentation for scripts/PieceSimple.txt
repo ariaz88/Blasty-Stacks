@@ -21,6 +21,14 @@ STATIC REGISTRY
       The board stores only an integer owner id per cell. This registry is how
       MatchResolver turns that id back into the actual piece object.
       Ids are assigned in Start (if pieceId == 0) and removed in OnDestroy.
+  AllRegistered (static IEnumerable<PieceSimple>)   added 2026-09-26
+      Read-only view of Registry.Values. BoardInputController builds its
+      body-collision snapshot from it and MatchResolver scans it for match
+      candidates. Do not add/remove pieces while enumerating it.
+  IsPlaced (bool)   added 2026-09-26
+      True while the piece holds cells; false after ReleaseFromBoard (a match
+      releases pieces before their clear animation). Pieces with IsPlaced == false
+      are neither obstacles nor match candidates.
 
 INSPECTOR FIELDS
 ----------------

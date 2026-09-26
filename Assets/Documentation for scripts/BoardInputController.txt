@@ -53,11 +53,17 @@ INSPECTOR FIELDS
     restExactlyWhereReleased
                      (bool, default OFF) NO-SNAP MODE. ON: the piece does not move
                      at all on release - it stays exactly where the finger left it
-                     and reserves every cell its body overlaps. OFF: it eases onto
-                     the nearest cell over settleDuration. See NO-SNAP below.
+                     and books the one cell each block mostly covers. OFF: it eases
+                     onto the nearest cell over settleDuration. See NO-SNAP below.
+                     ON in LevelTemplate.prefab (every stage) and Tutorial_Board_01.
+                     THE USER DOES NOT WANT ANY RELEASE SNAP IN THIS MODE (2026-09-26).
+  REMOVED 2026-09-26: releaseSnapCells (near-cell release snap). It lived one day;
+                     the user rejected snapping outright and it did not fix the
+                     gap for drops > 0.25 from a line. Solved by BODY COLLISION below.
     gapAssistCells   (float 0-0.49, default 0.15) how far, in cells, the piece may
-                     be pulled onto the nearest cell LINE on the perpendicular
-                     axis when the axis it is being pushed along is walled.
+                     be pulled onto the nearest LANE on the perpendicular axis
+                     (a whole cell line OR a line flush with an obstacle edge)
+                     when the axis it is being pushed along is walled.
                      KEEP THIS SMALL - it displaces the piece WITHOUT moving the
                      finger, so a large value is felt directly as "I released it
                      here and it landed there". It was 0.4 and that was a large
@@ -88,10 +94,19 @@ RUNTIME STATE
                    grabbed cell, not the grabbed point.
   boardLocalZ      board plane depth in the board's own local space, cached at
                    pickup so AnchorToWorld does not have to re-derive it.
+  dragStartFree    (Vector2) continuous position at pickup; where a no-snap
+                   release slides back to if the board refuses the booking.
+  obstacleBoxes    (List<Vector2>) COLLISION SNAPSHOT taken at pickup: min corner
+                   of every 1x1 box the held piece may not overlap - each block
+                   of every other placed piece where its TRANSFORM really is,
+                   plus blocked/ghost cells. See BODY COLLISION below.
+  anchorMin / anchorMax
+                   anchor range that keeps every block of the held shape on the
+                   board (board edges are handled as a clamp, not as boxes).
   settlePiece / settleFrom / settleTo / settleT
                    the release ease. Driven from Update, not a coroutine, so it
                    can be force-completed at any moment (see CompleteSettle).
-  tmpFootprint     reused list
+  tmpFootprint / tmpLanes   reused lists
 
 INPUT ROUTING
 -------------
@@ -136,12 +151,23 @@ LEGALITY
       registered on its ORIGINAL cells for the whole drag - TryPlace only runs
       on release - which is exactly why passing its own id matters.
 
-  IsFreeAnchorLegal(anchor, piece)
-      Legality of a CONTINUOUS anchor. A piece sitting between cells overlaps
-      the union of its footprints at the surrounding integer anchors, so testing
-      the (up to) four floor/ceil corners is EXACT, not an approximation. This
-      is what stops a piece from visually overlapping a neighbour's corner while
-      moving diagonally - a per-axis check alone would miss that case.
+  BODY COLLISION (rewritten 2026-09-26) - BuildCollisionSnapshot / IsFreeAnchorLegal / ResolveAxis
+      THE BUG IT FIXES ("Piece Movement Bug" video, Assets/Arts/Reference videos/Board):
+      collision used to test the cells other pieces had BOOKED. A piece resting at
+      x = 2.85 booked cells 2 AND 3, so a same-colour piece pushed toward it could
+      not enter cell 3 and stopped with a visible gap (0.15-0.85 cell). The match
+      test needs <= touchTolerance (0.05), so they never matched, and the pushed
+      piece just shook in place (pickup highlight) without moving.
+      NOW: collision is against the other pieces' REAL bodies. At pickup,
+      BuildCollisionSnapshot reads every other placed piece's transform through
+      BoardGridXY.WorldToContinuousAnchor (SnapNearWhole'd) and records each block
+      as a 1x1 box; blocked/ghost cells are added as boxes too. Nothing else moves
+      while a piece is held, so one snapshot per drag is exact.
+      IsFreeAnchorLegal(anchor): inside [anchorMin, anchorMax] and no block of the
+      piece overlaps any obstacle box (|dx| < 1 AND |dy| < 1, epsilon 1e-4).
+      Distance exactly 1 is legal - that is flush contact.
+      No snapping is involved anywhere. Verified by MCP fuzz (400 random drags):
+      0 body overlaps, 0 double bookings, 0 out-of-bounds, 0 missed matches.
 
 PICKING
 -------
@@ -164,8 +190,10 @@ PICKING
          TryWorldToCell and then to a clamped rounded read of the transform.
          The old code went straight to TryWorldToCell and, on failure, clamped
          Vector2Int.zero - which teleported the piece to the bottom-left corner.
-      4. Records grabOffsetLocal, seeds freeAnchor from the integer anchor, and
-         applies ONLY the lift. There is no snap to the cell centre on pickup.
+      4. BuildCollisionSnapshot(piece), then seeds freeAnchor from the piece's
+         ACTUAL transform (falls back to the whole anchor only if that reads as
+         illegal), records dragStartFree and grabOffsetLocal, and applies ONLY the
+         lift. There is no snap to the cell centre on pickup.
 
 DRAGGING  (the interesting part)
 --------------------------------
@@ -195,10 +223,14 @@ DRAGGING  (the interesting part)
       Finally snaps near-whole components (see SnapNearWhole) so a corridor stays
       float-exact instead of drifting by rounding dust.
 
-  GAP ASSIST - ResolveAxisAssisted(axis, target)
+  GAP ASSIST - ResolveAxisAssisted(axis, target) / CollectLanes
       Resolves one axis, and IF that axis is completely walled, retries after
-      pulling the OTHER axis onto its nearest whole cell line (at most
-      gapAssistCells away, and never an axis the piece has locked).
+      pulling the OTHER axis onto a nearby LANE (at most gapAssistCells away,
+      never an axis the piece has locked). Lanes = the nearest whole cell line
+      plus every position flush with an obstacle edge (obstacle +/- 1 - offset),
+      tried nearest first - once pieces rest between cells, a corridor between
+      two of them need not sit on a whole line. This is a drag-time assist only;
+      nothing moves on release.
       WHY THIS EXISTS: with a genuinely free 1:1 drag, a corridor exactly as tall
       as the piece demands that the player hold the perpendicular axis at a
       float-exact whole number. That is impossible by hand, so the piece jams at
@@ -210,30 +242,22 @@ DRAGGING  (the interesting part)
       straight back off the line it was just helped onto and the two fight
       sub-step by sub-step - visible as jitter.
 
-  NO-SNAP RELEASE - restExactlyWhereReleased / TryRestInPlace / BuildOverlappedCells
-      When the toggle is ON, EndDrag leaves the transform's X/Y untouched (only the
-      drag lift is dropped) and books the piece onto EVERY cell its body overlaps,
-      via PieceSimple.TryPlaceExact(..., snapRootToAnchor: false).
-
-      Why reserve the overlap rather than just the rounded cell: a piece resting at
-      x = 3.4 visually covers parts of cells 3 and 4. If it only booked cell 3, the
-      next piece could legally take cell 4 and the two would visibly overlap. Booking
-      both keeps the occupancy grid truthful, so matching, blocked cells and the move
-      budget all keep working with no changes to their rules.
-      COST: a piece dropped between cells consumes 2 cells instead of 1, so the board
-      fills faster and sloppy drops waste space. That is the trade for zero snap.
-
-      MatchResolver was updated to match: FindConnectedIdenticalGroup now builds its
-      4-neighbour set from piece.OccupiedCells (the real cells) rather than
-      anchor + shapeOffsets, or a straddling piece would probe the wrong cells and
-      miss matches.
-
-      TryBeginDrag seeds freeAnchor from the piece's ACTUAL transform, not from its
-      whole-cell anchor - otherwise touching an off-grid piece would teleport it onto
-      its cell and undo the whole point of the mode.
-
-      If the board refuses the reservation, TryRestInPlace returns false and EndDrag
-      falls through to the ordinary snap-to-cell path.
+  NO-SNAP RELEASE - restExactlyWhereReleased / TryRestInPlace
+      When the toggle is ON, the piece's X/Y stay exactly where the finger left
+      them; only the drag lift eases off (through the normal settle, so match
+      resolution runs in CompleteSettle on landing, same as snap mode).
+      BOOKING (changed 2026-09-26): each block books the ONE cell it mostly covers
+      - the footprint of RoundAnchor(freeAnchor) - via PieceSimple.TryPlaceExact(...,
+      snapRootToAnchor: false). The old rule booked EVERY overlapped cell (2 per
+      axis for an off-grid piece); that was only needed because collision read the
+      bookings. Collision now reads real bodies, so bookings are only a coarse map
+      for match candidates, tutorial hints and "is the board empty".
+      Why bookings cannot clash: bodies that do not overlap are >= 1 apart on some
+      axis, and round(x + 1) == round(x) + 1, so they round to different cells.
+      If float noise on an exact x.5 ever makes TryPlaceExact refuse, the piece
+      slides back to dragStartFree (its old booking was never released). No snap.
+      TryBeginDrag seeds freeAnchor from the ACTUAL transform, so touching an
+      off-grid piece never teleports it onto a cell.
 
   REJECTED AND REMOVED: detent magnetism.
       An attempt to kill the release snap by bending the requested position toward
@@ -260,13 +284,13 @@ DRAGGING  (the interesting part)
       and magnetism fix properly.
 
   ResolveAxis(anchor, axis, target)
-      Moves one axis toward target and stops FLUSH against the obstruction.
-      Blocking boundaries always fall on whole cells (at an integer anchor the
-      piece overlaps exactly one column/row; anywhere between it overlaps two),
-      so the flush position is simply Ceil/Floor of the current value in the
-      direction of travel. Because the current position is always legal, that
-      boundary is guaranteed legal too - it is still checked anyway rather than
-      trusting the invariant blindly.
+      A SWEEP: moves one axis toward target and stops EXACTLY flush against the
+      first obstacle box ahead, wherever its edge is (on a cell line or between
+      two). Only boxes overlapping the piece on the perpendicular axis count, so a
+      piece exactly level with the row above slides past it. Clamped to
+      anchorMin/anchorMax. Never moves the piece backwards (stays put instead).
+      (Before 2026-09-26 it assumed every blocking edge was a whole cell and used
+      Ceil/Floor - false once pieces rest between cells.)
 
 RELEASE
 -------
@@ -329,24 +353,27 @@ HOW IT CONNECTS
 NOTES
 -----
   - INVARIANT: freeAnchor is only ever assigned a value that IsFreeAnchorLegal
-    accepted. Everything else leans on that - RoundToInt(freeAnchor) lands on
-    one of the corner anchors IsFreeAnchorLegal already proved legal, which is
-    why lastValidAnchor never needs its own check and why TryPlace on release
-    cannot realistically fail.
+    accepted (or a ResolveAxis sweep result, flush by construction). In snap
+    mode every other piece sits on whole cells, so RoundAnchor(freeAnchor) is a
+    legal cell and TryPlace on release cannot realistically fail.
+  - Picking falls back to the 3D raycast in the stage scenes (the pieces carry
+    no Collider2D). When testing through MCP inside ONE frame, call
+    Physics.SyncTransforms() before each pick or it hits nothing.
   - Uses the LEGACY Input class (Input.mousePosition, Input.GetTouch) even though
     the project has com.unity.inputsystem installed. Works, but is inconsistent
     with the package set and will break if the project ever switches the Active
     Input Handling setting to "Input System Package (New)" only.
-  - Per-frame cost: sub-steps x up to 4 corner anchors x shape cells. For a
-    5-cell piece flicked across the board that is a few hundred array reads -
-    negligible, and bounded by maxSubStepsPerFrame.
+  - Per-frame cost: sub-steps x shape cells x obstacle boxes. A full 8x6 board
+    is < 48 boxes, so a flick is a few thousand float compares - negligible, and
+    bounded by maxSubStepsPerFrame.
   - Rounding is deliberately round-half-UP (RoundWhole / RoundAnchor), NOT
     Mathf.RoundToInt. Mathf rounds half to EVEN, so a piece released on exactly
     x.5 would snap left or right depending on the parity of the cell - which
     looks random to a player.
   - SnapNearWhole treats anything within 1e-4 of a whole cell AS that cell, in
-    both IsFreeAnchorLegal and after each move. Without it, float dust flips the
-    corner set between one column and two and the piece shivers against walls.
+    both IsFreeAnchorLegal and after each move (and on every snapshot box).
+    Without it, float dust reads a flush contact as a sliver of overlap and the
+    piece shivers against walls.
   - FIXED 2026-08-25 (was listed here as out of scope, wrongly):
     PieceSimple.SnapSubBlocksToOffsets laid sub-blocks out at
     (offset * board.CellSize) while the grid steps by CellPitch, overwriting the

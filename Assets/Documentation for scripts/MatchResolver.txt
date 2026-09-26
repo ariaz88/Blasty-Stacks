@@ -82,17 +82,23 @@ GEOMETRIC TOUCH  (ArePiecesTouching)
       straddling Y only, touching X   -> match
       straddling X, 0.6 gap           -> no match
 
-  CONSEQUENCE WORTH KNOWING. Because a straddling piece reserves the cell it
-  partially covers, a neighbour can never sit flush against it ON THAT AXIS - so
-  in no-snap mode you generally have to PUSH pieces together to match. Collision
-  parks a pushed piece at exactly the whole-cell boundary, which is a true touch,
-  so pushing always works. A piece can still be straddling on one axis and match
-  on the other.
+  SUPERSEDED 2026-09-26. The paragraph above describes the old booking rule
+  (every overlapped cell). Now a no-snap piece books only the ONE cell each
+  block mostly covers, and BoardInputController collides against REAL bodies,
+  so a neighbour CAN sit flush against a piece resting between cells, from
+  either side (the old "you must push the straddling piece" limitation, and the
+  unclosable gap it caused, are gone).
+  Because two genuinely touching bodies can now book cells that are diagonal or
+  two apart, the cell sweep is no longer a safe candidate filter: with
+  requireGeometricTouch ON, EVERY placed, active piece (PieceSimple.AllRegistered,
+  IsPlaced) is a candidate and ArePiecesTouching alone decides. With it OFF the
+  old 4-neighbour cell sweep is used unchanged.
 
 REUSED BUFFERS
 --------------
   _footprint      (List<Vector2Int>)   reused to avoid per-call allocation
   _neighborCells  (HashSet<Vector2Int>) same
+  _candidates     (List<PieceSimple>)  per-BFS-node candidate list (added 2026-09-26)
 
 PUBLIC ENTRY POINTS
 -------------------
@@ -126,10 +132,11 @@ PUBLIC ENTRY POINTS
 CORE SEARCH
 -----------
   FindConnectedIdenticalGroup(seed) -> List<PieceSimple>
-      Breadth-first search over the BOARD OCCUPANCY (not colliders). From each
-      piece it builds the 4-adjacent cell ring around its footprint, reads the
-      occupant id out of the grid, resolves it back to a piece via
-      PieceSimple.GetById, and enqueues it when the shape and colour match.
+      Breadth-first search. Candidates per node: with requireGeometricTouch ON
+      (the default, and what every stage uses) every placed piece in
+      PieceSimple.AllRegistered; with it OFF the 4-adjacent cell ring around the
+      piece's OccupiedCells, resolved via GetById. A candidate is enqueued when
+      the shape and colour match AND (if the toggle is on) ArePiecesTouching.
 
   BuildFootprintNeighbors4(anchor, shape, outNeighbors)
       Collects every 4-neighbour cell of every cell in the footprint, then
