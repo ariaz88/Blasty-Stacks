@@ -76,5 +76,7 @@ NOTES
     so it mirrors with them. Wired 2026-09-25 - the three enemy types of stages 1-10:
       Enemy_Reaper_Man_01       -> ember_arc_ghost (0.139, 0.285)
       Enemy_Zombie_villager     -> candy_slash     (0.139, 0.285)
-      Enemy_Skeleton_Crusader_1 -> ember_arc       (0.139, 0.264)  (stage-6 Swordsman
-                                   reuses this prefab)
+      Enemy_Skeleton_Crusader_1 -> skeleton_slash  (0.45, 0.32)   (stage-6 Swordsman
+                                   reuses this prefab). 2026-09-26: replaced ember_arc
+                                   with the VFXKit "sword slash" example, sludge green.
+                                   ember_arc (now green) is built but on no unit.

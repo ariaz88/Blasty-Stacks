@@ -35,7 +35,7 @@ d = (R_OUT - r) / thick
 line = smooth(-0.35, 0.0, d) * (1 - smooth(0.7, 1.2, d))
 glow = np.exp(-((R_OUT - thick * 0.5 - r) / 0.07) ** 2) * 0.35
 a = np.clip(line * 0.85 + glow, 0, 1) * inside * smooth(0.0, 0.1, u) * (1 - smooth(0.9, 1.0, u))
-RED = np.array([0.80, 0.23, 0.13]); HOT = np.array([1.0, 0.45, 0.25])
+RED = np.array([0.38, 0.47, 0.12]); HOT = np.array([0.62, 0.72, 0.22])
 k = np.clip(line, 0, 1)[..., None]
 c = RED * (1 - k) + HOT * k
 img = np.dstack([c, a])
