@@ -137,7 +137,7 @@ public static class EarlyCampaignVerification
             double heroCp = waves.EarnedBatches.Sum(b => b.Sum(d => EarlyCampaignAuthoring.Power(d.baseStats, EarlyCampaignAuthoring.HeroGrowth, heroLevel)));
             var enemies = new Dictionary<int, double>();
             float began = Time.time, firstHit = -1, armyDefeated = -1;
-            start.StartBattle(); // Starts the real six-second deployment queue as well as the spawner.
+            start.StartBattle(); // Starts the real per-type deployment timers as well as the spawner.
             deadline = EditorApplication.timeSinceStartup + 100;
             SessionState.SetString(Key + ".status", $"Stage {stage}, match {matches}, seed {seed}");
             while (pg && !pg.isPlayerGateDestroyed && eg && !eg.isDestroyed && Time.time - began < 360)

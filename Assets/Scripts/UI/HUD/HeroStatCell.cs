@@ -100,9 +100,10 @@ public class HeroStatCell : MonoBehaviour
     // ======================================================================
     //
     // In PHASE 2 this cell stops being a survival read-out ("2/3 still alive")
-    // and becomes a DEPLOYMENT SLOT: a portrait, the NUMBER of that type this
-    // load releases ("x2"), and a cyan bar that fills from the bottom over the
-    // load's 6 seconds - the look from Reference videos/Ref2.MP4.
+    // and becomes a DEPLOYMENT SLOT: a portrait, "remaining/total" still to be
+    // released ("2/3"), and a cyan bar that fills from the bottom over that
+    // type's own load time - the look from Reference videos/Ref2.MP4. Since
+    // 2026-09-27 every card loads in parallel on its own timer.
     //
     // The alive/total path below is untouched and still works; a cell is in one
     // mode or the other depending on which Configure call built it.
@@ -142,15 +143,19 @@ public class HeroStatCell : MonoBehaviour
     /// <summary>
     /// Builds this cell as a deployment slot for one hero type.
     ///
-    /// <paramref name="count"/> is how many of that type the load releases, shown
-    /// as "xN" - NOT "alive/total". A match awarding two archers is ONE cell
-    /// reading "x2", not two cells.
+    /// <paramref name="total"/> is how many of that type the player earned this
+    /// stage. The label reads "remaining/total" and counts DOWN as each one is
+    /// released - see <see cref="SetDeployState"/>.
+    ///
+    /// SquadSize stays 0 on purpose: it is the alive/total mode's number, and the
+    /// panel never runs that mode's Refresh on a deployment cell.
     /// </summary>
-    public void ConfigureAsDeploymentSlot(int unitId, UnitDefinitionSO def, int count)
+    public void ConfigureAsDeploymentSlot(int unitId, UnitDefinitionSO def, int total)
     {
         UnitId = unitId;
-        SquadSize = Mathf.Max(0, count);
+        SquadSize = 0;
         IsSpent = false;
+        shownRemaining = shownTotal = -1;
         onBuyPressed = null;
 
         if (def && def.portrait)
@@ -169,46 +174,42 @@ public class HeroStatCell : MonoBehaviour
         }
 
         EnsureLoadFill();
-        SetLoadCount(count);
-        SetLoadFill(0f);
-        SetDimmed(true);
+        SetDeployState(total, total, 0f);
     }
 
+    // What the label currently shows, so SetDeployState - called EVERY FRAME by
+    // the panel - only rebuilds the string when a number actually changes.
+    private int shownRemaining = -1;
+    private int shownTotal = -1;
+
     /// <summary>
-    /// How many heroes of this type the RUNNING load releases. 0 = this type is
-    /// not in the running load.
+    /// Draws one deployment card:
+    ///   - label "remaining/total" (3/3 -> 2/3 -> 1/3 -> 0/3), always visible;
+    ///   - lit frame + rising cyan bar while any are left to release;
+    ///   - grey "Cell DeActive" frame, empty bar, "0/total" once the type has run out.
     ///
-    /// Separate from SquadSize on purpose. SquadSize is the alive/total mode's
-    /// "/total" and is written once at build time; this changes on every load.
-    /// Reusing SquadSize for it is exactly the bug that made the cyan fill never
-    /// appear - see NOTES in the doc.
+    /// Idempotent and cheap, so the panel can simply call it every frame.
     /// </summary>
-    public int LoadCount { get; private set; }
-
-    /// <summary>The "xN" under the portrait. N &lt;= 0 hides the label entirely.</summary>
-    public void SetLoadCount(int count)
+    public void SetDeployState(int remaining, int total, float fill)
     {
-        LoadCount = Mathf.Max(0, count);
+        remaining = Mathf.Max(0, remaining);
+        total = Mathf.Max(0, total);
 
-        bool show = LoadCount > 0;
-        ShowCount(show);
+        bool exhausted = remaining == 0;
 
-        if (show && countText) countText.text = "x" + LoadCount;
-    }
+        ShowFrame(exhausted);
+        ShowCount(true);
+        SetLoadFill(exhausted ? 0f : fill);
 
-    /// <summary>
-    /// Grey (not part of the running load) versus lit (part of it). Reuses the
-    /// authored two-frame model rather than tinting: "Cell DeActive" is already
-    /// grey artwork, which is exactly the greyed-out look the brief asks for.
-    /// </summary>
-    public void SetDimmed(bool dimmed)
-    {
-        ShowFrame(dimmed);
-        if (dimmed) SetLoadFill(0f);
+        if (remaining == shownRemaining && total == shownTotal) return;
+
+        shownRemaining = remaining;
+        shownTotal = total;
+        if (countText) countText.text = $"{remaining}/{total}";
     }
 
     /// <summary>Fill level of the cyan bar, 0..1. Rises from the BOTTOM.</summary>
-    public void SetLoadFill(float t)
+    private void SetLoadFill(float t)
     {
         if (loadFill) loadFill.fillAmount = Mathf.Clamp01(t);
     }

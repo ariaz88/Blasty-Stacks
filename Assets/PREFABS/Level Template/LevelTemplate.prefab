@@ -18616,7 +18616,7 @@ MonoBehaviour:
   holdUntilFirstEnemySpawns: 1
   enemySpawner: {fileID: 1079043511634868343}
   suppressStageSpawning: 1
-  deploymentPlan: {fileID: 0}
+  deploymentPlan: {fileID: 11400000, guid: 801d5ea258d62a7489c5575a58ca826f, type: 2}
   deployGateHold: 0.3
   reinforcementStagger: 0.12
   reinforcementGateHold: 0.75
@@ -18661,8 +18661,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 74b26b04128c1e549b28242ee80a4895, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HeroDeploymentSequencer
-  loadDuration: 6
-  gapBetweenLoads: 0
   awardWaitTimeout: 5
   waveManager: {fileID: 0}
   battleStart: {fileID: 0}

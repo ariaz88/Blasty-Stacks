@@ -4,40 +4,56 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Runs the DEPLOYMENT QUEUE: once BATTLE is pressed, one 6-second load per match
-/// the player cleared, back to back, each releasing that match's heroes onto the
-/// field the instant its bar fills.
+/// Releases the heroes the player earned in the puzzle, ONE TYPE PER TIMER, all
+/// timers running IN PARALLEL - a mana-style deployment. (Reworked 2026-09-27.)
 ///
-/// This is the second half of PHASE 2. The first half stopped heroes spawning on
-/// every match and made each match deal CARDS instead
-/// (HeroCardRevealDirector); the heroes earned that way sat in
-/// PlayerWaveManager.EarnedBatches with no way onto the battlefield. This is that
-/// way.
+/// When BATTLE is pressed it counts how many heroes of each type were earned
+/// (which match they came from no longer matters) and gives every type its own
+/// "track": total, remaining, and a load time from
+/// PlayerWaveManager.ResolveDeployInterval (the hero's
+/// UnitDefinitionSO.deployInterval, or the level's override). Every track starts
+/// loading on the same frame. Each time a track's load fills, ONE hero of that
+/// type is handed to PlayerWaveManager.DeployOne, the count drops by one and the
+/// load starts again - until that type runs out.
 ///
-/// WHY A SEQUENCER AND NOT A TIMER PER CELL:
-/// the loads are strictly serial and their number is only known when BATTLE is
-/// pressed (it equals the matches cleared). One owner walking a queue keeps
-/// "which load is running" in a single place, which is what the panel renders and
-/// what decides who spawns next. Per-cell timers would each have to re-derive it.
+/// So with Valkyrie x3 at 5.5s and Minotaur x2 at 7s: Valkyries at 5.5, 11, 16.5;
+/// Minotaurs at 7, 14. The first hero of a type comes out after ONE full load,
+/// never at 0s.
 ///
-/// It owns NO roster state: the batches, their order and their contents all come
-/// from PlayerWaveManager. It decides only WHEN, and asks PlayerWaveManager to do
-/// the spawning.
+/// The level ending (win OR loss - LevelGameManager leaves Playing) stops every
+/// track where it stands. Heroes that have not come out by then never will.
+///
+/// It owns no roster and spawns nothing itself: the counts come from
+/// PlayerWaveManager.EarnedHeroes and the spawning is PlayerWaveManager's. The
+/// Hero Stats panel reads <see cref="Tracks"/> every frame to draw the cards.
 /// </summary>
 [DisallowMultipleComponent]
 public class HeroDeploymentSequencer : MonoBehaviour
 {
-    [Header("Timing")]
-    [Tooltip("How long ONE load takes, in seconds. Ref2 shows 6s. Every load is " +
-             "the same length regardless of how many heroes it releases.")]
-    [Min(0.1f)] [SerializeField] private float loadDuration = 6f;
+    /// <summary>One hero type's deployment timer. Read-only outside this class.</summary>
+    public class Track
+    {
+        public UnitDefinitionSO Def { get; internal set; }
+        public int UnitId => Def ? Def.unitId : -1;
 
-    [Tooltip("Dead time between one load finishing and the next starting. 0 = the " +
-             "next bar starts on the same frame, which is what the brief asks for.")]
-    [Min(0f)] [SerializeField] private float gapBetweenLoads = 0f;
+        /// <summary>How many of this type were earned - the "/total" on the card.</summary>
+        public int Total { get; internal set; }
 
-    [Tooltip("How long RunQueue may wait for PlayerWaveManager to finish awarding " +
-             "every cleared match before it snapshots the queue. Must comfortably " +
+        /// <summary>How many have NOT come out yet - the left number on the card.</summary>
+        public int Remaining { get; internal set; }
+
+        /// <summary>Seconds one load takes.</summary>
+        public float Interval { get; internal set; }
+
+        /// <summary>Seconds into the current load.</summary>
+        public float Elapsed { get; internal set; }
+
+        /// <summary>0..1 fill of the current load. 0 once the type has run out.</summary>
+        public float Progress => Remaining > 0 && Interval > 0f ? Mathf.Clamp01(Elapsed / Interval) : 0f;
+    }
+
+    [Tooltip("How long the sequencer may wait for PlayerWaveManager to finish awarding " +
+             "every cleared match before it counts the heroes. Must comfortably " +
              "exceed PlayerWaveManager.nextWaveDelay (0.75s) times the number of " +
              "matches in a stage. It is a SAFETY NET, not a pacing value - in normal " +
              "play the wait ends in well under a second.")]
@@ -47,45 +63,50 @@ public class HeroDeploymentSequencer : MonoBehaviour
     [SerializeField] private PlayerWaveManager waveManager;
     [SerializeField] private BattleStartController battleStart;
 
-    /// <summary>Index of the load currently running, 0-based. -1 when idle.</summary>
-    public int CurrentLoadIndex { get; private set; } = -1;
+    private readonly List<Track> tracks = new();
 
-    /// <summary>0..1 progress of the running load. 0 when idle.</summary>
-    public float CurrentLoadProgress { get; private set; }
+    /// <summary>
+    /// One track per earned hero type, in units-database order. Null until the
+    /// tracks exist (BATTLE not pressed yet, or still waiting on the award
+    /// pipeline); an EMPTY list means the battle started with no heroes.
+    /// </summary>
+    public IReadOnlyList<Track> Tracks => tracksReady ? tracks : null;
 
-    /// <summary>How many loads this battle will run - fixed when BATTLE is pressed.</summary>
-    public int TotalLoads { get; private set; }
-
-    /// <summary>True from the first load starting until the last one has released.</summary>
+    /// <summary>True while the timers are counting.</summary>
     public bool Running { get; private set; }
 
     /// <summary>
-    /// The heroes the RUNNING load will release; null when idle.
-    ///
-    /// Exposed so a listener that subscribed too late can catch up on the load
-    /// already in flight. HeroStatsPanel needs exactly that: the sequencer starts
-    /// its queue from BattleStartController.OnBattleStarted and fires
-    /// LoadStarted(0) inside that same call, before the panel has finished
-    /// building its cells - so load 1 would otherwise never be drawn.
+    /// True while any earned hero has yet to reach the field: a track still has
+    /// some left, a released hero is waiting for a free stage, or BATTLE was just
+    /// pressed and the heroes have not even been counted yet. LevelGameManager's
+    /// mutual-wipe check reads this so an empty field with heroes still loading
+    /// is not called a defeat.
     /// </summary>
-    public IReadOnlyList<UnitDefinitionSO> CurrentBatch { get; private set; }
+    public bool HeroesStillComing
+    {
+        get
+        {
+            if (stopped) return false;
+            if (waitingForAwards) return true;
+            if (waveManager && waveManager.HeroesWaitingForGate > 0) return true;
 
-    /// <summary>
-    /// A load began. Carries its 0-based index and the heroes it will release, so
-    /// the panel can light exactly those cells and grey the rest.
-    /// </summary>
-    public event Action<int, IReadOnlyList<UnitDefinitionSO>> LoadStarted;
+            foreach (var t in tracks)
+                if (t.Remaining > 0) return true;
 
-    /// <summary>Progress of the running load, 0..1, once per frame.</summary>
-    public event Action<int, float> LoadProgress;
+            return false;
+        }
+    }
 
-    /// <summary>A load filled and its heroes have been handed to PlayerWaveManager.</summary>
-    public event Action<int, IReadOnlyList<UnitDefinitionSO>> LoadCompleted;
+    /// <summary>One hero of this track's type has just been handed to PlayerWaveManager.</summary>
+    public event Action<Track> HeroReleased;
 
-    /// <summary>Every load has run. The panel uses this to settle into its final look.</summary>
-    public event Action AllLoadsCompleted;
+    /// <summary>Every track has run out. Not raised when the level end stops them.</summary>
+    public event Action AllDeployed;
 
-    private Coroutine routine;
+    private bool tracksReady;
+    private bool waitingForAwards;
+    private bool stopped;
+    private Coroutine startRoutine;
 
     private void Awake()
     {
@@ -100,53 +121,62 @@ public class HeroDeploymentSequencer : MonoBehaviour
     private void OnEnable()
     {
         if (battleStart) battleStart.OnBattleStarted += HandleBattleStarted;
+        LevelGameManager.OnGameStateChanged += HandleGameStateChanged;
     }
 
     private void OnDisable()
     {
         if (battleStart) battleStart.OnBattleStarted -= HandleBattleStarted;
+        LevelGameManager.OnGameStateChanged -= HandleGameStateChanged;
     }
 
     private void HandleBattleStarted()
     {
-        // The puzzle phase is over at this point (BattleStartController seals the
-        // wave manager), so the batch list can no longer grow and the queue length
-        // is final.
-        if (routine != null) StopCoroutine(routine);
-        routine = StartCoroutine(RunQueue());
+        if (stopped) return;
+
+        if (startRoutine != null) StopCoroutine(startRoutine);
+        startRoutine = StartCoroutine(BuildTracksWhenAwarded());
     }
 
-    /// <summary>Stops the queue where it stands. Nothing further is released.</summary>
-    public void StopQueue()
+    /// <summary>
+    /// Win, loss or revive offer - anything that is not Playing ends deployment
+    /// for good. The bars freeze where they are; nothing further is released.
+    /// </summary>
+    private void HandleGameStateChanged(LevelGameManager.GameState state)
     {
-        if (routine != null) StopCoroutine(routine);
-
-        routine = null;
-        Running = false;
-        CurrentLoadIndex = -1;
-        CurrentLoadProgress = 0f;
+        if (state != LevelGameManager.GameState.Playing) StopDeployment();
     }
 
-    private IEnumerator RunQueue()
+    /// <summary>Stops every track where it stands. Nothing further is released.</summary>
+    public void StopDeployment()
+    {
+        if (startRoutine != null) StopCoroutine(startRoutine);
+        startRoutine = null;
+
+        stopped = true;
+        Running = false;
+        waitingForAwards = false;
+
+        // A hero whose card already filled but who is still waiting for a free
+        // stage must not walk out after the level has ended either.
+        if (waveManager) waveManager.ClearGateQueue();
+    }
+
+    private IEnumerator BuildTracksWhenAwarded()
     {
         if (!waveManager) yield break;
 
-        // !! WAIT FOR THE AWARD PIPELINE BEFORE SNAPSHOTTING. (2026-09-16)
+        waitingForAwards = true;
+
+        // !! WAIT FOR THE AWARD PIPELINE BEFORE COUNTING. (2026-09-16)
         //
-        // This used to snapshot EarnedBatches immediately, on the assumption that
-        // "PlayerWaveManager is sealed for battle by now, so this cannot change
-        // under us". THAT ASSUMPTION IS WRONG and it cost a whole battle:
-        //
-        //   SealForBattle stops new MATCHES being counted. It does NOT flush the
-        //   award pipeline - PlannedWaveLoop is a coroutine that converts a cleared
-        //   match into an earned batch only after `nextWaveDelay` (0.75s). Clear the
-        //   last match and press BATTLE inside that window and EarnedBatches is
-        //   still EMPTY, so TotalLoads lands on 0, the queue yield-breaks, and NOT
-        //   ONE HERO EVER DEPLOYS. The enemies then walk to an undefended base and
-        //   the stage is an automatic loss.
-        //
-        // Reproduced in play mode on stage 1: EarnedBatches=1 but TotalLoads=0,
-        // CurrentLoadIndex=-1, ReleasedHeroes=0, enemy marching, gate 500 -> 458.
+        // SealForBattle stops new MATCHES being counted. It does NOT flush the
+        // award pipeline - PlannedWaveLoop converts a cleared match into earned
+        // heroes only after `nextWaveDelay` (0.75s). Clear the last match and
+        // press BATTLE inside that window and EarnedHeroes is still missing that
+        // match. Counting straight away once produced ZERO heroes for a whole
+        // battle: the enemies walked to an undefended base and the stage was an
+        // automatic loss (reproduced on stage 1, gate 500 -> 458).
         //
         // So wait until every cleared match has actually been awarded. The timeout
         // is a safety net: on expiry we take whatever exists rather than hanging.
@@ -163,52 +193,89 @@ public class HeroDeploymentSequencer : MonoBehaviour
                              $"{waveManager.MatchesCleared} matches awarded after {waited:F2}s" +
                              (waveManager.DeploymentFailed ? " (deployment had FAILED)." : "."), this);
 
-        // Snapshot the batches. Safe now that the pipeline has caught up.
-        var batches = new List<IReadOnlyList<UnitDefinitionSO>>();
-        foreach (var b in waveManager.EarnedBatches)
-            if (b != null && b.Count > 0) batches.Add(b);
+        waitingForAwards = false;
+        startRoutine = null;
 
-        TotalLoads = batches.Count;
-        if (TotalLoads == 0)
+        BuildTracks();
+
+        // Every track starts at Elapsed 0 on this same frame - the parallel start.
+        Running = tracks.Count > 0;
+        if (!Running) AllDeployed?.Invoke();
+    }
+
+    /// <summary>Counts EarnedHeroes per type into one track each.</summary>
+    private void BuildTracks()
+    {
+        tracks.Clear();
+
+        foreach (var def in waveManager.EarnedHeroes)
         {
-            AllLoadsCompleted?.Invoke();
-            yield break;
-        }
+            if (!def) continue;
 
-        Running = true;
+            Track track = null;
+            foreach (var t in tracks)
+                if (t.Def == def) { track = t; break; }
 
-        for (int i = 0; i < batches.Count; i++)
-        {
-            CurrentLoadIndex = i;
-            CurrentLoadProgress = 0f;
-            CurrentBatch = batches[i];
-            LoadStarted?.Invoke(i, batches[i]);
-
-            for (float t = 0f; t < loadDuration; t += Time.deltaTime)
+            if (track == null)
             {
-                CurrentLoadProgress = Mathf.Clamp01(t / loadDuration);
-                LoadProgress?.Invoke(i, CurrentLoadProgress);
-                yield return null;
+                track = new Track { Def = def, Interval = waveManager.ResolveDeployInterval(def) };
+                tracks.Add(track);
             }
 
-            CurrentLoadProgress = 1f;
-            LoadProgress?.Invoke(i, 1f);
-
-            // Release FIRST, announce after, so a listener reacting to
-            // LoadCompleted already sees the heroes on their way.
-            waveManager.DeployBatch(batches[i]);
-            LoadCompleted?.Invoke(i, batches[i]);
-
-            if (gapBetweenLoads > 0f && i < batches.Count - 1)
-                yield return new WaitForSeconds(gapBetweenLoads);
+            track.Total++;
+            track.Remaining++;
         }
 
-        Running = false;
-        CurrentLoadIndex = -1;
-        CurrentLoadProgress = 0f;
-        CurrentBatch = null;
-        routine = null;
+        // Database order, so the cards read the same way every run instead of
+        // following whichever type happened to be earned first.
+        var gsm = GameStartManager.Instance;
+        var db = gsm ? gsm.unitsDatabase : null;
+        if (db != null)
+            tracks.Sort((a, b) => db.IndexOf(a.UnitId).CompareTo(db.IndexOf(b.UnitId)));
 
-        AllLoadsCompleted?.Invoke();
+        tracksReady = true;
+
+        foreach (var t in tracks)
+            Debug.Log($"[HeroDeployment] {t.Def.displayName}: x{t.Total}, one every {t.Interval:0.##}s", this);
+    }
+
+    /// <summary>
+    /// Advances every track by the frame's time. Update rather than one coroutine
+    /// per type: all tracks tick from the SAME deltaTime in the same loop, so they
+    /// cannot drift apart, and pausing (timeScale 0) freezes them together.
+    /// </summary>
+    private void Update()
+    {
+        if (!Running) return;
+
+        float dt = Time.deltaTime;
+        bool anyLeft = false;
+
+        foreach (var t in tracks)
+        {
+            if (t.Remaining <= 0) continue;
+
+            t.Elapsed += dt;
+
+            if (t.Elapsed >= t.Interval)
+            {
+                // Carry the overshoot into the next load so the rhythm stays
+                // exactly one hero per Interval, whatever the frame rate.
+                t.Elapsed -= t.Interval;
+                t.Remaining--;
+                if (t.Remaining == 0) t.Elapsed = 0f;
+
+                waveManager.DeployOne(t.Def);
+                HeroReleased?.Invoke(t);
+            }
+
+            if (t.Remaining > 0) anyLeft = true;
+        }
+
+        if (!anyLeft)
+        {
+            Running = false;
+            AllDeployed?.Invoke();
+        }
     }
 }

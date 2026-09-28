@@ -1,27 +1,14 @@
-CURRENT UPDATE - 2026-09-16  RACE FIXED: NO HERO EVER DEPLOYED IF BATTLE WAS PRESSED FAST
-RunQueue used to snapshot waveManager.EarnedBatches the instant BATTLE was pressed,
-on the stated assumption that "PlayerWaveManager is sealed for battle by now, so this
-cannot change under us". THE ASSUMPTION WAS WRONG.
+CURRENT UPDATE - 2026-09-27  REWORKED: PARALLEL PER-TYPE TIMERS (MANA-STYLE)
+The old one-load-per-MATCH serial queue (6s x matches, back to back) is GONE.
+Arash's brief: which match a hero came from no longer matters. At BATTLE, count the
+earned heroes per TYPE; every type gets its own timer; ALL timers start on the same
+frame; each fill releases ONE hero of that type; stronger types load slower
+(5.5 / 7 / 8 / 9s for the four deployed heroes, ordered by base CP); a type that runs
+out greys out; the level ending stops everything.
 
-SealForBattle stops new MATCHES being counted. It does NOT flush the award pipeline:
-PlannedWaveLoop converts a cleared match into an earned batch only after
-PlayerWaveManager.nextWaveDelay (0.75s). Clear the last match, press BATTLE inside
-that window, and EarnedBatches is still EMPTY -> TotalLoads = 0 -> the coroutine
-yield-breaks -> NOT ONE HERO EVER DEPLOYS. Enemies then walk to an undefended base
-and the stage is an automatic loss with no way to intervene.
-
-REPRODUCED in play mode on stage 1 (Arash reported seeing it repeatedly in normal
-play, then watched it happen live):
-    EarnedBatches=1  but  TotalLoads=0, CurrentLoadIndex=-1, ReleasedHeroes=0
-    enemy marching, player gate 500 -> 458, ~20s with no hero
-
-THE FIX: RunQueue now waits until MatchesReleased >= MatchesCleared before it
-snapshots, bounded by the new `awardWaitTimeout` (5s, Inspector). On timeout it takes
-whatever exists and logs a warning naming the shortfall, rather than hanging.
-
-NOT A TIMESCALE BUG. The 6s load uses Time.deltaTime, so it scales correctly - at 2x
-speed the load really does take 3 real seconds. The stall was purely the empty
-snapshot.
+Removed: loadDuration, gapBetweenLoads, CurrentLoadIndex, CurrentLoadProgress,
+TotalLoads, CurrentBatch, LoadStarted/LoadProgress/LoadCompleted/AllLoadsCompleted,
+StopQueue, RunQueue. The 2026-09-16 award-pipeline wait (below) is KEPT.
 
 --------------------------------------------------------------------------------
 ================================================================================
@@ -29,116 +16,116 @@ snapshot.
   Path : Assets/Scripts/Combat/Spawning/HeroDeploymentSequencer.cs
   Type : MonoBehaviour
   Layer: Combat / Spawning
-  Added: 2026-09-14  (PHASE 2, part 2)
+  Added: 2026-09-14  (PHASE 2, part 2); reworked 2026-09-27
   Lives: on the [PlayerWaveManager] GameObject inside
          Assets/PREFABS/Level Template/LevelTemplate.prefab, so every stage has one
 ================================================================================
 
 PURPOSE
 -------
-Runs the DEPLOYMENT QUEUE. Once BATTLE is pressed it plays one 6-second "load"
-per match the player cleared, back to back, and the instant a load's bar fills it
-puts that match's heroes on the field.
+Releases the heroes earned in the puzzle onto the battlefield, one TYPE per timer,
+all timers in parallel.
 
-This is the second half of PHASE 2. The first half stopped heroes spawning on
-every match and made each match deal CARDS instead (HeroCardRevealDirector); the
-heroes earned that way piled up in PlayerWaveManager.EarnedBatches with no route
-onto the battlefield. This is that route.
+  Example: Valkyrie x3 @5.5s, Minotaur x2 @7s
+    Valkyries at 5.5, 11, 16.5   Minotaurs at 7, 14
+  The first hero of a type comes out after ONE full load, never at 0s.
 
-It owns NO roster state. The batches, their order and their contents all come
-from PlayerWaveManager. It decides only WHEN, and asks PlayerWaveManager to spawn.
+It owns no roster and spawns nothing itself: counts come from
+PlayerWaveManager.EarnedHeroes; spawning is PlayerWaveManager.DeployOne.
 
-WHY A SEQUENCER AND NOT A TIMER PER CELL
-  The loads are strictly serial, and how many there are is only known when BATTLE
-  is pressed (it equals the matches cleared). One owner walking a queue keeps
-  "which load is running" in a single place - which is what the panel renders and
-  what decides who spawns next. Per-cell timers would each have to re-derive it.
+NESTED CLASS  Track  (one per hero type)
+----------------------------------------
+  Def        UnitDefinitionSO of the type          UnitId  Def.unitId
+  Total      how many were earned ("/total")        Remaining  not released yet
+  Interval   seconds per load (ResolveDeployInterval)
+  Elapsed    seconds into the current load
+  Progress   Elapsed/Interval, 0..1; 0 once Remaining == 0
+  Setters are `internal` - only this class writes them.
 
 INSPECTOR FIELDS
 ----------------
-  Timing
-    loadDuration     (float, min .1, default 6)  how long ONE load takes. Ref2
-                     shows 6s. EVERY load is the same length no matter how many
-                     heroes it releases.
-    gapBetweenLoads  (float, min 0, default 0)  dead time between loads. 0 = the
-                     next bar starts on the same frame, which is what the brief
-                     asks for.
-
+  awardWaitTimeout (float, min .5, default 5)  safety net for the award wait.
   Refs (left empty = found in the scene at Awake)
-    waveManager      (PlayerWaveManager) does the spawning. Missing = logs an
-                     error, nothing can ever deploy.
-    battleStart      (BattleStartController) the trigger.
+    waveManager  (PlayerWaveManager)      counts + spawning. Missing = error.
+    battleStart  (BattleStartController)  the trigger.
 
-PUBLIC STATE
-------------
-  CurrentLoadIndex    0-based index of the running load; -1 when idle
-  CurrentLoadProgress 0..1 of the running load; 0 when idle
-  TotalLoads          how many loads this battle will run - fixed at BATTLE
-  Running             true from the first load starting to the last releasing
-
-EVENTS
-------
-  LoadStarted(int index, IReadOnlyList<UnitDefinitionSO> batch)
-      A load began. Carries the heroes it WILL release, so the panel can light
-      exactly those cells and grey the rest.
-  LoadProgress(int index, float t)     0..1, once per frame
-  LoadCompleted(int index, batch)      released and handed to PlayerWaveManager
-  AllLoadsCompleted()                  every load has run
-
-  !! A LATE SUBSCRIBER MISSES LOAD 1. The queue starts from
-  BattleStartController.OnBattleStarted and fires LoadStarted(0) inside that same
-  call, before HeroStatsPanel has built its cells (and its BuildAtEndOfFrame path
-  puts it a whole frame later still). The panel therefore showed NO BAR for the
-  first load and appeared to start at load 2. The fix is `CurrentBatch` +
-  `CurrentLoadIndex` + `CurrentLoadProgress`: after subscribing, a listener checks
-  `Running` and replays the load already in flight. Any new listener must do the
-  same.
+PUBLIC API
+----------
+  Tracks             IReadOnlyList<Track>; NULL until built (BATTLE not pressed or
+                     still waiting on awards); EMPTY = battle with no heroes.
+  Running            true while the timers tick.
+  HeroesStillComing  true while any hero has yet to reach the field: still waiting
+                     on awards, a track has Remaining > 0, or a released hero is
+                     queued for a free stage (PlayerWaveManager.HeroesWaitingForGate).
+                     False after StopDeployment. Read by LevelGameManager.
+  StopDeployment()   stops every track where it stands, clears PlayerWaveManager's
+                     gate queue. Permanent for this level.
+  event HeroReleased(Track)  one hero handed to PlayerWaveManager.
+  event AllDeployed()        every track ran out (NOT raised by StopDeployment).
 
 FLOW
 ----
-  Awake            resolves waveManager / battleStart by scene search.
-  OnEnable         subscribes BattleStartController.OnBattleStarted.
-  HandleBattleStarted
-      Restarts RunQueue. Safe because BattleStartController.StartBattle has
-      already called PlayerWaveManager.SealForBattle, so the batch list can no
-      longer grow and the queue length is final.
-  RunQueue()  [coroutine]
-      1. SNAPSHOTS the batches into a local list. The wave manager is sealed by
-         now so this cannot change under us - copying says so explicitly.
-      2. No batches -> fires AllLoadsCompleted immediately and exits.
-      3. Per batch: LoadStarted, then tick loadDuration firing LoadProgress every
-         frame, then DeployBatch, then LoadCompleted.
-      4. Releases FIRST and announces after, so a listener reacting to
-         LoadCompleted already sees the heroes on their way.
-  StopQueue()      halts where it stands; nothing further is released.
+  OnEnable   subscribes BattleStartController.OnBattleStarted and the STATIC
+             LevelGameManager.OnGameStateChanged (unsubscribed in OnDisable).
+  HandleBattleStarted -> BuildTracksWhenAwarded() [coroutine]
+      1. Waits until MatchesReleased >= MatchesCleared (or DeploymentFailed, or
+         awardWaitTimeout). See the 2026-09-16 race below.
+      2. BuildTracks(): counts EarnedHeroes per def, Interval from
+         waveManager.ResolveDeployInterval(def), sorts by units-database order,
+         sets tracksReady, logs one line per type.
+      3. Running = tracks.Count > 0 (no tracks -> AllDeployed at once).
+  Update     (only while Running) adds the SAME deltaTime to every track with
+             Remaining > 0. On Elapsed >= Interval: Elapsed -= Interval (overshoot
+             carried so the rhythm stays exact), Remaining--, DeployOne(def),
+             HeroReleased. When no track has any left: Running=false, AllDeployed.
+  HandleGameStateChanged(state != Playing) -> StopDeployment().
 
 HOW IT CONNECTS
 ---------------
-  - BattleStartController.OnBattleStarted  -> starts the queue.
-  - PlayerWaveManager.EarnedBatches        -> what to release, in order.
-  - PlayerWaveManager.DeployBatch(batch)   -> spawns on free gates and jumps them
-    to the REAR lane (closest to the player base).
-  - HeroStatsPanel subscribes to all four events and renders the queue: portrait
-    + "xN" + a cyan bar filling from the bottom, greying the types not in the
-    running load.
+  - BattleStartController.OnBattleStarted -> builds and starts the tracks.
+  - PlayerWaveManager.EarnedHeroes        -> the per-type totals.
+  - PlayerWaveManager.ResolveDeployInterval -> UnitDefinitionSO.deployInterval, or
+    the level's StageDeploymentPlanSO.deployIntervals override.
+  - PlayerWaveManager.DeployOne(def)      -> spawns on a FREE, reserved stage (waits
+    if none), poses, jumps to the rear lane.
+  - LevelGameManager.OnGameStateChanged   -> win/loss stops deployment.
+  - LevelGameManager.IsMutualWipe         -> reads HeroesStillComing.
+  - HeroStatsPanel POLLS Tracks every frame and draws each card.
 
 NOTES / RISKS
 -------------
-  - Uses Time.deltaTime, NOT unscaled: a paused game should pause the queue.
-    (HeroCardRevealDirector deliberately does the opposite - its deal should
-    still play while paused.)
-  - The queue length is the MATCH count, not the hero count. A match awarding 4
-    heroes is still ONE 6s load.
-  - Four matches = 24 seconds before the last hero arrives, with enemies already
-    on the field. That is a deliberate pacing decision from the brief, not an
-    oversight - but it is the number to revisit if early stages feel unwinnable.
-  - StopQueue is never called by anything yet. A level that ends mid-queue leaves
-    the coroutine running on a destroyed-soon object; harmless today because the
-    scene unloads, but wire it to the win/lose flow if deployment ever needs to
-    stop cleanly.
+  - Update + one shared deltaTime rather than a coroutine per type: tracks cannot
+    drift apart, and GameplayPause (timeScale 0) freezes them together. Scaled
+    time on purpose - a paused game pauses deployment.
+  - At most ONE release per track per frame; a frame longer than an Interval just
+    releases the next one a frame later (Elapsed carries).
+  - Tracks are built once per level. After a revive (currently disabled) they are
+    not rebuilt - StopDeployment already ran on ReviveOffer.
+  - 2026-09-16 RACE (kept): SealForBattle does not flush PlannedWaveLoop, which
+    awards a match only after nextWaveDelay (0.75s). Counting immediately once
+    produced ZERO heroes (stage 1, gate 500 -> 458). Hence the award wait.
+  - Before 2026-09-27 nothing ever called StopQueue, so on a WIN (the game is not
+    paused on win) the queue kept releasing heroes under the win panel. Fixed by
+    the OnGameStateChanged subscription.
 
-NOT VERIFIED (as of 2026-09-14)
---------------------------------
-  Compiles clean and the component is on the LevelTemplate prefab. NOT play-tested:
-  the 6s cadence, the back-to-back transition, the spawn-on-completion, the rear
-  lane landing and the panel's reaction have never run.
+VERIFIED 2026-09-27 (play mode, Level_1_Stage_4, matches simulated via OnBlast)
+--------------------------------------------------------------------------------
+  Real intervals, earned CowMinotaur_2 x5 / Minotaur_02 x2 / Valkir3 x1:
+    +5.50 Valkir3 | +7.01 Minotaur | +9.00 Cow | +14.00 Minotaur | +18.01 Cow |
+    +27.00 Cow | +36.00 Cow  -> level WON with Cow at 1/5, progress 0.94;
+    50s later still 1/5 @0.94, released count unchanged -> stop-on-win works.
+  Card labels read 0/1, 0/2 (grey frame) and 1/5 (lit) at that moment.
+  Same-frame: all four types forced to 3s -> frame 3089 spawned 4 heroes on 4
+    DIFFERENT stages (x -2.08 / -0.68 / 0.71 / 2.09); waitingForGate 0.
+  Overflow (direct DeployOne x6, 4 stages, live level): 4 spawned at once on 4
+    distinct stages, 2 waited; ~400 frames later all 6 out, 0 waiting, the late
+    two on stages already vacated.
+  Both award paths checked the same day: Level_1_Stage_6 (planned path, levels
+    1-10) +5.51 Valkir3 / +8.01 Dark_Oracle_1 / +9.02 CowMinotaur_2, all bars
+    started together; Level_1_Stage_11 (HandleBlast direct-award path, levels
+    11-20) +5.51 / +7.01 / +8.01 / +9.00. Each hero on a free stage.
+  Hero SWAP in the Units menu needs nothing extra: a track's Interval is read
+    from the earned hero's OWN UnitDefinitionSO, and heroes are only ever drawn
+    from the deployed roster (PlayerWaveManager.GetDeployedUnitDefinitions).
+  NOT verified: a per-level override with real data (the plan asset exists but
+    is empty); mutual-wipe guard (scenario never arose in the runs).

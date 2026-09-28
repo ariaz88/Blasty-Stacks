@@ -46,6 +46,17 @@ FIELDS
                            mid-battle, via the Heroes Stats panel.
                            0 = use HeroStatsPanel's own fallback,
                            gemsPerHero * squad size. Added 2026-08-22.
+    deployInterval (float, >=0.1, default 6)  seconds this type's card takes to
+                           load in battle before ONE hero of it is released.
+                           Every card loads in parallel from BATTLE; stronger =
+                           slower. Added 2026-09-27. A level can override it in
+                           StageDeploymentPlanSO.deployIntervals.
+                           AUTHORED VALUES (by base CP, 2026-09-27):
+                             Valkir3 5.5 | Minotaur_02 7 | Dark_Oracle_1 8 |
+                             CowMinotaur_2 9 | Golem_3 10 | Fallen_Angels_02 11 |
+                             Fallen_Minotaur_01 12 | Dark_Oracle_3 13
+                           (the last four are not deployed yet - placeholders
+                           continuing the CP order).
 
   Tags
     classType     (FighterType)  mirrors baseStats.type for quick UI filtering.
@@ -67,4 +78,7 @@ HOW IT CONNECTS
     a mid-battle reinforcement squad (SpawnReinforcements).
   - HeroStatsPanel reads portrait (cell avatar) and respawnGemCost (buy-back
     price); HeroRoster keys everything by unitId.
+  - PlayerWaveManager.ResolveDeployInterval reads deployInterval (unless the
+    level's plan overrides it); HeroDeploymentSequencer uses it as the track's
+    load time.
   - UnitCardView / UnitDetailView read portrait, displayName and baseStats.

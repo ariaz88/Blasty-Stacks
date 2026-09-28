@@ -25,9 +25,15 @@ time.
 
 STRUCTURE
 ---------
-  LevelPlan  { int level; List<MatchPlan> matches; }
+  LevelPlan  { int level; List<MatchPlan> matches; List<IntervalOverride> deployIntervals; }
       level    1-based, the same number LevelBattleRules.ResolveLevel returns.
       matches  ONE ENTRY PER MATCH, in clear order. Element 0 is the FIRST match.
+               May be left EMPTY: the level then keeps the random draw and the
+               plan only carries interval overrides (Validate ignores it).
+      deployIntervals  (added 2026-09-27) optional per-level card load times.
+
+  IntervalOverride { int unitId; float seconds (>=0.1, default 6); }
+      Replaces that type's UnitDefinitionSO.deployInterval in THIS level only.
 
   MatchPlan  { List<Entry> entries; }        empty = that match awards nothing
 
@@ -45,16 +51,22 @@ API
                                   to line up with LevelBattleRules.HeroesForMatch.
                                   Null = fall back to the random draw.
   HeroCountFor(level, match)   -> total heroes that match awards
-  Validate()                   -> "" when consistent, otherwise a report
+  TryGetDeployInterval(level, unitId, out seconds) -> bool
+                                  true + seconds when that level overrides that
+                                  type's load time; false = use the type's own.
+  Validate()                   -> "" when consistent, otherwise a report. A level
+                                  with ZERO matches authored is not reported.
 
 HOW IT CONNECTS
 ---------------
   - PlayerWaveManager holds the reference (Inspector field `deploymentPlan`) and
     consults it in AwardHeroesForMatch. A null asset, an unauthored level or an
     unauthored match all fall through to the pre-PHASE-2 path.
-  - The batch it produces flows to HeroCardRevealDirector (the card deal) and to
-    HeroDeploymentSequencer (the 6s loads), so authoring here changes what the
-    player sees on the cards AND who arrives in each load.
+  - The batch it produces flows to HeroCardRevealDirector (the card deal) and,
+    counted per type, to HeroDeploymentSequencer, so authoring here changes what
+    the player sees on the cards AND how many of each type deploy.
+  - PlayerWaveManager.ResolveDeployInterval calls TryGetDeployInterval(RuleLevel,
+    unitId) before falling back to UnitDefinitionSO.deployInterval.
 
 NOTES / RISKS
 -------------
@@ -65,10 +77,14 @@ NOTES / RISKS
     block anything.
   - A unitId with no matching UnitDefinitionSO is skipped with a LogError rather
     than silently shrinking the wave - a typo'd id must be loud.
-  - The asset itself does not exist yet. Create it via
-    Create > Blasty > Stage Deployment Plan and assign it on the
-    [PlayerWaveManager] object in LevelTemplate.prefab. Until then every level
-    uses the random fallback, which is the current behaviour.
+  - THE ASSET NOW EXISTS (2026-09-27): Assets/Scriptable Objects/Deployment/
+    StageDeploymentPlan.asset, assigned on [PlayerWaveManager] in
+    LevelTemplate.prefab (ASSET EDIT). All 20 Level_1_Stage_N scenes instance that
+    prefab and none override deploymentPlan, so it reaches every stage.
+    It is created EMPTY on purpose: an empty plan behaves exactly like no plan
+    (random types, hero-default intervals). To change a load time for one level:
+    Levels -> + -> level = N, leave Matches empty, Deploy Intervals -> + ->
+    unitId + seconds.
 
 NOT VERIFIED (as of 2026-09-14)
 --------------------------------

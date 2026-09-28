@@ -47,13 +47,19 @@ public class HeroStatsPanel : MonoBehaviour
     [SerializeField, Min(0)] private int gemsPerHero = 50;
 
     [Header("Refs (left empty = found in the scene)")]
-    [Tooltip("PHASE 2. Present = the panel becomes the DEPLOYMENT QUEUE (portrait " +
-             "+ 'xN' + a cyan load bar) instead of the alive/total read-out. Left " +
-             "empty = found in the scene; absent from the scene = old behaviour.")]
+    [Tooltip("PHASE 2. Present = the panel shows the DEPLOYMENT cards (portrait + " +
+             "'remaining/total' + a cyan load bar per type) instead of the alive/total " +
+             "read-out. Left empty = found in the scene; absent from the scene = old behaviour.")]
     [SerializeField] private HeroDeploymentSequencer deploymentSequencer;
 
     /// <summary>Latches true when the panel built itself as a deployment queue.</summary>
     private bool deploymentMode;
+
+    /// <summary>True once the deployment cards exist (they wait for the sequencer's tracks).</summary>
+    private bool deploymentCellsBuilt;
+
+    /// <summary>The track each deployment cell draws, same index as <see cref="cells"/>.</summary>
+    private readonly List<HeroDeploymentSequencer.Track> cellTracks = new();
 
     [SerializeField] private PlayerWaveManager waveManager;
     [SerializeField] private GameStartManager gameStartManager;
@@ -160,13 +166,6 @@ public class HeroStatsPanel : MonoBehaviour
 
         if (CurrencyManager.Instance != null)
             CurrencyManager.Instance.OnCurrencyChanged -= HandleCurrencyChanged;
-
-        if (deploymentSequencer)
-        {
-            deploymentSequencer.LoadStarted -= HandleLoadStarted;
-            deploymentSequencer.LoadProgress -= HandleLoadProgress;
-            deploymentSequencer.AllLoadsCompleted -= HandleAllLoadsCompleted;
-        }
     }
 
     private void HandleBattleStarted()
@@ -175,32 +174,16 @@ public class HeroStatsPanel : MonoBehaviour
         built = true;
 
         // PHASE 2: with a deployment sequencer in the scene the panel stops being
-        // a survival read-out and becomes the deployment queue. Nothing is on the
+        // a survival read-out and shows the deployment cards. Nothing is on the
         // field when BATTLE is pressed, so HeroRoster would build an EMPTY panel.
+        //
+        // The cards themselves are built in Update, the first frame the
+        // sequencer's tracks exist - it waits for the award pipeline first, so
+        // they may not be ready on this frame.
         if (!deploymentSequencer) deploymentSequencer = FindObjectOfType<HeroDeploymentSequencer>(true);
         if (deploymentSequencer)
         {
             deploymentMode = true;
-            BuildDeploymentCells();
-
-            deploymentSequencer.LoadStarted += HandleLoadStarted;
-            deploymentSequencer.LoadProgress += HandleLoadProgress;
-            deploymentSequencer.AllLoadsCompleted += HandleAllLoadsCompleted;
-
-            // !! CATCH UP ON THE LOAD ALREADY IN FLIGHT. The sequencer starts its
-            // queue from BattleStartController.OnBattleStarted and fires
-            // LoadStarted(0) inside that same call - before this panel has
-            // subscribed, and BuildAtEndOfFrame can put us a whole frame later
-            // still. Without this the FIRST load never draws and the bar appears
-            // to begin at load 2.
-            if (deploymentSequencer.Running)
-            {
-                HandleLoadStarted(deploymentSequencer.CurrentLoadIndex,
-                                  deploymentSequencer.CurrentBatch);
-                HandleLoadProgress(deploymentSequencer.CurrentLoadIndex,
-                                   deploymentSequencer.CurrentLoadProgress);
-            }
-
             return;
         }
 
@@ -215,88 +198,69 @@ public class HeroStatsPanel : MonoBehaviour
     // ======================================================================
 
     /// <summary>
-    /// One cell per hero TYPE the player earned this stage, in database order.
-    ///
-    /// Built from PlayerWaveManager.EarnedBatches rather than from HeroRoster:
-    /// under PHASE 2 no hero is on the field when BATTLE is pressed, so the
-    /// roster is empty and the old path would build nothing.
+    /// Draws the deployment cards. POLLED every frame rather than driven by
+    /// events: every card changes every frame anyway (its bar rises), and
+    /// polling means a panel that is switched on late - or built a frame after
+    /// the timers started - simply draws the right state. The old event version
+    /// needed a separate "catch up on the load already in flight" step for that.
     /// </summary>
-    private void BuildDeploymentCells()
+    private void Update()
     {
+        if (!deploymentMode || !deploymentSequencer) return;
+
+        if (!deploymentCellsBuilt)
+        {
+            var tracks = deploymentSequencer.Tracks;
+            if (tracks == null) return;   // still waiting on the award pipeline
+
+            BuildDeploymentCells(tracks);
+        }
+
+        for (int i = 0; i < cells.Count; i++)
+        {
+            var cell = cells[i];
+            var track = cellTracks[i];
+            if (cell && track != null)
+                cell.SetDeployState(track.Remaining, track.Total, track.Progress);
+        }
+    }
+
+    /// <summary>
+    /// One cell per hero TYPE the player earned this stage - one per sequencer
+    /// track, in the track order (units-database order).
+    ///
+    /// Built from the sequencer rather than from HeroRoster: under PHASE 2 no
+    /// hero is on the field when BATTLE is pressed, so the roster is empty and
+    /// the old path would build nothing.
+    /// </summary>
+    private void BuildDeploymentCells(IReadOnlyList<HeroDeploymentSequencer.Track> tracks)
+    {
+        deploymentCellsBuilt = true;
+
         foreach (var cell in cells)
             if (cell) Destroy(cell.gameObject);
 
         cells.Clear();
+        cellTracks.Clear();
 
-        if (!waveManager) return;
-
-        var ids = new List<int>();
-        foreach (var batch in waveManager.EarnedBatches)
-        {
-            if (batch == null) continue;
-            foreach (var def in batch)
-                if (def && !ids.Contains(def.unitId)) ids.Add(def.unitId);
-        }
-
-        if (ids.Count == 0)
+        if (tracks.Count == 0)
         {
             Debug.LogWarning("[HeroStatsPanel] BATTLE started with no earned heroes - " +
                              "the deployment panel stays empty.", this);
             return;
         }
 
-        ids.Sort(CompareByDatabaseOrder);
-
-        foreach (int unitId in ids)
+        foreach (var track in tracks)
         {
-            var def = unitsDatabase ? unitsDatabase.GetById(unitId) : null;
+            var def = track.Def;
 
             var cell = Instantiate(cellTemplate, cellContainer);
             cell.gameObject.SetActive(true);
-            cell.name = def ? $"Deploy_{def.displayName}" : $"Deploy_{unitId}";
-
-            // Count 0 = greyed with no label; the first LoadStarted fills it in.
-            cell.ConfigureAsDeploymentSlot(unitId, def, 0);
+            cell.name = def ? $"Deploy_{def.displayName}" : $"Deploy_{track.UnitId}";
+            cell.ConfigureAsDeploymentSlot(track.UnitId, def, track.Total);
 
             cells.Add(cell);
-        }
-    }
-
-    private void HandleLoadStarted(int index, IReadOnlyList<UnitDefinitionSO> batch)
-    {
-        foreach (var cell in cells)
-        {
-            if (!cell) continue;
-
-            int n = 0;
-            if (batch != null)
-                foreach (var def in batch)
-                    if (def && def.unitId == cell.UnitId) n++;
-
-            // A type not in THIS load greys out and shows no number - the brief is
-            // explicit that only the types being released are lit.
-            cell.SetLoadCount(n);
-            cell.SetDimmed(n == 0);
-            cell.SetLoadFill(0f);
-        }
-    }
-
-    private void HandleLoadProgress(int index, float t)
-    {
-        // LoadCount, NOT SquadSize: SquadSize belongs to the alive/total mode and
-        // is 0 for every deployment cell, so gating on it meant SetLoadFill was
-        // never called and the cyan bar never appeared.
-        foreach (var cell in cells)
-            if (cell && cell.LoadCount > 0) cell.SetLoadFill(t);
-    }
-
-    private void HandleAllLoadsCompleted()
-    {
-        foreach (var cell in cells)
-        {
-            if (!cell) continue;
-            cell.SetLoadCount(0);
-            cell.SetDimmed(true);
+            cellTracks.Add(track);
         }
     }
 
@@ -359,7 +323,7 @@ public class HeroStatsPanel : MonoBehaviour
 
     private void Refresh()
     {
-        // A deployment cell shows "xN for this load", not "N still alive". Refresh
+        // A deployment cell shows "N still to come", not "N still alive". Refresh
         // is driven by HeroRoster.OnRosterChanged, which fires on every hero death
         // - letting it through would overwrite the load labels the moment the
         // first hero died.

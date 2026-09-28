@@ -34,6 +34,12 @@ public class UnitDefinitionSO : ScriptableObject
              "0 = use the panel's own 'gems per hero x squad size' fallback.")]
     [Min(0)] public int respawnGemCost = 0;
 
+    [Tooltip("Seconds this hero's card takes to load in battle before ONE hero of this " +
+             "type is released onto a free deploy stage. Every card loads in parallel " +
+             "from the moment BATTLE is pressed, so a stronger hero should load slower.\n" +
+             "A level can override this in StageDeploymentPlanSO (deployIntervals).")]
+    [Min(0.1f)] public float deployInterval = 6f;
+
 
     [Header("Tags (optional)")]
     public FighterType classType;               // Mirrors or complements baseStats.type for UI filtering, etc.

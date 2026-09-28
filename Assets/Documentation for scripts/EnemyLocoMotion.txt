@@ -1,4 +1,47 @@
-CURRENT UPDATE - 2026-09-14  A GATE-LOCKED ENEMY NO LONGER IGNORES HEROES
+CURRENT UPDATE - 2026-09-28  AT THE BASE, THE ENEMY CLOSES THE LAST GAP TO ITS HERO
+Reported by Arash (seen more than once): an enemy hitting the player base stopped
+the moment a freshly deployed hero attacked it, and then did NOTHING - no base
+attack, no swing at the hero - while the hero hit it freely.
+
+MEASURED LIVE (stage 6, game paused at the bug): Skeleton_Crusader_1 at (3.01,4.02),
+reachedGate, target = CowMinotaur at 0.845, IsInAttackPosition FALSE, not attacking,
+Idle clip. The hero: PlayerCombatState, targeting it, in its own attack position.
+
+THE DEADLOCK - three rules together:
+  1. EnemyManager.HandleCurrentAction: a live hero target switches the GATE attack off.
+  2. This file, base branch (2026-09-21): at the base the enemy held gateStopPosition
+     and never walked toward a hero.
+  3. IsInAttackPosition: the enemy swings only within ITS reach, stoppingDistance
+     0.83. EVERY hero reaches 0.85 (all 8 checked), so a hero stopping at 0.83-0.85
+     is happy and swings, the enemy never can.
+  The "0.02 extra tolerance" clause in IsInAttackPosition (see PURPOSE below) was
+  meant for exactly this 0.85/0.83 mismatch, but it still demands
+  offset <= stoppingDistance, so it can never accept 0.845 - it does not help here.
+
+THE FIX (Arash chose this over widening ranges): in the reachedGate + live-hero
+branch of HandleMoveToTarget -
+  - in attack position -> StopAtCurrentPosition (fight from here);
+  - otherwise step STRAIGHT toward the hero with MoveTowards, re-checked every
+    physics step, so it stops the moment it is in reach and moves only as far as
+    it must;
+  - never further than `baseApproachLeash` (new field, default 1.5) from
+    gateStopPosition - past that it just holds.
+  StripBackwardMotion is deliberately NOT applied here: deployed heroes land on the
+  rear lane, slightly BEHIND an enemy at the base, and stripping would leave those
+  exact fights deadlocked. Mid-field behaviour is unchanged.
+  When the hero is gone, the no-target branch walks it back to gateStopPosition
+  and the gate attack resumes (unchanged).
+  The old "walk back to gateStopPosition while a hero is targeted" hold is gone -
+  it would fight the approach step and oscillate.
+
+VERIFIED 2026-09-28 (stage 6, base HP raised at runtime only, 6 enemies at the
+base, 4 heroes dropped in): longest time an enemy at the base had an unreachable
+hero = 0.06s (was indefinite), 0 episodes over 1s, 37 base swings at heroes,
+largest step off the gate spot 0.04. Afterwards all enemies returned to their spot
+and resumed hitting the base.
+
+--------------------------------------------------------------------------------
+PREVIOUS UPDATE - 2026-09-14  A GATE-LOCKED ENEMY NO LONGER IGNORES HEROES
 HandleMoveToTarget's first branch used to pin the enemy Kinematic on
 gateStopPosition and RETURN, before the hero-target branch ran at all. So the
 moment an enemy touched the gate trigger it stopped seeing heroes ENTIRELY - it
@@ -86,6 +129,9 @@ INSPECTOR FIELDS
                        Removing the growth axis is exactly what fixed that.
   fairDistanceToPlayer (float, default 1.6) only chase a player unit within this
                        distance - stops enemies being pulled far off their lane
+  baseApproachLeash    (float, private serialized, default 1.5, added 2026-09-28)
+                       at the base, the furthest this enemy may step from its
+                       gate spot to get its hero into reach
 
 LIFECYCLE
 ---------
@@ -147,6 +193,9 @@ HandleMoveToTarget()  - the live version, evaluated in order
      after any hero that came near - including one standing behind it.
      Consequence, accepted: a hero that stays just outside attack reach of a
      gate-parked enemy is never chased.
+     !! SUPERSEDED 2026-09-28 - that consequence WAS the deadlock. The enemy now
+     steps straight toward its hero until in reach, within baseApproachLeash of
+     its gate spot. See the update at the top of this file.
 
   2. ENGAGE A PLAYER UNIT
      If currentTarget exists and is not dead:

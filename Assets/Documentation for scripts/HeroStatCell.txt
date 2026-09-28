@@ -1,26 +1,33 @@
-CURRENT UPDATE - 2026-09-14  PHASE 2: THE CELL HAS A SECOND MODE
+CURRENT UPDATE - 2026-09-27  DEPLOYMENT LABEL IS NOW "remaining/total"
+With parallel per-type deployment (HeroDeploymentSequencer.txt) a card no longer
+shows "xN for this load". It shows how many of its type are STILL TO COME:
+  3/3 -> 2/3 -> 1/3 -> 0/3
+  SetDeployState(remaining, total, fill)  [public, the ONE deployment call]
+      remaining > 0 : lit "Cell Active" frame, label visible, cyan bar = fill
+      remaining == 0: grey "Cell DeActive" frame, label "0/total", bar empty
+      Called EVERY FRAME by HeroStatsPanel. Cheap and idempotent: the label string
+      is rebuilt only when remaining/total change (shownRemaining/shownTotal);
+      SetActive on an unchanged value is a no-op in Unity.
+  ConfigureAsDeploymentSlot(unitId, def, total) now takes the TOTAL earned and
+      starts the card at SetDeployState(total, total, 0) - lit, full count, empty
+      bar. SquadSize stays 0 (alive/total-mode only).
+  Removed: SetLoadCount, LoadCount, SetDimmed. SetLoadFill is now private.
+
+--------------------------------------------------------------------------------
+PREVIOUS UPDATE - 2026-09-14  PHASE 2: THE CELL HAS A SECOND MODE
+(the API list below was replaced on 2026-09-27 - see above; the fill notes still hold)
 The alive/total path below is UNTOUCHED and still works. A cell built with the
 new ConfigureAsDeploymentSlot is a DEPLOYMENT SLOT instead: a portrait, the
 NUMBER of that type the running load releases ("x2" - NOT "2/3"), and a cyan bar
 filling from the bottom over the load's 6 seconds. Look taken from
 Assets/Arts/Reference videos/Ref2.MP4.
 
-  ConfigureAsDeploymentSlot(unitId, def, count)
-      Builds the slot. Writes the portrait into both frames as Bind does, forces
-      "Cost Gem" off and attaches NO buy-back listener, then starts dimmed with
-      an empty bar.
-  SetLoadCount(count)   the "xN" label; count <= 0 hides it entirely. Also sets
-                        the LoadCount property.
-  LoadCount             how many of this type the RUNNING load releases; 0 = not
-                        in it. !! SEPARATE FROM SquadSize ON PURPOSE. SquadSize is
-                        the alive/total mode's "/total", written once at build
-                        time and left at 0 for deployment cells. HeroStatsPanel
-                        first gated the fill on SquadSize > 0, so SetLoadFill was
-                        never called and THE CYAN BAR NEVER APPEARED AT ALL.
-  SetDimmed(bool)       grey ("Cell DeActive") vs lit ("Cell Active"). Reuses the
-                        authored two-frame model rather than tinting - the
-                        DeActive sprite is ALREADY the greyed-out artwork.
-  SetLoadFill(0..1)     the cyan bar
+  [REMOVED 2026-09-27] SetLoadCount / LoadCount / SetDimmed - history only:
+  LoadCount was kept SEPARATE FROM SquadSize ON PURPOSE. SquadSize is the
+  alive/total mode's "/total", left at 0 for deployment cells. HeroStatsPanel
+  first gated the fill on SquadSize > 0, so the fill was never set and THE CYAN
+  BAR NEVER APPEARED AT ALL. Don't gate deployment drawing on SquadSize.
+  SetLoadFill(0..1)     the cyan bar (private since 2026-09-27)
   EnsureLoadFill()      creates the fill Image on first use
 
   !! THE FILL IS THE FIRST CHILD OF **Mask**, not of "Cell Active". Ref2 fills
@@ -60,10 +67,10 @@ Assets/Arts/Reference videos/Ref2.MP4.
   of those cannot have a bar; EnsureLoadFill now logs a warning naming the likely
   cause instead of silently doing nothing.
 
-  A deployment cell is driven entirely by HeroStatsPanel from
-  HeroDeploymentSequencer's events. HeroStatsPanel.Refresh() early-returns in
-  deployment mode, because it is driven by HeroRoster.OnRosterChanged and would
-  overwrite the "xN" labels the moment the first hero died.
+  A deployment cell is driven entirely by HeroStatsPanel, which polls
+  HeroDeploymentSequencer.Tracks every frame. HeroStatsPanel.Refresh() early-returns
+  in deployment mode, because it is driven by HeroRoster.OnRosterChanged and would
+  overwrite the deployment labels the moment the first hero died.
 
 ================================================================================
   HeroStatCell.cs

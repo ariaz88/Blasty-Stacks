@@ -1,5 +1,31 @@
-CURRENT UPDATE - 2026-09-14  PHASE 2: THE PANEL IS NOW A DEPLOYMENT QUEUE
-(supersedes the alive/total description below whenever a sequencer is present)
+CURRENT UPDATE - 2026-09-27  PARALLEL DEPLOYMENT CARDS, POLLED EVERY FRAME
+(supersedes the 2026-09-14 block right below)
+
+The sequencer no longer runs serial per-match loads - it runs one timer per hero
+TYPE, all in parallel (see HeroDeploymentSequencer.txt). The panel changed with it:
+
+  - HandleBattleStarted only latches deploymentMode. It does NOT build the cells:
+    the sequencer's Tracks are null until the award pipeline has caught up.
+  - Update() (deployment mode only):
+      first frame Tracks != null -> BuildDeploymentCells(tracks): one cell per
+        track, in track order (units-database order), ConfigureAsDeploymentSlot
+        with the track's Total; `cellTracks` keeps the track for each cell by index.
+      every frame -> cell.SetDeployState(track.Remaining, track.Total, track.Progress)
+  - So every card is lit and filling from the same frame; the label counts down
+    "3/3 -> 2/3 -> 1/3 -> 0/3"; at 0 the card greys out and its bar empties.
+  - After a win/loss the sequencer stops, the tracks stop changing, and the cards
+    simply freeze in place.
+  - WHY POLL instead of events: every card changes every frame anyway (the bar),
+    and polling has no late-subscriber problem. The old event version needed a
+    special "catch up on the load already in flight" step because the sequencer
+    fired LoadStarted(0) before the panel had subscribed.
+  - Removed: HandleLoadStarted / HandleLoadProgress / HandleAllLoadsCompleted and
+    their subscriptions.
+  - Refresh() still EARLY-RETURNS in deployment mode (see below). No buy-back here.
+
+--------------------------------------------------------------------------------
+PREVIOUS UPDATE - 2026-09-14  PHASE 2: THE PANEL IS NOW A DEPLOYMENT QUEUE
+(superseded by the 2026-09-27 block above; kept for history)
 
 If a HeroDeploymentSequencer exists in the scene (it is on the [PlayerWaveManager]
 object in LevelTemplate.prefab, so normally yes), HandleBattleStarted takes a new

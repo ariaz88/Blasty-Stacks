@@ -48,6 +48,19 @@ public class StageDeploymentPlanSO : ScriptableObject
         public List<Entry> entries = new();
     }
 
+    /// <summary>
+    /// A per-level replacement for one hero type's UnitDefinitionSO.deployInterval.
+    /// </summary>
+    [Serializable]
+    public class IntervalOverride
+    {
+        [Tooltip("UnitDefinitionSO.unitId of the hero type whose load time changes.")]
+        public int unitId;
+
+        [Tooltip("Seconds that type's card takes to load in THIS level only.")]
+        [Min(0.1f)] public float seconds = 6f;
+    }
+
     /// <summary>The whole run of matches for one level, in order.</summary>
     [Serializable]
     public class LevelPlan
@@ -57,8 +70,13 @@ public class StageDeploymentPlanSO : ScriptableObject
         [Min(1)] public int level = 1;
 
         [Tooltip("One entry per match, in the order the player clears them. " +
-                 "Element 0 is the FIRST match.")]
+                 "Element 0 is the FIRST match. Left empty = this level keeps the " +
+                 "random draw and the plan only carries interval overrides.")]
         public List<MatchPlan> matches = new();
+
+        [Tooltip("Optional. Hero load times for THIS level. A type not listed here " +
+                 "uses its own UnitDefinitionSO.deployInterval.")]
+        public List<IntervalOverride> deployIntervals = new();
     }
 
     [SerializeField] private List<LevelPlan> levels = new();
@@ -101,6 +119,29 @@ public class StageDeploymentPlanSO : ScriptableObject
         return total;
     }
 
+    /// <summary>
+    /// The load time this level sets for one hero type. False when the level, or
+    /// that type within it, has no override - the caller then uses the type's own
+    /// UnitDefinitionSO.deployInterval.
+    /// </summary>
+    public bool TryGetDeployInterval(int level, int unitId, out float seconds)
+    {
+        seconds = 0f;
+
+        var plan = FindLevel(level);
+        if (plan?.deployIntervals == null) return false;
+
+        foreach (var o in plan.deployIntervals)
+        {
+            if (o == null || o.unitId != unitId) continue;
+
+            seconds = Mathf.Max(0.1f, o.seconds);
+            return true;
+        }
+
+        return false;
+    }
+
     private LevelPlan FindLevel(int level)
     {
         foreach (var p in levels)
@@ -126,7 +167,9 @@ public class StageDeploymentPlanSO : ScriptableObject
             if (p == null) continue;
 
             int expectedMatches = LevelBattleRules.TotalPairs(p.level);
-            if (expectedMatches > 0 && p.matches.Count != expectedMatches)
+            // A level authored ONLY for its interval overrides has no matches on
+            // purpose - that is not a mismatch.
+            if (expectedMatches > 0 && p.matches.Count > 0 && p.matches.Count != expectedMatches)
                 report.AppendLine($"level {p.level}: authored {p.matches.Count} matches, " +
                                   $"LevelBattleRules says {expectedMatches}");
 

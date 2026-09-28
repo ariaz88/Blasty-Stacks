@@ -89,8 +89,8 @@ LIFECYCLE
       OnPlayerGateDestroyed - correctly paired.
   Start()   finds both gates via FindObjectOfType (not null-checked afterward,
             but only read inside OnEnemyGateDestroyed's HP% calculation, which
-            null-checks playerGate defensively), plus the EnemySpawner used by
-            the mutual-wipe check
+            null-checks playerGate defensively), plus the EnemySpawner and the
+            HeroDeploymentSequencer used by the mutual-wipe check
   Update()  the mutual-wipe watchdog - see MUTUAL WIPE below. Does nothing at
             all unless CurrentState is Playing.
 
@@ -159,6 +159,12 @@ MUTUAL WIPE -> SAME DEFEAT FLOW, NO GATE INVOLVED   [2026-08-30]
         into the field (isUnlocked), and PlayerWaveManager marks a bought
         reinforcement unlocked before its gate hold, so a hero on its way in
         correctly keeps this above zero.
+      - !deploymentSequencer.HeroesStillComing  (added 2026-09-27). Deployment
+        is one hero per type every few seconds (HeroDeploymentSequencer), so the
+        field can be EMPTY while a slow type (9s) still has heroes loading.
+        Without this, "last hero and last enemy trade" in that gap was called a
+        defeat with the player's heroes still on their cards. deploymentSequencer
+        is found in Start(); absent = check skipped.
       - enemySpawner.AliveEnemyCount == 0 AND AnyLiveEnemyInScene() is false.
         The cheap counter runs first; the FindObjectsOfType<EnemyStats> sweep
         only executes on the rare frames where both sides already read empty,
@@ -204,7 +210,10 @@ HOW IT CONNECTS
   - RevivePanel calls back into NotifyReviveAccepted/NotifyReviveDeclined.
   - EnemySpawner is POLLED read-only every frame (BattleStarted,
     HasSpawnedFirstEnemy, AllWavesDispatched, AliveEnemyCount) for the
-    mutual-wipe check; HeroRoster.TotalAlive() supplies the hero half.
+    mutual-wipe check; HeroRoster.TotalAlive() supplies the hero half, and
+    HeroDeploymentSequencer.HeroesStillComing the heroes not yet deployed.
+  - OnGameStateChanged is what HeroDeploymentSequencer listens to: leaving
+    Playing (Won / Lost / ReviveOffer) stops every deployment timer.
 
 NOTES
 -----

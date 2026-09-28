@@ -47,6 +47,12 @@ public class EnemyLocoMotion : MonoBehaviour
     // NEW: pursue player only when close enough and only if player is "opposite side"
     public float fairDistanceToPlayer = 1.6f;
 
+    [Tooltip("At the base, how far this enemy may step away from its gate spot to " +
+             "get a hero into weapon reach. Only used when it is ALREADY fighting a " +
+             "hero it cannot reach - it never chases further than this, so the " +
+             "'at the base the enemy does not chase' rule still holds.")]
+    [SerializeField, Min(0f)] private float baseApproachLeash = 1.5f;
+
     Animator anim;
     MeleeContactRecovery contactRecovery;
 
@@ -204,20 +210,37 @@ public class EnemyLocoMotion : MonoBehaviour
             }
 
             // A hero IS in reach. AT THE BASE THE ENEMY DOES NOT CHASE (Arash,
-            // 2026-09-21): it has arrived, so it holds its spot, turns to the hero
-            // and fights from there. Previously this fell through to the pursuit
-            // branch, which walked the enemy off the gate line after any hero that
-            // came near - including one standing behind it.
+            // 2026-09-21): it has arrived, so it fights from where it stands and
+            // never follows a hero off round the field. Previously this fell
+            // through to the pursuit branch, which walked the enemy off the gate
+            // line after any hero that came near - including one standing behind it.
+            if (IsInAttackPosition())
+            {
+                StopAtCurrentPosition();
+                return;
+            }
+
+            // EXCEPTION - CLOSE THE LAST GAP (Arash, 2026-09-28). Holding still
+            // DEADLOCKED: every hero reaches 0.85 and every enemy only 0.83, so a
+            // hero hitting from 0.845 was never hit back - and the hero target had
+            // already switched the gate attack off (EnemyManager.HandleCurrentAction).
+            // Measured live on stage 6: enemy idle at the base, hero 0.845 away
+            // swinging freely. So the enemy now steps STRAIGHT toward its hero, and
+            // the check above stops it the moment it is in reach - it moves only as
+            // far as it must.
             //
-            // Facing is handled by EnemyManager.UpdateFacing (a sprite flip), and the
-            // attack controller hits from here when the hero is in reach, so holding
-            // position costs nothing but the chase.
-            Vector2 hold = enemyManager.gateStopPosition;
-            if (Vector2.Distance(pos, hold) > 0.05f)
+            // Only here at the base, and never further than baseApproachLeash from
+            // its gate spot; the mid-field pursuit below closes gaps on its own.
+            // StripBackwardMotion is NOT applied on purpose: deployed heroes land on
+            // the rear lane, slightly BEHIND an enemy standing at the base, and
+            // stripping would leave exactly those fights deadlocked.
+            Vector2 heroPos = currentTarget.transform.position;
+            Vector2 step = Vector2.MoveTowards(pos, heroPos, CurrentMoveSpeed * Time.fixedDeltaTime);
+
+            if (Vector2.Distance(step, enemyManager.gateStopPosition) <= baseApproachLeash)
             {
                 enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
-                enemyRigidbody2D.MovePosition(
-                    Vector2.MoveTowards(pos, hold, CurrentMoveSpeed * Time.fixedDeltaTime));
+                enemyRigidbody2D.MovePosition(step);
                 SetAnimMoving(true);
             }
             else

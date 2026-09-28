@@ -94,6 +94,7 @@ public class LevelGameManager : MonoBehaviour
     private PlayerGateStats playerGate;
     private EnemyGateStats enemyGate;
     private EnemySpawner enemySpawner;
+    private HeroDeploymentSequencer deploymentSequencer;
 
     // How long the mutual-wipe condition has held without a break.
     private float stalemateTimer;
@@ -128,6 +129,7 @@ public class LevelGameManager : MonoBehaviour
         playerGate = FindObjectOfType<PlayerGateStats>();
         enemyGate = FindObjectOfType<EnemyGateStats>();
         enemySpawner = FindObjectOfType<EnemySpawner>(true);
+        deploymentSequencer = FindObjectOfType<HeroDeploymentSequencer>(true);
     }
 
     // ---------------------------------------------------------
@@ -289,6 +291,11 @@ public class LevelGameManager : MonoBehaviour
         // the moment they are bought, before their gate hold, so one on its way in keeps
         // this above zero and the timer resets.
         if (HeroRoster.TotalAlive() > 0) return false;
+
+        // Heroes still LOADING on their cards are still in the fight. Deployment
+        // is one hero per type every few seconds, so the field can be empty while
+        // a slow type (9s) has several left to send - that is not a defeat.
+        if (deploymentSequencer && deploymentSequencer.HeroesStillComing) return false;
 
         // Cheap counter first; the scene sweep only runs on the rare frames where both
         // sides already read empty, and catches enemies hand-placed in the scene that

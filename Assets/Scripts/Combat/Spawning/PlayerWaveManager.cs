@@ -157,10 +157,10 @@ public class PlayerWaveManager : MonoBehaviour
     /// <summary>
     /// The heroes earned by EACH match, kept separate rather than flattened.
     ///
-    /// HeroDeploymentSequencer releases them one BATCH at a time - one 6s load per
-    /// match - so which hero came from which match is load-bearing, not
-    /// bookkeeping. earnedHeroes stays as the flat roster for anything that only
-    /// needs the total.
+    /// Deployment no longer cares which match a hero came from - since 2026-09-27
+    /// HeroDeploymentSequencer releases heroes PER TYPE from the flat
+    /// <see cref="EarnedHeroes"/> totals. This list stays because
+    /// EarlyCampaignVerification (editor balance tool) counts cleared matches by it.
     /// </summary>
     private readonly List<List<UnitDefinitionSO>> earnedBatches = new();
 
@@ -169,8 +169,8 @@ public class PlayerWaveManager : MonoBehaviour
 
     /// <summary>
     /// Every hero earned so far this stage, in the order the matches awarded them.
-    /// This is the roster the (still to be designed) deployment step will draw
-    /// from - nothing consumes it yet.
+    /// HeroDeploymentSequencer counts this per type when BATTLE is pressed - that
+    /// count is the "/total" on each Hero Stats card.
     /// </summary>
     public IReadOnlyList<UnitDefinitionSO> EarnedHeroes => earnedHeroes;
 
@@ -269,15 +269,6 @@ public class PlayerWaveManager : MonoBehaviour
         return null;
     }
 
-    /// <summary>
-    /// Puts ONE earned batch on the field: every hero spawns on a free gate, then
-    /// jumps to the REAR lane - the rank closest to the player base - rather than
-    /// walking forward one rank per wave the way pre-PHASE-2 waves did.
-    ///
-    /// Called by HeroDeploymentSequencer the moment that batch's 6s load finishes.
-    /// Deliberately does NOT touch waveLocked or currentWave: there is no lock
-    /// step any more, the load bar IS the wait.
-    /// </summary>
     /// <summary>One hero posed on a gate, waiting for its leap.</summary>
     private class PendingDeploy
     {
@@ -313,36 +304,96 @@ public class PlayerWaveManager : MonoBehaviour
             SetHealthBarsHiddenOnGate(d.hero, false);
             StartCoroutine(JumpThenSwitch(d.hero, d.laneY));
         }
+
+        // After the releases above, so a hero that just leapt off its gate is
+        // already mid-jump when the waiting line looks for a free one.
+        if (gateQueue.Count > 0) DrainGateQueue();
     }
 
-    public void DeployBatch(IReadOnlyList<UnitDefinitionSO> batch)
+    // ---------- Deployment: one hero at a time (2026-09-27) ----------
+
+    /// <summary>
+    /// Heroes whose card has finished loading but who have not found a free
+    /// deploy stage yet. Retried every Update - never dropped, never stacked.
+    /// </summary>
+    private readonly Queue<UnitDefinitionSO> gateQueue = new();
+
+    /// <summary>
+    /// Which hero is standing on which deploy stage. A stage is RESERVED from the
+    /// frame its hero spawns until that hero has finished jumping into the field.
+    ///
+    /// !! WHY NOT ONLY THE PHYSICS CHECK. GetFreeGateIndices also tests the stage
+    /// with Physics2D.OverlapCircle, but a collider instantiated THIS frame is not
+    /// in the physics world until the next simulation step. With every card
+    /// loading in parallel, two types can finish on the same frame (7s and 8s
+    /// cards both fire at 56s) - the physics check alone would see both stages
+    /// empty and could put both heroes on one of them.
+    /// </summary>
+    private readonly Dictionary<Transform, PlayerManager> gateOccupants = new();
+
+    /// <summary>Heroes released by their card and still waiting for a free stage.</summary>
+    public int HeroesWaitingForGate => gateQueue.Count;
+
+    /// <summary>
+    /// Puts ONE hero of this type on the field: it spawns on a random FREE deploy
+    /// stage, poses for deployGateHold, then jumps to the rear lane.
+    ///
+    /// Called by HeroDeploymentSequencer each time a card finishes loading. If
+    /// every stage is taken the hero waits in gateQueue and goes out on the first
+    /// stage that frees up - a hero the player earned is never dropped, and two
+    /// heroes never share a stage.
+    /// </summary>
+    public void DeployOne(UnitDefinitionSO def)
     {
-        if (batch == null || batch.Count == 0) return;
+        if (!def) return;
 
-        StartCoroutine(DeployBatchRoutine(batch));
-    }
-
-    private IEnumerator DeployBatchRoutine(IReadOnlyList<UnitDefinitionSO> batch)
-    {
-        float? laneY = GetRearLaneY();
-
-        for (int i = 0; i < batch.Count; i++)
+        if (GetUsableGates().Count == 0)
         {
-            var def = batch[i];
-            if (!def) continue;
+            Debug.LogError($"[PlayerWaveManager] No usable deploy stage - '{def.displayName}' " +
+                           "cannot be deployed.", this);
+            return;
+        }
 
-            // Random free gate, so two heroes of the same type do not stack on one
-            // platform. Falls back to round-robin when every gate is busy - a
-            // deployment must never silently drop a hero the player earned.
+        gateQueue.Enqueue(def);
+        DrainGateQueue();
+    }
+
+    /// <summary>
+    /// Forgets every hero still waiting for a stage. Called when the level ends,
+    /// so nothing arrives after a win or a loss.
+    /// </summary>
+    public void ClearGateQueue() => gateQueue.Clear();
+
+    /// <summary>
+    /// Load time of one hero type's card in the CURRENT level: the level's
+    /// override in the deployment plan if it has one, otherwise the type's own
+    /// UnitDefinitionSO.deployInterval.
+    /// </summary>
+    public float ResolveDeployInterval(UnitDefinitionSO def)
+    {
+        if (!def) return 6f;
+
+        if (deploymentPlan && deploymentPlan.TryGetDeployInterval(RuleLevel, def.unitId, out float seconds))
+            return seconds;
+
+        return Mathf.Max(0.1f, def.deployInterval);
+    }
+
+    private void DrainGateQueue()
+    {
+        while (gateQueue.Count > 0)
+        {
             var free = GetFreeGateIndices();
-            Transform gate = free.Count > 0
-                ? gatePoints[free[UnityEngine.Random.Range(0, free.Count)]]
-                : gatePoints[i % gatePoints.Length];
+            if (free.Count == 0) return;   // retried next Update
 
-            if (!gate) continue;
+            var def = gateQueue.Dequeue();
+            var gate = gatePoints[free[UnityEngine.Random.Range(0, free.Count)]];
 
             var pm = SpawnUnitAt(def, gate.position, Quaternion.identity);
-            if (!pm) continue;
+            if (!pm) continue;   // SpawnUnitAt already logged why
+
+            // Reserved on the SAME frame as the spawn - see gateOccupants.
+            gateOccupants[gate] = pm;
 
             pm.isUnlocked = true;
             releasedHeroes.Add(pm);
@@ -356,25 +407,44 @@ public class PlayerWaveManager : MonoBehaviour
 
             // !! THE HOLD IS A WATCHDOG ENTRY, NOT A COROUTINE. It used to be
             // StartCoroutine(HoldOnGateThenJump(...)), and ANY StopAllCoroutines on
-            // this component during that 1.2s wait left the hero locked on the
+            // this component during that wait left the hero locked on the
             // platform FOREVER - PlayerLockState re-asserts a Static body every
             // FixedUpdate, so it can never recover by itself. Measured 2026-09-14:
             // 4 heroes released, only 2 reached the field; the other 2 sat on the
-            // deploy stages at y=3.21 for the rest of the battle, which is what
-            // "the hero only spawned once" looked like on screen.
+            // deploy stages at y=3.21 for the rest of the battle.
             //
-            // ReleaseDueDeployments in Update owns the wait instead, so there is no
-            // coroutine to interrupt and a stranded hero cannot happen.
+            // Update owns the wait instead, so there is no coroutine to interrupt
+            // and a stranded hero cannot happen.
             pendingDeploys.Add(new PendingDeploy
             {
                 hero = pm,
                 releaseAt = Time.time + deployGateHold,
-                laneY = laneY
+                laneY = GetRearLaneY()
             });
-
-            if (i < batch.Count - 1)
-                yield return new WaitForSeconds(reinforcementStagger);
         }
+    }
+
+    /// <summary>
+    /// True while a deployed hero still owns this stage: it is posing on it, or
+    /// it is mid-jump off it. A dead/destroyed or landed hero frees the stage.
+    /// </summary>
+    private bool IsGateReserved(Transform gate)
+    {
+        if (!gate || !gateOccupants.TryGetValue(gate, out var pm)) return false;
+
+        if (pm && StillOnGate(pm)) return true;
+
+        gateOccupants.Remove(gate);
+        return false;
+    }
+
+    private bool StillOnGate(PlayerManager pm)
+    {
+        foreach (var d in pendingDeploys)
+            if (d != null && d.hero == pm) return true;
+
+        var jump = pm.GetComponent<FrogJumpTransformOnly>();
+        return jump && jump.IsJumping;
     }
 
     /// <summary>
@@ -532,6 +602,8 @@ public class PlayerWaveManager : MonoBehaviour
         earnedHeroes.Clear();
         earnedBatches.Clear();
         pendingDeploys.Clear();
+        gateQueue.Clear();
+        gateOccupants.Clear();
 
         BeginWaves();   // uses WaveLoop that checks puzzle again
     }
@@ -1609,6 +1681,10 @@ public class PlayerWaveManager : MonoBehaviour
         for (int i = 0; i < gateCount; i++)
         {
             if (!IsGateUsable(gatePoints[i])) continue;
+
+            // A deployed hero still posing on / jumping off this stage owns it,
+            // even on the frame it spawned - see gateOccupants.
+            if (IsGateReserved(gatePoints[i])) continue;
 
             // If something sits there, skip it (prevents stacking)
             var c = Physics2D.OverlapCircle((Vector2)gatePoints[i].position, occupyCheckRadius, playerLayer);

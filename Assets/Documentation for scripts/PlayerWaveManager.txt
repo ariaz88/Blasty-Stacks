@@ -1,4 +1,39 @@
-CURRENT UPDATE - 2026-09-16  HERO CALIBRATION REPLACED BY PLAIN REGISTRATION
+CURRENT UPDATE - 2026-09-27  ONE-HERO DEPLOYS, RESERVED STAGES, NO STACKING
+DeployBatch / DeployBatchRoutine are GONE. HeroDeploymentSequencer now runs one
+parallel timer per hero TYPE and calls, once per filled load:
+  DeployOne(def) [public]
+      Enqueues def in `gateQueue` and drains it: each hero spawns on a RANDOM free
+      stage, is reserved there (`gateOccupants`), marked isUnlocked, added to
+      releasedHeroes, locked + HP bar hidden, and put in pendingDeploys (gate hold
+      deployGateHold, then JumpThenSwitch to the rear lane - unchanged).
+      NO free stage -> the hero WAITS in gateQueue; Update retries every frame
+      (after the pendingDeploys release loop). It is never dropped and NEVER put on
+      an occupied stage - the old round-robin fallback that could stack two heroes
+      is gone (Arash: "a stage with a hero on it must never get another").
+      No usable stage at all -> LogError and drop (would otherwise wait forever).
+  ClearGateQueue() [public]  forgets waiting heroes; the sequencer calls it when
+      the level ends, so nothing walks out after a win/loss.
+  HeroesWaitingForGate [public]  gateQueue.Count; part of the sequencer's
+      HeroesStillComing (mutual-wipe guard).
+  ResolveDeployInterval(def) [public]  load time for the CURRENT level:
+      deploymentPlan.TryGetDeployInterval(RuleLevel, unitId) override, else
+      UnitDefinitionSO.deployInterval.
+
+STAGE RESERVATION (gateOccupants: Transform -> PlayerManager)
+  Set on the spawn frame; IsGateReserved(gate) is true while that hero is still in
+  pendingDeploys (posing) or its FrogJumpTransformOnly.IsJumping (leaping off).
+  Dead/destroyed/landed -> entry removed, stage free. GetFreeGateIndices now skips
+  reserved stages BEFORE its physics test.
+  !! Why not the physics test alone: a collider instantiated THIS frame is not in
+  the physics world until the next step. Parallel timers can fire two types on the
+  same frame (7s and 8s both at 56s); physics alone would call both stages empty.
+  RestartAfterRevive clears gateQueue and gateOccupants.
+
+EarnedBatches is KEPT (EarlyCampaignVerification counts matches by it) but no
+longer drives deployment; EarnedHeroes (flat) is what the sequencer counts.
+
+--------------------------------------------------------------------------------
+PREVIOUS UPDATE - 2026-09-16  HERO CALIBRATION REPLACED BY PLAIN REGISTRATION
 The spawn path used to end with
     if (UsesDeploymentRules) CPBattleController.CalibrateHero(pm, RuleLevel);
 which applied the team-normalisation factor to the hero - overwriting the player's
@@ -61,7 +96,8 @@ PHASE 2 PART 2 (same day) - HEROES NOW REACH THE FIELD AGAIN, VIA LOADS
     jump animation that v3 was protecting. Gate-to-landed went ~1.70s -> ~0.80s.
     !! The live value is serialized in LevelTemplate.prefab, so changing only the
     !! C# initializer does nothing - both were set. ASSET EDIT, invisible in git.
-  - `DeployBatch(batch)` [public] spawns one batch: each hero on a RANDOM free
+  - [REPLACED 2026-09-27 by DeployOne - see top of file]
+    `DeployBatch(batch)` [public] spawns one batch: each hero on a RANDOM free
     gate (round-robin fallback when all gates are busy, so an earned hero is
     never silently dropped), then jumps to the REAR lane via GetRearLaneY - the
     rank closest to the player base. It deliberately does NOT touch waveLocked or
