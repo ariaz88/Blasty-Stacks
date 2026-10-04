@@ -27,18 +27,26 @@ INSPECTOR FIELDS
   When the tutorial finishes
     loadSceneOnComplete   (string) scene to load afterwards. Empty = stay put.
                           Set to "MenuScene" in Tutorial_Board_01.
-    loadSceneDelay        (float, default 0.6)
+    loadSceneDelay        (float, default 0.6) realtime seconds between the end of
+                          the tutorial and the switch. 0 in Tutorial_Board_01
+                          (SCENE EDIT 2026-10-04, was 0.6).
+    preloadSceneOnComplete (bool, default true) read loadSceneOnComplete in the
+                          BACKGROUND from Start, held just short of activation, so
+                          the end of the tutorial is a switch, not a load. See
+                          2026-10-04 below for the constraint that comes with it.
   Testing
     forceReplayInEditor   (bool) EDITOR ONLY - play even if already marked seen
 
 FLOW
 ----
-  Start()  -> waits startDelay (realtime) -> Play()
+  Start()  -> BeginPreload() -> waits startDelay (realtime) -> Play()
   Play()   -> if the sequence is playOnce AND already done: log, skip straight
               to HandleComplete
            -> else TutorialManager.Get().Play(...); if that returns false,
               HandleComplete anyway
-  HandleComplete() -> loads loadSceneOnComplete after loadSceneDelay
+  HandleComplete() -> after loadSceneDelay: lets the preload in
+                      (allowSceneActivation = true), or, with no preload, a
+                      plain blocking SceneManager.LoadScene
 
 HOW IT CONNECTS
 ---------------
@@ -83,3 +91,41 @@ actually start a tutorial, so a failed start cannot strand the player.
 WillPlay() asks the same three questions Play() does (sequence assigned,
 requiresTutorialId satisfied, not already seen / forceReplayInEditor) with no
 side effects.
+
+2026-10-04 — THE NEXT SCENE IS PRELOADED (tutorial -> menu was 6.4 s)
+---------------------------------------------------------------------
+Reported: after the board tutorial, up to ~10 s before the Home menu appeared.
+Arash wants the menu within ~1 s of "Nice!".
+
+MEASURED in the Editor (MCP, 3 scripted matches, realtime stamps):
+  before   'Nice!' 1.2 s + 0.6 s blank + a BLOCKING LoadScene that froze the game
+           4.6 s (MenuScene is 2.19 MB of scene data)       -> 6.4 s to the menu
+  preload  'Nice!' 0.8 s + 1.68 s freeze                     -> 2.5 s
+  +DOTween 'Nice!' 0.7 s + 0.91 s freeze                     -> 1.62 s
+  (+ 'Nice!' cut to 0.5 s afterwards: ~1.4 s expected, not re-measured.)
+The remaining switch frame (profiler): GC.Collect 508 ms - Unity's forced
+collection on every Single-mode scene load, slow in the Editor because the
+Editor's own heap is scanned - plus ~0.2 s creating MenuScene's objects and
+~0.1 s canvases/editor. A phone build should pay far less GC; never measured.
+Worst hitch while the tutorial is played with the preload running: 0.13 s.
+
+BeginPreload() runs at the top of Start(): LoadSceneAsync(loadSceneOnComplete)
+with allowSceneActivation = false. LoadAfterDelay() then only flips
+allowSceneActivation to true. The other two fixes that made up the numbers:
+GameStartManager.Awake starts DOTween at boot (its first start-up was 304 ms
+inside the switch), and the 'Nice!' step / loadSceneDelay values above.
+
+!! CONSTRAINT: a held background load holds up EVERY other scene load until it
+   is let in. BeginPreload therefore skips "not my turn yet"
+   (requiresTutorialId unmet), and the feature is only safe in a scene that
+   leaves ONLY through this trigger - true of Tutorial_Board_01 (board scripts +
+   overlay + trigger, nothing else loads scenes). Before adding a back button
+   or any other exit to such a scene, turn preloadSceneOnComplete off there.
+   Only Tutorial_Board_01 sets loadSceneOnComplete today; MenuScene and
+   OnBoarding Test leave it empty, so they never preload.
+
+REJECTED: loading MenuScene ADDITIVELY to skip that GC. It would run MenuScene's
+Awake/OnEnable/Start (16 project scripts) while the tutorial scene, its camera
+and its EventSystem still exist - Camera.main, FindObjectOfType and
+unparented Instantiate could all land on the dying scene. An Editor-only gain
+was not worth a possibly broken menu.

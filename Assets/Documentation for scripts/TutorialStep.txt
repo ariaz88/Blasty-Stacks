@@ -44,6 +44,10 @@ THE STEPS
       stack rather than flipping to whichever direction is shortest this frame.
       firstPairAtCell names the stack to teach first, because the shortest drag
       is not always the clearest first lesson.
+      While runner.BoardIsSettling is true (a stack was just dropped and its
+      match is not resolved yet) the provider answers "nothing to show" and
+      leaves sticky alone; the hand stays hidden and asks again pauseTime
+      (0.45 s) later. See the 2026-10-04 fix below.
 
   TutorialFocusTapStep            <- what the guided ONBOARDING uses
       tooltip, tooltipSide, at (TutorialTarget), holePadding, dimAlpha, timings,
@@ -106,3 +110,26 @@ NOTES
     (target never appeared) and giveUpAfterSeconds (player never acted) release
     the screen and call runner.AbortSequence(), which deliberately does not mark
     the tutorial as seen - so it gets another chance later.
+
+2026-10-04 FIX — THE HAND NO LONGER REPLAYS A PAIR THAT JUST BLASTED
+--------------------------------------------------------------------
+Reported (Tutorial_Board_01): after matching two stacks, the hand played one more
+drag between the two now-EMPTY spots, and only then moved on to the next pair.
+Moves that made no match were fine.
+
+WHY: the finger lifting ends TutorialHand's "hidden while pressed" wait and the
+hand asks this step's provider IN THE SAME FRAME. BoardInputController has by then
+booked the dropped stack on its new cells, but it resolves the match only when
+its 0.1 s settle ends. So the provider still saw both stacks of the pair, found a
+legal one-cell slide that kept them touching, and returned a gesture between them.
+The hand asks once per ~1.8 s cycle and never re-checks mid-cycle, so it played
+that whole gesture while the pair blasted underneath it.
+
+FIX: the provider returns TutorialDragPoints.None while runner.BoardIsSettling.
+The hand already treats None as "hide and ask again after pauseTime", and by then
+the pair is off the board, so the next ask finds the next pair. sticky is
+untouched on that early return - clearing it would let the hint flip to the other
+stack of the pair after a non-matching move.
+Cost: after a move that makes NO match, the new gesture starts ~0.45 s after
+release instead of on the release frame - the same as the normal pause between
+cycles.

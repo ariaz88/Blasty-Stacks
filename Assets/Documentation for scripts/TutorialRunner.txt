@@ -17,6 +17,8 @@ RUNTIME STATE
   _overlay      the overlay it draws through
   _worldCamera  lazily Camera.main
   _board        lazily FindObjectOfType<BoardGridXY>(); null in non-board scenes
+  _boardInput   lazily FindObjectOfType<BoardInputController>(); null in
+                non-board scenes (re-looked-up while null, like _board)
   _sequence     the running coroutine
 
 INSPECTOR FIELDS
@@ -45,6 +47,9 @@ PUBLIC API
   WaitFor(condition, timeoutSeconds, TutorialWaitResult)
   ResolveMatchHint()                    the gesture to demonstrate right now
   ResolveMatchHint(preferred, sticky, out chosenMover)
+  BoardIsSettling                       true while a dropped stack has not been
+                                        match-resolved yet (BoardInputController
+                                        .IsSettling); false with no board input
 
   class TutorialWaitResult { bool timedOut; }
       Out-parameter for WaitFor, which cannot have one because it is a coroutine.
@@ -65,6 +70,12 @@ RESOLVEMATCHHINT
   sticky    - keep this stack as the one that MOVES, so the demonstrated gesture
               never reverses direction under the player
   chosenMover comes back so the caller can feed it in as sticky next cycle.
+
+  It does NOT check BoardIsSettling itself. Asked while a dropped stack is still
+  settling, it happily demonstrates a pair that will blast 0.1 s later - so the
+  caller must check first (TutorialMatchGuideStep does). The check lives in the
+  caller because answering "nothing" from here would also make the caller drop
+  its sticky stack.
 
 HOW IT CONNECTS
 ---------------

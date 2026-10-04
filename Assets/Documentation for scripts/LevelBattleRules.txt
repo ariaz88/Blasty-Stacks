@@ -35,12 +35,29 @@ Coverage:
     hits-to-die band            every stage
 
 DEPLOYMENT
-  Deployments   1: 1-1-1   2: 1-1-2   3: 1-1-2-1
-                4: 1-1-2-1        (5 heroes)   was 1-1-2-4       (8)
+  Deployments   1: 1-1-1   2: 1-1-2
+                3: 1-1-1-2        (5 heroes)   was 1-1-2-1       (5)
+                4: 1-1-1-2        (5 heroes)   was 1-1-2-4       (8)
                 5: 1-1-1-1-2-3    (9 heroes)   was 1-1-2-2-2-4   (12)
                 6: 1-1-2-2-2      (8 heroes)   was 1-1-2-2-4     (10)
-                7: 1-1-2-1-2-2-4  8: 1-1-2-2-2-4  9: 1-2-2-2-2-4  10: 1-1-2-2-2-3-4
-  Stages 4-6 cut on 2026-09-28 (Arash, TEST SCENARIO - not yet confirmed by play).
+                7: 1-1-2-2-2-2-3  (13 heroes)  was 1-1-2-1-2-2-4 (13)
+                8: 1-2-2-3-3-3    (14 heroes)  was 1-1-2-2-2-4   (12)
+                9: 1-2-2-2-2-4    (13 heroes)  unchanged
+               10: 1-1-2-2-3-3-4  (16 heroes)  was 1-1-2-2-2-3-4 (15)
+
+  AUTHORING RULES (Arash, 2026-09-29) - keep every row obeying them:
+    * a match never awards FEWER heroes than the match before it;
+    * 4 appears only in a stage's LAST match.
+  DESIGN TARGETS 7-10, sized at MAX CP (every hero the strongest starting type,
+  123 CP, level 1), against enemy CP 1113 / 1322 / 1589 / 1996:
+    L7  win even WITHOUT the last match  (first six = 10 heroes = 1230 > 1113)
+    L8  win even WITHOUT the last match  (first five = 11 heroes = 1353 > 1322)
+    L9  win ONLY with every match cleared (13 = 1599 > 1589; any miss <= 1476)
+    L10 lose even at max, but close       (16 = 1968 < 1996)
+    max ratio curve: L6 0.99  L7 1.44  L8 1.30  L9 1.01  L10 0.99
+  These ignore hero upgrades and the stage-8 Golem_3 unlock (CP 162), either of
+  which makes 8-10 easier. Stages 3-10 set 2026-09-28/29 - TEST SCENARIO, not yet
+  confirmed by play.
   Target player CP with every match cleared, level-1 heroes (~118 CP typical,
   123 max): L4 ~589 vs enemy 386, L5 ~1060 (max 1107) vs 537 - last two matches raised
   to 2 and 3 after the flat 1-1-1-1-1-1 test (Arash, 2026-09-28) -, L6 ~942 (max 984) vs 991 -

@@ -66,6 +66,14 @@ public class BoardInputController : MonoBehaviour
     private Vector3 settleFrom, settleTo;
     private float settleT;
 
+    /// <summary>
+    /// True from the moment a piece is dropped until its match has been resolved.
+    /// In that window the dropped piece is already booked on its new cells, but a
+    /// pair it completed has NOT blasted yet (MatchResolver runs in CompleteSettle),
+    /// so anything reading the board now still sees that pair standing.
+    /// </summary>
+    public bool IsSettling => settlePiece != null;
+
     private readonly List<Vector2Int> tmpFootprint = new();
 
     // ---- collision snapshot, taken at pickup ----

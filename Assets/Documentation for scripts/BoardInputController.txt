@@ -45,11 +45,12 @@ INSPECTOR FIELDS
     maxSubStepsPerFrame (int, default 64) safety cap so a huge pointer jump
                      cannot stall a frame. On an 8x6 board the real worst case
                      is ~32 sub-steps, so the cap never binds in practice.
-    settleDuration   (float 0-0.3, default 0.07) seconds spent easing onto the
-                     exact cell centre after release. 0 = snap instantly (old
-                     behaviour). Because the drag is 1:1 the piece can be up to
-                     half a cell off centre at release, which pops visibly
-                     without this ease.
+    settleDuration   (float 0-0.3, default 0.10; 0.1 in LevelTemplate.prefab and
+                     Tutorial_Board_01) seconds spent easing onto the resting
+                     position after release. 0 = snap instantly (old behaviour).
+                     Because the drag is 1:1 the piece can be up to half a cell
+                     off centre at release, which pops visibly without this ease.
+                     The match is only resolved when this ease ENDS - see IsSettling.
     restExactlyWhereReleased
                      (bool, default OFF) NO-SNAP MODE. ON: the piece does not move
                      at all on release - it stays exactly where the finger left it
@@ -106,6 +107,11 @@ RUNTIME STATE
   settlePiece / settleFrom / settleTo / settleT
                    the release ease. Driven from Update, not a coroutine, so it
                    can be force-completed at any moment (see CompleteSettle).
+  IsSettling       (public, read-only) settlePiece != null. True from the drop
+                   until CompleteSettle has run MatchResolver. In that window the
+                   dropped piece is ALREADY booked on its new cells, but a pair it
+                   completed has NOT blasted yet, so the board still shows that
+                   pair standing. Read by TutorialRunner.BoardIsSettling.
   tmpFootprint / tmpLanes   reused lists
 
 INPUT ROUTING
@@ -319,8 +325,10 @@ RELEASE
       warrior wave. It is called from TickSettle when the ease finishes, from
       TryBeginDrag before a new pickup, and directly from EndDrag when
       settleDuration is 0.
-      IMPORTANT: match resolution now happens at the END of the settle, roughly
-      70 ms after the pointer is released, not on the release frame itself.
+      IMPORTANT: match resolution now happens at the END of the settle,
+      settleDuration (100 ms in every scene today) after the pointer is released,
+      not on the release frame itself. Anything that reads the board on the
+      release frame must check IsSettling first - see 2026-10-04 below.
 
 THE RELEASE SNAP  (understood and ACCEPTED, not a bug)
 -----------------------------------------------------
@@ -349,6 +357,8 @@ HOW IT CONNECTS
     -> PlayerWaveManager spawns units. This is the start of the whole game loop.
   - Calls PuzzleMoveBudget.RegisterMove on every counted move, and reads its
     HasMovesLeft to gate new pickups.
+  - TutorialRunner.BoardIsSettling reads IsSettling, so the board tutorial's
+    hand never demonstrates a pair that is about to blast.
 
 NOTES
 -----
@@ -384,3 +394,14 @@ NOTES
     CellPitch for SPACING and keeps CellSize for collider SIZE.
   - PieceDragHandlerSimple is a dead alternative drag path - zero scene and
     prefab references (verified by GUID). Do not confuse the two.
+
+2026-10-04 — IsSettling ADDED (the tutorial hand drew over a blasted pair)
+-------------------------------------------------------------------------
+Reported: in Tutorial_Board_01, right after matching two stacks, the hand played
+one more drag gesture over the spot where the pair HAD been, then moved on.
+Cause: on the release frame EndDrag books the dropped stack on its new cells and
+starts the settle; the tutorial hand re-asked the board in that SAME frame, saw
+both stacks of the pair still booked (MatchResolver only runs in CompleteSettle,
+0.1 s later) and demonstrated them - then played that ~1.8 s cycle unchanged
+while the pair blasted. Fix: this read-only flag; TutorialMatchGuideStep shows
+nothing while it is true. No movement, snapping or matching behaviour changed.

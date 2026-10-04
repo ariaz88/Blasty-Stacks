@@ -3,6 +3,7 @@ using System.Collections;
 using UnityEngine;
 using System;
 using System.Linq;  // NEW: Add this for Select extension
+using DG.Tweening;
 
 public class GameStartManager : MonoBehaviour
 {
@@ -62,6 +63,12 @@ public class GameStartManager : MonoBehaviour
         }
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        // Start DOTween here, behind the boot, instead of on its first tween. That
+        // first tween is MainMenuPanelController.Start, which runs inside the
+        // tutorial's switch to MenuScene - DOTween's own start-up was 0.3 s of that
+        // switch in the Editor profiler. Same settings as the automatic start.
+        DOTween.Init();
 
 #if UNITY_EDITOR
         // Must run BEFORE InitializeServices(), which is the first thing in the

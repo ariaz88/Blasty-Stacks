@@ -39,11 +39,22 @@ public class TutorialTrigger : MonoBehaviour
     [Tooltip("Scene to load once the tutorial ends. Empty = stay in this scene.")]
     [SerializeField] private string loadSceneOnComplete = "";
 
+    [Tooltip("Realtime seconds between the tutorial ending and the switch to loadSceneOnComplete.")]
     [SerializeField] private float loadSceneDelay = 0.6f;
+
+    [Tooltip("Read loadSceneOnComplete in the BACKGROUND while the tutorial plays, so the end " +
+             "of the tutorial is a quick switch instead of a blocking load (MenuScene froze the " +
+             "game for 1-5 s). Only for a scene that leaves ONLY through this trigger: a held " +
+             "background load holds up every other scene load until it is let in.")]
+    [SerializeField] private bool preloadSceneOnComplete = true;
 
     [Header("Testing")]
     [Tooltip("EDITOR ONLY: play the tutorial even if it is already marked as seen.")]
     [SerializeField] private bool forceReplayInEditor = false;
+
+    // loadSceneOnComplete, loading in the background and held just short of
+    // activation until HandleComplete lets it in. Null when not preloading.
+    private AsyncOperation _preload;
 
     private IEnumerator Start()
     {
@@ -55,6 +66,10 @@ public class TutorialTrigger : MonoBehaviour
         // to start a battle before the first beat has even begun.
         bool willPlay = WillPlay();
         if (willPlay) BlockDuringDelay(true);
+
+        // Start reading the next scene NOW, so the player spends the tutorial waiting
+        // on the load instead of a frozen screen after it.
+        BeginPreload();
 
         if (startDelay > 0f) yield return new WaitForSecondsRealtime(startDelay);
 
@@ -129,9 +144,34 @@ public class TutorialTrigger : MonoBehaviour
         StartCoroutine(LoadAfterDelay());
     }
 
+    /// <summary>
+    /// Starts loading loadSceneOnComplete in the background, held just short of
+    /// activation. Only when this visit is certain to end in that scene: a held load
+    /// that is never let in would hold up every other scene load for good.
+    /// </summary>
+    private void BeginPreload()
+    {
+        if (!preloadSceneOnComplete || _preload != null || string.IsNullOrEmpty(loadSceneOnComplete)) return;
+
+        // "Not my turn yet" never routes onwards, so it must not preload either.
+        if (!string.IsNullOrEmpty(requiresTutorialId) &&
+            !TutorialManager.IsTutorialDone(requiresTutorialId))
+            return;
+
+        _preload = SceneManager.LoadSceneAsync(loadSceneOnComplete);
+        if (_preload != null) _preload.allowSceneActivation = false;
+    }
+
     private IEnumerator LoadAfterDelay()
     {
         if (loadSceneDelay > 0f) yield return new WaitForSecondsRealtime(loadSceneDelay);
+
+        // Already read in the background - letting it in is only the switch.
+        if (_preload != null)
+        {
+            _preload.allowSceneActivation = true;
+            yield break;
+        }
 
         SceneManager.LoadScene(loadSceneOnComplete);
     }

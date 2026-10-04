@@ -537,6 +537,10 @@ public class HomeManager : MonoBehaviour
 
     private void LoadSelectedStage()
     {
+        // A stage is already loading in the background - a second press would queue
+        // a second load of the same scene behind it.
+        if (_loadingStage) return;
+
         int idx0 = pager.CurrentIndex;                  // 0-based index in this level
         int highestUnlocked = SaveSystem.GetHighestUnlocked(levelId);
 
@@ -559,7 +563,27 @@ public class HomeManager : MonoBehaviour
         // Load the gameplay scene for this level / stage
         string sceneName = string.Format(sceneNamePattern, levelId, idx0 + 1);
         Debug.Log($"Loading scene: {sceneName}");
-        UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
+        _loadingStage = true;
+        StartCoroutine(LoadStageInBackground(sceneName));
+    }
+
+    private bool _loadingStage;
+
+    /// <summary>
+    /// Loads the stage in the background so the menu keeps drawing - the button's
+    /// release animation plays instead of the screen freezing mid-press. A blocking
+    /// LoadScene here froze the menu for 1.2 s per press (12.6 s on the first press
+    /// of an Editor session). Only the final switch into the stage still blocks.
+    /// </summary>
+    private IEnumerator LoadStageInBackground(string sceneName)
+    {
+        // One frame first, so the press feedback is drawn before any load work
+        // starts. No fade or cover: Home stays on screen until the stage replaces
+        // it (Arash rejected a black transition screen, 2026-10-04).
+        yield return null;
+
+        var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(sceneName);
+        if (op == null) _loadingStage = false;   // not in Build Settings - let the player try again
     }
 
 

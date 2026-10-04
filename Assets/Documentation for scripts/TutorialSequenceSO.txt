@@ -43,4 +43,6 @@ CURRENT ASSET
   Tut_Board_Basics  id "board_basics", playOnce, 2 steps:
     1. TutorialMatchGuideStep  caption "Drag to match 2 same blocks",
                                firstPairAtCell (6,2), until BoardEmpty
-    2. TutorialCaptionStep     "Nice!" for 1.2s
+    2. TutorialCaptionStep     "Nice!" for 0.5s (was 1.2s until 2026-10-04 - Arash:
+                               the menu must follow within ~1 s. The switch freezes on
+                               the "Nice!" frame, so it stays readable longer than 0.5s.)

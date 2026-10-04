@@ -30,6 +30,7 @@ public class TutorialRunner : MonoBehaviour
     private TutorialOverlay _overlay;
     private Camera _worldCamera;
     private BoardGridXY _board;
+    private BoardInputController _boardInput;
     private Coroutine _sequence;
     private bool _abortRequested;
 
@@ -57,6 +58,20 @@ public class TutorialRunner : MonoBehaviour
         {
             if (!_board) _board = FindObjectOfType<BoardGridXY>();
             return _board;
+        }
+    }
+
+    /// <summary>
+    /// True while a dropped stack is still settling: booked on its new cells, but
+    /// its match not resolved yet. A board hint read now would still see a pair
+    /// that is about to blast. False in scenes with no board input.
+    /// </summary>
+    public bool BoardIsSettling
+    {
+        get
+        {
+            if (!_boardInput) _boardInput = FindObjectOfType<BoardInputController>();
+            return _boardInput && _boardInput.IsSettling;
         }
     }
 

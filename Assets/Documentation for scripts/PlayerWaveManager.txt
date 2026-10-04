@@ -479,3 +479,22 @@ NOTES / RISKS
     still exists in the DEAD numbered siblings SpawnOneAt4 (line ~474) and
     SpawnOneAt5 (line ~527) - harmless while they are unused, but fix them too
     if either is ever revived.
+
+2026-10-04 — STAGE-ARRIVAL CAPSULE VFX + SHORTER STAGE HOLDS
+------------------------------------------------------------
+  gateArrivalVfx (GameObject, LevelTemplate.prefab -> VFXKit stage_capsule)
+      Played by PlayGateArrivalVfx(pm) the moment a hero appears on a deploy
+      stage - in DrainGateQueue right after ApplyLock/SetHealthBarsHiddenOnGate,
+      and in SpawnReinforcementsRoutine after the lock. The effect is authored
+      for a 1-unit hero with feet at its origin: it is spawned at the bottom
+      centre of the hero's SpriteRenderer bounds, scaled to their height
+      (scalingMode forced to Hierarchy), sorted one order above the hero's top
+      sprite, left unparented on the stage, destroyed after 1.5 s.
+      Built only from Arash's 3 sprites in Arts/.../Stage VFX (capsule glow,
+      star, star tail). Spec + notes: Assets/VFXKit/Effects/stage_capsule/.
+      !! If the VFXKit prefab is rebuilt, re-check this reference - a rebuilt
+         prefab may get new object IDs.
+  deployGateHold 0.30 -> 0.50 and reinforcementGateHold 0.75 -> 0.60 (ASSET
+      EDIT, LevelTemplate.prefab). Arash: the whole stand on the stage must be
+      at most 0.5-0.6 s; the effect lasts 0.5 s to match. Only the stray
+      duplicate scene "Level_1_Stage_1 1.unity" overrides these.

@@ -152,6 +152,11 @@ public class PlayerWaveManager : MonoBehaviour
              "was removed is dead standing time, not the jump.")]
     [SerializeField, Min(0f)] private float deployGateHold = 0.3f;
 
+    [Tooltip("Glass-capsule effect played the moment a hero appears on a deploy stage " +
+             "(VFXKit stage_capsule, built from Arts/.../Stage VFX). Sized to each hero's " +
+             "real sprite height at spawn. Empty = no effect.")]
+    [SerializeField] private GameObject gateArrivalVfx;
+
     private readonly List<UnitDefinitionSO> earnedHeroes = new();
 
     /// <summary>
@@ -404,6 +409,7 @@ public class PlayerWaveManager : MonoBehaviour
             // (Lock state + Static body), so the hero cannot drift while it poses.
             ApplyLock(pm, true);
             SetHealthBarsHiddenOnGate(pm, true);
+            PlayGateArrivalVfx(pm);
 
             // !! THE HOLD IS A WATCHDOG ENTRY, NOT A COROUTINE. It used to be
             // StartCoroutine(HoldOnGateThenJump(...)), and ANY StopAllCoroutines on
@@ -1322,6 +1328,7 @@ public class PlayerWaveManager : MonoBehaviour
             // a normal wave sits in (Lock state + Static body), so the hero cannot
             // drift or be shoved while it waits.
             if (reinforcementGateHold > 0f) ApplyLock(pm, true);
+            PlayGateArrivalVfx(pm);
 
             // Per-hero coroutine rather than an inline wait: the hold has to run
             // ALONGSIDE the stagger, otherwise a squad of four takes
@@ -1331,6 +1338,49 @@ public class PlayerWaveManager : MonoBehaviour
             if (reinforcementStagger > 0f && i < count - 1)
                 yield return new WaitForSeconds(reinforcementStagger);
         }
+    }
+
+    /// <summary>
+    /// Plays the stage-arrival capsule around a hero that has just appeared on a
+    /// deploy stage. The effect is authored for a 1-unit hero with feet at its
+    /// origin, so it is placed at the hero's feet and scaled to the hero's real
+    /// sprite height - one prefab fits every character. It stays on the stage
+    /// (unparented) and fades by itself while the hero leaps off.
+    /// </summary>
+    private void PlayGateArrivalVfx(PlayerManager pm)
+    {
+        if (!gateArrivalVfx || !pm) return;
+
+        bool any = false;
+        Bounds b = default;
+        int topOrder = int.MinValue, topLayer = 0;
+        foreach (var r in pm.GetComponentsInChildren<SpriteRenderer>())
+        {
+            if (!r.enabled || !r.gameObject.activeInHierarchy || !r.sprite) continue;
+            if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
+            if (r.sortingOrder > topOrder) { topOrder = r.sortingOrder; topLayer = r.sortingLayerID; }
+        }
+
+        Vector3 feet = any ? new Vector3(b.center.x, b.min.y, pm.transform.position.z) : pm.transform.position;
+        var fx = Instantiate(gateArrivalVfx, feet, Quaternion.identity);
+        fx.transform.localScale = Vector3.one * (any ? b.size.y : 1f);
+
+        foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>())
+        {
+            var main = ps.main;
+            main.scalingMode = ParticleSystemScalingMode.Hierarchy;   // follow the hero-height scale
+        }
+        // Glass over the hero: one order above its top sprite, same sorting layer.
+        if (any)
+            foreach (var pr in fx.GetComponentsInChildren<ParticleSystemRenderer>())
+            {
+                pr.sortingLayerID = topLayer;
+                pr.sortingOrder = topOrder + 1;
+            }
+
+        var root = fx.GetComponent<ParticleSystem>();
+        if (root) root.Play(true);
+        Destroy(fx, 1.5f);
     }
 
     /// <summary>

@@ -38,6 +38,14 @@ public class AdBannerSlot : MonoBehaviour
              "banner is confirmed on screen.")]
     [SerializeField] private GameObject placeholderVisual;
 
+#if UNITY_EDITOR
+    [Header("Editor")]
+    [Tooltip("EDITOR ONLY. The Google Ads plugin fakes the banner in the Editor with a " +
+             "test prefab whose first appearance froze the game ~7-11 s. Off = no banner " +
+             "is requested in the Editor; builds always request it.")]
+    [SerializeField] private bool showTestBannerInEditor = false;
+#endif
+
     private RectTransform rect;
     private Canvas canvas;
     private float authoredHeight;
@@ -57,6 +65,9 @@ public class AdBannerSlot : MonoBehaviour
 
     private void OnEnable()
     {
+#if UNITY_EDITOR
+        if (!showTestBannerInEditor) return;   // the strip stays reserved, no banner requested
+#endif
         var ads = AdManager.Instance;
         if (ads == null)
         {

@@ -1,0 +1,512 @@
+{
+ "name": "stage_capsule",
+ "loop": false,
+ "duration": 0.5,
+ "prewarm": false,
+ "notes": "Ref: still screenshot (2.jpg left) - each hero on a deploy pad inside a cyan glass capsule, brightest at the pad, clear above the head, a few white stars twinkling on it. Timing designed (no motion in ref): Arash caps the whole stand on the pad at 0.5-0.6 s, deployGateHold 0.5 -> effect is 0.5 s: capsule pops in 0-0.08 s, holds, fades 0.38-0.5 s as the hero jumps. Built ONLY from Arash's 3 sprites in Arts/.../Stage VFX (padded square, colours kept). Designed for a 1-unit-tall hero, feet at y=0; the spawner scales it to the real hero height.",
+ "reference": "",
+ "view": {
+  "center": [
+   0,
+   0.6
+  ],
+  "size": 2.0
+ },
+ "layers": [
+  {
+   "name": "capsule",
+   "enabled": true,
+   "texture": "stage_capsule_glow.png",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 1.0,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.0,
+   "lifetime": [
+    0.5,
+    0.5
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    1.672072072072072,
+    1.672072072072072
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 1,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 1,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "point",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.62
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 0.0
+    },
+    {
+     "t": 0.12,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 0.5,
+     "c": "#ffffff",
+     "a": 0.85
+    },
+    {
+     "t": 0.76,
+     "c": "#ffffff",
+     "a": 0.8
+    },
+    {
+     "t": 1.0,
+     "c": "#ffffff",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 0.82
+    },
+    {
+     "t": 0.16,
+     "v": 1.04
+    },
+    {
+     "t": 0.3,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.0,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "streaks",
+   "enabled": true,
+   "texture": "stage_star_tail.png",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 1.2,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.04,
+   "lifetime": [
+    0.26,
+    0.34
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    0.18,
+    0.26
+   ],
+   "rotation": [
+    0.0,
+    0.0
+   ],
+   "spin": [
+    0.0,
+    0.0
+   ],
+   "gravity": 0.0,
+   "max": 8,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 2,
+     "cycles": 1,
+     "interval": 0.1
+    },
+    {
+     "time": 0.1,
+     "count": 2,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "box",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     0.75,
+     0.01,
+     0.35
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.3
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 0.0
+    },
+    {
+     "t": 0.2,
+     "c": "#e6fbff",
+     "a": 0.9
+    },
+    {
+     "t": 0.7,
+     "c": "#bff4ff",
+     "a": 0.6
+    },
+    {
+     "t": 1.0,
+     "c": "#8fe6ff",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 1.0
+    },
+    {
+     "t": 1.0,
+     "v": 1.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 1.3,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  },
+  {
+   "name": "stars",
+   "enabled": true,
+   "texture": "stage_star.png",
+   "tiles": [
+    1,
+    1
+   ],
+   "flipbook_cycles": 1,
+   "shader": "additive",
+   "intensity": 1.3,
+   "softness": 0.25,
+   "scroll": {
+    "noise": "noise",
+    "scale": 1.0,
+    "speed_a": [
+     0.0,
+     -0.6
+    ],
+    "speed_b": [
+     0.15,
+     -1.1
+    ]
+   },
+   "render": "billboard",
+   "length_scale": 1.0,
+   "velocity_scale": 0.0,
+   "delay": 0.05,
+   "lifetime": [
+    0.22,
+    0.32
+   ],
+   "speed": [
+    0.0,
+    0.0
+   ],
+   "size": [
+    0.16,
+    0.267
+   ],
+   "rotation": [
+    0.0,
+    360.0
+   ],
+   "spin": [
+    -180.0,
+    180.0
+   ],
+   "gravity": 0.0,
+   "max": 12,
+   "space": "local",
+   "rate": 0.0,
+   "bursts": [
+    {
+     "time": 0,
+     "count": 3,
+     "cycles": 1,
+     "interval": 0.1
+    },
+    {
+     "time": 0.08,
+     "count": 2,
+     "cycles": 1,
+     "interval": 0.1
+    },
+    {
+     "time": 0.16,
+     "count": 2,
+     "cycles": 1,
+     "interval": 0.1
+    }
+   ],
+   "shape": {
+    "type": "box",
+    "radius": 0.0,
+    "angle": 0.0,
+    "arc": 360.0,
+    "thickness": 1.0,
+    "box": [
+     0.95,
+     0.01,
+     1.1
+    ],
+    "rotation": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "position": [
+     0.0,
+     0.0,
+     0.62
+    ]
+   },
+   "color": [
+    {
+     "t": 0.0,
+     "c": "#ffffff",
+     "a": 1.0
+    },
+    {
+     "t": 0.6,
+     "c": "#eefcff",
+     "a": 1.0
+    },
+    {
+     "t": 1.0,
+     "c": "#c8f3ff",
+     "a": 0.0
+    }
+   ],
+   "size_curve": [
+    {
+     "t": 0.0,
+     "v": 0.0
+    },
+    {
+     "t": 0.3,
+     "v": 1.15
+    },
+    {
+     "t": 0.55,
+     "v": 0.9
+    },
+    {
+     "t": 1.0,
+     "v": 0.0
+    }
+   ],
+   "velocity": {
+    "x": 0.0,
+    "y": 0.25,
+    "z": 0.0,
+    "radial": 0.0,
+    "orbital": 0.0
+   },
+   "drag": 0.0,
+   "noise": {
+    "strength": 0.0,
+    "frequency": 0.5,
+    "scroll": 0.0
+   },
+   "trail": {
+    "enabled": false,
+    "lifetime": 0.25,
+    "width": [
+     {
+      "t": 0.0,
+      "v": 1.0
+     },
+     {
+      "t": 1.0,
+      "v": 0.0
+     }
+    ],
+    "min_vertex": 0.05
+   },
+   "sort": 0
+  }
+ ],
+ "textures": [
+  {
+   "id": "stage_capsule_glow.png",
+   "file": "stage_capsule_glow.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  },
+  {
+   "id": "stage_star.png",
+   "file": "stage_star.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  },
+  {
+   "id": "stage_star_tail.png",
+   "file": "stage_star_tail.png",
+   "wrap": "clamp",
+   "tiles": [
+    1,
+    1
+   ]
+  }
+ ]
+}

@@ -215,7 +215,21 @@ LOADING A STAGE
       GLOBAL stage index ((levelId-1)*stagesPerLevel + stage) and calls
       LevelManager.Instance.SetStage(globalStage, loadScene: false) - keeping
       LevelManager's own tracking in sync BEFORE loading the scene manually via
-      string.Format(sceneNamePattern, levelId, stage) and SceneManager.LoadScene.
+      string.Format(sceneNamePattern, levelId, stage).
+      2026-10-04: the load is now LoadStageInBackground(sceneName) - waits one
+      frame, then SceneManager.LoadSceneAsync - instead of a blocking
+      SceneManager.LoadScene, so the menu keeps drawing and the BATTLE button's
+      release animation plays instead of the screen freezing mid-press (blocking
+      load measured 1.2 s per press, 12.6 s on the first press of an Editor
+      session - see SESSIONS.md, the Google Ads Editor placeholder banner). The
+      final switch into the stage still blocks (~1 s in the Editor, mostly GC).
+      _loadingStage ignores further presses while the load runs; it resets only
+      when LoadSceneAsync returns null (scene missing from Build Settings).
+      NO transition screen: a black fade over the switch was built and REMOVED
+      the same day (2026-10-04) - Arash does not want any black screen between
+      Home and a stage; Home stays visible until the stage replaces it. A held PRELOAD of the stage while on Home was rejected:
+      Unity cannot cancel a background scene load, so pressing BATTLE on any
+      other card would first have to enter the preloaded stage.
 
   ReportStageResult_1Based(stage1Based, castleHpPercent)
       An ALTERNATIVE entry point (not called from within this file - intended

@@ -402,7 +402,11 @@ public class FrogJumpTransformOnly : MonoBehaviour
 
     private void MaybeSwapToLoop(float t01)
     {
-        if (!loopPlayed && tElapsed >= tLoopSwapAt && t01 < 1f)
+        // NO "t01 < 1" guard: the loop must play even when the jump ends in this
+        // same frame. Jump Loop is the only state that exits to Empty (which
+        // resets isInteracting); a long frame that skipped it left the hero in
+        // Jump Start forever with its AI blocked (seen live 2026-10-04).
+        if (!loopPlayed && tElapsed >= tLoopSwapAt)
         {
             PlayAnim(jumpLoopState);
             loopPlayed = true;

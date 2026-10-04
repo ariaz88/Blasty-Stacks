@@ -52,6 +52,11 @@ FLOW
 ----
   Awake()
       1. Singleton guard + DontDestroyOnLoad.
+      1b. DOTween.Init() (added 2026-10-04) - starts DOTween at boot instead of on
+         its first tween. That first tween is MainMenuPanelController.Start, which
+         runs INSIDE the tutorial's switch to MenuScene, and DOTween's own start-up
+         (DOTweenComponent.Awake) was 304 ms of that switch in the Editor profiler.
+         No arguments = the same DOTweenSettings the automatic start would use.
       2. EDITOR ONLY: if resetProgressOnPlay is ticked, SaveSystem.WipeAllProgress()
          and log it loudly. This MUST come before step 3 - InitializeServices is
          the first thing in the boot to read SaveSystem.Data, so wiping after it
@@ -110,6 +115,9 @@ HOW IT CONNECTS
   - PlayerWaveManager reads GameStartManager.PlayerUnits to know which units are
     deployed and should spawn.
   - The Units UI reads ProgressionService for upgrade costs and to apply levels.
+  - Owns DOTween's start-up for the whole game (Awake step 1b). Every scene's
+    first tween relies on it already being up; do not remove it to "tidy" -
+    the tutorial -> menu switch would get 0.3 s slower in the Editor again.
 
 NOTES / CRITICAL ISSUES
 -----------------------

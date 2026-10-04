@@ -18617,9 +18617,10 @@ MonoBehaviour:
   enemySpawner: {fileID: 1079043511634868343}
   suppressStageSpawning: 1
   deploymentPlan: {fileID: 11400000, guid: 801d5ea258d62a7489c5575a58ca826f, type: 2}
-  deployGateHold: 0.3
+  deployGateHold: 0.5
+  gateArrivalVfx: {fileID: 5467552189166270821, guid: b4ef21dc6c473a84abb547a6fc75cf99, type: 3}
   reinforcementStagger: 0.12
-  reinforcementGateHold: 0.75
+  reinforcementGateHold: 0.6
 --- !u!114 &7351843336487089692
 MonoBehaviour:
   m_ObjectHideFlags: 0

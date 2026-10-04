@@ -100,3 +100,14 @@ NOTES
   - If AdManager is missing the component degrades quietly to "reserve the strip
     and do nothing", which is the right behaviour for testing a gameplay scene
     on its own.
+
+2026-10-04 — showTestBannerInEditor (EDITOR ONLY, default OFF)
+--------------------------------------------------------------
+In the Editor the Google Ads plugin fakes the banner with a test prefab
+(ADAPTIVE, legacy Text with Best Fit, from the plugin's Editor/Resources). Its
+first appearance per Play session froze the game ~7-11 s (font cache 7.1 s +
+IMGUI skin waiting on the asset lock; MCP A/B: 12.6 s -> 1.5 s without it).
+With the flag OFF, OnEnable returns before requesting a banner - the strip is
+still reserved and the placeholder graphic stays. The field and the check are
+inside #if UNITY_EDITOR, so builds always request the real banner. Tick it to
+see the test banner in the Editor.

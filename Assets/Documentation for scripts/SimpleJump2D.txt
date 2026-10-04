@@ -273,3 +273,17 @@ NOTES
     The override is one-shot ON PURPOSE: a later plain TriggerJump() must go
     back to the fixed-distance behaviour rather than silently reusing a stale
     target from a previous wave.
+
+2026-10-04 FIX — THE LOOP CLIP CAN NO LONGER BE SKIPPED (hero frozen in place)
+-----------------------------------------------------------------------------
+NOTE: the class in this file is named FrogJumpTransformOnly (file name differs).
+Seen live in Level_1_Stage_1: a deployed CowMinotaur stood still for the whole
+battle, its OverrideLayer stuck in "Jump Start" (normalizedTime 77 = 77 loops),
+isInteracting true, PlayerPursueTargetState returning early on line 16.
+CAUSE: MaybeSwapToLoop required t01 < 1. A deploy hop is short (0.28 s, the
+durationClamp minimum, loop swap at 0.14 s), so ONE long frame at the jump
+start carried tElapsed past the end and the loop was skipped. "Jump Start" has
+no exit transition; only "Jump Loop" -> Empty resets isInteracting.
+FIX: the t01 < 1 guard is gone - the loop always plays, even in the landing
+frame (MaybeSwapToLoop runs before Land in TickJump), and exits to Empty by
+itself. Heroes that already landed stuck are not rescued; new jumps are safe.

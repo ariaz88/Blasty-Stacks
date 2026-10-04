@@ -166,6 +166,12 @@ public class TutorialMatchGuideStep : TutorialStep
 
         runner.Hand.StartDragLoop(() =>
         {
+            // A stack was just dropped and its match is not resolved yet. The board
+            // still holds the pair that is about to blast, and the hand plays a whole
+            // cycle on whatever it is told now - over cells that are empty a moment
+            // later. Show nothing and let the hand ask again; sticky is left alone.
+            if (runner.BoardIsSettling) return TutorialDragPoints.None;
+
             var points = runner.ResolveMatchHint(preferred, sticky, out var chosen);
             sticky = points.valid ? chosen : null;   // that pair is gone - let it re-pick
             return points;
