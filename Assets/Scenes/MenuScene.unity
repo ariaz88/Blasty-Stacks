@@ -376,6 +376,83 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7254411}
   m_CullTransparentMesh: 1
+--- !u!1 &8120001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8120002}
+  - component: {fileID: 8120003}
+  - component: {fileID: 8120004}
+  m_Layer: 0
+  m_Name: Onboarding Rig
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8120002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8120001}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8120003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8120001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4c69b073ea84f52b18730ce5a29d17b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  overlayPrefab: {fileID: 8860319722725234086, guid: bfe32b195d8d0f54fb8134ada490be3c, type: 3}
+  navUnitsId: menu_nav_units
+  firstDeployedCardId: units_first_deployed_card
+  moreDeployedCardIds:
+  - units_deployed_card_2
+  - units_deployed_card_3
+  - units_deployed_card_4
+  upgradeButtonId: units_upgrade_button
+  detailBackId: units_detail_back
+  loseLeaveStageId: lose_leave_stage
+  extraPasses: 3
+--- !u!114 &8120004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8120001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4cde9e00ea870ac4091b104f3560ccfd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sequence: {fileID: 11400000, guid: 3e8b7d1042fa4a349c5f28e6b1740d97, type: 2}
+  overlay: {fileID: 0}
+  playOnStart: 1
+  requiresTutorialId: onboard_leave_stage
+  startDelay: 0.9
+  loadSceneOnComplete: 
+  loadSceneDelay: 0.6
+  preloadSceneOnComplete: 1
+  forceReplayInEditor: 0
 --- !u!1 &12917689
 GameObject:
   m_ObjectHideFlags: 0
@@ -3057,8 +3134,11 @@ MonoBehaviour:
   levelText: {fileID: 110733583}
   cpText: {fileID: 466380381}
   xpText: {fileID: 456039090}
+  xpTextOwned: {fileID: 0}
   coinsText: {fileID: 153578236}
   coinsTextDelta: {fileID: 1723042422}
+  coinsRow: {fileID: 0}
+  heroXpRow: {fileID: 0}
   hpText: {fileID: 1542855032}
   hpDeltaText: {fileID: 0}
   atkText: {fileID: 2001025960}
@@ -3079,6 +3159,10 @@ MonoBehaviour:
   hideOnClickButton: {fileID: 1129342301}
   tooltipFadeDuration: 0.3
   tooltipFadeEase: 6
+  infoButtonGap: 14
+  tooltipArrow: {fileID: 1147237425}
+  tooltipSortingLayer: TopUI
+  tooltipSortingOrder: 100
   toastCanvasParent: {fileID: 1263791525}
   toastAnchor: {fileID: 1263791525}
   notEnoughText: NOT ENOUGH RESOURCES
@@ -15940,8 +16024,11 @@ MonoBehaviour:
   levelText: {fileID: 1202175666}
   cpText: {fileID: 1586341468}
   xpText: {fileID: 1192584375}
+  xpTextOwned: {fileID: 0}
   coinsText: {fileID: 1933321286}
   coinsTextDelta: {fileID: 526440028}
+  coinsRow: {fileID: 0}
+  heroXpRow: {fileID: 0}
   hpText: {fileID: 1637705084}
   hpDeltaText: {fileID: 0}
   atkText: {fileID: 638427842}
@@ -15962,6 +16049,10 @@ MonoBehaviour:
   hideOnClickButton: {fileID: 2017862663}
   tooltipFadeDuration: 0.3
   tooltipFadeEase: 6
+  infoButtonGap: 14
+  tooltipArrow: {fileID: 1711369233}
+  tooltipSortingLayer: TopUI
+  tooltipSortingOrder: 100
   toastCanvasParent: {fileID: 0}
   toastAnchor: {fileID: 0}
   notEnoughText: NOT ENOUGH RESOURCES
@@ -38522,6 +38613,12 @@ MonoBehaviour:
   toastFadeInDuration: 0.12
   toastGrayAt: 0.73
   toastFadeOutAt: 0.8
+  tabPopEnabled: 1
+  tabPopOnlyDuringTutorial: 1
+  tabPopFrom: 0.88
+  tabPopPeak: 1.08
+  tabPopUpTime: 0.1
+  tabPopSettleTime: 0.12
 --- !u!114 &1886900810
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -51037,8 +51134,11 @@ MonoBehaviour:
   levelText: {fileID: 3486991521816233222}
   cpText: {fileID: 0}
   xpText: {fileID: 0}
+  xpTextOwned: {fileID: 0}
   coinsText: {fileID: 0}
   coinsTextDelta: {fileID: 0}
+  coinsRow: {fileID: 0}
+  heroXpRow: {fileID: 0}
   hpText: {fileID: 0}
   hpDeltaText: {fileID: 0}
   atkText: {fileID: 0}
@@ -51059,6 +51159,10 @@ MonoBehaviour:
   hideOnClickButton: {fileID: 0}
   tooltipFadeDuration: 0.3
   tooltipFadeEase: 6
+  infoButtonGap: 14
+  tooltipArrow: {fileID: 0}
+  tooltipSortingLayer: TopUI
+  tooltipSortingOrder: 100
   toastCanvasParent: {fileID: 0}
   toastAnchor: {fileID: 0}
   notEnoughText: NOT ENOUGH RESOURCES
@@ -53192,8 +53296,11 @@ MonoBehaviour:
   levelText: {fileID: 7135385892315992966}
   cpText: {fileID: 0}
   xpText: {fileID: 0}
+  xpTextOwned: {fileID: 0}
   coinsText: {fileID: 0}
   coinsTextDelta: {fileID: 0}
+  coinsRow: {fileID: 0}
+  heroXpRow: {fileID: 0}
   hpText: {fileID: 6949890763580759787}
   hpDeltaText: {fileID: 3767865554606002976}
   atkText: {fileID: 4960958919795316439}
@@ -53214,6 +53321,10 @@ MonoBehaviour:
   hideOnClickButton: {fileID: 0}
   tooltipFadeDuration: 0.3
   tooltipFadeEase: 6
+  infoButtonGap: 14
+  tooltipArrow: {fileID: 0}
+  tooltipSortingLayer: TopUI
+  tooltipSortingOrder: 100
   toastCanvasParent: {fileID: 0}
   toastAnchor: {fileID: 0}
   notEnoughText: NOT ENOUGH RESOURCES
@@ -54589,8 +54700,11 @@ MonoBehaviour:
   levelText: {fileID: 1841212298645860246}
   cpText: {fileID: 5948534742893358704}
   xpText: {fileID: 4845268742991833541}
+  xpTextOwned: {fileID: 0}
   coinsText: {fileID: 8547085518156996239}
   coinsTextDelta: {fileID: 5747762600054682677}
+  coinsRow: {fileID: 0}
+  heroXpRow: {fileID: 0}
   hpText: {fileID: 8121184121854510434}
   hpDeltaText: {fileID: 0}
   atkText: {fileID: 7201247370382033914}
@@ -54611,6 +54725,10 @@ MonoBehaviour:
   hideOnClickButton: {fileID: 1608016446}
   tooltipFadeDuration: 0.3
   tooltipFadeEase: 6
+  infoButtonGap: 14
+  tooltipArrow: {fileID: 2570673914367760939}
+  tooltipSortingLayer: TopUI
+  tooltipSortingOrder: 100
   toastCanvasParent: {fileID: 5410076751741995073}
   toastAnchor: {fileID: 5410076751741995073}
   notEnoughText: NOT ENOUGH RESOURCES
@@ -57340,8 +57458,11 @@ MonoBehaviour:
   levelText: {fileID: 7254413}
   cpText: {fileID: 1947425100}
   xpText: {fileID: 0}
+  xpTextOwned: {fileID: 0}
   coinsText: {fileID: 0}
   coinsTextDelta: {fileID: 0}
+  coinsRow: {fileID: 0}
+  heroXpRow: {fileID: 0}
   hpText: {fileID: 1129620050}
   hpDeltaText: {fileID: 0}
   atkText: {fileID: 439312689}
@@ -57362,6 +57483,10 @@ MonoBehaviour:
   hideOnClickButton: {fileID: 460409376}
   tooltipFadeDuration: 0.3
   tooltipFadeEase: 6
+  infoButtonGap: 14
+  tooltipArrow: {fileID: 2022385506}
+  tooltipSortingLayer: TopUI
+  tooltipSortingOrder: 100
   toastCanvasParent: {fileID: 1110607464}
   toastAnchor: {fileID: 1110607464}
   notEnoughText: NOT ENOUGH RESOURCES
@@ -70882,6 +71007,7 @@ MonoBehaviour:
   startLockedOverlay: {fileID: 0}
   startLabel: {fileID: 0}
   stageTitle: {fileID: 0}
+  stageEnemyCpText: {fileID: 0}
   sceneNamePattern: Level_{0}_Stage_{1}
   lockedToastPrefab: {fileID: 3466995440680768470, guid: 771efbd3f04858a4298bfd627043e935, type: 3}
   toastCanvasParent: {fileID: 4644728512482623511}
@@ -74329,79 +74455,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0.2604149, y: -109.9563}
   m_SizeDelta: {x: 944.72, y: 107}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!1 &8120001
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 8120002}
-  - component: {fileID: 8120003}
-  - component: {fileID: 8120004}
-  m_Layer: 0
-  m_Name: Onboarding Rig
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &8120002
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8120001}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &8120003
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8120001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d4c69b073ea84f52b18730ce5a29d17b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  overlayPrefab: {fileID: 8860319722725234086, guid: bfe32b195d8d0f54fb8134ada490be3c,
-    type: 3}
-  navUnitsId: menu_nav_units
-  firstDeployedCardId: units_first_deployed_card
-  upgradeButtonId: units_upgrade_button
-  detailBackId: units_detail_back
-  loseLeaveStageId: lose_leave_stage
-  extraPasses: 3
---- !u!114 &8120004
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8120001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4cde9e00ea870ac4091b104f3560ccfd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  sequence: {fileID: 11400000, guid: 3e8b7d1042fa4a349c5f28e6b1740d97, type: 2}
-  overlay: {fileID: 0}
-  playOnStart: 1
-  requiresTutorialId: onboard_leave_stage
-  startDelay: 0.9
-  loadSceneOnComplete: 
-  loadSceneDelay: 0.6
-  forceReplayInEditor: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

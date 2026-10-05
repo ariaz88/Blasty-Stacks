@@ -8,7 +8,8 @@ using UnityEngine.UI;
 /// The visible body is measured from the sprite's TIGHT mesh (sprite.vertices), so the
 /// sprite must import with Mesh Type = Tight. The body is scaled so its height fills
 /// <see cref="bodyHeightFill"/> of the frame height, and its centre is placed on the frame
-/// centre (+ <see cref="focusOffset"/>). Whatever spills outside is clipped by the mask.
+/// centre (+ <see cref="focusOffset"/>), or with <see cref="feetOnBottom"/> its feet are
+/// stood on the frame's bottom edge. Whatever spills outside is clipped by the mask.
 /// The art itself is never touched - only the Image's size and position.
 /// </summary>
 [RequireComponent(typeof(RectTransform))]
@@ -22,6 +23,12 @@ public class PortraitFrame : MonoBehaviour
 
     [Tooltip("Pixels to shift the body centre away from the frame centre.")]
     [SerializeField] private Vector2 focusOffset = Vector2.zero;
+
+    [Tooltip("Stand the feet on the frame's bottom edge instead of centring the body vertically.")]
+    [SerializeField] private bool feetOnBottom = false;
+
+    [Tooltip("With Feet On Bottom: pixels between the feet and the frame's bottom edge.")]
+    [SerializeField] private float bottomPadding = 2f;
 
     public Image Image => image;
 
@@ -47,7 +54,10 @@ public class PortraitFrame : MonoBehaviour
         var size = new Vector2(height * rectPx.x / rectPx.y, height);
 
         rt.sizeDelta = size;
-        rt.anchoredPosition = -Vector2.Scale(body.center - new Vector2(0.5f, 0.5f), size) + focusOffset;
+        Vector2 pos = -Vector2.Scale(body.center - new Vector2(0.5f, 0.5f), size) + focusOffset;
+        if (feetOnBottom)
+            pos.y = -frame.rect.height * 0.5f + bottomPadding - (body.yMin - 0.5f) * size.y + focusOffset.y;
+        rt.anchoredPosition = pos;
     }
 
     /// <summary>Visible (opaque) area of the sprite, in 0..1 of its rect.</summary>

@@ -50,6 +50,9 @@ public class UnitDetailView : MonoBehaviour
 
     [Header("Header UI")]
     [SerializeField] private RectTransform visualRoot;   // empty UI container
+    [Tooltip("Seconds one idle loop of the hero takes in this screen, the same for every hero " +
+             "(most idle clips are 0.6 s). 0 = play each clip at its own speed.")]
+    [SerializeField] private float menuIdleCycleSeconds = 0.6f;
     private GameObject currentVisualInstance;
 
     // --- Upgrade FX hooks -----------------------------------------------
@@ -125,6 +128,15 @@ public class UnitDetailView : MonoBehaviour
     [SerializeField] private UnityEngine.UI.Button hideOnClickButton;  // Full-screen transparent button for "click anywhere" hide (parented to tooltipRoot)
     [SerializeField] private float tooltipFadeDuration = 0.3f;  // Fade in/out time
     [SerializeField] private Ease tooltipFadeEase = Ease.OutQuad;  // Smooth easing for fade
+
+    [Tooltip("Gap in px between the last letter of the hero name and the info (i) button.")]
+    [SerializeField] private float infoButtonGap = 14f;
+    [Tooltip("Optional. The tooltip's little arrow; slid sideways so it points at the (i) button.")]
+    [SerializeField] private RectTransform tooltipArrow;
+    [Tooltip("The tooltip gets its own canvas on this sorting layer so it draws above the hero " +
+             "sprites (Default layer) and every other layer of the menu.")]
+    [SerializeField] private string tooltipSortingLayer = "TopUI";
+    [SerializeField] private int tooltipSortingOrder = 100;
 
     [Header("Locked Stage Toast Settings && Upgrade Button Disable")]
     [SerializeField] private RectTransform toastCanvasParent; // usually the Detail screen root
@@ -228,6 +240,7 @@ public class UnitDetailView : MonoBehaviour
 
         // Activate and ensure CanvasGroup for fading
         tooltipRoot.SetActive(true);
+        BringTooltipToTop();
         var cg = tooltipRoot.GetComponent<CanvasGroup>();
         if (!cg) cg = tooltipRoot.gameObject.AddComponent<CanvasGroup>();
         cg.alpha = 0f;  // Start invisible
@@ -255,6 +268,82 @@ public class UnitDetailView : MonoBehaviour
         });
     }
 
+    // The hero visual is world SpriteRenderers, which draw over the Screen-Space-Camera
+    // canvas. An override-sorting canvas on a higher sorting layer puts the tooltip above
+    // the hero and every other part of the menu. Set after SetActive(true): Unity drops
+    // overrideSorting set on an inactive canvas.
+    private void BringTooltipToTop()
+    {
+        var canvas = tooltipRoot.GetComponent<Canvas>();
+        if (!canvas) canvas = tooltipRoot.AddComponent<Canvas>();
+        if (!tooltipRoot.GetComponent<GraphicRaycaster>()) tooltipRoot.AddComponent<GraphicRaycaster>();
+
+        canvas.overrideSorting = true;
+        canvas.sortingLayerName = tooltipSortingLayer;
+        canvas.sortingOrder = tooltipSortingOrder;
+
+        // "Tap anywhere to close" must cover the whole screen wherever the box sits.
+        if (hideOnClickButton)
+        {
+            var closeRT = (RectTransform)hideOnClickButton.transform;
+            var screenRT = (RectTransform)canvas.rootCanvas.transform;
+            closeRT.anchorMin = closeRT.anchorMax = closeRT.pivot = new Vector2(0.5f, 0.5f);
+            closeRT.position = screenRT.TransformPoint(screenRT.rect.center);
+            closeRT.sizeDelta = screenRT.rect.size * (screenRT.lossyScale.x / closeRT.parent.lossyScale.x);
+        }
+    }
+
+    // Puts the (i) button a small gap after the last letter of the name, whatever the
+    // name's length, and slides the tooltip arrow under it.
+    private void PlaceInfoButton()
+    {
+        if (!nameText || !tooltipButton) return;
+
+        var nameRT = nameText.rectTransform;
+        var iconRT = (RectTransform)tooltipButton.transform;
+        Rect r = nameRT.rect;
+
+        float textWidth = Mathf.Min(nameText.GetPreferredValues(nameText.text).x,
+                                    nameText.textWrappingMode == TextWrappingModes.NoWrap ? float.MaxValue : r.width);
+        float rightEdge = nameText.horizontalAlignment switch
+        {
+            HorizontalAlignmentOptions.Center => r.center.x + textWidth * 0.5f,
+            HorizontalAlignmentOptions.Right => r.xMax - nameText.margin.z,
+            _ => r.xMin + nameText.margin.x + textWidth,
+        };
+
+        // name-local -> icon-parent-local, keep the icon's own height
+        var parent = (RectTransform)iconRT.parent;
+        Vector3 edge = parent.InverseTransformPoint(nameRT.TransformPoint(new Vector3(rightEdge, r.center.y)));
+        float iconLeftOffset = iconRT.rect.width * iconRT.pivot.x;
+        Vector3 local = iconRT.localPosition;
+        local.x = edge.x + infoButtonGap + iconLeftOffset;
+        iconRT.localPosition = local;
+
+        if (tooltipArrow) PointTooltipAt(iconRT);
+    }
+
+    private Vector2? _tooltipBoxBasePos;
+
+    // Slides the arrow under the (i) button. If the button is past the box edge (very long
+    // name), the box slides too, just enough to keep the arrow inside it.
+    private void PointTooltipAt(RectTransform iconRT)
+    {
+        var box = (RectTransform)tooltipArrow.parent;
+        if (_tooltipBoxBasePos == null) _tooltipBoxBasePos = box.anchoredPosition;
+        box.anchoredPosition = _tooltipBoxBasePos.Value;
+
+        float x = box.InverseTransformPoint(iconRT.TransformPoint(iconRT.rect.center)).x - box.rect.center.x;
+        float half = box.rect.width * 0.5f - tooltipArrow.rect.width;
+        float shift = Mathf.Abs(x) > half ? x - Mathf.Sign(x) * half : 0f;
+
+        box.anchoredPosition = _tooltipBoxBasePos.Value + new Vector2(shift, 0f);
+
+        Vector3 a = tooltipArrow.localPosition;
+        a.x = box.rect.center.x + x - shift;
+        tooltipArrow.localPosition = a;
+    }
+
 
     /// <summary>
     /// Sets the header area (portrait, display name, and Level).
@@ -264,6 +353,7 @@ public class UnitDetailView : MonoBehaviour
         if (portraitImage) portraitImage.sprite = portrait;
         if (nameText) nameText.text = displayName ?? "-";
         if (levelText) levelText.text = $"LVL. {Mathf.Max(1, level)}";
+        PlaceInfoButton();
     }
 
     public void SetHeader(UnitDefinitionSO unitDef, int level)
@@ -271,6 +361,7 @@ public class UnitDetailView : MonoBehaviour
         // Texts
         if (nameText) nameText.text = unitDef.displayName ?? "-";
         if (levelText) levelText.text = $"LVL. {Mathf.Max(1, level)}";
+        PlaceInfoButton();
 
         // Remove old visual
         if (currentVisualInstance)
@@ -287,13 +378,33 @@ public class UnitDetailView : MonoBehaviour
         t.localRotation = Quaternion.identity;
         t.localScale = unitDef.uiVisualScale;
 
-        // Force idle animation
+        // Force idle animation. Most heroes have no "Idle" state - their default Locomotion
+        // blend tree already idles at Horizontal = 0 - so only Play it when it exists
+        // (Play on a missing state logs "State could not be found").
         var animator = currentVisualInstance.GetComponentInChildren<Animator>();
         if (animator)
         {
             animator.Update(0f);
-            animator.Play("Idle", 0, 0f);
+            int idle = Animator.StringToHash("Idle");
+            if (animator.HasState(0, idle)) animator.Play(idle, 0, 0f);
+            MatchIdlePace(animator);
         }
+    }
+
+    // Idle clips are authored at different lengths (Fallen_Minotaur_01: 0.4 s, the rest
+    // 0.6 s), so some heroes breathe faster than others here. Scale this menu-only
+    // Animator so every idle loop lasts menuIdleCycleSeconds.
+    private void MatchIdlePace(Animator animator)
+    {
+        animator.speed = 1f;
+        animator.Update(0f);
+
+        float length = 0f, weight = 0f;
+        foreach (var info in animator.GetCurrentAnimatorClipInfo(0))
+            if (info.clip && info.weight > weight) { weight = info.weight; length = info.clip.length; }
+
+        if (length > 0.01f && menuIdleCycleSeconds > 0.01f)
+            animator.speed = length / menuIdleCycleSeconds;
     }
 
     // this is for Main Screen Stats( HP , Attack,Deffence)

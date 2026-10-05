@@ -20,6 +20,9 @@ FIELDS
   bodyHeightFill  (float 0.3..2, default 0.9)  visible body height as a
                   fraction of the frame height (1 = head-to-feet fills it)
   focusOffset     (Vector2, px)  shifts the body centre off the frame centre
+  feetOnBottom    (bool, default false)  stand the feet on the frame's bottom
+                  edge instead of centring the body vertically
+  bottomPadding   (float px, default 2)  feet-to-bottom gap when feetOnBottom
 
   Image (public get)  the image field
 
@@ -31,8 +34,9 @@ METHODS / FLOW
       gets the body box from VisibleBodyNormalized, sizes the Image so the
       body height = bodyHeightFill * frame height (keeping the sprite's
       aspect), and positions it so the body centre lands on the frame centre
-      + focusOffset. Anything outside the frame is clipped by the frame's
-      Mask / RectMask2D.
+      + focusOffset (with feetOnBottom: body bottom = frame bottom +
+      bottomPadding + focusOffset.y). Anything outside the frame is clipped
+      by the frame's Mask / RectMask2D.
 
   VisibleBodyNormalized(Sprite)  (static, private)
       Min/max of sprite.vertices (local units, pivot-relative) converted to
@@ -44,7 +48,12 @@ HOW IT CONNECTS
     GetComponentInParent<PortraitFrame>() on their portrait Image:
       UnitCardView.SetPortrait   MyCard.prefab  PortraitMask (RectMask2D),
                                  fill 0.88, offset (0,12) -> feet on shadow
-      BucketStatRow.Bind         StatsRow-VS1   MaskImage (Mask), fill 0.95
+      BucketStatRow.Bind         StatsRow-VS1   MaskImage (Mask), fill 0.92,
+                                 feetOnBottom, padding 2. MaskImage was
+                                 resized to the cell art's inner fill area
+                                 (pos 0.5,1.5 size 119x117 - measured from
+                                 UI_Player-Icon_Cell-btn.png) so feet stand
+                                 on the visible floor of the cell.
   - Both callers fall back to a plain sprite swap if no frame exists.
 
 NOTES

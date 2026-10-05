@@ -55,6 +55,10 @@ INSPECTOR FIELDS  (grouped)
     tooltipRoot, tooltipButton, hideOnClickButton (full-screen transparent
     "click anywhere to dismiss" button), tooltipFadeDuration (0.3),
     tooltipFadeEase (OutQuad)
+    infoButtonGap (14 px)  gap between the name's last letter and the (i)
+    tooltipArrow  (RectTransform, the tooltip's "UpArrow"; wired in MenuScene
+                  on all 4 panels that have a tooltip)
+    tooltipSortingLayer ("TopUI"), tooltipSortingOrder (100)
 
   Locked Stage Toast Settings
     toastCanvasParent, toastAnchor, notEnoughText ("NOT ENOUGH RESOURCES"),
@@ -93,9 +97,27 @@ STATS POPUP
 TOOLTIP
 ----------
   ShowTooltip()
-      Activates tooltipRoot, ensures a CanvasGroup exists (adding one if
-      missing), starts it fully transparent but ALREADY interactable/raycast-
-      blocking, then fades alpha to 1 via DOTween.
+      Activates tooltipRoot, calls BringTooltipToTop, ensures a CanvasGroup
+      exists (adding one if missing), starts it fully transparent but ALREADY
+      interactable/raycast-blocking, then fades alpha to 1 via DOTween.
+  BringTooltipToTop()
+      Gives tooltipRoot its own Canvas (overrideSorting, tooltipSortingLayer /
+      tooltipSortingOrder) + GraphicRaycaster. WHY: the hero visual is world
+      SpriteRenderers (Default layer, order 0) that sit in front of the
+      Screen-Space-Camera canvas plane, so they drew OVER the tooltip. Must run
+      after SetActive(true) - Unity drops overrideSorting set while inactive.
+      Also resizes hideOnClickButton to cover the whole root canvas (it used
+      to miss the right ~86 px of the screen).
+  PlaceInfoButton()   (called from SetHeader / SetHeader1)
+      Moves the (i) button (tooltipButton) to infoButtonGap after the name's
+      last letter: name width from TMP GetPreferredValues, honouring the
+      text's alignment (Left / Center / Right). Works while the panel is
+      inactive. Measured: 15 px letter-to-icon for "Valkir3" and
+      "Fallen_Minotaur_01" alike (was +233 px / -98 px overlapping).
+  PointTooltipAt(iconRT)
+      Slides tooltipArrow under the (i); if the (i) is past the box edge (long
+      name), slides the tooltip box from its cached base position just enough
+      to keep the arrow inside.
   HideTooltip()
       No-ops if not currently active. Fades alpha to 0, then on completion
       deactivates the root and resets the CanvasGroup back to alpha 1 /
@@ -104,13 +126,24 @@ TOOLTIP
 HEADER
 ---------
   SetHeader(UnitDefinitionSO unitDef, level)  (the live version)
-      Sets name/level text. Destroys any previously instantiated visual, then
+      Sets name/level text and calls PlaceInfoButton. Destroys any previously instantiated visual, then
       (if both a visualPrefab and visualRoot exist) instantiates the new
       visual under visualRoot at zero local position/rotation and the unit's
       configured uiVisualScale. Finds an Animator on the new instance and
       forces it to the "Idle" state at time 0 immediately (animator.Update(0f)
       then Play) so the character does not visibly pop into a T-pose or a
-      random frame before the next real Update tick.
+      random frame before the next real Update tick. Play only runs when the
+      controller HAS an "Idle" state (animator.HasState) - only Minotaur_03
+      does; the rest idle via their default Locomotion blend tree at
+      Horizontal = 0, and Play on them logged "State could not be found".
+      Then calls MatchIdlePace.
+
+  MatchIdlePace(animator)
+      Reads the heaviest current clip and sets animator.speed = clip length /
+      menuIdleCycleSeconds (default 0.6), so every hero's idle loops at the
+      same pace in this screen. Menu-only: gameplay animators are untouched.
+      WHY: Fallen_Minotaur_01's Idle clip is 0.4 s, all others 0.6 s, so it
+      breathed 1.5x faster (now animator.speed 0.667).
 
 STAT ROWS
 ------------
