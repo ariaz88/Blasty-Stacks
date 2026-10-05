@@ -69,7 +69,7 @@ public class UnitCardView : MonoBehaviour
         _unlocked = unlocked;
         _onClick = onClick;
 
-        if (portraitImage) portraitImage.sprite = def.portrait;
+        SetPortrait(def.portrait);
         SetLevelText(level);
 
         SetLockAwareHeader(def, unlocked, level); // ADDED
@@ -119,6 +119,16 @@ public class UnitCardView : MonoBehaviour
     }
 
 
+
+    // Goes through the PortraitFrame (ProfileImage's masking parent) so every hero is
+    // framed at the same size; plain sprite swap if the prefab has no frame.
+    private void SetPortrait(Sprite sprite)
+    {
+        if (!portraitImage) return;
+        var frame = portraitImage.GetComponentInParent<PortraitFrame>(true);
+        if (frame) frame.Show(sprite);
+        else portraitImage.sprite = sprite;
+    }
 
     private void HandleClick()
     {

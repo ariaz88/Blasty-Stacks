@@ -32,7 +32,13 @@ public class BucketStatRow : MonoBehaviour
     public void Bind(Sprite icon, string displayName, int level,
                      int hp, int atk, int def, int cp, int coins)
     {
-        if (portrait) portrait.sprite = icon;
+        if (portrait)
+        {
+            // Frame (the MaskImage parent) sizes and centres every hero the same way.
+            var frame = portrait.GetComponentInParent<PortraitFrame>(true);
+            if (frame) frame.Show(icon);
+            else portrait.sprite = icon;
+        }
         if (nameText) nameText.text = displayName;
         if (levelText) levelText.text = $"{level}";
         if (hpText) hpText.text = hp.ToString("N0");

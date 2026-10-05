@@ -72,3 +72,18 @@ NOTES
     "never beaten" and makes a good first-defeat test.
   - Stage 6 only, by design. To cover another stage, drop the same rig object
     into that stage's scene and change stage1Based.
+
+2026-10-05 — STAGE 6: requireUpgradeAffordable OFF
+--------------------------------------------------
+Arash: the onboarding must appear the FIRST time stage 6 is lost, whether the
+run started at stage 1 or stage 6 was opened directly. It did not in the
+direct case because StarterScene's GameStartManager.resetProgressOnPlay wipes
+the save on every editor play (0 coins / 0 gems), so CanStartUpgradeChain()
+was false and HandleStateChanged returned without starting (by design, no
+flag written). Playing 1 -> 6 earns enough to afford an upgrade, so that route
+worked. Level_1_Stage_6.unity now has requireUpgradeAffordable = 0 (SCENE
+EDIT). Safe: the menu half (Tut_Onboard_UnitsUpgrade) already guards each hero
+step with ifHeroNotUpgradable - the first hero AbortChain (not marked seen), so
+a broke player is never walked to a dead Upgrade button. Consequence: in a
+broke run the lesson stops at the first hero card and stays pending.
+NOT play-tested.

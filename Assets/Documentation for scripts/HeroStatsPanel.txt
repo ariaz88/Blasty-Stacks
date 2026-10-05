@@ -1,3 +1,18 @@
+UPDATE - 2026-10-05  CARD POSITIONS FOR HERO STAGE PLACEMENT
+  New public  GetDeployCardScreenXs(List<KeyValuePair<int unitId, float screenX>>)
+  - fills the list with each deployment card's centre in SCREEN X, sorted left to
+  right. Empty outside deployment mode / before the cards exist. Uses the root
+  canvas's worldCamera (null for Overlay). Read live, never cached - the layout
+  group only places the cells at the end of the frame they are built.
+  Caller: PlayerWaveManager.ResolveHomeStage, which spawns each hero on the deploy
+  stage in front of its own card. Moving/re-sizing the card row therefore moves
+  where heroes appear.
+  (b) New public  HasDeployCards  (cards built and non-empty) - PlayerWaveManager
+  waits for it before staging the first heroes. BuildDeploymentCells sets
+  cardLayoutDirty; the first GetDeployCardScreenXs call then runs
+  LayoutRebuilder.ForceRebuildLayoutImmediate(cellContainer) once, so positions are
+  right even on the frame the cards were built.
+
 CURRENT UPDATE - 2026-09-27  PARALLEL DEPLOYMENT CARDS, POLLED EVERY FRAME
 (supersedes the 2026-09-14 block right below)
 

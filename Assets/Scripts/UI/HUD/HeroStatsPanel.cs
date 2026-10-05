@@ -58,6 +58,15 @@ public class HeroStatsPanel : MonoBehaviour
     /// <summary>True once the deployment cards exist (they wait for the sequencer's tracks).</summary>
     private bool deploymentCellsBuilt;
 
+    /// <summary>True from BuildDeploymentCells until the first forced layout pass.</summary>
+    private bool cardLayoutDirty;
+
+    /// <summary>
+    /// True once the deployment cards exist, so their positions can be read.
+    /// PlayerWaveManager waits for this before putting the first heroes on their stages.
+    /// </summary>
+    public bool HasDeployCards => deploymentCellsBuilt && cells.Count > 0;
+
     /// <summary>The track each deployment cell draws, same index as <see cref="cells"/>.</summary>
     private readonly List<HeroDeploymentSequencer.Track> cellTracks = new();
 
@@ -262,6 +271,46 @@ public class HeroStatsPanel : MonoBehaviour
             cells.Add(cell);
             cellTracks.Add(track);
         }
+
+        cardLayoutDirty = true;
+    }
+
+    /// <summary>
+    /// Screen X of every deployment card's centre with the unit type it deploys,
+    /// left to right. PlayerWaveManager reads this to put each hero on the deploy
+    /// stage straight in front of its own card. Empty until the cards exist, and
+    /// always empty outside PHASE 2 deployment.
+    ///
+    /// Read LIVE rather than cached when the cards are built: the layout group
+    /// only places them at the end of that frame.
+    /// </summary>
+    public void GetDeployCardScreenXs(List<KeyValuePair<int, float>> into)
+    {
+        into.Clear();
+        if (!deploymentMode || !cellContainer) return;
+
+        // The layout group places new cells only at the end of the frame they were
+        // built in. A caller on that same frame would read every card at one spot.
+        if (cardLayoutDirty)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(cellContainer);
+            cardLayoutDirty = false;
+        }
+
+        var canvas = cellContainer.GetComponentInParent<Canvas>();
+        if (canvas) canvas = canvas.rootCanvas;
+        Camera uiCam = canvas && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+
+        foreach (var cell in cells)
+        {
+            if (!cell) continue;
+
+            var rt = (RectTransform)cell.transform;
+            var screen = RectTransformUtility.WorldToScreenPoint(uiCam, rt.TransformPoint(rt.rect.center));
+            into.Add(new KeyValuePair<int, float>(cell.UnitId, screen.x));
+        }
+
+        into.Sort((a, b) => a.Value.CompareTo(b.Value));
     }
 
     private void BuildCells()

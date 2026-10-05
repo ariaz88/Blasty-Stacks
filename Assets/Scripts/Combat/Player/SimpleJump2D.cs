@@ -60,10 +60,16 @@ public class FrogJumpTransformOnly : MonoBehaviour
     [SerializeField, Min(0.1f)] private float scaleResponse = 1.0f;
     [SerializeField] private bool resetScaleOnLand = true;
 
-    [Tooltip("Scale the unit SETTLES AT once it lands in the field, as a fraction " +
-             "of the scale it had on the stage. 0.9 = 90%. 1 = the old behaviour " +
-             "(lands back at its original size).")]
-    [SerializeField, Range(0.1f, 1f)] private float landedScaleMultiplier = 0.9f;
+    [Tooltip("Size while standing on the stage / castle gate, as a multiple of the " +
+             "prefab's AUTHORED size. Applied once in Awake - every hero spawns onto a " +
+             "stage. 1.1 = 10% bigger than in the field.")]
+    [SerializeField, Range(0.5f, 2f)] private float stageScaleMultiplier = 1.1f;
+
+    [Tooltip("Size the unit SETTLES AT once it lands in the field, as a multiple of the " +
+             "prefab's AUTHORED size (NOT of its stage size). 1 = exactly the authored " +
+             "size, which is what makes heroes and enemies the same height in battle. " +
+             "Absolute on purpose: a second jump lands at the same size, never smaller.")]
+    [SerializeField, Range(0.1f, 2f)] private float landedScale = 1f;
 
     [Header("Air Scale Effect (Shadow)")]
     [Tooltip("Shadow world scale at apex (e.g., 0.75 = 25% smaller).")]
@@ -107,6 +113,8 @@ public class FrogJumpTransformOnly : MonoBehaviour
     // scale bookkeeping (player)
     private Vector3 baseScaleAbs;
     private Vector3 baseScaleSign;
+    private Vector3 authoredScaleAbs;   // the prefab's own size, captured before the stage scale
+    private float landedFactor = 1f;    // landed size as a fraction of baseScaleAbs, per jump
 
     // shadow bookkeeping
     private Vector3 shadowBaseLocalAbs;
@@ -158,6 +166,13 @@ public class FrogJumpTransformOnly : MonoBehaviour
     private void Awake()
     { 
         pm = GetComponent<PlayerManager>();
+
+        var s = transform.localScale;
+        authoredScaleAbs = new Vector3(Mathf.Abs(s.x), Mathf.Abs(s.y), Mathf.Abs(s.z));
+        transform.localScale = new Vector3(
+            authoredScaleAbs.x * stageScaleMultiplier * Sgn(s.x),
+            authoredScaleAbs.y * stageScaleMultiplier * Sgn(s.y),
+            authoredScaleAbs.z * stageScaleMultiplier * Sgn(s.z));
 
         CacheBaseScales();
     }
@@ -237,10 +252,13 @@ public class FrogJumpTransformOnly : MonoBehaviour
     {
         ConsumeJumpBuffer();
 
-        // Re-read the scale we are STARTING from, so "90% of its scale on the
-        // stage" is measured against the real on-stage size rather than whatever
-        // was cached back in Awake.
+        // Re-read the scale we are STARTING from (the stage size on the first
+        // jump, the landed size on any later one), then express the absolute
+        // landed size as a fraction of it for the per-frame lerp.
         CacheBaseScales();
+        landedFactor = Mathf.Approximately(baseScaleAbs.y, 0f)
+            ? 1f
+            : authoredScaleAbs.y * landedScale / baseScaleAbs.y;
 
         int facingY = GetFacingYSign();
         startPos = transform.position;
@@ -420,10 +438,10 @@ public class FrogJumpTransformOnly : MonoBehaviour
 
         // The "ground" size eases from the on-stage scale down to the landed
         // scale across the whole jump, and the arc bump rides on top of it.
-        // Doing it this way means the unit is ALREADY at landedScaleMultiplier
-        // when it touches down, so there is no pop on landing - at t01 = 1 the
-        // arc term is 0 and this lands exactly on baseScaleAbs * multiplier.
-        float groundU = Mathf.Lerp(1f, landedScaleMultiplier, t01);
+        // Doing it this way means the unit is ALREADY at its landed size when it
+        // touches down, so there is no pop on landing - at t01 = 1 the arc term
+        // is 0 and this lands exactly on baseScaleAbs * landedFactor.
+        float groundU = Mathf.Lerp(1f, landedFactor, t01);
         float playerScaleU = groundU * Mathf.Lerp(1f, apexScale, arcForScale);
 
         Vector3 scaledAbs = baseScaleAbs * playerScaleU;
@@ -516,13 +534,12 @@ public class FrogJumpTransformOnly : MonoBehaviour
 
     private void RestorePlayerScale()
     {
-        // NOT back to the original size any more: the unit settles at
-        // landedScaleMultiplier of the scale it had on the stage. The sign is
-        // preserved so this never disturbs which way the unit is facing.
+        // Settles at landedScale x the AUTHORED size, not back to the stage size.
+        // The sign is preserved so this never disturbs which way the unit faces.
         transform.localScale = new Vector3(
-            baseScaleAbs.x * landedScaleMultiplier * baseScaleSign.x,
-            baseScaleAbs.y * landedScaleMultiplier * baseScaleSign.y,
-            baseScaleAbs.z * landedScaleMultiplier * baseScaleSign.z
+            authoredScaleAbs.x * landedScale * baseScaleSign.x,
+            authoredScaleAbs.y * landedScale * baseScaleSign.y,
+            authoredScaleAbs.z * landedScale * baseScaleSign.z
         );
     }
 

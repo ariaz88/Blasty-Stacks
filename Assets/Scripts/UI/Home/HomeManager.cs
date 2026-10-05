@@ -445,9 +445,14 @@ public class HomeManager : MonoBehaviour
         int highestUnlocked = SaveSystem.GetHighestUnlocked(levelId);
         bool unlocked = (selectedIndex <= highestUnlocked);
 
-        if (startButton) startButton.interactable = unlocked;
-        if (startLockedOverlay) startLockedOverlay.SetActive(!unlocked);
-        if (startLabel) startLabel.text = unlocked ? "START" : "LOCKED";
+        // A stage this build does not ship (11-20 in the first release): the button
+        // stays pressable and opens the "more stages coming" screen instead.
+        bool comingSoon = IsComingSoon(selectedIndex);
+
+        if (startButton) startButton.interactable = unlocked || comingSoon;
+        if (startLockedOverlay) startLockedOverlay.SetActive(!unlocked && !comingSoon);
+        if (startLabel) startLabel.text = comingSoon ? "COMING SOON" : unlocked ? "START" : "LOCKED";
+        if (comingSoon && stageTitle) stageTitle.text = $"STAGE {levelId}-{selectedIndex + 1}  COMING SOON";
 
         RefreshStageEnemyCp(selectedIndex + 1);
     }
@@ -544,6 +549,14 @@ public class HomeManager : MonoBehaviour
         int idx0 = pager.CurrentIndex;                  // 0-based index in this level
         int highestUnlocked = SaveSystem.GetHighestUnlocked(levelId);
 
+        // Not in this build: announce the update rather than load a missing scene.
+        if (IsComingSoon(idx0))
+        {
+            _loadingStage = true;
+            UnityEngine.SceneManagement.SceneManager.LoadScene(StageBuildAvailability.ComingSoonScene);
+            return;
+        }
+
         if (idx0 > highestUnlocked)
         {
             Debug.Log("Selected stage is locked.");
@@ -568,6 +581,14 @@ public class HomeManager : MonoBehaviour
     }
 
     private bool _loadingStage;
+
+    /// <summary>
+    /// True when the stage at this card is not in the build AND the coming-soon
+    /// screen is - so a project without that scene keeps the old behaviour.
+    /// </summary>
+    private bool IsComingSoon(int idx0)
+        => StageBuildAvailability.ComingSoonAvailable &&
+           !StageBuildAvailability.IsSceneInBuild(string.Format(sceneNamePattern, levelId, idx0 + 1));
 
     /// <summary>
     /// Loads the stage in the background so the menu keeps drawing - the button's

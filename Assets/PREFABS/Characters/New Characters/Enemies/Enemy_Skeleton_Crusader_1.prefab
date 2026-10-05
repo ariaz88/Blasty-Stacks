@@ -28,7 +28,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 0.91316026, y: 0.91316026, z: 0.91316026}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 27835807801130461}
@@ -302,7 +302,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -3063194330996600093, guid: 998562d3d25b06e4ba8b12d4bde143ce, type: 3}
+  m_Sprite: {fileID: 1267806026801555892, guid: d4fad0d4cd219f54fab6ebaa67377193, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -440,7 +440,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 1.203}
+  m_AnchoredPosition: {x: 0, y: 1.319}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!223 &8167277306193941399
@@ -530,6 +530,7 @@ MonoBehaviour:
   trailHoldSeconds: 0.18
   trailDrainPerSecond: 0.9
   trailFadeSeconds: 0.12
+  keepConstantWorldSize: 1
   hideUntilBattleStarts: 1
 --- !u!1 &7632726480503846717
 GameObject:
@@ -596,7 +597,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 6152661969115879799, guid: 807743cbe55c3934cb933bd09c9d691c, type: 3}
+  m_Sprite: {fileID: 2190790200046579290, guid: 50c74c7c8eede154ba637eb6f44784d2, type: 3}
   m_Type: 3
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -671,7 +672,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -6925754031443590939, guid: 8860215aeafa93b4ba62b30744fefb93, type: 3}
+  m_Sprite: {fileID: 1129239020016629891, guid: 32e598d8cff9ac34db958761e662c970, type: 3}
   m_Type: 3
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -797,6 +798,7 @@ MonoBehaviour:
   moveSpeed: 0.5
   stoppingDistance: 0.83
   fairDistanceToPlayer: 2
+  baseApproachLeash: 1.5
 --- !u!114 &5004210840137090193
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -986,15 +988,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4511886699936682699, guid: 4caf0f334cf508c4eadef532673ec126, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.19
+      value: 0.20806862
       objectReference: {fileID: 0}
     - target: {fileID: 4511886699936682699, guid: 4caf0f334cf508c4eadef532673ec126, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.19
+      value: 0.20806862
       objectReference: {fileID: 0}
     - target: {fileID: 4511886699936682699, guid: 4caf0f334cf508c4eadef532673ec126, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.19
+      value: 0.20806862
       objectReference: {fileID: 0}
     - target: {fileID: 4511886699936682699, guid: 4caf0f334cf508c4eadef532673ec126, type: 3}
       propertyPath: m_LocalPosition.x

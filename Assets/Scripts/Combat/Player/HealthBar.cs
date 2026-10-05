@@ -66,6 +66,12 @@ public class HealthBar : MonoBehaviour
              "RGB is never touched. 0 = snap off with no fade.")]
     [SerializeField, Min(0f)] private float trailFadeSeconds = 0.12f;
 
+    [Header("Size")]
+    [Tooltip("ON = the bar keeps its authored WORLD size whatever its unit is scaled to. " +
+             "Heroes stand on the stage at 1.1x (FrogJumpTransformOnly.stageScaleMultiplier) " +
+             "and swell mid-jump, which would otherwise resize their bar.")]
+    [SerializeField] private bool keepConstantWorldSize = true;
+
     [Header("Battle Gate")]
 
     [SerializeField] private bool hideUntilBattleStarts = false;
@@ -80,6 +86,7 @@ public class HealthBar : MonoBehaviour
     private bool capturedAuthoredSorting;
 
     float _baseLocalScaleX;
+    float _baseLocalScaleY;
 
     // The colour the ARTIST put on the hit Image. Cached so the fade can restore it
     // exactly instead of the script inventing one.
@@ -123,6 +130,7 @@ public class HealthBar : MonoBehaviour
         }
 
         _baseLocalScaleX = Mathf.Abs(transform.localScale.x);
+        _baseLocalScaleY = Mathf.Abs(transform.localScale.y);
     }
 
     /// <summary>
@@ -166,6 +174,29 @@ public class HealthBar : MonoBehaviour
     {
         TickDamageTrail();
         KeepUnmirrored();
+        KeepConstantWorldSize();   // after KeepUnmirrored: that one resets the magnitude
+    }
+
+    /// <summary>
+    /// Divides out the parent's scale MAGNITUDE so the bar's world size is the
+    /// authored one (its size on a unit at scale 1). Signs are kept as they are -
+    /// mirroring stays KeepUnmirrored's job.
+    /// </summary>
+    void KeepConstantWorldSize()
+    {
+        if (!keepConstantWorldSize) return;
+
+        var parent = transform.parent;
+        if (!parent) return;
+
+        Vector3 ps = parent.lossyScale;
+        float px = Mathf.Abs(ps.x), py = Mathf.Abs(ps.y);
+        if (px < 0.0001f || py < 0.0001f) return;
+
+        Vector3 ls = transform.localScale;
+        ls.x = (ls.x < 0f ? -1f : 1f) * _baseLocalScaleX / px;
+        ls.y = (ls.y < 0f ? -1f : 1f) * _baseLocalScaleY / py;
+        transform.localScale = ls;
     }
 
 

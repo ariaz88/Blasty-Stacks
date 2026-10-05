@@ -33,6 +33,9 @@ METHODS
   Bind(icon, displayName, level, hp, atk, def, cp, coins)
       Pure display setter: writes every field, formatting numeric stats with
       "N0" (thousands separators, no decimals). Every target is null-checked.
+      The icon goes through the PortraitFrame on the portrait's parent
+      ("MaskImage" in StatsRow-VS1, fill 0.95) so every hero is the same size
+      and centred in the masked cell; plain sprite swap if no frame exists.
 
   Initialize(unitId, bucketType, onClicked)
       Stores which unit/bucket this row represents and the click callback,

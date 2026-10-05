@@ -22,8 +22,12 @@ INSPECTOR FIELDS
   UI Refs
     levelText        (TMP_Text, "Lvl N")
     stageValueText   (TMP_Text, shows the unlock requirement e.g. "1-3" while
-                     locked)
-    portraitImage    (Image)
+                     locked). In MyCard.prefab the "StageTounlock" label is
+                     196 px wide with TMP auto-size 18..45, so "STAGE 1-20"
+                     shrinks to fit inside the card instead of spilling out.
+    portraitImage    (Image)  "ProfileImage". In MyCard.prefab it is a child of
+                     "PortraitMask" (RectMask2D + PortraitFrame, fill 0.88,
+                     offset 0,12 so the feet sit on the shadow).
     selectedHighlight (GameObject)  FULL green overlay - used for "currently
                       deployed" styling, distinct from the border highlight
     bgHighlighted    (Image)  border/background highlight for "selected" or
@@ -62,7 +66,9 @@ BINDING
 ----------
   Bind(def, unlocked, level, onClick)
       Warns and aborts if def is null. Sets UnitId, stores unlocked/onClick,
-      sets the portrait, calls SetLevelText and SetLockAwareHeader, resets
+      sets the portrait via SetPortrait (-> PortraitFrame.Show on
+      ProfileImage's parent frame, so every hero is the same size and
+      centred; plain sprite swap if no frame exists), calls SetLevelText and SetLockAwareHeader, resets
       selection state, calls ApplyVisuals, and (re)wires clickButton -
       IMPORTANT: interactable is always left true regardless of lock state -
       "controller decides behaviour" per the inline comment; the lock gating

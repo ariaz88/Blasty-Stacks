@@ -1,0 +1,51 @@
+================================================================================
+  ComingSoonScreen.cs
+  Path : Assets/Scripts/UI/ComingSoon/ComingSoonScreen.cs
+  Type : MonoBehaviour (the only object in Assets/Scenes/ComingSoonScene.unity)
+  Layer: UI
+  Added: 2026-10-04
+================================================================================
+
+PURPOSE
+-------
+"You cleared every stage in this build - more coming in the next update"
+screen. Shown after the last shipped stage (10 in the first release) and when
+BATTLE is pressed on a stage card that is not in the build. Arash asked for a
+lively, never-black screen in English built from the game's own art.
+
+LOOK (built entirely from code in Awake, laid out on a 1125x2436 canvas,
+match height, like the HUD)
+----
+  background  Home sky + skull pattern + Level Complete dark overlay
+  ribbon      Level Complete blue ribbon, "CHAPTER 1 CLEARED!"; the subtitle
+              "STAGES 1 - 10 COMPLETE" sits in the dark frame the ribbon carries
+  stars       three SINGLE gold stars (UI_Star-Aactive01 only - 02/03 are 2- and
+              3-star RATING icons, a first draft used them by mistake)
+  heroes      the player's DEPLOYED heroes' portraits (UnitsDatabaseSO via
+              GameStartManager), max 4, in Level Complete reward cells;
+              fallbackPortraits when no roster exists (scene played directly)
+  text        "MORE STAGES COMING SOON!" (gold) + two-line body
+  button      Home "Start" yellow button, "BACK TO HOME" -> MenuScene
+  sparkles    26 Stage VFX stars / star tails drifting up and twinkling
+  Font: Lilita One SDF + its outline material.
+
+ANIMATION (DOTween, unscaled; Time.timeScale forced to 1 in Awake)
+---------
+  ribbon drops in (OutBack) -> subtitle fades -> stars pop one by one with a
+  punch rotation -> heroes bounce in from 1.4 s, then bob forever -> headline
+  scales in at 2.0 s -> body fades at 2.35 s -> button pops at 2.6 s. After
+  that the headline and button pulse and the stars rock.
+
+FIELDS
+------
+  title / subtitle / headline / body / buttonText / homeScene - editable text
+  art refs (sky, pattern, overlay, ribbon, stars[], heroCell, button, sparkle,
+  sparkleTail, font, fontOutlineMaterial, fallbackPortraits) - assigned by
+  ComingSoonSceneBuilder; re-run it rather than wiring by hand.
+
+NOTES
+-----
+  - The subtitle says "STAGES 1 - 10": change the text field when a release
+    ships a different number of stages.
+  - GoHome kills all tweens before loading MenuScene.
+  - Verified by an Editor Play-mode screenshot 2026-10-04 (second pass).

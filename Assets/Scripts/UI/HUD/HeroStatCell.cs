@@ -101,44 +101,49 @@ public class HeroStatCell : MonoBehaviour
     //
     // In PHASE 2 this cell stops being a survival read-out ("2/3 still alive")
     // and becomes a DEPLOYMENT SLOT: a portrait, "remaining/total" still to be
-    // released ("2/3"), and a cyan bar that fills from the bottom over that
-    // type's own load time - the look from Reference videos/Ref2.MP4. Since
-    // 2026-09-27 every card loads in parallel on its own timer.
+    // released ("2/3"), and a load bar INSIDE "card  Button" that fills LEFT TO
+    // RIGHT behind the count over that type's own load time - the look from
+    // New GamePlay Assets/preview_Battle_Mana.png. Since 2026-09-27 every card
+    // loads in parallel on its own timer. Once a type has run out the label
+    // reads "DEPLOYED" instead of "0/3".
     //
     // The alive/total path below is untouched and still works; a cell is in one
     // mode or the other depending on which Configure call built it.
 
-    private Image loadFill;
+    [Header("Deployment load bar")]
+    [Tooltip("The loader Image under 'card  Button' (Gameplay_Hero_Crafting-loader). Must be " +
+             "Image Type = Filled, Horizontal, origin Left - the fill clips it from the left, " +
+             "like the preview. Left empty = found as 'Load Bar' under card  Button.")]
+    [SerializeField] private Image loadBar;
 
-    /// <summary>
-    /// Ref2's fill colour - a bright cyan against the cell's own dark teal.
-    /// Fully opaque: it sits BEHIND the portrait, so it never hides the hero.
-    /// </summary>
-    private static readonly Color LoadCyan = new Color32(0x5B, 0xE8, 0xF5, 0xFF);
+    [Tooltip("The dark track the loader sits in (Gameplay_Hero_Crafting-loader-frame). " +
+             "Hidden together with the loader once the type is DEPLOYED.")]
+    [SerializeField] private GameObject loadBarFrame;
 
-    private static Sprite whiteSprite;
+    [Tooltip("The 'DEPLOYED' text object under 'card  Button'. Authored switched OFF; it " +
+             "takes the count's place once every hero of this type has been released. " +
+             "Left empty = found by name ('DEPLOYED').")]
+    [SerializeField] private GameObject deployedRoot;
 
-    /// <summary>
-    /// A 1x1 opaque sprite, built once and shared. Fallback for a cell whose mask
-    /// carries no sprite of its own - see EnsureLoadFill: a Filled Image MUST have
-    /// one or it silently renders full.
-    /// </summary>
-    private static Sprite WhiteSprite
-    {
-        get
-        {
-            if (whiteSprite) return whiteSprite;
+    [Tooltip("The gloss Image over the loader. Its authored sprite + alpha are used while " +
+             "loading; deployedGlossSprite + deployedGlossAlpha once DEPLOYED.")]
+    [SerializeField] private Image gloss;
 
-            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            tex.SetPixel(0, 0, Color.white);
-            tex.Apply();
-            tex.hideFlags = HideFlags.HideAndDontSave;
+    [Tooltip("Gloss sprite on a DEPLOYED card. The preview uses a DIFFERENT gloss there: the " +
+             "blue one fading out towards the bottom, instead of the flat white one. " +
+             "Left empty = keep the loading sprite.")]
+    [SerializeField] private Sprite deployedGlossSprite;
 
-            whiteSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
-            whiteSprite.hideFlags = HideFlags.HideAndDontSave;
-            return whiteSprite;
-        }
-    }
+    [Tooltip("Gloss alpha on a DEPLOYED card.")]
+    [Range(0f, 1f)] [SerializeField] private float deployedGlossAlpha = 1f;
+
+    // The gloss's authored look, restored while the card is still loading.
+    private Sprite glossSprite;
+    private float glossAlpha = 1f;
+
+    [Tooltip("Swap to the grey 'Cell DeActive' frame once the type is DEPLOYED. OFF matches " +
+             "the preview, where a deployed card keeps its coloured frame.")]
+    [SerializeField] private bool greyFrameWhenDeployed = false;
 
     /// <summary>
     /// Builds this cell as a deployment slot for one hero type.
@@ -173,7 +178,11 @@ public class HeroStatCell : MonoBehaviour
             buyButton.interactable = false;
         }
 
-        EnsureLoadFill();
+        if (!loadBar)
+            Debug.LogWarning($"[HeroStatCell] '{name}' has no loader Image under 'card  Button' - " +
+                             "the deployment card will show no load bar. Assign loadBar on the " +
+                             "Hero Card template.", this);
+
         SetDeployState(total, total, 0f);
     }
 
@@ -183,10 +192,12 @@ public class HeroStatCell : MonoBehaviour
     private int shownTotal = -1;
 
     /// <summary>
-    /// Draws one deployment card:
-    ///   - label "remaining/total" (3/3 -> 2/3 -> 1/3 -> 0/3), always visible;
-    ///   - lit frame + rising cyan bar while any are left to release;
-    ///   - grey "Cell DeActive" frame, empty bar, "0/total" once the type has run out.
+    /// Draws one deployment card, matching New GamePlay Assets/preview_Battle_Mana.png:
+    ///   - while any are left: "remaining/total" in the count's own yellow, the dark
+    ///     track showing, and the loader filling left to right inside it;
+    ///   - once the type has run out: the authored "DEPLOYED" text instead of the
+    ///     count - never "0/total" - with track and loader hidden, so only the
+    ///     plain button and gloss remain.
     ///
     /// Idempotent and cheap, so the panel can simply call it every frame.
     /// </summary>
@@ -197,89 +208,36 @@ public class HeroStatCell : MonoBehaviour
 
         bool exhausted = remaining == 0;
 
-        ShowFrame(exhausted);
+        ShowFrame(exhausted && greyFrameWhenDeployed);
+
+        // DEPLOYED is its own authored text object, so the count is switched off
+        // rather than rewritten - "0/total" is never shown. Only the count TEXT is
+        // toggled: "card  Button" itself must stay on, because DEPLOYED, the loader
+        // and the gloss all live inside it.
         ShowCount(true);
-        SetLoadFill(exhausted ? 0f : fill);
+        if (countText) countText.gameObject.SetActive(!exhausted || !deployedRoot);
+        if (deployedRoot) deployedRoot.SetActive(exhausted);
+
+        if (gloss)
+        {
+            var c = gloss.color;
+            c.a = exhausted ? deployedGlossAlpha : glossAlpha;
+            gloss.color = c;
+            gloss.sprite = exhausted && deployedGlossSprite ? deployedGlossSprite : glossSprite;
+        }
+
+        if (loadBarFrame) loadBarFrame.SetActive(!exhausted);
+        if (loadBar)
+        {
+            loadBar.gameObject.SetActive(!exhausted);
+            loadBar.fillAmount = exhausted ? 0f : Mathf.Clamp01(fill);
+        }
 
         if (remaining == shownRemaining && total == shownTotal) return;
 
         shownRemaining = remaining;
         shownTotal = total;
         if (countText) countText.text = $"{remaining}/{total}";
-    }
-
-    /// <summary>Fill level of the cyan bar, 0..1. Rises from the BOTTOM.</summary>
-    private void SetLoadFill(float t)
-    {
-        if (loadFill) loadFill.fillAmount = Mathf.Clamp01(t);
-    }
-
-    /// <summary>
-    /// Creates the cyan fill INSIDE THE MASK - the same object that holds the
-    /// portrait - as its FIRST child.
-    ///
-    /// !! THE HOST IS THE MASK, NOT "Cell Active". Ref2 fills the PORTRAIT AREA
-    /// from the bottom up, behind the character. Hosting this on "Cell Active"
-    /// instead washed the entire card, frame and all, which is not the effect at
-    /// all. The mask also clips the fill to the cell's rounded shape for free.
-    ///
-    /// Reached through activeAvatar.transform.parent rather than by searching for
-    /// a child called "Mask": the avatar is already resolved by AutoWire and is
-    /// by definition inside the right object, so there is no second magic name to
-    /// keep in sync.
-    ///
-    /// First child matters: in uGUI later siblings draw above earlier ones, so
-    /// first-child puts the cyan BELOW the Avatar - it rises behind the hero
-    /// rather than painting over them.
-    ///
-    /// The Image gets NO SPRITE on purpose. A null-sprite Image draws a plain
-    /// quad, which is exactly the flat colour wanted, and the mask gives it its
-    /// shape.
-    /// </summary>
-    private void EnsureLoadFill()
-    {
-        if (loadFill) return;
-
-        // The OLD cell layouts in LevelTemplate.prefab ("Hero 1", "OfferCell")
-        // have no "Cell Active"/Mask at all, so there is nowhere to put the fill.
-        // Warn rather than return silently - a deployment cell with no bar looks
-        // like a broken sequencer, and the real cause is the wrong template.
-        Transform host = activeAvatar ? activeAvatar.transform.parent : null;
-        if (!host && activeRoot) host = activeRoot.transform;
-        if (!host)
-        {
-            Debug.LogWarning($"[HeroStatCell] '{name}' has no Cell Active/Mask/Avatar, so the " +
-                             "deployment load bar cannot be created. HeroStatsPanel.cellTemplate " +
-                             "is probably pointing at an old cell layout ('Hero 1' / 'OfferCell') " +
-                             "instead of 'Hero Card'.", this);
-            return;
-        }
-
-        var go = new GameObject("Load Fill", typeof(RectTransform), typeof(Image));
-        var rt = go.GetComponent<RectTransform>();
-        rt.SetParent(host, false);
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-        rt.localScale = Vector3.one;
-        rt.SetAsFirstSibling();
-
-        loadFill = go.GetComponent<Image>();
-
-        // !! A FILLED IMAGE NEEDS A SPRITE. With sprite == null an Image draws a
-        // plain quad and IGNORES type/fillAmount completely, so the bar rendered
-        // permanently full and the cell just flicked from dark to solid cyan.
-        // Prefers the mask's own sprite so the fill matches the cell's shape.
-        var hostImage = host.GetComponent<Image>();
-        loadFill.sprite = hostImage && hostImage.sprite ? hostImage.sprite : WhiteSprite;
-
-        loadFill.type = Image.Type.Filled;
-        loadFill.fillMethod = Image.FillMethod.Vertical;
-        loadFill.fillOrigin = (int)Image.OriginVertical.Bottom;
-        loadFill.fillAmount = 0f;
-        loadFill.color = LoadCyan;
-        loadFill.raycastTarget = false;
     }
 
     private void Awake()
@@ -311,6 +269,15 @@ public class HeroStatCell : MonoBehaviour
         DropForeign(ref costRoot, nameof(costRoot));
         DropForeign(ref buyButton, nameof(buyButton));
         DropForeign(ref gemCostText, nameof(gemCostText));
+        DropForeign(ref loadBar, nameof(loadBar));
+        DropForeign(ref loadBarFrame, nameof(loadBarFrame));
+        DropForeign(ref deployedRoot, nameof(deployedRoot));
+        DropForeign(ref gloss, nameof(gloss));
+        if (gloss)
+        {
+            glossAlpha = gloss.color.a;
+            glossSprite = gloss.sprite;
+        }
 
         if (!activeRoot) activeRoot = FindChild(transform, "Cell Active");
         if (!deactiveRoot) deactiveRoot = FindChild(transform, "Cell DeActive");
@@ -331,9 +298,26 @@ public class HeroStatCell : MonoBehaviour
             if (go) deactiveAvatar = go.GetComponent<Image>();
         }
 
-        // One TMP_Text under each root, so a typed search beats a name lookup here.
+        if (!deployedRoot && countRoot) deployedRoot = FindChild(countRoot.transform, "DEPLOYED");
+
+        // A typed search beats a name lookup here - but "card  Button" now holds
+        // TWO texts, so skip the DEPLOYED one or every card would write its count
+        // into the DEPLOYED label.
         if (!countText && countRoot)
-            countText = countRoot.GetComponentInChildren<TMP_Text>(true);
+        {
+            foreach (var t in countRoot.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (deployedRoot && t.transform.IsChildOf(deployedRoot.transform)) continue;
+                countText = t;
+                break;
+            }
+        }
+
+        if (!loadBar && countRoot)
+        {
+            var go = FindChild(countRoot.transform, "Load Bar");
+            if (go) loadBar = go.GetComponent<Image>();
+        }
 
         if (!gemCostText && costRoot)
             gemCostText = costRoot.GetComponentInChildren<TMP_Text>(true);

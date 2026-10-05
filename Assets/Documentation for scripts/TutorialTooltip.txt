@@ -100,3 +100,55 @@ VERIFIED end to end by driving all four steps through ExecuteEvents in a live
 session: after the Back click, tooltip alpha 0, Bubble and Tail inactive, runner
 stopped, gate released, all four scrim plates inactive, and the tutorial flag
 written.
+
+2026-10-05 — GEM-HOLDER ART REPLACES THE PLACEHOLDER BUBBLE
+-----------------------------------------------------------
+Arash: every tooltip of the stage-6 onboarding must use the
+Gameplay_Gem-holder_H3P asset (Arts/.../New GamePlay Assets), and stretching it
+sideways must NOT stretch its bottom tail - only the body grows.
+
+  The placeholder: TutorialOverlay built this component at runtime with no
+  sprites, so the bubble was a plain white rectangle + a small square tail.
+  TutorialOverlay.prefab now carries a saved "Tooltip" child (sibling 3, under
+  the Hand; the runtime-built FocusGate/FocusFx are inserted first so the scrim
+  stays below it) with the holder sprites assigned - GetComponentInChildren picks
+  it up, nothing is built.
+
+  The texture (73 x 121, UNCHANGED) is now sliced into extra sprites:
+      Gameplay_Gem-holder_H3P_0   full image, ORIGINAL internalID kept - used
+                                  by LevelTemplate "New Stage UnLock Holder/Image".
+                                  !! Never drop it when re-slicing.
+      Holder_LeftCap         x 0-13     border (L,B,R,T) = (0,33,0,15)
+      Holder_Strip           x 14 (1px) same border - the plain body column
+      Holder_CenterWithTail  x 15-57    same border - holds the tail AND the
+                                        gap in the bottom outline where the
+                                        tail joins (cols 18-41, rows 100-103)
+      Holder_RightCap        x 59-72    same border
+  Rows 15-87 are the only identical rows (top border 15, bottom 33 = rows
+  88-120 incl. the tail). Column 14 == column 58, so one strip sprite serves
+  both sides. A plain body + tail split would NOT work: the outline gap at the
+  junction would widen with the body.
+
+  New fields: holderLeftCap / holderStrip / holderCenter / holderRightCap,
+  holderScale 3 (canvas units per art px; Image.pixelsPerUnitMultiplier =
+  1/holderScale), holderTailPx 17 (rows 104-120), holderTextColor white (the
+  fill is navy 56,67,87 @ 75%). Prefab padding 60 x 46.
+  UsesHolder = all four sprites set; then bubbleSprite / tailSprite / the
+  separate Tail object are ignored (tail kept inactive).
+
+  Layout (LayoutHolder, every Reposition):
+      [left cap][strip ....][centre+tail][.... strip][right cap]
+  caps and centre at fixed width, the two strips take the rest. The centre
+  slides by (targetX - bubbleX), clamped so both strips stay >= 0 - the tail
+  keeps pointing at the target after the edge clamp moves the bubble. Each
+  piece spans the bubble's top to the tail tip below its bottom (HolderTailH),
+  sliced so only rows 15-87 stretch vertically. Below its target the
+  "HolderArt" root is flipped (scale y -1 about the bubble centre) so the tail
+  points UP; the label is not a child of it and stays upright. Gap maths in
+  Reposition uses HolderTailH instead of tailSize.y.
+  ResizeBubble clamps to min width caps+centre+2 strip px and min height = the
+  body's top + bottom borders.
+
+  PreviewLayout(text, tailOffset, above): EDITOR ONLY, for edit-mode captures.
+  Verified in edit mode (short / long+offset tail / below-flipped); NOT seen in
+  a live tutorial run yet.

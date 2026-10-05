@@ -309,3 +309,11 @@ NOTES
   - LoadSelectedStage1() (a numbered sibling not listed among the toast
     duplicates) is an earlier version that never synced LevelManager before
     loading the scene - the live LoadSelectedStage adds that step.
+
+2026-10-04 — STAGES NOT IN THE BUILD READ "COMING SOON"
+-------------------------------------------------------
+IsComingSoon(idx0): ComingSoonScene is in the build AND this card's scene is not
+(StageBuildAvailability). HandleSelectionChanged then keeps BATTLE pressable,
+hides the locked overlay, startLabel = "COMING SOON", stageTitle gets
+"  COMING SOON" appended. LoadSelectedStage checks it FIRST and loads
+ComingSoonScene. First release: stages 11-20 are unticked, so their cards do this.

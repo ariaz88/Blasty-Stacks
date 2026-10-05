@@ -140,8 +140,10 @@ public class PlayerWaveManager : MonoBehaviour
              "types drawn at random). Left empty = every level behaves that way.")]
     [SerializeField] private StageDeploymentPlanSO deploymentPlan;
 
-    [Tooltip("How long a deployed hero STANDS ON THE GATE before it leaps into the " +
-             "battlefield, in seconds. Separate from reinforcementGateHold, which " +
+    [Tooltip("SHORTEST time a deployed hero stands on its stage before it leaps, in " +
+             "seconds. Since 2026-10-05 a hero normally waits on its stage for its " +
+             "whole card load, so this only applies when the load filled while the " +
+             "hero was still appearing. Separate from reinforcementGateHold, which " +
              "belongs to the gem buy-back.\n\n" +
              "HISTORY, so this is not 'restored' by mistake: it was 0.75 -> 1.20 " +
              "(+60%) after the first deployment play-test, because the leap read as " +
@@ -152,10 +154,16 @@ public class PlayerWaveManager : MonoBehaviour
              "was removed is dead standing time, not the jump.")]
     [SerializeField, Min(0f)] private float deployGateHold = 0.3f;
 
-    [Tooltip("Glass-capsule effect played the moment a hero appears on a deploy stage " +
-             "(VFXKit stage_capsule, built from Arts/.../Stage VFX). Sized to each hero's " +
-             "real sprite height at spawn. Empty = no effect.")]
+    [Tooltip("Glass-capsule prefab (with a GateArrivalCapsule) played the moment a hero " +
+             "appears on a deploy stage. As wide as the stage's top cap, up to the hero's " +
+             "mid-head. Empty = no effect.")]
     [SerializeField] private GameObject gateArrivalVfx;
+
+    [Tooltip("Where a hero stands on a deploy stage, as a share of the stage cap's (Top_0) " +
+             "height from its top: 33/82 puts the hero and its shadow in the MIDDLE of the cap's " +
+             "top circle, not on its lower edge (29/82 - the geometric centre row - read a touch " +
+             "high; Arash asked for it a little lower).")]
+    [SerializeField, Range(0f, 1f)] private float standFromCapTop = 33f / 82f;
 
     private readonly List<UnitDefinitionSO> earnedHeroes = new();
 
@@ -274,54 +282,80 @@ public class PlayerWaveManager : MonoBehaviour
         return null;
     }
 
-    /// <summary>One hero posed on a gate, waiting for its leap.</summary>
-    private class PendingDeploy
+    /// <summary>
+    /// One hero TYPE's line onto its deploy stage (2026-10-05). Its next hero
+    /// WAITS on the stage while the card loads, leaps the moment the load fills,
+    /// and the one after it appears as soon as that leap has landed.
+    /// </summary>
+    private class StageLane
     {
-        public PlayerManager hero;
-        public float releaseAt;
-        public float? laneY;
+        public UnitDefinitionSO def;
+
+        /// <summary>Heroes of this type not spawned yet.</summary>
+        public int toSpawn;
+
+        /// <summary>Filled loads whose hero has not leapt yet (it was still appearing).</summary>
+        public int releasesOwed;
+
+        /// <summary>The hero standing on the stage, waiting for its load. Null = none.</summary>
+        public PlayerManager staged;
+        public float stagedAt;
+
+        /// <summary>
+        /// This type's stage. Chosen ONCE, the first time a hero of the type
+        /// appears, and never changed for the rest of the level (Arash: a card's
+        /// stage must not move between heroes).
+        /// </summary>
+        public Transform home;
+
+        /// <summary>The last hero that leapt off the stage, until it has landed.</summary>
+        public PlayerManager leaving;
+
+        /// <summary>Earliest Time.time the next hero may appear (restageGap after a landing).</summary>
+        public float nextStageAt;
     }
 
-    private readonly List<PendingDeploy> pendingDeploys = new();
+    private readonly List<StageLane> stageLanes = new();
+
+    /// <summary>Time.time of the first StageHeroes call; -1 = staging not started.</summary>
+    private float stagingStartedAt = -1f;
+
+    [Tooltip("How long the first heroes wait for the HUD cards to exist before giving up " +
+             "on 'stage in front of the card' and using the stage nearest the base centre. " +
+             "The cards only appear once the battle camera has finished its pan " +
+             "(BattlePhaseTransition, 1.1s + fade), so this must comfortably exceed that.")]
+    [SerializeField, Min(0f)] private float cardWaitTimeout = 4f;
+
+    [Tooltip("Seconds the stage stays EMPTY after a hero has landed in the field, before " +
+             "the next hero of that type appears on it.")]
+    [SerializeField, Min(0f)] private float restageGap = 0.3f;
 
     /// <summary>
-    /// Releases every deployed hero whose gate pose has expired.
+    /// Runs every lane: puts the next hero on its stage, and sends the staged hero
+    /// leaping once its load has filled.
     ///
     /// Deliberately in Update and NOT in a coroutine: a coroutine here can be
     /// killed by any StopAllCoroutines on this component, and a hero killed
     /// mid-hold stays locked on the platform for the rest of the battle because
-    /// PlayerLockState re-asserts a Static body every FixedUpdate. This loop has
-    /// no such failure mode - the worst case is a late release, never a permanent
-    /// one.
+    /// PlayerLockState re-asserts a Static body every FixedUpdate. Measured
+    /// 2026-09-14: 4 heroes released, only 2 reached the field. This loop has no
+    /// such failure mode - the worst case is a late release, never a permanent one.
     /// </summary>
     private void Update()
     {
-        for (int i = pendingDeploys.Count - 1; i >= 0; i--)
-        {
-            var d = pendingDeploys[i];
-
-            if (d == null || d.hero == null) { pendingDeploys.RemoveAt(i); continue; }
-            if (Time.time < d.releaseAt) continue;
-
-            pendingDeploys.RemoveAt(i);
-
-            ApplyLock(d.hero, false);
-            SetHealthBarsHiddenOnGate(d.hero, false);
-            StartCoroutine(JumpThenSwitch(d.hero, d.laneY));
-        }
-
-        // After the releases above, so a hero that just leapt off its gate is
-        // already mid-jump when the waiting line looks for a free one.
-        if (gateQueue.Count > 0) DrainGateQueue();
+        if (stageLanes.Count > 0) ServiceStageLanes();
     }
 
-    // ---------- Deployment: one hero at a time (2026-09-27) ----------
+    // ---------- Deployment: heroes wait on their stage (2026-10-05) ----------
 
-    /// <summary>
-    /// Heroes whose card has finished loading but who have not found a free
-    /// deploy stage yet. Retried every Update - never dropped, never stacked.
-    /// </summary>
-    private readonly Queue<UnitDefinitionSO> gateQueue = new();
+    [Tooltip("The battle HUD's deployment cards. Each hero spawns on the deploy stage " +
+             "straight in front of its own card. Left empty = found in the scene at " +
+             "Awake; none in the scene = the free stage nearest the base centre.")]
+    [SerializeField] private HeroStatsPanel deployCards;
+
+    // Scratch lists for ResolveHomeStage - reused, it runs on every deploy attempt.
+    private readonly List<KeyValuePair<int, float>> cardXs = new();
+    private readonly List<KeyValuePair<Transform, float>> stageXs = new();
 
     /// <summary>
     /// Which hero is standing on which deploy stage. A stage is RESERVED from the
@@ -336,17 +370,43 @@ public class PlayerWaveManager : MonoBehaviour
     /// </summary>
     private readonly Dictionary<Transform, PlayerManager> gateOccupants = new();
 
-    /// <summary>Heroes released by their card and still waiting for a free stage.</summary>
-    public int HeroesWaitingForGate => gateQueue.Count;
+    /// <summary>
+    /// Heroes whose load has filled but who have not leapt yet (still appearing on
+    /// their stage, or waiting for it). Part of the sequencer's HeroesStillComing.
+    /// </summary>
+    public int HeroesWaitingForGate
+    {
+        get
+        {
+            int n = 0;
+            foreach (var lane in stageLanes) n += lane.releasesOwed;
+            return n;
+        }
+    }
 
     /// <summary>
-    /// Puts ONE hero of this type on the field: it spawns on a random FREE deploy
-    /// stage, poses for deployGateHold, then jumps to the rear lane.
+    /// Announces how many heroes of this type will deploy. Called by
+    /// HeroDeploymentSequencer for every card the moment BATTLE starts: the FIRST
+    /// hero of the type appears on its stage straight away (arrival capsule) and
+    /// stands there until its card's load fills - see <see cref="DeployOne"/>.
+    /// </summary>
+    public void StageHeroes(UnitDefinitionSO def, int count)
+    {
+        if (!def || count <= 0) return;
+
+        if (stagingStartedAt < 0f) stagingStartedAt = Time.time;
+        GetLane(def).toSpawn += count;
+    }
+
+    /// <summary>
+    /// One load of this type's card has filled: the hero standing on its stage
+    /// leaps into the battle NOW. If it is not on the stage yet (the previous one
+    /// is still mid-leap) it leaps the moment it has appeared - a hero the player
+    /// earned is never dropped, and two heroes never share a stage.
     ///
-    /// Called by HeroDeploymentSequencer each time a card finishes loading. If
-    /// every stage is taken the hero waits in gateQueue and goes out on the first
-    /// stage that frees up - a hero the player earned is never dropped, and two
-    /// heroes never share a stage.
+    /// Called by HeroDeploymentSequencer each time a card finishes loading. A
+    /// type that was never announced through StageHeroes still works: it gets
+    /// a hero spawned for the release.
     /// </summary>
     public void DeployOne(UnitDefinitionSO def)
     {
@@ -359,15 +419,38 @@ public class PlayerWaveManager : MonoBehaviour
             return;
         }
 
-        gateQueue.Enqueue(def);
-        DrainGateQueue();
+        if (stagingStartedAt < 0f) stagingStartedAt = Time.time;
+
+        var lane = GetLane(def);
+        lane.releasesOwed++;
+
+        // Every owed release needs a hero to send: one on the stage or one to come.
+        int heroesLeft = lane.toSpawn + (lane.staged ? 1 : 0);
+        if (lane.releasesOwed > heroesLeft) lane.toSpawn += lane.releasesOwed - heroesLeft;
+
+        ServiceStageLanes();
     }
 
     /// <summary>
-    /// Forgets every hero still waiting for a stage. Called when the level ends,
-    /// so nothing arrives after a win or a loss.
+    /// Stops every lane: nothing further appears and nothing further leaps. Called
+    /// when the level ends, so nothing arrives after a win or a loss. A hero
+    /// already standing on its stage stays there, locked.
     /// </summary>
-    public void ClearGateQueue() => gateQueue.Clear();
+    public void ClearGateQueue()
+    {
+        foreach (var lane in stageLanes)
+            lane.toSpawn = lane.releasesOwed = 0;
+    }
+
+    private StageLane GetLane(UnitDefinitionSO def)
+    {
+        foreach (var lane in stageLanes)
+            if (lane.def == def) return lane;
+
+        var created = new StageLane { def = def };
+        stageLanes.Add(created);
+        return created;
+    }
 
     /// <summary>
     /// Load time of one hero type's card in the CURRENT level: the level's
@@ -384,54 +467,104 @@ public class PlayerWaveManager : MonoBehaviour
         return Mathf.Max(0.1f, def.deployInterval);
     }
 
-    private void DrainGateQueue()
+    private void ServiceStageLanes()
     {
-        while (gateQueue.Count > 0)
+        // No hero appears until the cards exist: the card panel only switches on
+        // once the battle camera has finished its pan, and every stage is chosen
+        // from the card positions ONCE and then kept. A hero placed earlier would
+        // go to a fallback stage and its type would then sit on the wrong one.
+        bool cardsReady = !deployCards || deployCards.HasDeployCards
+                          || Time.time >= stagingStartedAt + cardWaitTimeout;
+        if (!cardsReady) return;
+
+        foreach (var lane in stageLanes)
         {
-            var free = GetFreeGateIndices();
-            if (free.Count == 0) return;   // retried next Update
+            // 1) The next hero appears - only once the stage is free, i.e. the
+            //    previous one of this type has LANDED in the field.
+            if (!lane.staged && lane.toSpawn > 0) TryStageNext(lane);
 
-            var def = gateQueue.Dequeue();
-            var gate = gatePoints[free[UnityEngine.Random.Range(0, free.Count)]];
-
-            var pm = SpawnUnitAt(def, gate.position, Quaternion.identity);
-            if (!pm) continue;   // SpawnUnitAt already logged why
-
-            // Reserved on the SAME frame as the spawn - see gateOccupants.
-            gateOccupants[gate] = pm;
-
-            pm.isUnlocked = true;
-            releasedHeroes.Add(pm);
-
-            // STAND ON THE GATE FIRST, then leap. The first version jumped on the
-            // spawn frame, which read as the hero teleporting past the platform
-            // entirely. The lock here is the same one a normal wave sits in
-            // (Lock state + Static body), so the hero cannot drift while it poses.
-            ApplyLock(pm, true);
-            SetHealthBarsHiddenOnGate(pm, true);
-            PlayGateArrivalVfx(pm);
-
-            // !! THE HOLD IS A WATCHDOG ENTRY, NOT A COROUTINE. It used to be
-            // StartCoroutine(HoldOnGateThenJump(...)), and ANY StopAllCoroutines on
-            // this component during that wait left the hero locked on the
-            // platform FOREVER - PlayerLockState re-asserts a Static body every
-            // FixedUpdate, so it can never recover by itself. Measured 2026-09-14:
-            // 4 heroes released, only 2 reached the field; the other 2 sat on the
-            // deploy stages at y=3.21 for the rest of the battle.
-            //
-            // Update owns the wait instead, so there is no coroutine to interrupt
-            // and a stranded hero cannot happen.
-            pendingDeploys.Add(new PendingDeploy
-            {
-                hero = pm,
-                releaseAt = Time.time + deployGateHold,
-                laneY = GetRearLaneY()
-            });
+            // 2) Its load has filled: leap now. deployGateHold is only the shortest
+            //    stand, for a hero whose load filled while it was still appearing.
+            if (lane.staged && lane.releasesOwed > 0 && Time.time >= lane.stagedAt + deployGateHold)
+                ReleaseStaged(lane);
         }
     }
 
+    private void TryStageNext(StageLane lane)
+    {
+        // The previous hero must have LANDED, and then the stage stays visibly
+        // empty for restageGap before the next one appears. Polled rather than
+        // hooked on the jumper's Landed event: a hero destroyed mid-leap never
+        // lands, and an event wait would block this lane for good.
+        if (!ReferenceEquals(lane.leaving, null))
+        {
+            if (lane.leaving && StillOnGate(lane.leaving)) return;
+
+            lane.leaving = null;
+            lane.nextStageAt = Time.time + restageGap;
+        }
+        if (Time.time < lane.nextStageAt) return;
+
+        // Chosen once, here, and kept - before the free check, so every lane
+        // resolves from the same card snapshot on the same frame.
+        if (!lane.home) lane.home = ResolveHomeStage(lane.def);
+
+        var free = GetFreeGateIndices();
+        if (free.Count == 0) return;   // retried next Update
+
+        if (!lane.home) lane.home = PickFallbackStage(free);
+
+        int gi = Array.IndexOf(gatePoints, lane.home);
+        if (gi < 0 || !free.Contains(gi)) return;   // its own stage is busy - retried next Update
+
+        var gate = gatePoints[gi];
+
+        // Counted down even if the spawn fails: SpawnUnitAt only fails on a
+        // missing prefab, which retrying every frame would never fix.
+        lane.toSpawn--;
+        lane.releasesOwed = Mathf.Min(lane.releasesOwed, lane.toSpawn + 1);
+
+        var pm = SpawnUnitAt(lane.def, GetStageStandPoint(gate), Quaternion.identity);
+        if (!pm) { lane.releasesOwed = Mathf.Min(lane.releasesOwed, lane.toSpawn); return; }
+
+        // Reserved on the SAME frame as the spawn - see gateOccupants.
+        gateOccupants[gate] = pm;
+
+        // NOT isUnlocked yet: on the stage the hero is scenery. HeroRoster,
+        // FormationGapFiller and the targeting all treat an unlocked hero as one
+        // that is in the field - FormationGapFiller would pull it off the stage.
+        // The lock (Lock state + Static body) keeps it in place, and enemies
+        // never hit a hero in the Lock state.
+        ApplyLock(pm, true);
+        SetHealthBarsHiddenOnGate(pm, true);
+        PlayGateArrivalVfx(pm, gate);
+
+        lane.staged = pm;
+        lane.stagedAt = Time.time;
+    }
+
+    private void ReleaseStaged(StageLane lane)
+    {
+        var pm = lane.staged;
+        lane.staged = null;
+        lane.leaving = pm;
+        lane.releasesOwed--;
+
+        pm.isUnlocked = true;
+        releasedHeroes.Add(pm);
+
+        ApplyLock(pm, false);
+        SetHealthBarsHiddenOnGate(pm, false);
+
+        // The jump itself starts INSIDE this call (TriggerJumpTo runs before the
+        // coroutine's first yield), so a later StopAllCoroutines cannot strand
+        // the hero on the stage - the stage frees itself when the jump lands.
+        StartCoroutine(JumpThenSwitch(pm, GetRearLaneY()));
+        PlayStageThrow(lane.home);   // same frame as the leap: the stage throws it
+    }
+
     /// <summary>
-    /// True while a deployed hero still owns this stage: it is posing on it, or
+    /// True while a deployed hero still owns this stage: it is waiting on it, or
     /// it is mid-jump off it. A dead/destroyed or landed hero frees the stage.
     /// </summary>
     private bool IsGateReserved(Transform gate)
@@ -446,11 +579,100 @@ public class PlayerWaveManager : MonoBehaviour
 
     private bool StillOnGate(PlayerManager pm)
     {
-        foreach (var d in pendingDeploys)
-            if (d != null && d.hero == pm) return true;
+        foreach (var lane in stageLanes)
+            if (lane.staged == pm) return true;
 
         var jump = pm.GetComponent<FrogJumpTransformOnly>();
         return jump && jump.IsJumping;
+    }
+
+    /// <summary>
+    /// A type's stage when there is no card to go by (no HeroStatsPanel, or this
+    /// type has no card): the free stage nearest the base centre. NEVER RANDOM
+    /// (Arash, 2026-10-05), and like a card stage it is then kept for the level.
+    /// </summary>
+    private Transform PickFallbackStage(List<int> free)
+    {
+        float centreX = ResolveCardAnchorWorld().x;
+        int best = -1;
+        foreach (int i in free)
+            if (best < 0 || Mathf.Abs(gatePoints[i].position.x - centreX) < Mathf.Abs(gatePoints[best].position.x - centreX))
+                best = i;
+
+        return best >= 0 ? gatePoints[best] : null;
+    }
+
+    /// <summary>
+    /// The deploy stage straight in front of this type's card, or null when there
+    /// is no card to go by.
+    ///
+    /// Cards and stages are both put in left-to-right SCREEN order, and the cards
+    /// are matched onto the stages in that same order, each as close to its own
+    /// card as the order allows (fewest total pixels off). On the 4-stage base:
+    ///   1 card  -> a middle stage
+    ///   2 cards -> the two middle stages
+    ///   3 cards -> left / one middle / right
+    ///   4 cards -> one stage each
+    /// Computed from the real positions rather than a hard-coded table, so a
+    /// moved stage or a re-sized card still lines up. More card types than
+    /// stages: each card takes its nearest stage, and types sharing one wait
+    /// their turn.
+    /// </summary>
+    private Transform ResolveHomeStage(UnitDefinitionSO def)
+    {
+        if (!deployCards || !def) return null;
+
+        var cam = Camera.main;
+        if (!cam) return null;
+
+        deployCards.GetDeployCardScreenXs(cardXs);
+        int card = cardXs.FindIndex(c => c.Key == def.unitId);
+        if (card < 0) return null;
+
+        // The same stages GetFreeGateIndices deploys onto, left to right.
+        stageXs.Clear();
+        int gateCount = UsesDeploymentRules ? Mathf.Min(4, gatePoints.Length) : gatePoints.Length;
+        for (int i = 0; i < gateCount; i++)
+            if (IsGateUsable(gatePoints[i]))
+                stageXs.Add(new KeyValuePair<Transform, float>(gatePoints[i], cam.WorldToScreenPoint(gatePoints[i].position).x));
+
+        if (stageXs.Count == 0) return null;
+        stageXs.Sort((a, b) => a.Value.CompareTo(b.Value));
+
+        int n = cardXs.Count, g = stageXs.Count;
+
+        if (n > g)
+        {
+            int nearest = 0;
+            for (int j = 1; j < g; j++)
+                if (Mathf.Abs(stageXs[j].Value - cardXs[card].Value) < Mathf.Abs(stageXs[nearest].Value - cardXs[card].Value))
+                    nearest = j;
+            return stageXs[nearest].Key;
+        }
+
+        // cost[i, j] = least total distance putting the first i cards on the first
+        // j stages, in order, one card per stage.
+        const float Inf = 1e30f;
+        var cost = new float[n + 1, g + 1];
+        for (int i = 1; i <= n; i++) cost[i, 0] = Inf;
+
+        for (int i = 1; i <= n; i++)
+            for (int j = 1; j <= g; j++)
+            {
+                float skip = j > i ? cost[i, j - 1] : Inf;
+                float take = cost[i - 1, j - 1] + Mathf.Abs(cardXs[i - 1].Value - stageXs[j - 1].Value);
+                cost[i, j] = Mathf.Min(skip, take);
+            }
+
+        // Walk back from the full match to find which stage `card` landed on.
+        for (int i = n, j = g; i > 0; )
+        {
+            if (j > i && cost[i, j - 1] <= cost[i, j]) { j--; continue; }
+            if (i - 1 == card) return stageXs[j - 1].Key;
+            i--; j--;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -488,6 +710,7 @@ public class PlayerWaveManager : MonoBehaviour
         // CombatLive could never become true and heroes would freeze forever.
         if (!enemySpawner) enemySpawner = FindObjectOfType<EnemySpawner>(true);
         if (!gapFiller) gapFiller = FindObjectOfType<FormationGapFiller>(true);
+        if (!deployCards) deployCards = FindObjectOfType<HeroStatsPanel>(true);
 
         _gsm = GameStartManager.Instance ? GameStartManager.Instance : FindObjectOfType<GameStartManager>();
         if (_gsm == null)
@@ -607,8 +830,8 @@ public class PlayerWaveManager : MonoBehaviour
         releasedHeroes.Clear();
         earnedHeroes.Clear();
         earnedBatches.Clear();
-        pendingDeploys.Clear();
-        gateQueue.Clear();
+        stageLanes.Clear();
+        stagingStartedAt = -1f;
         gateOccupants.Clear();
 
         BeginWaves();   // uses WaveLoop that checks puzzle again
@@ -1315,7 +1538,7 @@ public class PlayerWaveManager : MonoBehaviour
             var gate = usableGates[i % usableGates.Count];
             if (gate == null) continue;
 
-            var pm = SpawnUnitAt(def, gate.position, gate.rotation);
+            var pm = SpawnUnitAt(def, GetStageStandPoint(gate), gate.rotation);
             if (pm == null) continue;
 
             // Marked unlocked HERE, not after the gate hold: HeroRoster.AliveCount
@@ -1328,12 +1551,12 @@ public class PlayerWaveManager : MonoBehaviour
             // a normal wave sits in (Lock state + Static body), so the hero cannot
             // drift or be shoved while it waits.
             if (reinforcementGateHold > 0f) ApplyLock(pm, true);
-            PlayGateArrivalVfx(pm);
+            PlayGateArrivalVfx(pm, gate);
 
             // Per-hero coroutine rather than an inline wait: the hold has to run
             // ALONGSIDE the stagger, otherwise a squad of four takes
             // 4 * (hold + stagger) to walk out instead of overlapping.
-            StartCoroutine(HoldOnGateThenJump(pm, laneY, reinforcementGateHold));
+            StartCoroutine(HoldOnGateThenJump(pm, laneY, reinforcementGateHold, gate));
 
             if (reinforcementStagger > 0f && i < count - 1)
                 yield return new WaitForSeconds(reinforcementStagger);
@@ -1341,53 +1564,53 @@ public class PlayerWaveManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Plays the stage-arrival capsule around a hero that has just appeared on a
-    /// deploy stage. The effect is authored for a 1-unit hero with feet at its
-    /// origin, so it is placed at the hero's feet and scaled to the hero's real
-    /// sprite height - one prefab fits every character. It stays on the stage
+    /// Plays the stage-arrival capsule (<see cref="GateArrivalCapsule"/>) around a hero
+    /// that has just appeared on <paramref name="gate"/>. The capsule is sized from the
+    /// STAGE, not the hero: as wide as the stage's top cap, standing on its front rim.
+    /// Only its height follows the hero (up to mid-head). It stays on the stage
     /// (unparented) and fades by itself while the hero leaps off.
     /// </summary>
-    private void PlayGateArrivalVfx(PlayerManager pm)
+    private void PlayGateArrivalVfx(PlayerManager pm, Transform gate)
     {
-        if (!gateArrivalVfx || !pm) return;
+        if (!gateArrivalVfx || !pm || !gate) return;
 
+        // The cap is the stage sprite drawn on top (Top_0 at -1, over Mid -2 / Bot -3).
+        SpriteRenderer cap = null;
+        foreach (var r in gate.GetComponentsInChildren<SpriteRenderer>())
+            if (r.enabled && r.sprite && (!cap || r.sortingOrder > cap.sortingOrder)) cap = r;
+        if (!cap) return;
+
+        // Hero body only - a health bar above the head would make the capsule too tall,
+        // and the ground shadow is handed to the capsule (shrunk for the stand) instead.
         bool any = false;
         Bounds b = default;
         int topOrder = int.MinValue, topLayer = 0;
+        SpriteRenderer shadow = null;
         foreach (var r in pm.GetComponentsInChildren<SpriteRenderer>())
         {
             if (!r.enabled || !r.gameObject.activeInHierarchy || !r.sprite) continue;
+            if (r.GetComponentInParent<HealthBar>(true)) continue;
+            if (r.name == "Shadow") { shadow = r; continue; }
             if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
             if (r.sortingOrder > topOrder) { topOrder = r.sortingOrder; topLayer = r.sortingLayerID; }
         }
 
-        Vector3 feet = any ? new Vector3(b.center.x, b.min.y, pm.transform.position.z) : pm.transform.position;
-        var fx = Instantiate(gateArrivalVfx, feet, Quaternion.identity);
-        fx.transform.localScale = Vector3.one * (any ? b.size.y : 1f);
+        var fx = Instantiate(gateArrivalVfx, gate.position, Quaternion.identity);
+        var capsule = fx.GetComponent<GateArrivalCapsule>();
+        if (!capsule) { Destroy(fx); return; }
 
-        foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>())
-        {
-            var main = ps.main;
-            main.scalingMode = ParticleSystemScalingMode.Hierarchy;   // follow the hero-height scale
-        }
-        // Glass over the hero: one order above its top sprite, same sorting layer.
-        if (any)
-            foreach (var pr in fx.GetComponentsInChildren<ParticleSystemRenderer>())
-            {
-                pr.sortingLayerID = topLayer;
-                pr.sortingOrder = topOrder + 1;
-            }
-
-        var root = fx.GetComponent<ParticleSystem>();
-        if (root) root.Play(true);
-        Destroy(fx, 1.5f);
+        // Glass over the hero: just above its top sprite, same sorting layer.
+        capsule.Play(cap.bounds,
+                     any ? b.max.y : 0f, any ? b.size.y : 0f,
+                     any ? topLayer : cap.sortingLayerID, any ? topOrder : cap.sortingOrder,
+                     shadow);
     }
 
     /// <summary>
     /// Keeps one bought hero standing on the gate for <see cref="reinforcementGateHold"/>
     /// seconds, then releases it into the normal jump-and-pursue flow.
     /// </summary>
-    private IEnumerator HoldOnGateThenJump(PlayerManager pm, float? laneY, float hold)
+    private IEnumerator HoldOnGateThenJump(PlayerManager pm, float? laneY, float hold, Transform gate = null)
     {
         // On the gate the hero is scenery, not a combatant - no HP bar. The
         // prefab's own hideUntilBattleStarts cannot do this for reinforcements:
@@ -1404,6 +1627,9 @@ public class PlayerWaveManager : MonoBehaviour
 
         ApplyLock(pm, false);
 
+        // Same frame as the leap: a yielded coroutine starts at once, and
+        // JumpThenSwitch triggers the jump before its first yield.
+        PlayStageThrow(gate);
         yield return JumpThenSwitch(pm, laneY);
 
         // Landed and marching - the bar is its own again. Null-guarded inside:
@@ -1798,6 +2024,42 @@ public class PlayerWaveManager : MonoBehaviour
     private bool PuzzleHasStacks()
     {
         return matchResolver != null && matchResolver.HasAnyStacksLeft();
+    }
+
+    /// <summary>
+    /// Where a hero stands on a deploy stage: the CENTRE of the stage's top circle
+    /// (Arash, 2026-10-05: heroes stood on the circle's lower edge with the shadow
+    /// below it). The circle is the top face of the cap sprite (Top_0, the stage's
+    /// highest-order SpriteRenderer); its centre row is <see cref="standFromCapTop"/>
+    /// of the cap's height down from its top. Falls back to the stage's own position.
+    /// </summary>
+    private Vector3 GetStageStandPoint(Transform stage)
+    {
+        if (!stage) return Vector3.zero;
+
+        SpriteRenderer cap = null;
+        foreach (var r in stage.GetComponentsInChildren<SpriteRenderer>())
+            if (r.enabled && r.sprite && (!cap || r.sortingOrder > cap.sortingOrder)) cap = r;
+        if (!cap) return stage.position;
+
+        var b = cap.bounds;
+        return new Vector3(stage.position.x, b.max.y - standFromCapTop * b.size.y, stage.position.z);
+    }
+
+    /// <summary>
+    /// Plays the stage's own throw animation (Top_0's Animator, trigger "Throw" -
+    /// the cap dips, kicks up and settles) on the SAME frame the hero leaps off it,
+    /// so the stage throws the hero into the field. The clip's animation event
+    /// (StageUnlockRelay -> OnOneStageUnlockEventFired) is a no-op outside the old
+    /// wave flow: it returns early unless unlockAnimInProgress.
+    /// </summary>
+    private static void PlayStageThrow(Transform stage)
+    {
+        if (!stage) return;
+        var anim = stage.GetComponentInChildren<Animator>();
+        if (!anim || !anim.isActiveAndEnabled) return;
+        anim.ResetTrigger("Throw");
+        anim.SetTrigger("Throw");
     }
 
     // Adding  a helper to find Top child  on a stage

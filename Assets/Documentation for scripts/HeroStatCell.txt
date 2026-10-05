@@ -1,4 +1,58 @@
-CURRENT UPDATE - 2026-09-27  DEPLOYMENT LABEL IS NOW "remaining/total"
+CURRENT UPDATE - 2026-10-05  "card  Button" IS NOW THE CRAFTING LOADER (preview_Battle_Mana.png)
+The load bar is NO LONGER behind the portrait (the old cyan "Load Fill" inside
+Mask is gone, with LoadCyan / WhiteSprite / EnsureLoadFill). "card  Button" in
+LevelTemplate.prefab now holds, in draw order:
+  card  Button                      Gameplay_Hero_Crafting (Simple), 174x63 native
+  |- Gameplay_Hero_Crafting-loader-frame  -> loadBarFrame (dark track)
+  |- Gameplay_Hero_Crafting-loader        -> loadBar  (Filled, Horizontal, Left)
+  |- Gameplay_Hero_Crafting-gloss         -> gloss
+  |- Text (TMP) (1)                       -> countText, "3/5", yellow, 37pt
+  |- DEPLOYED                             -> deployedRoot, starts OFF, #B6D3FF,
+                                             32pt, spacing -10, no wrap
+All four art files share one 174x63 export canvas, so every child is anchored
+to its exact SLICE RECT on that canvas (anchors = rect/174,63, offsets 0):
+  frame (4,10,166,49)  loader (12,18,150,33)  gloss (5,19,38,39)   [x,y-from-bottom,w,h]
+-> 3px of dark track on ALL FOUR sides of the loader, identical to the preview.
+
+SetDeployState(remaining, total, fill):
+  loading  : count on, DEPLOYED off, frame + loader on, loader.fillAmount = fill
+             (Filled = clipped from the left with a hard right edge, exactly as
+             the preview - not stretched), gloss = authored white sprite @ 0.36.
+  remaining==0 : count text OFF, DEPLOYED ON, frame + loader OFF (plain button),
+             gloss = deployedGlossSprite @ deployedGlossAlpha. "0/total" is never shown.
+  Only the count TEXT is toggled - "card  Button" itself must stay on, because
+  DEPLOYED, loader and gloss all live inside it.
+  greyFrameWhenDeployed (default OFF): the preview keeps the coloured portrait
+  frame on a deployed card, so "Cell DeActive" is no longer shown here.
+
+GLOSS - two different glosses, measured from the preview pixel by pixel:
+  - Loading card: PURE WHITE at 35.5% (sRGB). Gameplay_Hero_Crafting-gloss.png is
+    tinted (173,206,255) and a tint can only darken, so a white copy was made:
+    Crafting-Button/Gameplay_Hero_Crafting-gloss-white.png (same alpha).
+  - Deployed card: the BLUE gloss with alpha fading linearly from ~50% at its
+    top row to 0 at its bottom. Baked as Gameplay_Hero_Crafting-gloss-deployed.png.
+  - The project is LINEAR colour space, so Unity blends alpha in linear light
+    while the preview was blended in sRGB: alpha 0.355 rendered too bright.
+    Fitted by rendering: white gloss Image alpha 0.36, deployed alpha 1.0
+    (mean error ~4-5/255 on the gloss pixels).
+
+AutoWire: deployedRoot is found by name "DEPLOYED" FIRST, then countText is the
+first TMP_Text under countRoot that is NOT inside deployedRoot - otherwise every
+card would write its count into the DEPLOYED label. All new refs are DropForeign'd
+and are also explicitly assigned on the Hero Card template.
+New fields: loadBar, loadBarFrame, deployedRoot, gloss, deployedGlossSprite,
+deployedGlossAlpha, greyFrameWhenDeployed.
+
+VERIFIED (edit mode, real HeroStatCell code on a clone of the scene's Hero Card,
+rendered 1:1 at 174x63 and diffed against the preview): track/loader/gloss
+geometry pixel-identical on rows and columns; fill cut matches at 0.567 / 0.767.
+Remaining difference is glyph rendering (the preview's outline/shadow is a bit
+heavier) - an outline/underlay sweep only gained ~1 point, so the shared
+LILITAONE material was left alone. NOT play-tested.
+
+--------------------------------------------------------------------------------
+PREVIOUS UPDATE - 2026-09-27  DEPLOYMENT LABEL IS NOW "remaining/total"
+(the "0/total" and cyan-bar details below were replaced 2026-10-05 - see above)
 With parallel per-type deployment (HeroDeploymentSequencer.txt) a card no longer
 shows "xN for this load". It shows how many of its type are STILL TO COME:
   3/3 -> 2/3 -> 1/3 -> 0/3
@@ -111,7 +165,9 @@ AUTHORED HIERARCHY (a contract - AutoWire looks these up by name)
   |- BG                         card backdrop, never touched
   |- Cell DeActive   OFF        Image (grey frame art)  -> Mask -> Avatar
   |- Cell Active     ON         Image (blue frame art)  -> Mask -> Avatar
-  |- card  Button    ON         Image + a DISABLED Button  -> Text (TMP), "2/2"
+  |- card  Button    ON         Image + a DISABLED Button  -> loader-frame, loader, gloss,
+  |                                                        Text (TMP) "2/2", DEPLOYED (OFF)
+  |                                                        (see CURRENT UPDATE at the top)
   |- Cost  Gem       OFF        Image + the LIVE Button    -> Text (TMP) + Gem
 
   Note the DOUBLE SPACE in "card  Button" and "Cost  Gem". It is invisible in
@@ -139,6 +195,13 @@ INSPECTOR FIELDS
   Count
     countRoot       (GameObject) "card  Button". SetActive(false) once wiped.
     countText       (TMP_Text) the label inside it. Rendered as "2/3".
+
+  Deployment load bar (see CURRENT UPDATE at the top)
+    loadBar             (Image) the loader, Filled Horizontal Left; fillAmount = load.
+    loadBarFrame        (GameObject) the dark track, hidden once DEPLOYED.
+    deployedRoot        (GameObject) the "DEPLOYED" text, replaces the count at 0.
+    gloss               (Image) + deployedGlossSprite / deployedGlossAlpha.
+    greyFrameWhenDeployed (bool, default OFF).
 
   Buy Back
     costRoot        (GameObject) "Cost  Gem". MUST start switched OFF.

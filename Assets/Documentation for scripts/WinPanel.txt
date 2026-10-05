@@ -171,3 +171,11 @@ NOTES
   - UpdateLevelHeaderText1() is another unused sibling using the older
     HomeManager-only header logic, superseded by the LevelManager-aware
     version.
+
+2026-10-04 — AFTER THE LAST SHIPPED STAGE -> ComingSoonScene
+------------------------------------------------------------
+ClaimRoutine (the live one) still advances LevelManager to the next stage, then
+asks StageBuildAvailability.IsGlobalStageInBuild(next). If the next stage is not
+in the build and ComingSoonScene is, it loads ComingSoonScene instead of
+targetSceneName. First release: winning stage 10 shows the "more stages coming"
+screen. ClaimRoutine1 (dead numbered sibling) was not changed.

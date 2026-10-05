@@ -198,6 +198,12 @@ public class HeroDeploymentSequencer : MonoBehaviour
 
         BuildTracks();
 
+        // The first hero of every type appears on its stage as soon as the cards
+        // are on screen, and waits there for its card's load (2026-10-05). The
+        // rest follow one by one, each appearing once the previous one has landed.
+        foreach (var t in tracks)
+            waveManager.StageHeroes(t.Def, t.Total);
+
         // Every track starts at Elapsed 0 on this same frame - the parallel start.
         Running = tracks.Count > 0;
         if (!Running) AllDeployed?.Invoke();

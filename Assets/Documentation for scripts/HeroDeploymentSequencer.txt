@@ -1,3 +1,12 @@
+UPDATE - 2026-10-05  HEROES ARE STAGED AT BATTLE START
+  BuildTracksWhenAwarded now calls waveManager.StageHeroes(t.Def, t.Total) for every
+  track right after BuildTracks, on the same frame the timers start. So the first
+  hero of every type is ALREADY standing on its stage while its card loads, and each
+  fill (DeployOne) sends that waiting hero leaping instead of spawning a new one.
+  Timers themselves are unchanged. See PlayerWaveManager.txt 2026-10-05 (b)/(c).
+  (c) The heroes actually appear once the card panel is on screen (after the
+  ~1.1s camera pan), not on this exact frame - PlayerWaveManager waits for it.
+
 CURRENT UPDATE - 2026-09-27  REWORKED: PARALLEL PER-TYPE TIMERS (MANA-STYLE)
 The old one-load-per-MATCH serial queue (6s x matches, back to back) is GONE.
 Arash's brief: which match a hero came from no longer matters. At BATTLE, count the

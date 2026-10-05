@@ -371,13 +371,11 @@ MonoBehaviour:
   moveSpeed: 0.6
   canMove: 1
   isUnlocked: 0
-  marchSpeedBoost: 1.3
   actualMoveSpeed: 0
   intendedMoveSpeed: 0
   forwardProgress: 0
   isFormationStepping: 0
   faceCenterOnStart: 1
-  retargetHysteresis: 0.2
   anchorSwitchHysteresis: 0.3
   facingDeadZoneX: 0.12
   enemyIsInLeft: 0
@@ -493,10 +491,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 64
   use2D: 1
-  allowNearestSwitch: 0
-  onlySwitchIfInFront: 1
   respectFOV: 0
-  retargetHysteresis: 0.35
 --- !u!114 &5947008903218501455
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -812,7 +807,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 1.262}
+  m_AnchoredPosition: {x: 0, y: 1.317}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!223 &3253269168843519856
@@ -902,6 +897,7 @@ MonoBehaviour:
   trailHoldSeconds: 0.18
   trailDrainPerSecond: 0.9
   trailFadeSeconds: 0.12
+  keepConstantWorldSize: 1
   hideUntilBattleStarts: 1
 --- !u!1 &7037152825165652495
 GameObject:
@@ -1271,7 +1267,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0.000000059604638, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1.421053, y: 1.421053, z: 1.4210529}
+  m_LocalScale: {x: 1.3510818, y: 1.3510818, z: 1.3510817}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 7482916264074741478}
@@ -1407,15 +1403,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4495795111869891069, guid: 8d48509b15f44de42ae1a7f502db2c8d, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.19
+      value: 0.19983992
       objectReference: {fileID: 0}
     - target: {fileID: 4495795111869891069, guid: 8d48509b15f44de42ae1a7f502db2c8d, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.19
+      value: 0.19983992
       objectReference: {fileID: 0}
     - target: {fileID: 4495795111869891069, guid: 8d48509b15f44de42ae1a7f502db2c8d, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.19
+      value: 0.19983992
       objectReference: {fileID: 0}
     - target: {fileID: 4495795111869891069, guid: 8d48509b15f44de42ae1a7f502db2c8d, type: 3}
       propertyPath: m_LocalPosition.x

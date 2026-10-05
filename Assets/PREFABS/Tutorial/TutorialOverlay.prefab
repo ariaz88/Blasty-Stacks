@@ -567,6 +567,77 @@ CanvasGroup:
   m_Interactable: 1
   m_BlocksRaycasts: 0
   m_IgnoreParentGroups: 0
+--- !u!1 &5882632701837813503
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 336732905140274231}
+  - component: {fileID: 4647964868523106781}
+  m_Layer: 0
+  m_Name: Tooltip
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &336732905140274231
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5882632701837813503}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 9095787179840352605}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &4647964868523106781
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5882632701837813503}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2e47d915c8340f1bd93a06e7f21c4d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialTooltip
+  bubble: {fileID: 0}
+  label: {fileID: 0}
+  tail: {fileID: 0}
+  group: {fileID: 0}
+  bubbleSprite: {fileID: 0}
+  tailSprite: {fileID: 0}
+  bubbleColor: {r: 1, g: 1, b: 1, a: 1}
+  textColor: {r: 0.1, g: 0.1, b: 0.13, a: 1}
+  holderLeftCap: {fileID: 2961296238547953581, guid: 7629495be7c1ca546bfd616b26ba8fec, type: 3}
+  holderStrip: {fileID: -9222016551870638108, guid: 7629495be7c1ca546bfd616b26ba8fec, type: 3}
+  holderCenter: {fileID: -7729984087337245573, guid: 7629495be7c1ca546bfd616b26ba8fec, type: 3}
+  holderRightCap: {fileID: 5075724690173733526, guid: 7629495be7c1ca546bfd616b26ba8fec, type: 3}
+  holderScale: 3
+  holderTailPx: 17
+  holderTextColor: {r: 1, g: 1, b: 1, a: 1}
+  font: {fileID: 0}
+  fontSize: 44
+  maxWidth: 760
+  padding: {x: 60, y: 46}
+  gap: 28
+  edgeMargin: 40
+  tailSize: {x: 34, y: 20}
+  fadeTime: 0.22
 --- !u!1 &8574942598802527601
 GameObject:
   m_ObjectHideFlags: 0
@@ -603,6 +674,7 @@ RectTransform:
   - {fileID: 4535929874100252299}
   - {fileID: 2539514422792075181}
   - {fileID: 4010315736119039040}
+  - {fileID: 336732905140274231}
   - {fileID: 5193546332719466664}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -689,8 +761,12 @@ MonoBehaviour:
   canvas: {fileID: 7754236400088781363}
   hand: {fileID: 2947205300106038525}
   caption: {fileID: 8387563047681803513}
+  tooltip: {fileID: 0}
+  focusGate: {fileID: 0}
+  focusFx: {fileID: 0}
   dimmer: {fileID: 8250549982556163095}
   blocker: {fileID: 42797694199454798}
+  forceSortingOrder: 1100
 --- !u!114 &6037305826473102696
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -703,3 +779,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b1495b85de033154884d8bc576207b15, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TutorialRunner
+  hardStopSeconds: 600

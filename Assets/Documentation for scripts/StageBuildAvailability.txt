@@ -1,0 +1,38 @@
+================================================================================
+  StageBuildAvailability.cs
+  Path : Assets/Scripts/Core/Progression/StageBuildAvailability.cs
+  Type : static class
+  Layer: Core / Progression
+  Added: 2026-10-04
+================================================================================
+
+PURPOSE
+-------
+Answers "does this stage ship in THIS build?". The first release ships stages
+1-10; 11-20 stay in the project, UNTICKED in the build list. Anything about to
+load a stage asks here and sends the player to ComingSoonScene instead of
+loading a scene that is not in the build.
+
+API
+---
+  ComingSoonScene                    "ComingSoonScene"
+  StageSceneName(level, stage1)      "Level_{level}_Stage_{stage1}" (same pattern
+                                     as HomeManager.sceneNamePattern)
+  IsSceneInBuild(name)               Application.CanStreamedLevelBeLoaded
+  IsStageInBuild(level, stage1)
+  IsGlobalStageInBuild(global)       global index as LevelManager counts it
+  ComingSoonAvailable                the coming-soon scene itself is in the build
+
+HOW IT CONNECTS
+---------------
+  - WinPanel.ClaimRoutine: next stage not in build -> ComingSoonScene.
+  - HomeManager: cards not in build read "COMING SOON"; BATTLE opens the screen.
+  - The source of truth is the build list: ticking 11-20 back in is the whole
+    "ship the next update" change. No code to touch.
+
+NOTES
+-----
+  !! In EDIT mode CanStreamedLevelBeLoaded returns false for EVERY scene. Only
+     trust it in Play mode / a build (verified 2026-10-04 in Play: 1,10 true;
+     11,20 false; ComingSoonScene true).
+  - Every caller keeps its old route when ComingSoonScene is not in the build.

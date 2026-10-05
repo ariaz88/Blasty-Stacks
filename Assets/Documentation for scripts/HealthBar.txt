@@ -57,9 +57,20 @@ REQUIRED HIERARCHY  [2026-09-02, extended to enemies 2026-09-03]
   differences, both taken from the bar authored on the scene's
   Enemy_Reaper_Man_01:
 
-    1. PlayerHP_Fill uses Gameplay_Enemy-Base-HP-loader_0 instead of
-       Gameplay_PlayerHP_Fill_0. Frame, Mask and Hit are the SAME assets as the
-       players - the enemy variant is one sprite swap on the fill, nothing else.
+    1. [2026-10-05, supersedes the 09-03 single fill swap] Enemies have their
+       OWN art set, in "Player HP/<U+064D>Enemy HP/" (the folder name starts
+       with an invisible U+064D - find it by GUID or Glob, not by typing):
+         PlayerHP_frame -> Gameplay_Zombie-HP_frame_0
+         PlayerHP_Fill  -> Gameplay_Zombie-HP_loader_0         (RED)
+         PlayerHP_Hit   -> Gameplay_Zombie-HP_InstantDamage_0  (yellow)
+       PlayerHP_Mask still uses the PLAYER mask sprite (same shape, and it is
+       1px larger than the enemy loader on each side, so it clips nothing).
+       Loader and InstantDamage are cropped to their alpha box (3,2,53,12),
+       pivot centre, border 26/26 - the same import recipe as the player
+       Fill/Hit. Node names are unchanged, so ResolveBars still finds them.
+       All 10 enemy prefabs swapped. The zombie's bar root moved 1.212 ->
+       1.253 to match the head gap in Arash's preview (bar bottom ~0.19 bar
+       widths above the top of the head). Other enemies keep their own heights.
     2. MIRRORING. Every enemy root is authored at scale.x = -1 (they face left).
        The bar cancels that on the BAR ROOT alone: localScale (-1, 1, 1) with
        IDENTITY rotation, and every child below it stays identity.
@@ -91,6 +102,18 @@ FIELDS
     onTopSortingOrder (int, default 500) the order applied when forceOnTop is on.
     onTopSortingLayer (string, default "") optional sorting layer to move onto.
                       EMPTY = stay on the Canvas's layer and use the order alone.
+
+  Size  [2026-10-05]
+    keepConstantWorldSize (bool, default true) the bar keeps its AUTHORED world
+                      size (its size on a unit at scale 1) whatever the unit is
+                      scaled to. Added because heroes landed from their jump at
+                      0.9x, which shrank the hero bar to 90% of the enemy bar.
+                      [2026-10-05] Heroes now stand on the stage at 1.1x and
+                      land at 1.0x (FrogJumpTransformOnly.stageScaleMultiplier /
+                      landedScale); this keeps the bar the same size through
+                      both, and cancels the jump's 1.2x apex swell. The bar's
+                      HEIGHT above the head still follows the unit's scale -
+                      only the bar's own size is held.
 
   Battle Gate
     hideUntilBattleStarts (bool, default false)
@@ -136,7 +159,9 @@ FIELDS
     authoredSortingOrder / authoredSortingLayer / capturedAuthoredSorting
                             what the prefab SHIPPED with, captured before
                             ApplyRenderOrder overwrites it.
-    _baseLocalScaleX        (float) original absolute X scale, captured in Awake.
+    _baseLocalScaleX / _baseLocalScaleY
+                            (float) original absolute X / Y scale, captured in
+                            Awake. Y was added 2026-10-05 for KeepConstantWorldSize.
     authoredHitColor        (Color) the colour the ARTIST put on the hit Image,
                             cached in Awake. The fade multiplies this and
                             HideHitBar restores it, so the script never has to
@@ -169,7 +194,18 @@ LIFECYCLE
       Finally stores the absolute base X scale.
 
   LateUpdate()
-      Calls TickDamageTrail() then KeepUnmirrored(). Both used to be inline here.
+      Calls TickDamageTrail(), KeepUnmirrored(), then KeepConstantWorldSize().
+      The order matters: KeepUnmirrored rewrites localScale.x from
+      _baseLocalScaleX, so the size correction must come after it.
+
+  KeepConstantWorldSize()   [private, added 2026-10-05]
+      Divides the PARENT's lossyScale magnitude out of this transform's
+      localScale (x and y), against _baseLocalScaleX / _baseLocalScaleY captured
+      in Awake. Signs are left untouched - mirroring stays KeepUnmirrored's job.
+      No-op when keepConstantWorldSize is off, there is no parent, or the
+      parent's scale is ~0. Enemies (|scale| 1) are a no-op; a landed hero
+      (0.9) gets bar localScale 1.111. Verified in Play mode: hero at 0.9 and
+      enemy at 1 both measure a 0.588 x 0.161 frame.
 
   KeepUnmirrored()   [private, was the body of LateUpdate]
       Keeps the bar UNMIRRORED IN WORLD SPACE. Measures the world direction of

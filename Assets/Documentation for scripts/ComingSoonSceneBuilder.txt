@@ -1,0 +1,28 @@
+================================================================================
+  ComingSoonSceneBuilder.cs
+  Path : Assets/Scripts/Editor/ComingSoonSceneBuilder.cs
+  Type : static Editor class
+  Menu : Tools > Blasty > Coming Soon > Build Scene + Ship Stages 1-10
+  Added: 2026-10-04
+================================================================================
+
+PURPOSE
+-------
+One click: (re)builds Assets/Scenes/ComingSoonScene.unity (orthographic camera,
+EventSystem with the Input System UI module, one ComingSoonScreen with every art
+reference wired), adds it to the build list ticked, and unticks every
+Level_1_Stage_N past LastShippedStage (10). Stages are UNTICKED, never removed.
+
+FLOW
+----
+  NewScene ADDITIVE -> build objects -> wire refs via SerializedObject ->
+  SaveScene -> CloseScene -> UpdateBuildList. Additive on purpose: the scene
+  open in the editor (unsaved changes included) is never touched.
+
+NOTES
+-----
+  - Re-running overwrites ComingSoonScene.unity; do not have it open while it
+    runs (the open copy would go stale).
+  - Missing sprites are logged as "[ComingSoon] Sprite not found".
+  - To ship more stages: raise LastShippedStage and re-run, or just tick the
+    scenes in the build list.

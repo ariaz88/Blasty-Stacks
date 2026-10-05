@@ -1,0 +1,59 @@
+================================================================================
+  PortraitFrame.cs
+  Path : Assets/Scripts/UI/Common/PortraitFrame.cs
+  Type : MonoBehaviour  (RequireComponent RectTransform)
+  Layer: UI / Common
+  Scenes: MenuScene (via MyCard.prefab and StatsRow-VS1.prefab)
+================================================================================
+
+PURPOSE
+-------
+Shows a hero portrait at the SAME size and position no matter how its PNG is
+padded. The hero portraits are raw animation frames with different canvases
+(900x900 vs 720x490) and different empty margins, so "preserve aspect" in a
+fixed box made some heroes big, some small, some cut at the waist. This
+component measures the VISIBLE body and frames that instead.
+
+FIELDS
+------
+  image           (Image)  child Image that displays the sprite
+  bodyHeightFill  (float 0.3..2, default 0.9)  visible body height as a
+                  fraction of the frame height (1 = head-to-feet fills it)
+  focusOffset     (Vector2, px)  shifts the body centre off the frame centre
+
+  Image (public get)  the image field
+
+METHODS / FLOW
+--------------
+  Show(Sprite)
+      Sets image.sprite (disables the Image for null). Turns off
+      preserveAspect/useSpriteMesh, anchors the Image to the frame centre,
+      gets the body box from VisibleBodyNormalized, sizes the Image so the
+      body height = bodyHeightFill * frame height (keeping the sprite's
+      aspect), and positions it so the body centre lands on the frame centre
+      + focusOffset. Anything outside the frame is clipped by the frame's
+      Mask / RectMask2D.
+
+  VisibleBodyNormalized(Sprite)  (static, private)
+      Min/max of sprite.vertices (local units, pivot-relative) converted to
+      0..1 of sprite.rect. Falls back to the full rect if there are no verts.
+
+HOW IT CONNECTS
+---------------
+  - Lives on the masking frame object; callers find it with
+    GetComponentInParent<PortraitFrame>() on their portrait Image:
+      UnitCardView.SetPortrait   MyCard.prefab  PortraitMask (RectMask2D),
+                                 fill 0.88, offset (0,12) -> feet on shadow
+      BucketStatRow.Bind         StatsRow-VS1   MaskImage (Mask), fill 0.95
+  - Both callers fall back to a plain sprite swap if no frame exists.
+
+NOTES
+-----
+  - REQUIRES the portrait sprite to import with Mesh Type = Tight. A Full Rect
+    sprite's vertices are its whole rect, so its padding would count as body.
+    0_Minotaur_Slashing_011 and Minotaur_02_Idle_000 were switched from Full
+    Rect to Tight on 2026-10-05 for this. Set any NEW portrait to Tight too.
+  - Only the Image's size and position change; the art is never tinted,
+    cropped or edited.
+  - Width is not normalized: wide weapon poses (Slashing frames) overflow the
+    frame sideways and get clipped by the mask - intended.

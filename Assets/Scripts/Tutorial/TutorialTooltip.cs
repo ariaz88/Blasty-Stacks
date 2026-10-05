@@ -48,6 +48,24 @@ public class TutorialTooltip : MonoBehaviour
     [SerializeField] private Color bubbleColor = Color.white;
     [SerializeField] private Color textColor = new Color(0.10f, 0.10f, 0.13f, 1f);
 
+    [Header("Gem holder art (Gameplay_Gem-holder_H3P) - replaces bubble + tail sprites")]
+    [Tooltip("Left cap of the holder (columns 0-13). When ALL holder sprites are set, the " +
+             "bubble is drawn from the holder art and bubbleSprite / tailSprite are ignored.")]
+    [SerializeField] private Sprite holderLeftCap;
+    [Tooltip("1 px plain body column (column 14). Stretched sideways on BOTH sides of the " +
+             "centre, so the tail never widens however wide the bubble gets.")]
+    [SerializeField] private Sprite holderStrip;
+    [Tooltip("Fixed-width centre piece WITH the tail (columns 15-57).")]
+    [SerializeField] private Sprite holderCenter;
+    [Tooltip("Right cap of the holder (columns 59-72).")]
+    [SerializeField] private Sprite holderRightCap;
+    [Tooltip("Canvas units per holder pixel. The art is 73 x 121 px.")]
+    [SerializeField, Min(0.1f)] private float holderScale = 3f;
+    [Tooltip("Height of the tail under the body, in holder px (rows 104-120).")]
+    [SerializeField, Min(0f)] private float holderTailPx = 17f;
+    [Tooltip("Text colour on the holder (its fill is dark navy).")]
+    [SerializeField] private Color holderTextColor = Color.white;
+
     [Tooltip("Font for the bubble. Empty = TMP's default.")]
     [SerializeField] private TMP_FontAsset font;
 
@@ -77,6 +95,17 @@ public class TutorialTooltip : MonoBehaviour
 
     private string _current = "";
     private float _targetAlpha;
+
+    // Holder art: a root matching the bubble (flipped upside down when the bubble sits
+    // BELOW its target, so the tail points up) and its five sliced pieces.
+    private RectTransform _art;
+    private RectTransform _leftCap, _stripL, _center, _stripR, _rightCap;
+
+    private bool UsesHolder => holderLeftCap && holderStrip && holderCenter && holderRightCap;
+
+    // Canvas units of each fixed piece and of the tail under the body.
+    private float CapW(Sprite s) => s.rect.width * holderScale;
+    private float HolderTailH => holderTailPx * holderScale;
 
     private void Awake()
     {
@@ -209,10 +238,11 @@ public class TutorialTooltip : MonoBehaviour
         Vector2 size = bubble.sizeDelta;
         float halfW = size.x * 0.5f;
         float halfH = size.y * 0.5f;
+        float tailH = UsesHolder ? HolderTailH : tailSize.y;
 
         float y = above
-            ? hi.y + gap + tailSize.y + halfH
-            : lo.y - gap - tailSize.y - halfH;
+            ? hi.y + gap + tailH + halfH
+            : lo.y - gap - tailH - halfH;
 
         // keep the whole bubble on screen, horizontally and vertically
         float minX = canvasLocal.xMin + edgeMargin + halfW;
@@ -224,6 +254,12 @@ public class TutorialTooltip : MonoBehaviour
         if (maxY >= minY) y = Mathf.Clamp(y, minY, maxY);
 
         bubble.anchoredPosition = new Vector2(x, y);
+
+        if (UsesHolder)
+        {
+            LayoutHolder(targetCenterX - x, above);
+            return;
+        }
 
         if (!tail) return;
 
@@ -237,6 +273,60 @@ public class TutorialTooltip : MonoBehaviour
         tail.sizeDelta = tailSize;
     }
 
+    /// <summary>
+    /// Lays the five holder pieces across the bubble's width:
+    ///   [left cap][strip ......][centre WITH tail][...... strip][right cap]
+    /// Caps and centre keep their pixel width (x holderScale); only the two 1-px strips
+    /// stretch, so the tail is never widened. The centre slides by `tailOffset` so the
+    /// tail stays over the target when the bubble was clamped at a screen edge.
+    /// Every piece runs from the bubble's top to the tail's tip below its bottom, and
+    /// is 9-sliced vertically so only the plain middle rows stretch. Below its target
+    /// the whole art is flipped upside down so the tail points up; the label is not.
+    /// </summary>
+    private void LayoutHolder(float tailOffset, bool above)
+    {
+        if (!_art) return;
+
+        float w = bubble.sizeDelta.x;
+        float capL = CapW(holderLeftCap), capR = CapW(holderRightCap), cw = CapW(holderCenter);
+        float tailH = HolderTailH;
+
+        float maxLeft = Mathf.Max(0f, w * 0.5f - capL - cw * 0.5f);
+        float maxRight = Mathf.Max(0f, w * 0.5f - capR - cw * 0.5f);
+        float off = Mathf.Clamp(tailOffset, -maxLeft, maxRight);
+        float c0 = w * 0.5f + off - cw * 0.5f;
+
+        Span(_leftCap, 0f, capL, tailH);
+        Span(_stripL, capL, c0, tailH);
+        Span(_center, c0, c0 + cw, tailH);
+        Span(_stripR, c0 + cw, w - capR, tailH);
+        Span(_rightCap, w - capR, w, tailH);
+
+        _art.localScale = new Vector3(1f, above ? 1f : -1f, 1f);
+    }
+
+#if UNITY_EDITOR
+    /// <summary>Editor-only: lays the bubble out for `text` at the canvas centre, for edit-mode captures.</summary>
+    public void PreviewLayout(string text, float tailOffset, bool above)
+    {
+        EnsureParts();
+        SetPartsActive(true);
+        if (group) group.alpha = 1f;
+        _current = text;
+        if (label) label.text = text;
+        ResizeBubble(text);
+        bubble.anchoredPosition = Vector2.zero;
+        if (UsesHolder) LayoutHolder(tailOffset, above);
+    }
+#endif
+
+    private static void Span(RectTransform rt, float x0, float x1, float tailH)
+    {
+        if (!rt) return;
+        rt.offsetMin = new Vector2(x0, -tailH);
+        rt.offsetMax = new Vector2(Mathf.Max(x0, x1), 0f);
+    }
+
     private void ResizeBubble(string text)
     {
         if (!bubble || !label) return;
@@ -246,6 +336,16 @@ public class TutorialTooltip : MonoBehaviour
 
         float w = Mathf.Min(preferred.x, innerMax) + padding.x * 2f;
         float h = preferred.y + padding.y * 2f;
+
+        if (UsesHolder)
+        {
+            // Never narrower than caps + centre (+1 px of strip each side), never
+            // shorter than the top and bottom slice borders of the body.
+            float minW = CapW(holderLeftCap) + CapW(holderRightCap) + CapW(holderCenter) + 2f * holderScale;
+            float minH = (holderCenter.border.w + holderCenter.border.y - holderTailPx) * holderScale;
+            w = Mathf.Max(w, minW);
+            h = Mathf.Max(h, minH);
+        }
 
         bubble.sizeDelta = new Vector2(w, h);
         ((RectTransform)label.transform).sizeDelta = new Vector2(w - padding.x * 2f, h - padding.y * 2f);
@@ -281,11 +381,31 @@ public class TutorialTooltip : MonoBehaviour
             var img = go.GetComponent<Image>();
             img.color = bubbleColor;
             img.raycastTarget = false;
-            if (bubbleSprite)
+            if (UsesHolder) img.enabled = false;   // the holder pieces draw the bubble
+            else if (bubbleSprite)
             {
                 img.sprite = bubbleSprite;
                 img.type = Image.Type.Sliced;
             }
+        }
+
+        if (UsesHolder && !_art)
+        {
+            var go = new GameObject("HolderArt", typeof(RectTransform));
+            go.layer = gameObject.layer;
+            _art = (RectTransform)go.transform;
+            _art.SetParent(bubble, false);
+            _art.SetAsFirstSibling();             // under the label
+            _art.anchorMin = Vector2.zero;
+            _art.anchorMax = Vector2.one;
+            _art.pivot = new Vector2(0.5f, 0.5f); // flips about the bubble's centre
+            _art.offsetMin = _art.offsetMax = Vector2.zero;
+
+            _leftCap = HolderPiece("LeftCap", holderLeftCap);
+            _stripL = HolderPiece("StripL", holderStrip);
+            _center = HolderPiece("CenterWithTail", holderCenter);
+            _stripR = HolderPiece("StripR", holderStrip);
+            _rightCap = HolderPiece("RightCap", holderRightCap);
         }
 
         if (!label)
@@ -299,7 +419,7 @@ public class TutorialTooltip : MonoBehaviour
             var tmp = go.AddComponent<TextMeshProUGUI>();
             if (font) tmp.font = font;
             tmp.fontSize = fontSize;
-            tmp.color = textColor;
+            tmp.color = UsesHolder ? holderTextColor : textColor;
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.textWrappingMode = TextWrappingModes.Normal;
             tmp.raycastTarget = false;
@@ -322,6 +442,24 @@ public class TutorialTooltip : MonoBehaviour
         }
     }
 
+    private RectTransform HolderPiece(string name, Sprite sprite)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.layer = gameObject.layer;
+        var rt = (RectTransform)go.transform;
+        rt.SetParent(_art, false);
+        rt.anchorMin = new Vector2(0f, 0f);       // x from the bubble's left edge, y full height
+        rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 0.5f);
+
+        var img = go.GetComponent<Image>();
+        img.sprite = sprite;
+        img.type = Image.Type.Sliced;
+        img.pixelsPerUnitMultiplier = 1f / holderScale;   // border px -> holderScale canvas units
+        img.raycastTarget = false;
+        return rt;
+    }
+
     private static void Center(RectTransform rt)
     {
         rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
@@ -331,6 +469,6 @@ public class TutorialTooltip : MonoBehaviour
     private void SetPartsActive(bool on)
     {
         if (bubble) bubble.gameObject.SetActive(on);
-        if (tail) tail.gameObject.SetActive(on);
+        if (tail) tail.gameObject.SetActive(on && !UsesHolder);   // the holder has its own tail
     }
 }

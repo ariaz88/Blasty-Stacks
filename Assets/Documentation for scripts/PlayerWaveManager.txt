@@ -1,3 +1,66 @@
+UPDATE - 2026-10-05 (c)  A TYPE'S STAGE IS FIXED; 0.3s EMPTY GAP BETWEEN HEROES
+  Bug Arash saw (3 cards): the first heroes took the right-hand stages, then hero 1
+  moved left. Cause: the card panel is in BattlePhaseTransition.fadeInAfterMove, so it
+  only switches on after the 1.1s camera pan; the old 1s card wait expired first, the
+  first heroes took the base-centre FALLBACK, later ones the real card stage.
+  Fix: StageLane.home is chosen ONCE (first appearance) and never changes.
+  ServiceStageLanes stages nothing until deployCards.HasDeployCards (or
+  cardWaitTimeout, 4s - the old `cardLayoutWait` 1s field is gone). Every lane
+  resolves its home on the same frame from one card snapshot. No card ->
+  PickFallbackStage (free stage nearest the base centre), also kept.
+  PickDeployStage is GONE (replaced by lane.home + PickFallbackStage).
+  restageGap (0.3s): after a hero leaps, lane.leaving is polled until it has landed
+  (StillOnGate false, or destroyed), then nextStageAt = now + restageGap - the stage
+  stays visibly empty that long before the next hero appears.
+
+UPDATE - 2026-10-05 (b)  HEROES WAIT ON THEIR STAGE FOR THE WHOLE LOAD
+(replaces gateQueue / DrainGateQueue / pendingDeploys / PendingDeploy - all GONE)
+  Arash: "appear then leap on the same beat" was wrong. Now, per hero TYPE:
+    BATTLE -> the first hero appears on its card's stage (arrival capsule) and
+    stands there locked -> its load fills -> it leaps AT ONCE -> once it has LANDED
+    the next of that type appears on the same stage -> ... until the type runs out.
+  StageLane {def, toSpawn, releasesOwed, staged, stagedAt}, one per type, in
+  `stageLanes`. Update -> ServiceStageLanes() every frame:
+    1) !staged && toSpawn>0 -> TryStageNext: waits (up to cardLayoutWait, 1s) for
+       HeroStatsPanel.HasDeployCards, then PickDeployStage (home stage, -1 while it
+       is busy = previous hero still mid-leap); SpawnUnitAt, gateOccupants, ApplyLock,
+       HP bar hidden, PlayGateArrivalVfx. isUnlocked stays FALSE while staged - an
+       unlocked hero counts as "in the field" for HeroRoster / FormationGapFiller
+       (which would pull it off the stage) / targeting.
+    2) staged && releasesOwed>0 && stood >= deployGateHold -> ReleaseStaged:
+       isUnlocked=true, releasedHeroes.Add, unlock, HP bar shown, JumpThenSwitch to
+       the rear lane. deployGateHold (0.3) is now only the SHORTEST stand.
+  StageHeroes(def, count) [public, NEW]  sequencer calls it per track at BATTLE.
+  DeployOne(def)  now = "this type's load filled": releasesOwed++; tops toSpawn up
+      if the type was never announced (so an unstaged caller still gets a hero).
+  HeroesWaitingForGate = sum of releasesOwed.  ClearGateQueue zeroes every lane's
+      toSpawn/releasesOwed (a hero already on its stage stays there, locked).
+  StillOnGate = staged in a lane OR jumping.  RestartAfterRevive clears stageLanes.
+  Enemies cannot hit a staged hero: EnemyDamageCollider / EnemyManager.StillFightable
+  both reject a hero in PlayerLockState.
+
+UPDATE - 2026-10-05  EACH HERO SPAWNS ON THE STAGE IN FRONT OF ITS OWN CARD
+(overrides the "RANDOM free stage" wording in the 2026-09-27 block below)
+  Arash: the deploy stage must never be random - a hero goes out on the stage
+  straight in front of its card in the HUD row.
+  New field  deployCards (HeroStatsPanel) - left empty = FindObjectOfType at Awake.
+  gateQueue is now a List, not a Queue: a hero waiting for its OWN busy stage must
+  not block a hero whose stage is free. DrainGateQueue walks the list and asks
+  PickDeployStage(def, free) -> gatePoints index, or -1 = keep waiting.
+  PickDeployStage: home = ResolveHomeStage(def). Home found -> that stage if it is
+  free, else -1 (wait). No home (no panel / type has no card) -> the free stage
+  nearest the base centre (ResolveCardAnchorWorld().x). Never random.
+  ResolveHomeStage: card screen X from HeroStatsPanel.GetDeployCardScreenXs, stage
+  screen X from Camera.main (same stage set as GetFreeGateIndices: first 4 under
+  deployment rules, usable only), both sorted left->right, then an ORDERED
+  one-card-per-stage match minimising total pixel distance (small DP + walk-back).
+  Measured on Level_1_Stage_1 (stages x=-2.08/-0.70/0.69/2.09, cards 1.99 apart,
+  row offset +0.09): 1 card -> stage 2, 2 -> 1,2, 3 -> 0,2,3, 4 -> 0,1,2,3.
+  More card types than stages -> each card takes its nearest stage; types sharing
+  one wait their turn. Recomputed on every attempt (cheap), so a side slot bought
+  mid-battle or a moved camera is picked up. Reinforcement / buy-back spawns are
+  NOT affected (they still round-robin).
+
 CURRENT UPDATE - 2026-09-27  ONE-HERO DEPLOYS, RESERVED STAGES, NO STACKING
 DeployBatch / DeployBatchRoutine are GONE. HeroDeploymentSequencer now runs one
 parallel timer per hero TYPE and calls, once per filled load:
@@ -482,19 +545,66 @@ NOTES / RISKS
 
 2026-10-04 — STAGE-ARRIVAL CAPSULE VFX + SHORTER STAGE HOLDS
 ------------------------------------------------------------
-  gateArrivalVfx (GameObject, LevelTemplate.prefab -> VFXKit stage_capsule)
-      Played by PlayGateArrivalVfx(pm) the moment a hero appears on a deploy
-      stage - in DrainGateQueue right after ApplyLock/SetHealthBarsHiddenOnGate,
-      and in SpawnReinforcementsRoutine after the lock. The effect is authored
-      for a 1-unit hero with feet at its origin: it is spawned at the bottom
-      centre of the hero's SpriteRenderer bounds, scaled to their height
-      (scalingMode forced to Hierarchy), sorted one order above the hero's top
-      sprite, left unparented on the stage, destroyed after 1.5 s.
-      Built only from Arash's 3 sprites in Arts/.../Stage VFX (capsule glow,
-      star, star tail). Spec + notes: Assets/VFXKit/Effects/stage_capsule/.
-      !! If the VFXKit prefab is rebuilt, re-check this reference - a rebuilt
-         prefab may get new object IDs.
+  gateArrivalVfx (GameObject, LevelTemplate.prefab)
+      SUPERSEDED 2026-10-05 - see the section below. (Was the particle prefab
+      VFXKit stage_capsule, sized to the hero's height and placed at the bottom
+      of the hero's bounds, which made it too wide, too tall and dip below the
+      stage; its stars and tails were separate particles.)
   deployGateHold 0.30 -> 0.50 and reinforcementGateHold 0.75 -> 0.60 (ASSET
       EDIT, LevelTemplate.prefab). Arash: the whole stand on the stage must be
       at most 0.5-0.6 s; the effect lasts 0.5 s to match. Only the stray
       duplicate scene "Level_1_Stage_1 1.unity" overrides these.
+
+2026-10-05 — HERO ARRIVAL CAPSULE REBUILT FROM Preview_mockup.png
+-----------------------------------------------------------------
+  gateArrivalVfx (GameObject, LevelTemplate.prefab ->
+      Assets/VFXKit/Effects/hero_arrival_capsule/hero_arrival_capsule.prefab)
+      The prefab must carry a GateArrivalCapsule (see its own doc); a prefab
+      without one is instantiated and immediately destroyed.
+  PlayGateArrivalVfx(PlayerManager pm, Transform gate)
+      Now takes the GATE. Called from DrainGateQueue and
+      SpawnReinforcementsRoutine with the gate the hero was spawned on.
+      - cap  = the gate's SpriteRenderer with the HIGHEST sortingOrder (the
+               stage's Top_0 cap at -1, above Mid -2 / Bot -3). Width and the
+               bottom of the capsule come from cap.bounds.
+      - hero = bounds of the hero's SpriteRenderers, SKIPPING anything under a
+               HealthBar (reinforcements do not hide their bars, and a bar
+               above the head would make the capsule too tall) and the child
+               named "Shadow" (passed to the capsule, which shrinks it to the
+               mockup size for the stand). Only top and height are used, for
+               the mid-head cut.
+      - sorted on the hero's top sprite's layer, just above its order.
+      Bails out silently if there is no prefab, no gate or no cap sprite.
+
+2026-10-05 — HEROES STAND IN THE CENTRE OF THE STAGE; STAGE THROW ANIMATION BACK
+-------------------------------------------------------------------------------
+  standFromCapTop (float, default 33/82)
+      Where a hero stands on a deploy stage, as a share of the cap's (Top_0)
+      height from its top. First set to 29/82 (the circle's geometric centre
+      row); Arash: "a little lower" -> 33/82 (~0.04 world lower; matches the
+      mockup's shadow, ~23 mockup px above the front rim).
+      Arash: heroes stood on the circle's LOWER EDGE (at the gate transform's
+      own position, ~0.28 below the centre on stage 1-1) with the shadow below
+      the circle; the mockup has them in the middle.
+  GetStageStandPoint(stage)
+      (gate.x, cap.bounds.max.y - standFromCapTop * cap.bounds.size.y). The cap
+      is the stage's highest-order SpriteRenderer. Used for the spawn position
+      in TryStageNext (deploy) and SpawnReinforcementsRoutine. Occupancy still
+      keys off gate.position + gateOccupants, unchanged.
+  PlayStageThrow(stage)
+      Sets the "Throw" trigger on the stage's Animator (Top_0 ->
+      Assets/Scenes/TestScenes/GamePlay Scenes/Top_0.controller, clip
+      "Stage Throw Anim" 0.54 s: the cap dips 0.185 -> 0.07, kicks up to 0.5
+      at 0.23 s, drops to 0.075 and settles at 0.19). That animation was never
+      deleted - only the OLD wave flow (PlayStageUnlockAnimations) triggered
+      it, and the current deploy flow never did, so it silently stopped
+      playing. Now called on the SAME frame the hero leaps (Arash: "play it
+      together with the hero being thrown into the battlefield"):
+        - ReleaseStaged: right after StartCoroutine(JumpThenSwitch), with
+          lane.home.
+        - HoldOnGateThenJump (reinforcements, new optional `gate` param):
+          right before `yield return JumpThenSwitch` - a yielded coroutine
+          starts at once and triggers the jump before its first yield.
+      The clip's event (0.233 s) -> StageUnlockRelay -> OnOneStageUnlockEventFired,
+      which returns at once unless unlockAnimInProgress (old flow only).
+      NOT play-tested yet.

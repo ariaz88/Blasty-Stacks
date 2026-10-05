@@ -1,0 +1,196 @@
+================================================================================
+  GateArrivalCapsule.cs
+  Path : Assets/Scripts/Combat/Spawning/GateArrivalCapsule.cs
+  Type : MonoBehaviour (lives on hero_arrival_capsule.prefab)
+  Layer: Combat / Spawning (VFX)
+  Added: 2026-10-05
+
+  UPDATE 2026-10-05 (late): Update now advances t by min(Time.deltaTime, MaxStep = 1/30s).
+  Since heroes WAIT on their stage (PlayerWaveManager 2026-10-05 b/c), the first hero of
+  every type appears on ONE frame - several heroes + capsules instantiated together - and
+  the long frame that follows could jump t past most of the effect, so it read
+  as missing on the first appearance only (Arash's report). The clamp means a hitch slows
+  the effect for a frame instead of skipping it. Verified in play (Level_1_Stage_6): all
+  3 capsules are spawned and visible on the first appearance; the hitch itself was not
+  reproduced in the editor.
+================================================================================
+
+PURPOSE
+-------
+The glass capsule a hero stands in for the moment it appears on a deploy stage.
+Rebuilt 1:1 from Arash's mockup
+  Assets/Arts/GamePlay Assets/GameplayARTS/GameplayArts/Stage VFX/
+      Hero Appearance animation/Preview_mockup.png
+using ONLY the sprites in that folder (Main Glow, Stars_001-004,
+Star-Tail_001/003/004). Arash's spec:
+  - width  = exactly the stage's top-cap circle;
+  - bottom = on the cap's front rim, never below the stage;
+  - top    = middle of the hero's head;
+  - 4 stars appear at the mockup spots (scattered, one per slot) as BARE stars;
+    as they climb straight up they grow the tail hanging under them. Star 2
+    (the low one) has no tail.
+  - (pass 6, 2026-10-05) the glow moves like the LANDING PILLAR at the start
+    of Assets/Arts/Reference videos/VFX ANIM/IMG_4311.MP4 (0.25-0.6 s, read
+    at 30 fps): a column anchored at the feet SHOOTS UP from a stub to full
+    height in ~0.12 s while fading in. (pass 7) It does NOT then stand still:
+    it lifts off the cap and travels up like a flame - top outrunning the
+    bottom so it stretches, thinning, flickering, swaying - fading on the
+    way. ~0.95 s.
+    (pass 8) Arash: it went far too high, and it still read as one block
+    shifted up. Climb cut to riseBottom 0.25 / riseTop 0.6 (was 1.1 / 1.8),
+    and the LOWER PARTS FADE FIRST: CapsuleRiseFade.shader fades everything
+    below a soft, wobbling line that climbs from the bottom as it rises -
+    alpha only, colour untouched.
+    Pass 5 (a CapsuleFlame shader revealing the glow bottom -> top and
+    burning it out) was REJECTED by Arash and deleted - do not bring it back.
+  - !! COLOUR IS ARASH'S. Never tint, whiten, recolour his layers or push
+    them above their own alpha. Motion = the glow's height/width + alpha only;
+    the sliced rounded bottom always stays on the rim.
+Replaced the 2026-10-04 particle version (VFXKit stage_capsule), which was too
+wide, too tall, dipped below the stage, and split stars from their tails.
+
+FIELDS
+------
+  glowSprite            Main Glow (80 x 111 px - the mockup's own glow size).
+  stars[]               StarSlot: label, star sprite, tail sprite (empty = no
+                        tail), mockupPos, delay.
+      mockupPos is in MOCKUP PX from the capsule's bottom-centre (x right,
+      y up). Measured off the mockup (glow box x315-394, y773-884):
+        Star 1 (left)          (-34.5,  97.6)  tail 001   delay 0.00
+        Star 2 (low, no tail)  (-20.1,  21.2)  -          delay 0.05
+        Star 3 (top right)     ( 10.7, 119.3)  tail 003   delay 0.03
+        Star 4 (mid right)     ( 29.6,  71.0)  tail 004   delay 0.08
+      Cross-checked on a second hero in the mockup: same offsets within 1 px.
+      delay = added to the moment the pillar reaches that star, so the four
+      never move in lockstep.
+  rimFromCapTop         56/82 - the cap's front rim as a share of the cap
+                        sprite's height from its top (Top.png row 56 of 82).
+  headCut               0.2 - capsule top = heroTop - 0.2 * heroHeight
+                        (measured on the mockup = middle of the head).
+  heightStretchClamp    (0.75, 1.35) x the mockup proportions.
+  capEquatorFromTop     29/82 - the cap ellipse's widest row. (rim - equator) x cap
+                        height = depth of the half-ellipse the capsule's bottom follows.
+  glowCurvePx           22 - depth of Main Glow's rounded bottom (row 88 at the edge ->
+                        110 at the centre). Main Glow has a 23 px BOTTOM slice border.
+  shadowWidthOfCap      0.57 - the hero's shadow width during the stand, as a share
+                        of the cap width (mockup: 46 px of 80).
+  shadowRestoreWindow   (0.4, 0.55) s - the shadow eases back to its own size
+                        around the hero's leap (hold 0.5 / 0.6), NOT at the end
+                        of the effect, which outlives the stand.
+  Pillar (reference timing):
+  shootUp 0.14          stub -> overshoot height, EaseOutCubic, alpha in.
+  startHeight 0.15      the stub, as a share of full height.
+  overshoot 1.08        peak of the shoot-up; settles to 1.0 over another shootUp.
+  flicker 0.06          +/- share of height the top flickers while standing ...
+  flickerRate 14        ... changes per second (2 Perlin rates, random seed).
+  riseStart 0.22        lift-off: the pillar starts travelling up.
+  riseBottom 0.4        the BOTTOM climbs this many full heights by `end` ...
+  riseTop 0.95          ... the TOP this many - so it stretches (not rigid).
+                        Ease-in. History: 1.1 / 1.8 "goes up far too much" ->
+                        0.25 / 0.6 -> 0.4 / 0.95 (pass 9: Arash circled where
+                        the last wisp should reach - a little above the head
+                        - before it vanishes).
+  riseFadeMaterial      capsule_rise_fade.mat (Blasty/CapsuleRiseFade, prefab
+                        folder). Empty = the pillar fades evenly.
+  cutRange (-0.55, 1)   the bottom-first fade line (uv.y) from riseStart to end.
+  riseThin 0.75         width it thins to as it rises.
+  widthFlicker 0.06     width flicker while rising.
+  sway 0.05             side sway while rising (share of cap width).
+  fadeStart 0.72        whole-pillar fade-out starts (late, so the last wisp
+                        stays visible while it climbs) ...
+  end 0.95              ... and ends; Destroy.
+  starPop 0.12, starHold 0.08, starRiseTime 0.5, starRiseMockupPx 60,
+  tailFadeIn 0.1, starHoldShare 0.5 (share of a star's climb at full opacity).
+
+FLOW
+----
+  Play(capBounds, heroTop, heroHeight, sortingLayerId, sortingOrder, shadow = null)
+    1. Moves itself to the cap's front rim (centre x of the cap).
+    2. sx = cap width / 0.80 (glow sprite width) - the uniform mockup scale.
+       sy = the height that reaches mid-head, clamped around sx.
+       glowYScale = cap half-ellipse depth / glow curve depth, so the glow's
+       rounded bottom is EXACTLY the cap's front rim (Arash's red arc). The
+       first version squashed the whole sprite by the height fit, flattening the
+       curve so the bottom read as square.
+    3. TakeShadow (the hero's "Shadow" SpriteRenderer) - Arash: the shadow must
+       always be UNDER the effect, never on top of it:
+         - remembers scale, local position, sorting layer + order;
+         - shrinks it to the mockup size (shadowWidthOfCap x cap width);
+         - LIFTS it just enough that its whole ellipse sits inside the glow's
+           rounded bottom (bottom edge on the glow curve at the shadow's
+           half-width, +0.01). The hero's feet stand on the rim, so at its own
+           spot the lower half of the shadow hung out below the capsule, over
+           the rim, and read as drawn on top of the effect (pass 4);
+         - forces it to the hero's sorting layer at min(own order, hero - 1),
+           so it is below the hero AND the glow/stars/tails by order, not by
+           luck. (All hero prefabs: shadow 0, body 1, glow 2 - already below,
+           now guaranteed.)
+    4. Build(): creates at runtime
+         Glow/Main Glow         order +1, drawMode SLICED, riseFadeMaterial. Glow root scaled (sx, glowYScale);
+                                the sprite's size.y carries the height, so only
+                                the straight column above the curve stretches.
+                                Root on the rim, sprite above it. Random
+                                flicker seed.
+         <label>/Tail           order +2, top on the star's centre
+         <label>/Star           order +3
+       Each star root is scaled by sx only, so stars and tails never squash
+       even when the glow is stretched; its resting spot uses sx / sy.
+  Update/Apply (t = seconds since Play; Destroy(gameObject) at `end`):
+    glow   height (share of full):
+             t < shootUp : lerp(startHeight, overshoot, EaseOutCubic(t/shootUp))
+             after       : lerp(overshoot, 1, EaseOutCubic(...)) settling over
+                           another shootUp, x (1 +/- flicker) Perlin
+             x (1 + (riseTop - riseBottom) * e)   e = p^2,
+                           p = (t-riseStart)/(end-riseStart)
+           lift   glow root y = riseBottom * fullWorldH * e  (bottom leaves the rim)
+           width  sx * lerp(1, riseThin, e) * (1 +/- widthFlicker Perlin)
+           sway   glow root x = +/- sway * cap width * p (Perlin)
+           alpha  saturate(2.5 * t/shootUp) * (1 - f^2), f = (t-fadeStart)/(end-fadeStart)
+           bottom-first fade (MaterialPropertyBlock on the glow):
+                  _Cut = lerp(cutRange.x, cutRange.y, p), _FlameTime = t + seed.
+                  CapsuleRiseFade.shader: alpha *= smoothstep(edge, edge + _Soft
+                  (0.45), uv.y), edge = _Cut + noise wobble (_Wobble 0.12,
+                  streaming up) - so the lower part breaks up and fades first,
+                  the top last. Output rgb = sprite rgb; alpha <= sprite alpha.
+           Height goes into the SLICED size.y, so the rounded bottom never
+           distorts (on the rim until lift-off, then rising with the column).
+    stars  starIgnite[i] = ShootTimeAt(mockupPos.y / 111) + delay
+           (inverse of the shoot-up's EaseOutCubic) - each pops in BARE
+           (EaseOutBack scale) when the pillar reaches it, holds starHold, then
+           shoots up starRiseMockupPx * k^2 over starRiseTime; its tail fades
+           in over tailFadeIn once moving; star + tail fade out over the last
+           (1 - starHoldShare) of the climb.
+    shadow   small + lifted from t = 0; scale and position eased back over
+             shadowRestoreWindow; at its end RestoreShadow() puts back scale,
+             position, layer and order in one go. OnDestroy calls
+             RestoreShadow() too, if the capsule dies early.
+  PreviewAt(time)  EDITOR ONLY: stops Update and freezes the pose at `time`
+                   (used for edit-mode captures).
+
+HOW IT CONNECTS
+---------------
+  - PlayerWaveManager.gateArrivalVfx (LevelTemplate.prefab) ->
+    Assets/VFXKit/Effects/hero_arrival_capsule/hero_arrival_capsule.prefab.
+  - PlayerWaveManager.PlayGateArrivalVfx(pm, gate) finds the cap (the gate's
+    highest-order SpriteRenderer = Top_0) and the hero's body bounds (health
+    bars skipped), instantiates the prefab and calls Play.
+  - The capsule is unparented: if the hero leaves the stage before `end`,
+    the pillar finishes fading on the empty stage.
+
+NOTES
+-----
+  - The new sprites were imported as Multiple, and Unity auto-sliced Main Glow
+    into two halves at its dark centre seam (only the left 41 px drew). All 8
+    were switched to Single / Uncompressed / no mips on 2026-10-05. If the art
+    is re-imported, keep them Single - and keep Main Glow's 23 px bottom border.
+  - Since 2026-10-05 (PlayerWaveManager.GetStageStandPoint) heroes stand in the
+    CENTRE of the cap's circle, so the shadow already sits inside the glass and
+    TakeShadow's lift normally comes out 0 - it stays as a guard.
+  - The hero "Shadow" (CH Shadow, 0.74 wide) is ~87% of the cap and covered the
+    whole stage; it is shrunk ONLY for the stand, battlefield shadows unchanged.
+  - In-game the hero stands lower on the stage than in the mockup (feet on the
+    rim, not on the cap), so the mid-head rule makes the capsule ~25% shorter
+    than the mockup's proportions (it hits the 0.75 clamp on stage 1-1).
+  - Verified in edit mode only (frozen frames via PreviewAt; pass 3 at
+    0.1 / 0.45 / 0.7 / 0.95 s on a temp stage built from Top/Mid/Bot.png).
+    NOT play-tested.

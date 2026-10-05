@@ -1,0 +1,96 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &6357036378784900328
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4976260862268096995}
+  - component: {fileID: 1214068799115581748}
+  m_Layer: 0
+  m_Name: hero_arrival_capsule
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4976260862268096995
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6357036378784900328}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1214068799115581748
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6357036378784900328}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 016afdab9f5c5ec46800ae530f2e026c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GateArrivalCapsule
+  glowSprite: {fileID: 21300000, guid: d0cfacd60a5f5e041ac9aa72b6fe9936, type: 3}
+  stars:
+  - label: Star 1 (left)
+    star: {fileID: 21300000, guid: 886b07e44483eba429ca509dfc0be2fd, type: 3}
+    tail: {fileID: 21300000, guid: fac2046fd0f703346aab0e44ea6c1077, type: 3}
+    mockupPos: {x: -34.5, y: 97.6}
+    delay: 0
+  - label: Star 2 (low, no tail)
+    star: {fileID: 21300000, guid: b8c2ed780dbf946499e7dc3e59779fe4, type: 3}
+    tail: {fileID: 0}
+    mockupPos: {x: -20.1, y: 21.2}
+    delay: 0.05
+  - label: Star 3 (top right)
+    star: {fileID: 21300000, guid: d8bda7738cb19b041a93b970d503663b, type: 3}
+    tail: {fileID: 21300000, guid: 58ff5112838bd1446a52fcc628d86ab4, type: 3}
+    mockupPos: {x: 10.7, y: 119.3}
+    delay: 0.03
+  - label: Star 4 (mid right)
+    star: {fileID: 21300000, guid: 5a014562f0f368d45ae66e77d1f03a3c, type: 3}
+    tail: {fileID: 21300000, guid: e33583182eae93446ba7dd9eb4562787, type: 3}
+    mockupPos: {x: 29.6, y: 71}
+    delay: 0.08
+  rimFromCapTop: 0.68292683
+  headCut: 0.2
+  heightStretchClamp: {x: 0.75, y: 1.35}
+  capEquatorFromTop: 0.35365853
+  glowCurvePx: 22
+  shadowWidthOfCap: 0.57
+  shadowRestoreWindow: {x: 0.4, y: 0.55}
+  shootUp: 0.14
+  startHeight: 0.15
+  overshoot: 1.08
+  flicker: 0.06
+  flickerRate: 14
+  riseStart: 0.22
+  riseBottom: 0.4
+  riseTop: 0.95
+  riseFadeMaterial: {fileID: 2100000, guid: 682b42a6c003afe4999b1f48d8d6ecb8, type: 2}
+  cutRange: {x: -0.55, y: 1}
+  riseThin: 0.75
+  widthFlicker: 0.06
+  sway: 0.05
+  fadeStart: 0.72
+  end: 0.95
+  starPop: 0.12
+  starHold: 0.08
+  starRiseTime: 0.5
+  starRiseMockupPx: 24
+  tailFadeIn: 0.1
+  starHoldShare: 0.5

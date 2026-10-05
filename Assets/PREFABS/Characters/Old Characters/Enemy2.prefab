@@ -363,7 +363,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 6152661969115879799, guid: 807743cbe55c3934cb933bd09c9d691c, type: 3}
+  m_Sprite: {fileID: 2190790200046579290, guid: 50c74c7c8eede154ba637eb6f44784d2, type: 3}
   m_Type: 3
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1004,7 +1004,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -3063194330996600093, guid: 998562d3d25b06e4ba8b12d4bde143ce, type: 3}
+  m_Sprite: {fileID: 1267806026801555892, guid: d4fad0d4cd219f54fab6ebaa67377193, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1525,7 +1525,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -6925754031443590939, guid: 8860215aeafa93b4ba62b30744fefb93, type: 3}
+  m_Sprite: {fileID: 1129239020016629891, guid: 32e598d8cff9ac34db958761e662c970, type: 3}
   m_Type: 3
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1710,12 +1710,15 @@ MonoBehaviour:
   rotationSpeed: 12
   faceCenterOnStart: 1
   playerIsInLeft: 0
+  behindTolerance: 0.35
+  retaliationMemory: 3
   reachedGate: 0
   gateStopPosition: {x: 0, y: 0}
   gateStopDistance: 0.6
   facingDeadZoneX: 0.05
   actualMoveSpeed: 0
   intendedMoveSpeed: 0
+  firstStrikeGrace: 3
 --- !u!114 &1960130878097094047
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1738,6 +1741,7 @@ MonoBehaviour:
   moveSpeed: 0.5
   stoppingDistance: 0.85
   fairDistanceToPlayer: 2
+  baseApproachLeash: 1.5
 --- !u!114 &7950575813012494473
 MonoBehaviour:
   m_ObjectHideFlags: 0

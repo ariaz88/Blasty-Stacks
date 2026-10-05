@@ -61,6 +61,20 @@ INSPECTOR FIELDS
     apexScale       (1-1.5, default 1.2)  player grows up to 20% at the apex
     scaleResponse   (min 0.1, default 1.0)  exponent shaping the growth curve
     resetScaleOnLand (bool, default true)
+    stageScaleMultiplier (0.5-2, default 1.1)  [2026-10-05] size while standing on
+                    the stage / castle gate, as a multiple of the prefab's
+                    AUTHORED size. Applied ONCE in Awake - every hero spawns onto a
+                    stage, so "freshly instantiated" means "on the stage".
+    landedScale     (0.1-2, default 1)  [2026-10-05] size the unit settles at once
+                    it lands, as a multiple of the AUTHORED size - NOT of the
+                    stage size. 1 = authored size, which is what makes heroes the
+                    same height as enemies in battle (all 15 characters were
+                    equalized to one height the same day).
+                    REPLACED landedScaleMultiplier (0.9 = "90% of the stage size").
+                    Renamed on purpose so the 0.9 still serialized in the hero
+                    prefabs is dropped instead of being read with the new
+                    meaning. Absolute on purpose too: the old relative value
+                    shrank a hero AGAIN on every later jump (0.9, 0.81, ...).
 
   Air Scale Effect (Shadow)
     shadowApexScale (0.5-1, default 0.75)  shadow shrinks to 75% at the apex
@@ -113,13 +127,24 @@ RUNTIME STATE
   tElapsed, tLoopSwapAt, startPos, endPos
   baseScaleAbs / baseScaleSign          player's original scale, split into
                                         magnitude and sign so facing flips are
-                                        never lost while scaling
+                                        never lost while scaling. Re-read at
+                                        EVERY BeginJump (stage size on the first
+                                        jump, landed size on later ones).
+  authoredScaleAbs                      the prefab's own size, captured in Awake
+                                        BEFORE the stage scale is applied. The
+                                        anchor landedScale is measured against.
+  landedFactor                          landed size as a fraction of baseScaleAbs
+                                        for the current jump (1/1.1 on the first
+                                        jump, 1 on later ones), set in BeginJump
   shadowBaseLocalAbs / shadowBaseLocalSign  same idea for the shadow
   shadowOriginalParent, shadowStartPos, shadowXZHold  detach/reattach bookkeeping
 
 LIFECYCLE
 ---------
-  Awake()     caches PlayerManager and CacheBaseScales()
+  Awake()     caches PlayerManager, records authoredScaleAbs, multiplies the
+              localScale by stageScaleMultiplier (sign kept), then
+              CacheBaseScales(). Verified in Play mode 2026-10-05: a spawned hero
+              reads 1.1, lands at 1.0, and a second jump stays at 1.0.
   OnDisable() ReattachShadowIfDetached() - a unit that dies or is pooled mid-jump
               in GroundProjected mode would otherwise leave its shadow behind in
               the scene as a permanent root object.
@@ -182,6 +207,9 @@ SCALE EFFECTS
       arcForScale = arcT ^ scaleResponse, then lerps the player's absolute
       scale from 1x to apexScale, re-applying the ORIGINAL sign so a flipped
       (facing-left) character does not un-flip while growing.
+      The "ground" size underneath eases from baseScaleAbs to
+      baseScaleAbs * landedFactor across the whole jump, so the unit is already
+      at its landed size on touchdown - no pop on landing.
 
   UpdateShadowScale(arcT)  (the live version)
       playerU = 1 if the shadow is detached (world scale is being computed
@@ -207,7 +235,9 @@ HELPERS
   CacheBaseScales()   splits both the player's and shadow's starting scale into
                       magnitude + sign, once, so later math never has to guess
                       which sign was "original" versus "flipped this jump"
-  RestorePlayerScale() / RestoreShadowScale()   reassemble abs * sign
+  RestorePlayerScale() / RestoreShadowScale()   reassemble abs * sign. The
+                      player one writes authoredScaleAbs * landedScale (NOT the
+                      stage size); the shadow one restores its base local scale
   ApplyPositionY(y) / SnapToEndY()   direct position writes (no physics)
   ConsumeJumpBuffer()   resets lastJumpPressedTime to a large negative sentinel
   HeightCurve(t) = 4t(1-t)   the parabola used for the visual arc

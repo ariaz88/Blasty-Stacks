@@ -163,7 +163,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 1.27}
+  m_AnchoredPosition: {x: 0, y: 1.3151}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!223 &8726910824907317000
@@ -253,6 +253,7 @@ MonoBehaviour:
   trailHoldSeconds: 0.18
   trailDrainPerSecond: 0.9
   trailFadeSeconds: 0.12
+  keepConstantWorldSize: 1
   hideUntilBattleStarts: 1
 --- !u!1 &1593503561200630803
 GameObject:
@@ -664,7 +665,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1.4210529, y: 1.4210529, z: 1.4210528}
+  m_LocalScale: {x: 1.3448614, y: 1.3448614, z: 1.3448613}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 6581283523425881225}
@@ -1423,15 +1424,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5737965524912553810, guid: 7ed760b00eb3fc547aff637ae070438f, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.19
+      value: 0.20076422
       objectReference: {fileID: 0}
     - target: {fileID: 5737965524912553810, guid: 7ed760b00eb3fc547aff637ae070438f, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.19
+      value: 0.20076422
       objectReference: {fileID: 0}
     - target: {fileID: 5737965524912553810, guid: 7ed760b00eb3fc547aff637ae070438f, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.19
+      value: 0.20076422
       objectReference: {fileID: 0}
     - target: {fileID: 5737965524912553810, guid: 7ed760b00eb3fc547aff637ae070438f, type: 3}
       propertyPath: m_LocalPosition.x

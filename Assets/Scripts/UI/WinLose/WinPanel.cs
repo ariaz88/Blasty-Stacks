@@ -334,11 +334,22 @@ public class WinPanel : MonoBehaviour
 
 
         // --- IMPORTANT PART: advance LevelManager’s global stage index ---
+        bool nextShips = true;
         if (LevelManager.Instance != null)
         {
             int nextStage = LevelManager.CurrentStage + 1;
             // We only want to update the index & save it; MenuScene will be loaded manually.
             LevelManager.Instance.SetStage(nextStage, loadScene: false);
+            nextShips = StageBuildAvailability.IsGlobalStageInBuild(nextStage);
+        }
+
+        // Cleared the last stage this build ships (stage 10 in the first release):
+        // celebrate and announce the update instead of returning to a Home whose
+        // next card cannot be played.
+        if (!nextShips && StageBuildAvailability.ComingSoonAvailable)
+        {
+            SceneManager.LoadScene(StageBuildAvailability.ComingSoonScene, LoadSceneMode.Single);
+            yield break;
         }
 
         // Return to Menu (or whatever you set as targetSceneName)

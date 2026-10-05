@@ -5,6 +5,18 @@ TextureImporter:
   - first:
       213: 5937092862470729823
     second: Gameplay_Gem-holder_H3P_0
+  - first:
+      213: 2961296238547953581
+    second: Holder_LeftCap
+  - first:
+      213: -9222016551870638108
+    second: Holder_Strip
+  - first:
+      213: -7729984087337245573
+    second: Holder_CenterWithTail
+  - first:
+      213: 5075724690173733526
+    second: Holder_RightCap
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -48,7 +60,7 @@ TextureImporter:
   compressionQuality: 50
   spriteMode: 2
   spriteExtrude: 1
-  spriteMeshType: 1
+  spriteMeshType: 0
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
   spritePixelsToUnits: 100
@@ -75,7 +87,7 @@ TextureImporter:
     maxTextureSize: 2048
     resizeAlgorithm: 0
     textureFormat: -1
-    textureCompression: 1
+    textureCompression: 0
     compressionQuality: 50
     crunchedCompression: 0
     allowsAlphaSplitting: 0
@@ -122,14 +134,102 @@ TextureImporter:
         height: 121
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
-      border: {x: 15, y: 32, z: 14, w: 16}
-      customData: 
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData:
       outline: []
       physicsShape: []
       tessellationDetail: -1
       bones: []
       spriteID: f50331a908ac46250800000000000000
       internalID: 5937092862470729823
+      vertices: []
+      indices:
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Holder_LeftCap
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 14
+        height: 121
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 33, z: 0, w: 15}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: da7e9554d33a81920800000000000000
+      internalID: 2961296238547953581
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Holder_Strip
+      rect:
+        serializedVersion: 2
+        x: 14
+        y: 0
+        width: 1
+        height: 121
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 33, z: 0, w: 15}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4e75af07ec0d40080800000000000000
+      internalID: -9222016551870638108
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Holder_CenterWithTail
+      rect:
+        serializedVersion: 2
+        x: 15
+        y: 0
+        width: 43
+        height: 121
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 33, z: 0, w: 15}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b7467d28d6499b490800000000000000
+      internalID: -7729984087337245573
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Holder_RightCap
+      rect:
+        serializedVersion: 2
+        x: 59
+        y: 0
+        width: 14
+        height: 121
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 33, z: 0, w: 15}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 69a2c7f96b8907640800000000000000
+      internalID: 5075724690173733526
       vertices: []
       indices: 
       edges: []
@@ -151,6 +251,10 @@ TextureImporter:
         value: '{"sliceOnImport":false,"gridCellCount":{"x":1.0,"y":1.0},"gridSpriteSize":{"x":64.0,"y":64.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.5,"y":0.5},"pivotPixels":{"x":0.0,"y":0.0},"autoSlicingMethod":1,"spriteAlignment":0,"pivotUnitMode":0,"slicingType":0,"keepEmptyRects":false,"isAlternate":false}'
     nameFileIdTable:
       Gameplay_Gem-holder_H3P_0: 5937092862470729823
+      Holder_CenterWithTail: -7729984087337245573
+      Holder_LeftCap: 2961296238547953581
+      Holder_RightCap: 5075724690173733526
+      Holder_Strip: -9222016551870638108
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
