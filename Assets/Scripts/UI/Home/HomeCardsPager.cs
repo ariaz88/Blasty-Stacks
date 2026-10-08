@@ -99,7 +99,7 @@ public class HomeCardsPager : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         }
 
         for (int i = content.childCount - 1; i >= 0; i--)
-            Destroy(content.GetChild(i).gameObject);
+            RemoveCard(content.GetChild(i).gameObject);
 
         hlg = content.GetComponent<HorizontalLayoutGroup>();
         if (!hlg) hlg = content.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -393,7 +393,7 @@ public class HomeCardsPager : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
 
         var oldGO = content.GetChild(index).gameObject;
         int sib = oldGO.transform.GetSiblingIndex();
-        Destroy(oldGO);
+        RemoveCard(oldGO);
 
         var go = Instantiate(prefab, content);
         go.transform.SetSiblingIndex(sib);
@@ -402,6 +402,15 @@ public class HomeCardsPager : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
 
         BindCard(index, go);
         OnCardRebuilt?.Invoke(index, go);
+    }
+
+    private static void RemoveCard(GameObject card)
+    {
+        // Destroy is deferred until the end of the frame. Detach first so layout
+        // and indexed child lookups immediately see only the replacement cards.
+        card.SetActive(false);
+        card.transform.SetParent(null, false);
+        Destroy(card);
     }
 
     // —— Centering for variable widths ——
