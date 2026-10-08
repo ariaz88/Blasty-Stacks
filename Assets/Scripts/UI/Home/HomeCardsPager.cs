@@ -57,6 +57,7 @@ public class HomeCardsPager : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     [SerializeField, Range(0.25f, 0.60f)] private float slideDuration = 0.33f;
 
     private ContentSizeFitter contentSizeFitter; // optional: if you have one on Content
+    private bool fitterWasEnabledBeforeAnimation;
 
     [Header("Swipe (Arash 2026-10-08: swipe left/right as well as the green arrows)")]
     [Tooltip("Canvas units the finger must travel to change stage on a slow drag.")]
@@ -69,11 +70,22 @@ public class HomeCardsPager : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     [SerializeField, Range(0f, 1f)] private float edgeResistance = 0.35f;
 
     private bool dragging;
+    private int dragPointerId = int.MinValue;
     private float dragStartContentX;
     private float dragStartTime;
 
 
     private void Start() => BuildIfNeeded();
+
+    private void OnDisable()
+    {
+        dragging = false;
+        dragPointerId = int.MinValue;
+        if (isAnimating && contentSizeFitter)
+            contentSizeFitter.enabled = fitterWasEnabledBeforeAnimation;
+        isAnimating = false;
+        StopAllCoroutines();
+    }
 
     public void BuildIfNeeded()
     {
@@ -138,11 +150,12 @@ public class HomeCardsPager : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         HookButtons();
         UpdateButtons();
 
-        // Drags that start on a card bubble up to this component (it sits on
-        // Content). Drags that start in the gaps hit the Viewport instead, which is
-        // a SIBLING of Content - forward those here too.
-        if (viewport && viewport != content && !viewport.GetComponent<HomeCardsSwipeForwarder>())
-            viewport.gameObject.AddComponent<HomeCardsSwipeForwarder>().target = this;
+        // In the active Home scene, Content and Viewport are siblings. Drags on
+        // cards bubble to this component; drags in gaps go to the Viewport.
+        var swipeForwarder = viewport.GetComponent<HomeCardsSwipeForwarder>();
+        if (!swipeForwarder)
+            swipeForwarder = viewport.gameObject.AddComponent<HomeCardsSwipeForwarder>();
+        swipeForwarder.target = this;
 
         built = true;
     }
@@ -153,24 +166,30 @@ public class HomeCardsPager : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
 
     public void OnBeginDrag(PointerEventData e)
     {
-        dragging = false;
-        if (!built || isAnimating || !content) return;
+        if (dragging || !built || isAnimating || !content || e.button != PointerEventData.InputButton.Left) return;
 
         Vector2 d = e.position - e.pressPosition;
         if (Mathf.Abs(d.x) < Mathf.Abs(d.y)) return;   // a mostly vertical drag is not a swipe
 
         dragging = true;
+        dragPointerId = e.pointerId;
         dragStartContentX = content.anchoredPosition.x;
         dragStartTime = Time.unscaledTime;
     }
 
     public void OnDrag(PointerEventData e)
     {
-        if (!dragging) return;
+        if (!dragging || e.pointerId != dragPointerId) return;
 
         float dx = ScreenToCanvasUnits(e.position.x - e.pressPosition.x);
         bool pastEdge = (dx > 0f && currentIndex == 0) || (dx < 0f && currentIndex >= cardCount - 1);
         if (pastEdge) dx *= edgeResistance;
+        else
+        {
+            int neighbor = currentIndex + (dx < 0f ? 1 : -1);
+            float oneCardDistance = Mathf.Abs(ComputeTargetContentX(neighbor) - dragStartContentX);
+            dx = Mathf.Clamp(dx, -oneCardDistance, oneCardDistance);
+        }
 
         var p = content.anchoredPosition;
         p.x = dragStartContentX + dx;
@@ -179,8 +198,9 @@ public class HomeCardsPager : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
 
     public void OnEndDrag(PointerEventData e)
     {
-        if (!dragging) return;
+        if (!dragging || e.pointerId != dragPointerId) return;
         dragging = false;
+        dragPointerId = int.MinValue;
 
         float dx = ScreenToCanvasUnits(e.position.x - e.pressPosition.x);
         float held = Time.unscaledTime - dragStartTime;
@@ -214,6 +234,7 @@ public class HomeCardsPager : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
 
         // Only disable ContentSizeFitter (if present) to avoid its re-sizing during the slide
         bool fitterWasEnabled = contentSizeFitter ? contentSizeFitter.enabled : false;
+        fitterWasEnabledBeforeAnimation = fitterWasEnabled;
         if (contentSizeFitter) contentSizeFitter.enabled = false;
 
         // Make sure current layout is fully computed before we start
