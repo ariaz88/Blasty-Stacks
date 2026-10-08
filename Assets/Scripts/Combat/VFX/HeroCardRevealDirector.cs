@@ -552,19 +552,18 @@ public class HeroCardRevealDirector : MonoBehaviour
         var cam = Camera.main;
         Vector2 screen = cam
             ? (Vector2)cam.WorldToScreenPoint(anchorWorld)
-            : new Vector2(Screen.width * 0.5f, Screen.height * 0.35f);
+            : GameFrame.PixelRect.center + new Vector2(0f, -0.15f * GameFrame.PixelRect.height);
 
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
             canvasRect, screen, null, out Vector2 local);
 
         local.y += cardH * ClearanceInCardHeights;
 
-        float halfH = canvasRect.rect.height * 0.5f;
+        // Clamp inside the game frame (centred on the canvas), not the full screen.
+        Vector2 half = FrameSizeInCanvasUnits() * 0.5f;
         float margin = cardH * 0.75f;
-        local.y = Mathf.Clamp(local.y, -halfH + margin, halfH - margin);
-        local.x = Mathf.Clamp(local.x,
-                              -canvasRect.rect.width * 0.5f + margin,
-                              canvasRect.rect.width * 0.5f - margin);
+        local.y = Mathf.Clamp(local.y, -half.y + margin, half.y - margin);
+        local.x = Mathf.Clamp(local.x, -half.x + margin, half.x - margin);
         return local;
     }
 
@@ -629,9 +628,19 @@ public class HeroCardRevealDirector : MonoBehaviour
     {
         Canvas.ForceUpdateCanvases();
 
-        cardW = canvasRect.rect.width * CardWidthFraction;
+        // Measured against the GAME FRAME, not this overlay canvas: an overlay
+        // canvas always spans the whole physical screen, so on a wider device the
+        // cards grew with the black side bars. GameFrame is the Editor's shape.
+        cardW = FrameSizeInCanvasUnits().x * CardWidthFraction;
         cardH = cardW / CardAspect;
         anchor = ResolveAnchor(anchorWorld, cardH);
+    }
+
+    /// <summary>GameFrame's size in this canvas's units (the frame is centred on screen).</summary>
+    private Vector2 FrameSizeInCanvasUnits()
+    {
+        float scale = canvas && canvas.scaleFactor > 0f ? canvas.scaleFactor : 1f;
+        return GameFrame.PixelRect.size / scale;
     }
 
     private void SetFlash(float a, Vector2 anchor, Vector2 cardSize)
@@ -667,22 +676,31 @@ public class HeroCardRevealDirector : MonoBehaviour
     private static readonly Dictionary<string, Sprite> spriteCache = new();
 
     /// <summary>
-    /// Loads a baked card sprite. Resources.Load is not usable here (the sprites
-    /// deliberately live under Arts/, not Resources/), so the sprites are resolved
-    /// through a lookup that works in the Editor and falls back to a runtime-built
-    /// 1x1 in a player build if the asset was never packed - which would show as a
-    /// plain rectangle rather than a NullReferenceException.
+    /// Loads a baked card sprite through HeroCardSpriteSet (a Resources asset that
+    /// references the PNGs, which stay under Arts/). That is the ONLY route that
+    /// works in a build: the old AssetDatabase lookup is Editor-only, so every
+    /// build drew white cards and a solid cyan glow. AssetDatabase is kept as an
+    /// Editor fallback; the white 1x1 is a last resort that logs an error.
     /// </summary>
     private static Sprite Load(string path)
     {
         if (spriteCache.TryGetValue(path, out var cached) && cached) return cached;
 
         Sprite sp = null;
+        var set = HeroCardSpriteSet.Load();
+        if (set)
+        {
+            if (path == CardSprites.Back) sp = set.back;
+            else if (path == CardSprites.Face) sp = set.face;
+            else if (path == CardSprites.Glow) sp = set.glow;
+        }
 #if UNITY_EDITOR
-        sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        if (!sp) sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
 #endif
         if (!sp)
         {
+            Debug.LogError($"[HeroCardRevealDirector] Card sprite missing for '{path}' - " +
+                           $"check Resources/{HeroCardSpriteSet.ResourcePath}.asset. Drawing a white placeholder.");
             // Runtime fallback: a plain white sprite, so the animation still plays.
             var tex = Texture2D.whiteTexture;
             sp = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));

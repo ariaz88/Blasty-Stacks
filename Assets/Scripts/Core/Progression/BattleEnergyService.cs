@@ -6,7 +6,7 @@ using UnityEngine;
 /// <summary>
 /// Owns the rule for "may the player start another battle?".
 ///
-/// The player gets a free allowance of battles (default 25) inside a rolling
+/// The player gets a free allowance of battles (default 20) inside a rolling
 /// 24-hour window. The window opens on the FIRST battle after a reset, not at
 /// midnight, so it does not depend on the device timezone. The allowance is
 /// global - it is shared by every scene and survives app restarts, because it
@@ -23,7 +23,7 @@ using UnityEngine;
 public static class BattleEnergyService
 {
     /// <summary>Free battles per 24h window. Overridable per-scene from the Inspector.</summary>
-    public const int DefaultDailyBattleLimit = 25;
+    public const int DefaultDailyBattleLimit = 20;
 
     /// <summary>PLACEHOLDER cost shown under the BATTLE icon, charged past the free allowance.</summary>
     public const int DefaultEnergyCostPerBattle = 25;

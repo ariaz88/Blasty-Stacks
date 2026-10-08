@@ -258,6 +258,20 @@ NOTES / RISKS
   - Budget: at most TotalHeroes cards alive (4 on stage 4), pooled and reused
     across deals. No particles, no overdraw beyond a handful of quads.
 
+2026-10-07 — BUILD FIX: cards were white rectangles on device
+--------------------------------------------------------------
+  - Load() used UnityEditor.AssetDatabase, which does not exist in a player
+    build, so every build drew the white 1x1 fallback: white cards, a blank
+    white "?" back, and the glow as a solid cyan block. Sprites now come from
+    HeroCardSpriteSet (Resources/VFX/HeroCardSprites.asset, which references the
+    PNGs in Arts/VFX). AssetDatabase stays as an Editor fallback; the white
+    fallback now logs an error.
+  - Card size and the on-screen clamp are measured against GameFrame.PixelRect
+    (FrameSizeInCanvasUnits) instead of this OVERLAY canvas, which always spans
+    the physical screen - otherwise cards grew with the black side bars.
+  - The no-camera fallback anchor uses the frame too.
+  Verified only that it compiles and the asset resolves; NOT seen in a build.
+
 NOT VERIFIED (as of 2026-09-14)
 --------------------------------
   Compiles clean, and the fan REST pose was screenshotted and measured in edit

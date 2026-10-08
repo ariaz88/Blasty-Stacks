@@ -1,0 +1,28 @@
+================================================================================
+  HomeCardsSwipeForwarder.cs
+  Path : Assets/Scripts/UI/Home/HomeCardsSwipeForwarder.cs
+  Type : MonoBehaviour (added at runtime - nothing to wire)
+  Layer: UI / Home
+  Added: 2026-10-08
+================================================================================
+
+PURPOSE
+-------
+Forwards swipe drags that start on the Home card strip's Viewport - the gaps
+between and beside the stage cards - to HomeCardsPager.
+
+WHY
+---
+HomeCardsPager sits on Content. The Viewport is Content's SIBLING, not its
+parent, so a drag that starts on the Viewport never bubbles up to the pager.
+
+FIELDS / FLOW
+-------------
+  target   the HomeCardsPager; set by HomeCardsPager.BuildIfNeeded when it adds
+           this component to the Viewport.
+  OnBeginDrag / OnDrag / OnEndDrag  -> target's methods of the same name.
+
+NOTES
+-----
+  Only receives events if the Viewport has a raycast-target Graphic. Without
+  one, gap drags simply do nothing - card drags still work.

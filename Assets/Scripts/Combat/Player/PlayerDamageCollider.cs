@@ -126,6 +126,7 @@ public class PlayerDamageCollider : MonoBehaviour
 
             playerManager.GetComponent<MeleeContactRecovery>()?.ReportContact(enemyStats);
             enemyStats.ApplyDamageToEnemy(dmg, playerManager);
+            GameAudio.PlayHeroHit();
             return;
         }
 
@@ -134,6 +135,7 @@ public class PlayerDamageCollider : MonoBehaviour
         {
             float dmg = playerManager.DamageApplying(gateStats.enemyManager);
             gateStats.ApplyDamageToEnemy(dmg);
+            GameAudio.PlayHeroHit();
         }
     }
 }

@@ -1,0 +1,49 @@
+================================================================================
+  BattleBalanceProbe.cs
+  Path : Assets/Scripts/Editor/BattleBalanceProbe.cs
+  Type : static class, [InitializeOnLoad] (Editor only)
+  Added: 2026-10-07
+================================================================================
+
+PURPOSE
+-------
+Plays real stage battles unattended and records who won, so stage tuning is
+judged by the actual combat simulation (deploy timers, waves, targeting) rather
+than by CP arithmetic.
+
+ONE RUN  - Begin(stage, matches, heroLevel)
+-------
+  1. Backs up the real save (PlayerPrefs GAME_SAVE_V1) ONCE into SessionState.
+  2. Writes a copy of that backup with every DEPLOYED hero's level set to
+     heroLevel (regex on the save JSON).
+  3. Opens Level_1_Stage_<stage> and enters Play mode.
+  4. After 1.5 s: PlayerWaveManager.SendMessage("HandleBlast", matches) - the
+     same entry MatchResolver uses - and timeScale 4.
+  5. When MatchesReleased >= MatchesCleared (every earned hero dealt), presses
+     BATTLE via BattleStartController.StartBattle().
+  6. Waits for LevelGameManager Won/Lost (timeout 420 game-seconds), appends
+     "stage S matches M heroLv L -> Won/Lost after Ns (player base %, enemy
+     base %)" to Results and to Temp/BalanceProbe.log, exits Play mode.
+
+QUEUE  - BeginQueue("9,6,2;9,5,2;10,7,3")
+-----
+  Runs each entry after the previous one has left Play mode. Writes
+  "QUEUE DONE" to the log once at the end and goes idle.
+
+OTHER API
+---------
+  Status, Results, ClearResults(), LogPath
+  RestoreSave()  puts the backed-up save back byte for byte. CALL IT WHEN DONE.
+                 (SaveOnStop writes the patched save on every Play exit.)
+
+NOTES
+-----
+  - State lives in SessionState because entering/leaving Play mode reloads
+    the script domain.
+  - StartBattle bypasses the daily battle allowance, so probe runs do not spend
+    battles.
+  - Matches are credited instantly, not dragged on the board; deal animations
+    still play (at 4x).
+  - SessionState.GetString returns "" (not null) for an erased key - an early
+    version used "key missing" as its stop condition and wrote QUEUE DONE every
+    editor tick. The end state is now the "idle" phase.

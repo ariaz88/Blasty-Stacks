@@ -18932,6 +18932,10 @@ MonoBehaviour:
   deploymentPlan: {fileID: 11400000, guid: 801d5ea258d62a7489c5575a58ca826f, type: 2}
   deployGateHold: 0.5
   gateArrivalVfx: {fileID: 6357036378784900328, guid: dafbdce4fb749d04292c77fbc5ca0650, type: 3}
+  standFromCapTop: 0.40243903
+  cardWaitTimeout: 4
+  restageGap: 0.3
+  deployCards: {fileID: 0}
   reinforcementStagger: 0.12
   reinforcementGateHold: 0.6
 --- !u!114 &7351843336487089692
@@ -21838,6 +21842,7 @@ MonoBehaviour:
   trailHoldSeconds: 0.18
   trailDrainPerSecond: 0.9
   trailFadeSeconds: 0.12
+  keepConstantWorldSize: 1
   hideUntilBattleStarts: 0
 --- !u!1 &7448724843634663900
 GameObject:
@@ -25270,9 +25275,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: '25
-
-'
+  m_text: 20
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 464870aefdffe1b4488c9984664ed088, type: 2}
   m_sharedMaterial: {fileID: 2904455022614176239, guid: 464870aefdffe1b4488c9984664ed088, type: 2}
@@ -25516,15 +25519,15 @@ MonoBehaviour:
   enemySpawner: {fileID: 1079043511634868343}
   transition: {fileID: 8586818769261228929}
   energyCostText: {fileID: 0}
-  remainingBattlesText: {fileID: 0}
-  dailyBattleLimit: 25
+  remainingBattlesText: {fileID: 3214298872770343352}
+  dailyBattleLimit: 20
   energyCostPerBattle: 25
   hideButtonAfterBattleStarts: 0
   requireMatchBeforeBattle: 1
   matchesRequiredToUnlock: 1
   lockedRoot: {fileID: 3811924523117623284}
   unlockedRoot: {fileID: 5786620261174984297}
-  doNotPersistAllowance: 1
+  doNotPersistAllowance: 0
 --- !u!1 &8851595087726948818
 GameObject:
   m_ObjectHideFlags: 0

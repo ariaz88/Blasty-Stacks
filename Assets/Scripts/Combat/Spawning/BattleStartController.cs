@@ -12,8 +12,9 @@ using UnityEngine.UI;
 /// BATTLE charges the player's daily allowance through BattleEnergyService and,
 /// if that succeeds, releases the spawner for the rest of the stage.
 ///
-/// The allowance is global (25 battles per rolling 24h by default), so it is
-/// NOT reset by reloading the scene or restarting the app.
+/// The allowance is global (20 battles per rolling 24h by default), so it is
+/// NOT reset by reloading the scene or restarting the app. At 0 the button is
+/// non-interactable until the window refills.
 /// </summary>
 public class BattleStartController : MonoBehaviour
 {
@@ -32,7 +33,8 @@ public class BattleStartController : MonoBehaviour
     [Tooltip("The cost label under the BATTLE icon (shows '25').")]
     [SerializeField] private TMP_Text energyCostText;
 
-    [Tooltip("Optional 'battles left today' label. Safe to leave empty.")]
+    [Tooltip("'Battles left today' label - the number next to the energy icon " +
+             "(20, 19 ... 0). Safe to leave empty.")]
     [SerializeField] private TMP_Text remainingBattlesText;
 
     [Header("Daily Allowance")]
@@ -188,7 +190,25 @@ public class BattleStartController : MonoBehaviour
         // Belt and braces: the live button is inside unlockedRoot, so this is
         // redundant while the roots are wired - but it is what keeps a scene that
         // uses ONLY a single always-visible button behaving correctly.
-        if (battleButton) battleButton.interactable = MatchGateOpen;
+        // No battles left today also locks it, until the 24h window refills.
+        if (battleButton) battleButton.interactable = MatchGateOpen && HasBattleLeft();
+    }
+
+    private bool HasBattleLeft() =>
+        BattleEnergyService.Peek(dailyBattleLimit, energyCostPerBattle)
+        != BattleEnergyService.StartCheck.BlockedNoEnergy;
+
+    private float nextRefillCheck;
+
+    // While the allowance is spent, look once a second for the 24h window to
+    // expire, so the button and the count come back without leaving the stage.
+    private void Update()
+    {
+        if (BattleStarted || Time.unscaledTime < nextRefillCheck) return;
+        nextRefillCheck = Time.unscaledTime + 1f;
+
+        if (battleButton && !battleButton.interactable && MatchGateOpen && HasBattleLeft())
+            RefreshUI();
     }
 
     /// <summary>
@@ -274,6 +294,8 @@ public class BattleStartController : MonoBehaviour
             energyCostText.text = energyCostPerBattle.ToString();
 
         if (remainingBattlesText)
-            remainingBattlesText.text = $"{BattleEnergyService.RemainingFree(dailyBattleLimit)}/{dailyBattleLimit}";
+            remainingBattlesText.text = BattleEnergyService.RemainingFree(dailyBattleLimit).ToString();
+
+        ApplyGateToButton();
     }
 }

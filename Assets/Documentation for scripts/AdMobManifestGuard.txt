@@ -1,0 +1,56 @@
+================================================================================
+  AdMobManifestGuard.cs
+  Path : Assets/Scripts/Editor/AdMobManifestGuard.cs
+  Type : IPostGenerateGradleAndroidProject (Editor only)
+  Added: 2026-10-07
+================================================================================
+
+PURPOSE
+-------
+Guarantees <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID">
+is in every Android build's manifest.
+
+WHY IT EXISTS
+-------------
+The 2026-10-07 (and 2026-10-05) APKs crashed on EVERY device at launch, before
+any game code ran:
+  java.lang.RuntimeException: Unable to get provider
+  com.google.android.gms.ads.MobileAdsInitProvider ... Missing application ID.
+The Google Mobile Ads plugin's ManifestProcessor (Library/PackageCache/
+com.google.ads.mobile@.../GoogleMobileAds/Editor/ManifestProcessor.cs) is
+wrapped in #if UNITY_ANDROID, so it only EXISTS when the editor's active target
+is ALREADY Android when the build starts. Both builds were started from a
+StandaloneWindows64 editor that switched to Android mid-build, so the processor
+never ran and the App ID was never written.
+
+FLOW
+----
+  OnPostGenerateGradleAndroidProject(unityLibraryPath)   callbackOrder 1000
+    1. reads adMobAndroidAppId from Assets/GoogleMobileAds/Resources/
+       GoogleMobileAdsSettings.asset (YAML regex - no dependency on the
+       plugin's editor assembly)
+    2. empty -> throws, failing the build (an APK without it always crashes)
+    3. unityLibrary/src/main/AndroidManifest.xml: if the meta-data exists,
+       makes sure its value matches; otherwise ADDS it and logs a warning.
+
+HOW IT CONNECTS
+---------------
+  - Not behind #if UNITY_ANDROID, so it runs however the build was started.
+  - AndroidBuildAutomation.Build additionally checks the launcher's MERGED
+    manifest after the build and reports "Failed ... adMobAppId=MISSING"
+    instead of Succeeded if the ID is still absent.
+
+VERIFIED 2026-10-07 21:35
+-------------------------
+  Headless build WITH -buildTarget Android: the plugin's processor STILL did
+  not write the ID - the log shows "[AdMobManifestGuard] AdMob App ID was
+  MISSING ... added". So this guard is LOAD-BEARING, not just a backup. Do not
+  delete it. aapt2 dump of the APK confirms
+  com.google.android.gms.ads.APPLICATION_ID = ca-app-pub-3940256099942544~3347511713.
+
+NOTES
+-----
+  - The App ID in the settings is still Google's TEST id
+    (ca-app-pub-3940256099942544~3347511713) - a release blocker, see SESSIONS.md.
+  - Preferred build: batch mode with -buildTarget Android (see
+    AndroidBuildAutomation.txt), which also makes the plugin's own processor run.

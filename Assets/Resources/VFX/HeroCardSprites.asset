@@ -1,0 +1,17 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05529b5e73637924e92883f2041099e9, type: 3}
+  m_Name: HeroCardSprites
+  m_EditorClassIdentifier: Assembly-CSharp::HeroCardSpriteSet
+  back: {fileID: 21300000, guid: 73cf5cc73a2291941a66f77a0a330d07, type: 3}
+  face: {fileID: 21300000, guid: b362e3472e74d734d9161ecb9d9cdd73, type: 3}
+  glow: {fileID: 21300000, guid: 7b0ccdba367cd1b48a352295acad793a, type: 3}

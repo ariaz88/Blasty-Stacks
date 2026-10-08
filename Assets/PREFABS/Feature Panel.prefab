@@ -1575,13 +1575,14 @@ MonoBehaviour:
   transition: {fileID: 0}
   energyCostText: {fileID: 0}
   remainingBattlesText: {fileID: 0}
-  dailyBattleLimit: 25
+  dailyBattleLimit: 20
   energyCostPerBattle: 25
   hideButtonAfterBattleStarts: 0
   requireMatchBeforeBattle: 1
   matchesRequiredToUnlock: 1
-  lockedHint: {fileID: 0}
-  doNotPersistAllowance: 1
+  lockedRoot: {fileID: 0}
+  unlockedRoot: {fileID: 0}
+  doNotPersistAllowance: 0
 --- !u!1 &3992963994295504422
 GameObject:
   m_ObjectHideFlags: 0
@@ -3779,13 +3780,14 @@ MonoBehaviour:
   transition: {fileID: 0}
   energyCostText: {fileID: 0}
   remainingBattlesText: {fileID: 0}
-  dailyBattleLimit: 25
+  dailyBattleLimit: 20
   energyCostPerBattle: 25
   hideButtonAfterBattleStarts: 0
   requireMatchBeforeBattle: 1
   matchesRequiredToUnlock: 1
-  lockedHint: {fileID: 0}
-  doNotPersistAllowance: 1
+  lockedRoot: {fileID: 0}
+  unlockedRoot: {fileID: 0}
+  doNotPersistAllowance: 0
 --- !u!1 &7844898764963277707
 GameObject:
   m_ObjectHideFlags: 0

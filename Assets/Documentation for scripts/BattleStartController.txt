@@ -35,11 +35,13 @@ INSPECTOR FIELDS
 
   Optional UI  (both are null-safe, leave empty and nothing breaks)
     energyCostText       (TMP_Text) the cost label under the BATTLE icon
-    remainingBattlesText (TMP_Text) optional "left today" label, rendered as
-                         "<remaining>/<dailyBattleLimit>"
+    remainingBattlesText (TMP_Text) "battles left today" - just the number
+                         (20, 19 ... 0). In LevelTemplate.prefab it is wired to
+                         Battel/Energy Text & Icon/Text (TMP) - the number next
+                         to the energy icon, which used to be a static "25".
 
   Daily Allowance
-    dailyBattleLimit     (int, >=1, default 25) free battles per rolling 24h,
+    dailyBattleLimit     (int, >=1, default 20) free battles per rolling 24h,
                          shared across every stage
     energyCostPerBattle  (int, >=0, default 25) PLACEHOLDER energy charged once
                          the free allowance is spent
@@ -65,11 +67,13 @@ INSPECTOR FIELDS
                          Button that lives on THIS object. Null-safe.
 
   Testing
-    doNotPersistAllowance (bool, default ON) TEST MODE. Pushed into
+    doNotPersistAllowance (bool, code default ON) TEST MODE. Pushed into
                          BattleEnergyService.SessionOnly in Awake. While ON the
                          daily allowance is memory-only, so every Play session
-                         starts with a full 25 and nothing is written to the
-                         save file. TURN OFF FOR RELEASE.
+                         starts with a full 20 and nothing is written to the
+                         save file. Switched OFF in LevelTemplate.prefab and
+                         Feature Panel.prefab on 2026-10-05 - the count now
+                         saves and survives restarts.
 
 RUNTIME STATE
 -------------
@@ -117,9 +121,9 @@ FLOW
   ApplyGateToButton()   [private]
       Swaps the two authored states - lockedRoot off / unlockedRoot on, or the
       reverse - so exactly one is ever visible; they occupy the same slot. ALSO
-      writes battleButton.interactable, which is redundant while both roots are
-      wired but is what keeps a scene using only a single always-visible button
-      behaving correctly. Returns early if BattleStarted, so nothing can
+      writes battleButton.interactable = MatchGateOpen && HasBattleLeft() - so
+      with 0 battles left today the button is greyed until the window refills.
+      Returns early if BattleStarted, so nothing can
       re-enable a button the battle has already consumed. Kept as one method so
       Awake and the unlock share a single code path and cannot drift apart.
 
@@ -152,9 +156,17 @@ FLOW
       The single place EnemySpawner.StartBattle() is called. Logs an error if
       there is no spawner.
 
+  HasBattleLeft()   [private]
+      Peek(...) != BlockedNoEnergy. Spends nothing.
+
+  Update()   [private]
+      Once a second (unscaled), only while the button is locked, the gate is
+      open and the battle has not started: if the 24h window has expired,
+      RefreshUI - so the count and button come back without leaving the stage.
+
   RefreshUI()
-      Writes energyCostPerBattle into energyCostText and
-      "remaining/limit" into remainingBattlesText. Both null-checked.
+      Writes energyCostPerBattle into energyCostText and the remaining count
+      into remainingBattlesText (both null-checked), then ApplyGateToButton.
 
 HOW IT CONNECTS
 ---------------
@@ -179,9 +191,12 @@ NOTES
     BATTLE. That is a separate, still-open change.
   - The allowance is global, so pressing Replay / reloading the scene does not
     refund a battle. That is intentional: the cap is per 24h across the whole
-    game, not per scene. NOTE this only holds ACROSS APP RESTARTS while
-    doNotPersistAllowance is OFF; during the current test phase it is ON, so
-    each Play session starts fresh.
+    game, not per scene, and with doNotPersistAllowance OFF (2026-10-05) it
+    also holds across app restarts. Verified: 20 presses -> 0 left, 21st
+    BlockedNoEnergy, still 0 after reloading the save from disk, back to 20
+    once the window start is 24h old.
+  - At 0 there is no popup yet: the button is greyed and the label reads 0.
+    OnBattleBlocked has no listeners - hook a "come back in Xh" message there.
   - THE MATCH GATE USES interactable, NOT SetActive. The button stays visible but
     greyed, so the player can see the goal. That means the Button's Disabled
     colour in its Transition block is what sells the locked state - if the button

@@ -1,0 +1,238 @@
+"""Synthesizes the game's original audio: two hit SFX and a seamless gameplay music loop.
+Everything is generated from scratch (no samples), so the output is fully owned and license-free."""
+import os, sys, wave
+import numpy as np
+
+SR = 44100
+OUT = sys.argv[1] if len(sys.argv) > 1 else "."
+rng = np.random.default_rng(7)
+
+def write_wav(path, data):
+    data = np.asarray(data, dtype=np.float64)
+    if data.ndim == 1:
+        data = data[:, None]
+    pcm = np.clip(data, -1, 1)
+    pcm = (pcm * 32767).astype("<i2")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with wave.open(path, "wb") as w:
+        w.setnchannels(pcm.shape[1]); w.setsampwidth(2); w.setframerate(SR)
+        w.writeframes(pcm.tobytes())
+    print("wrote", path, f"{len(pcm)/SR:.2f}s")
+
+def t_axis(seconds):
+    return np.arange(int(seconds * SR)) / SR
+
+def fft_filter(x, lo=None, hi=None, slope=1.0):
+    """Smooth band shaping in the frequency domain (fast for whole buses)."""
+    n = len(x)
+    X = np.fft.rfft(x)
+    f = np.fft.rfftfreq(n, 1 / SR)
+    g = np.ones_like(f)
+    if hi:
+        g *= 1 / np.sqrt(1 + (f / hi) ** (2 * slope))
+    if lo:
+        g *= 1 / np.sqrt(1 + (lo / np.maximum(f, 1e-3)) ** (2 * slope))
+    return np.fft.irfft(X * g, n)
+
+def normalize(x, peak_db):
+    p = np.max(np.abs(x)) or 1.0
+    return x / p * (10 ** (peak_db / 20))
+
+def sweep_sine(dur, f0, f1, curve=4.0):
+    t = t_axis(dur)
+    f = f1 + (f0 - f1) * np.exp(-curve * t / dur)
+    return np.sin(2 * np.pi * np.cumsum(f) / SR)
+
+# ---------------------------------------------------------------- hit SFX
+def hero_hit():
+    """Bright and snappy: an airy slash, a crisp 'tick' and a medium punch."""
+    dur = 0.24
+    t = t_axis(dur)
+    slash = fft_filter(rng.standard_normal(len(t)), lo=1800, hi=5000, slope=1.5)
+    slash *= np.exp(-t / 0.035) * (1 - np.exp(-t / 0.004))
+    punch = sweep_sine(dur, 420, 140, curve=6) * np.exp(-t / 0.06)
+    tick = np.sin(2 * np.pi * 2600 * t) * np.exp(-t / 0.012)
+    body = fft_filter(rng.standard_normal(len(t)), lo=300, hi=1600) * np.exp(-t / 0.03)
+    x = 0.55 * slash + 0.9 * punch + 0.18 * tick + 0.35 * body
+    x *= np.minimum(1, (len(t) - np.arange(len(t))) / (0.02 * SR))   # tail fade
+    return normalize(x, -4.0)
+
+def enemy_hit():
+    """Dull and heavy: a low thud with a short gritty crunch - clearly not the hero sound."""
+    dur = 0.30
+    t = t_axis(dur)
+    thud = sweep_sine(dur, 210, 55, curve=5) * np.exp(-t / 0.09)
+    crunch = fft_filter(rng.standard_normal(len(t)), lo=150, hi=1100, slope=1.5)
+    crunch *= np.exp(-t / 0.045) * (1 - np.exp(-t / 0.003))
+    grit = np.tanh(3 * sweep_sine(dur, 160, 90, curve=3)) * np.exp(-t / 0.05)
+    x = 1.0 * thud + 0.6 * crunch + 0.25 * grit
+    x = fft_filter(x, hi=2500)
+    x *= np.minimum(1, (len(t) - np.arange(len(t))) / (0.03 * SR))
+    return normalize(x, -4.0)
+
+# ---------------------------------------------------------------- music
+BPM = 112
+BEAT = 60 / BPM
+BARS = 16
+LOOP_BEATS = BARS * 4
+LOOP_N = int(round(LOOP_BEATS * BEAT * SR))
+TAIL = int(2.5 * SR)
+
+def midi_hz(m):
+    return 440.0 * 2 ** ((m - 69) / 12)
+
+def place(bus, start_beat, sig, gain=1.0):
+    i = int(round(start_beat * BEAT * SR))
+    j = min(len(bus), i + len(sig))
+    bus[i:j] += gain * sig[: j - i]
+
+def adsr(n, a=0.005, d=0.08, s=0.6, r=0.06, hold=None):
+    """hold = samples before release starts (defaults to n - release)."""
+    A, D, R = int(a * SR), int(d * SR), int(r * SR)
+    hold = n - R if hold is None else hold
+    env = np.full(n, s)
+    env[:A] = np.linspace(0, 1, A, endpoint=False) if A else env[:A]
+    dd = min(D, max(0, hold - A))
+    env[A:A + dd] = np.linspace(1, s, dd, endpoint=False)
+    if hold < n:
+        rel = np.linspace(env[hold - 1] if hold > 0 else s, 0, n - hold)
+        env[hold:] = rel
+    return env
+
+def marimba(m, dur_beats):
+    f = midi_hz(m)
+    n = int((dur_beats * BEAT + 0.5) * SR)
+    t = np.arange(n) / SR
+    x = (np.sin(2 * np.pi * f * t) * np.exp(-t / 0.45)
+         + 0.35 * np.sin(2 * np.pi * 4.0 * f * t) * np.exp(-t / 0.06)
+         + 0.12 * np.sin(2 * np.pi * 9.2 * f * t) * np.exp(-t / 0.02))
+    x *= 1 - np.exp(-t / 0.002)
+    return x
+
+def soft_pulse(m, dur_beats, duty=0.25, vib=0.0):
+    f = midi_hz(m)
+    n = int((dur_beats * BEAT + 0.08) * SR)
+    t = np.arange(n) / SR
+    ph = np.cumsum(f * (1 + vib * np.sin(2 * np.pi * 5.5 * t) * np.clip(t / 0.25, 0, 1))) / SR
+    x = np.where((ph % 1.0) < duty, 1.0, -1.0) - (2 * duty - 1)
+    return x * adsr(n, a=0.008, d=0.1, s=0.55, r=0.07)
+
+def triangle(m, dur_beats):
+    f = midi_hz(m)
+    n = int((dur_beats * BEAT + 0.03) * SR)
+    t = np.arange(n) / SR
+    ph = (f * t) % 1.0
+    x = 4 * np.abs(ph - 0.5) - 1
+    return x * adsr(n, a=0.004, d=0.06, s=0.75, r=0.03)
+
+def kick():
+    t = t_axis(0.22)
+    return sweep_sine(0.22, 150, 45, curve=7) * np.exp(-t / 0.08)
+
+def clap():
+    t = t_axis(0.16)
+    nz = fft_filter(rng.standard_normal(len(t)), lo=900, hi=5000)
+    env = np.exp(-t / 0.045) * (1 + 0.6 * (np.sin(2 * np.pi * 90 * t) > 0) * (t < 0.03))
+    return nz * env
+
+def hat():
+    t = t_axis(0.05)
+    return fft_filter(rng.standard_normal(len(t)), lo=7000) * np.exp(-t / 0.012)
+
+def glock(m):
+    f = midi_hz(m)
+    t = t_axis(0.9)
+    return (np.sin(2 * np.pi * f * t) + 0.3 * np.sin(2 * np.pi * 2.76 * f * t) * np.exp(-t / 0.1)) * np.exp(-t / 0.35)
+
+# melody: (beat, length, midi)
+MELODY = [
+    (0, 1, 76), (1, .5, 79), (1.5, .5, 76), (2, 1, 72), (3, 1, 67),
+    (4, 1, 74), (5, .5, 71), (5.5, .5, 74), (6, 2, 79),
+    (8, 1, 72), (9, .5, 76), (9.5, .5, 81), (10, 1, 79), (11, 1, 76),
+    (12, .5, 77), (12.5, .5, 76), (13, 1, 74), (14, 2, 72),
+    (16, .5, 76), (16.5, .5, 79), (17, 1, 84), (18, .5, 83), (18.5, .5, 81), (19, 1, 79),
+    (20, .5, 81), (20.5, .5, 79), (21, .5, 77), (21.5, .5, 76), (22, 2, 74),
+    (24, .5, 72), (24.5, .5, 74), (25, 1, 76), (26, 1, 77), (27, 1, 81),
+    (28, 3, 79),
+    (32, 1, 69), (33, 1, 72), (34, 1, 76), (35, 1, 81),
+    (36, .5, 79), (36.5, .5, 77), (37, 1, 76), (38, 2, 72),
+    (40, 1, 76), (41, 1, 79), (42, .5, 84), (42.5, .5, 83), (43, 1, 84),
+    (44, 1, 86), (45, 1, 83), (46, 2, 79),
+    (48, .5, 81), (48.5, .5, 81), (49, .5, 79), (49.5, .5, 77), (50, 1, 76), (51, 1, 77),
+    (52, .5, 79), (52.5, .5, 77), (53, .5, 76), (53.5, .5, 74), (54, 1, 71), (55, 1, 74),
+    (56, 1, 72), (57, .5, 76), (57.5, .5, 79), (58, 2, 84),
+    (62, .5, 67), (62.5, .5, 69), (63, .5, 71),
+]
+# one chord per bar: (bass root, chord tones)
+C, G, Am, F, G7 = (48, [60, 64, 67]), (43, [59, 62, 67]), (45, [60, 64, 69]), (41, [57, 60, 65]), (43, [59, 62, 65, 67])
+CHORDS = [C, G, Am, F, C, G, F, G7, Am, F, C, G, F, G, C, C]
+
+def music():
+    n = LOOP_N + TAIL
+    lead, chords, bass, drums, sparkle = (np.zeros(n) for _ in range(5))
+
+    for b, l, m in MELODY:
+        place(lead, b, marimba(m, l), 0.75)
+        place(lead, b, soft_pulse(m, l * 0.9, duty=0.5, vib=0.006), 0.22)
+
+    for bar, (root, tones) in enumerate(CHORDS):
+        b0 = bar * 4
+        # bouncy bass: root - fifth - root - fifth, plus an octave pickup
+        for k, (off, iv) in enumerate([(0, 0), (1, 7), (2, 0), (3, 7)]):
+            place(bass, b0 + off, triangle(root + iv, 0.42))
+        place(bass, b0 + 3.5, triangle(root + 12, 0.22), 0.6)
+        # offbeat chord stabs (the "oom-pah")
+        for off in (0.5, 1.5, 2.5, 3.5):
+            for tn in tones:
+                place(chords, b0 + off, soft_pulse(tn, 0.22, duty=0.25), 0.33)
+        # drums
+        last = bar == BARS - 1
+        place(drums, b0, kick(), 1.0)
+        place(drums, b0 + 2, kick(), 0.9)
+        place(drums, b0 + 1, clap(), 0.35)
+        place(drums, b0 + 3, clap(), 0.35)
+        for e in range(8):
+            place(drums, b0 + e * 0.5, hat(), 0.12 if e % 2 else 0.07)
+        if last:  # little fill back into the loop
+            for e, g in ((2.5, .25), (3, .3), (3.25, .3), (3.5, .35), (3.75, .4)):
+                place(drums, b0 + e, clap(), g)
+        # sparkle on the B section's chord changes
+        if bar >= 8 and bar % 2 == 0:
+            for k, tn in enumerate(tones[:3]):
+                place(sparkle, b0 + k * 0.25, glock(tn + 24), 0.18)
+
+    lead = fft_filter(lead, lo=180, hi=6000)
+    chords = fft_filter(chords, lo=200, hi=2200, slope=1.5)
+    bass = fft_filter(bass, hi=1200)
+    drums = fft_filter(drums, hi=9000)
+
+    # stereo: lead/bass/kick centre, chords widened by a short delay, sparkle right-ish
+    d = int(0.012 * SR)
+    chordsR = np.concatenate([np.zeros(d), chords[:-d]])
+    L = 0.9 * lead + 0.55 * chords + 0.8 * bass + 0.7 * drums + 0.6 * sparkle
+    R = 0.9 * lead + 0.55 * chordsR + 0.8 * bass + 0.7 * drums + 0.9 * sparkle
+
+    # small room reverb (FFT convolution with a decaying-noise impulse)
+    ir_t = t_axis(1.3)
+    ir = rng.standard_normal(len(ir_t)) * np.exp(-ir_t / 0.35)
+    ir = fft_filter(ir, lo=300, hi=5000)
+    ir /= np.sqrt(np.sum(ir ** 2))
+    def verb(x):
+        m = len(x) + len(ir)
+        y = np.fft.irfft(np.fft.rfft(x, m) * np.fft.rfft(ir, m), m)[: len(x)]
+        return y
+    send = 0.9 * lead + 0.5 * chords + 0.8 * sparkle
+    wet = verb(send) * 0.18
+    L = L + wet; R = R + np.concatenate([wet[300:], np.zeros(300)])
+
+    # seamless loop: fold the tail back onto the start, then cut to exactly 16 bars
+    st = np.stack([L, R], axis=1)
+    loop = st[:LOOP_N].copy()
+    loop[:TAIL] += st[LOOP_N:LOOP_N + TAIL]
+    # gentle glue compression (soft clip) then normalize
+    loop = np.tanh(1.3 * loop / np.max(np.abs(loop))) / np.tanh(1.3)
+    return normalize(loop, -1.5)
+
+write_wav(os.path.join(OUT, "SFX", "Hit_Hero.wav"), hero_hit())
+write_wav(os.path.join(OUT, "SFX", "Hit_Enemy.wav"), enemy_hit())
+write_wav(os.path.join(OUT, "Music", "Gameplay_Loop.wav"), music())

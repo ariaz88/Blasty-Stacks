@@ -1,11 +1,12 @@
 ﻿using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 
 
 
-public class HomeCardsPager : MonoBehaviour
+public class HomeCardsPager : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     public event Action<int> OnIndexChanged;
     public event Action<int, GameObject> OnCardRebuilt;
@@ -56,6 +57,20 @@ public class HomeCardsPager : MonoBehaviour
     [SerializeField, Range(0.25f, 0.60f)] private float slideDuration = 0.33f;
 
     private ContentSizeFitter contentSizeFitter; // optional: if you have one on Content
+
+    [Header("Swipe (Arash 2026-10-08: swipe left/right as well as the green arrows)")]
+    [Tooltip("Canvas units the finger must travel to change stage on a slow drag.")]
+    [SerializeField, Min(0f)] private float swipeDistance = 110f;
+    [Tooltip("A quick flick changes stage after only this many canvas units...")]
+    [SerializeField, Min(0f)] private float flickDistance = 35f;
+    [Tooltip("...if released within this many seconds.")]
+    [SerializeField, Min(0f)] private float flickTime = 0.25f;
+    [Tooltip("How much the strip still follows the finger past the first/last stage.")]
+    [SerializeField, Range(0f, 1f)] private float edgeResistance = 0.35f;
+
+    private bool dragging;
+    private float dragStartContentX;
+    private float dragStartTime;
 
 
     private void Start() => BuildIfNeeded();
@@ -122,7 +137,70 @@ public class HomeCardsPager : MonoBehaviour
         UpdatePlayButtonsForIndex(currentIndex);
         HookButtons();
         UpdateButtons();
+
+        // Drags that start on a card bubble up to this component (it sits on
+        // Content). Drags that start in the gaps hit the Viewport instead, which is
+        // a SIBLING of Content - forward those here too.
+        if (viewport && viewport != content && !viewport.GetComponent<HomeCardsSwipeForwarder>())
+            viewport.gameObject.AddComponent<HomeCardsSwipeForwarder>().target = this;
+
         built = true;
+    }
+
+    // —— Swipe ——
+    // The ScrollRect stays disabled (it let a drag settle between two cards); the
+    // strip follows the finger here and always lands on exactly one stage.
+
+    public void OnBeginDrag(PointerEventData e)
+    {
+        dragging = false;
+        if (!built || isAnimating || !content) return;
+
+        Vector2 d = e.position - e.pressPosition;
+        if (Mathf.Abs(d.x) < Mathf.Abs(d.y)) return;   // a mostly vertical drag is not a swipe
+
+        dragging = true;
+        dragStartContentX = content.anchoredPosition.x;
+        dragStartTime = Time.unscaledTime;
+    }
+
+    public void OnDrag(PointerEventData e)
+    {
+        if (!dragging) return;
+
+        float dx = ScreenToCanvasUnits(e.position.x - e.pressPosition.x);
+        bool pastEdge = (dx > 0f && currentIndex == 0) || (dx < 0f && currentIndex >= cardCount - 1);
+        if (pastEdge) dx *= edgeResistance;
+
+        var p = content.anchoredPosition;
+        p.x = dragStartContentX + dx;
+        content.anchoredPosition = p;
+    }
+
+    public void OnEndDrag(PointerEventData e)
+    {
+        if (!dragging) return;
+        dragging = false;
+
+        float dx = ScreenToCanvasUnits(e.position.x - e.pressPosition.x);
+        float held = Time.unscaledTime - dragStartTime;
+        bool far = Mathf.Abs(dx) >= swipeDistance;
+        bool flick = Mathf.Abs(dx) >= flickDistance && held <= flickTime;
+
+        // Finger moved LEFT -> the next stage comes in from the right.
+        if ((far || flick) && dx < 0f && currentIndex < cardCount - 1) { Next(); return; }
+        if ((far || flick) && dx > 0f && currentIndex > 0) { Prev(); return; }
+
+        // Not far enough: slide back onto the current stage.
+        StopAllCoroutines();
+        StartCoroutine(AnimateToTargetX(targetX));
+    }
+
+    private float ScreenToCanvasUnits(float pixels)
+    {
+        if (!rootCanvas) rootCanvas = GetComponentInParent<Canvas>();
+        float scale = rootCanvas ? Mathf.Max(1e-3f, rootCanvas.scaleFactor) : 1f;
+        return pixels / scale;
     }
 
 
@@ -342,15 +420,34 @@ public class HomeCardsPager : MonoBehaviour
         float w = GetPreferredWidthAt(index);
         float cardCenter = before + w * 0.5f;
 
-        float desired = viewportCenter - cardCenter;
+        // NOT clamped to the content's edges. The old clamp to [viewport-total, 0]
+        // only centred the FIRST and LAST cards on the Editor's screen shape, where
+        // the left padding happens to make desired == 0. On any wider screen the
+        // viewport grows, desired for card 0 turns positive, the clamp pinned it to
+        // 0 and stage 1 sat left of the START button. Always centring is identical
+        // on the reference screen and correct on every other one.
+        return viewportCenter - cardCenter;
+    }
 
-        float total = padL + padR;
-        for (int i = 0; i < cardCount; i++)
-            total += GetPreferredWidthAt(i) + (i < cardCount - 1 ? space : 0f);
+    // —— Re-centre when the screen size changes ——
+    // The target is computed from viewport.rect.width. On device the canvas can be
+    // resized AFTER Start (status bar / cut-out / resolution settling), which left
+    // the content at a stale offset. Re-snap whenever the viewport width changes.
+    private float lastViewportWidth = -1f;
 
-        float minX = Mathf.Min(0f, viewport.rect.width - total);
-        float maxX = 0f;
-        return Mathf.Clamp(desired, minX, maxX);
+    private void LateUpdate()
+    {
+        if (!built || isAnimating || dragging || !viewport) return;
+
+        float w = viewport.rect.width;
+        if (Mathf.Approximately(w, lastViewportWidth)) return;
+        lastViewportWidth = w;
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+        targetX = ComputeTargetContentX(currentIndex);
+        var pos = content.anchoredPosition;
+        pos.x = SnapToPixelGrid(targetX);
+        content.anchoredPosition = pos;
     }
 
     private float GetPreferredWidthAt(int i)

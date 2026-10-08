@@ -53,6 +53,9 @@ HOW IT CONNECTS
   - Losing the gate raises PlayerGateStats.OnGateDestroyed -> LevelGameManager
     shows the revive/lose flow. This class is therefore the direct cause of the
     lose condition.
+  - 2026-10-07: right after ApplyDamageToPlayer / ApplyDamageToPlayerGate it
+    plays GameAudio.PlayEnemyHit() - the ENEMY hit sound, only for blows that
+    actually land (the !isAttacking early-returns stay silent).
 
 NOTES
 -----

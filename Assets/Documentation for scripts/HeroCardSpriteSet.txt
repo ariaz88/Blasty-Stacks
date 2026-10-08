@@ -1,0 +1,37 @@
+================================================================================
+  HeroCardSpriteSet.cs
+  Path : Assets/Scripts/Combat/VFX/HeroCardSpriteSet.cs
+  Type : ScriptableObject   (asset: Assets/Resources/VFX/HeroCardSprites.asset)
+  Layer: Combat / VFX
+  Added: 2026-10-07
+================================================================================
+
+PURPOSE
+-------
+Holds the three baked card sprites HeroCardRevealDirector draws with, so the
+director can find them IN A BUILD.
+
+WHY IT EXISTS
+-------------
+HeroCardRevealDirector is self-bootstrapping (no scene object references it), so
+nothing could hand it sprites. It loaded them with UnityEditor.AssetDatabase,
+which does not exist in a player build: every build fell back to a blank white
+texture. On device the reward cards were white rectangles, the face-down "?"
+back was a blank white card and the teal glow a solid cyan block (device video
+2026-10-07, 0:46-0:55). The Editor never showed it.
+
+FIELDS
+------
+  back   Assets/Arts/VFX/HeroCardBack.png   face-down card with the "?"
+  face   Assets/Arts/VFX/HeroCardFace.png   face-up frame under the portrait
+  glow   Assets/Arts/VFX/HeroCardGlow.png   halo, baked with padding
+
+  ResourcePath = "VFX/HeroCardSprites"; Load() caches Resources.Load.
+
+NOTES
+-----
+  - The PNGs stay in Arts/VFX; the asset in Resources only REFERENCES them, which
+    is enough to pull them into the build.
+  - If the asset is deleted the director logs an error and draws white
+    placeholders - the old symptom. Re-create it (Create > Blasty > VFX > Hero
+    Card Sprite Set) at the same path and assign the three sprites.

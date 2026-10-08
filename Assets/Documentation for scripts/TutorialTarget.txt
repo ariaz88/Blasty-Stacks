@@ -21,6 +21,9 @@ KINDS
                Works for world objects AND UI RectTransforms, so this is what a
                future "press THIS button" tutorial will use.
   ScreenPoint  a normalised (0..1) screen position. Escape hatch.
+               2026-10-07: 0..1 of GameFrame.PixelRect (the design-shaped game
+               area), not of the physical screen - on other screen shapes the
+               game sits inside black bars.
   WorldPoint   a fixed world position.
 
 FIELDS

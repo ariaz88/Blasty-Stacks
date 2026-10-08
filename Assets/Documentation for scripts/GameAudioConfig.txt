@@ -1,0 +1,34 @@
+================================================================================
+  GameAudioConfig.cs
+  Path : Assets/Scripts/Core/Audio/GameAudioConfig.cs
+  Type : ScriptableObject   (asset: Assets/Resources/Audio/GameAudioConfig.asset)
+  Layer: Core / Audio
+  Added: 2026-10-07
+================================================================================
+
+PURPOSE
+-------
+The clips and levels GameAudio plays. In Resources so the self-bootstrapping
+GameAudio can load it in a build; its references pull the clips into the build.
+TUNE VOLUMES HERE, not in code.
+
+FIELDS (defaults)
+------
+  gameplayMusic    Assets/Audio/Music/Trendy BOY_128k.mp3 (3:38, supplied by Arash
+                   2026-10-07; ends with ~1.4 s of silence = a short pause before
+                   each repeat). Replaced the synthesized Gameplay_Loop.wav, which
+                   Arash did not like - that file is now unused.
+  musicVolume      0.15 (Arash, 2026-10-07; briefly 0.35 then 0.4)
+  musicFadeIn      0.6 s
+  musicFadeOut     1.0 s  (stage end)
+  heroHit          Assets/Audio/SFX/Hit_Hero.wav  (bright slash + punch, 0.24 s)
+  enemyHit         Assets/Audio/SFX/Hit_Enemy.wav (dull low thud + crunch, 0.30 s)
+  hitVolume        0.5
+  pitchJitter      0.06   (+/- 6% per blow)
+  minHitInterval   0.06 s (per kind)
+  hitVoices        6      (read once at startup)
+
+NOTES
+-----
+  - ResourcePath = "Audio/GameAudioConfig"; Load() caches Resources.Load.
+  - Missing asset -> GameAudio logs a warning and the game is silent.

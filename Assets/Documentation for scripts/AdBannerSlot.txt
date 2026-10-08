@@ -101,6 +101,20 @@ NOTES
     and do nothing", which is the right behaviour for testing a gameplay scene
     on its own.
 
+2026-10-07 — the strip no longer paints over the HUD
+----------------------------------------------------
+Device recording, stage 10: once a real 468x60 banner loaded, a light-grey
+block covered the boosters, BATTLE (only a sliver left to tap) and, in battle,
+the hero cards - until the ad rotated to 320x50. Two causes, both fixed:
+  1. The panel's own grey Image draws ON TOP of the HUD (sibling 13 of 15 under
+     "Canvas "), and stayed visible after the placeholder TEXT was hidden.
+     HandleBannerLoaded now hides the strip's own Graphic(s) via
+     SetStripVisible(false); HandleBannerFailed shows them again.
+  2. The rect's pivot is centred, so ApplyHeight grew it half UPWARD into the
+     HUD. ApplyHeight now keeps the authored BOTTOM edge fixed (BottomEdge()
+     measured before and after the resize, anchoredPosition corrected).
+NOT verified on a device.
+
 2026-10-04 — showTestBannerInEditor (EDITOR ONLY, default OFF)
 --------------------------------------------------------------
 In the Editor the Google Ads plugin fakes the banner with a test prefab

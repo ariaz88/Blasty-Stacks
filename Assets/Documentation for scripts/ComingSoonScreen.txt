@@ -48,4 +48,9 @@ NOTES
   - The subtitle says "STAGES 1 - 10": change the text field when a release
     ships a different number of stages.
   - GoHome kills all tweens before loading MenuScene.
+  - !! 2026-10-07: BACK TO HOME DID NOTHING (Editor and device). Img() sets
+    raycastTarget = false on every image, INCLUDING the button's own image, which
+    is the Button's hit area - so no click ever reached it. Build() now sets
+    btnImg.raycastTarget = true. Any new clickable built with Img() needs the
+    same. (The scene's EventSystem + InputSystemUIInputModule were fine.)
   - Verified by an Editor Play-mode screenshot 2026-10-04 (second pass).

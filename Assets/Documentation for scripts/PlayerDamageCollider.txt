@@ -37,6 +37,8 @@ HOW IT CONNECTS
   - Enabled/disabled by animation events on the attack clips.
   - Damage value comes from PlayerManager.DamageApplying, which uses CombatMath.
   - Targets EnemyStats.ApplyDamageToEnemy and EnemyGateStats.ApplyDamageToEnemy.
+  - 2026-10-07: right after either damage call it plays GameAudio.PlayHeroHit()
+    - the HERO hit sound, once per landed blow (rate-limited inside GameAudio).
 
 NOTES
 -----

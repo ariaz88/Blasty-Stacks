@@ -9,7 +9,7 @@ PURPOSE
 -------
 Answers one question: "may the player start another battle?".
 
-The player gets a free allowance of battles (25 by default) inside a ROLLING
+The player gets a free allowance of battles (20 by default) inside a ROLLING
 24-hour window. The window opens on the first battle after a reset, not at
 midnight, so it does not depend on the device timezone or on a calendar day.
 The allowance is GLOBAL - it is shared by every stage and survives scene
@@ -23,9 +23,12 @@ written it only needs to feed AddEnergy(); everything else here keeps working.
 
 CONSTANTS
 ---------
-  DefaultDailyBattleLimit      (25) free battles per window
-  DefaultEnergyCostPerBattle   (25) PLACEHOLDER cost - the number drawn under
-                               the BATTLE icon in the Feature Panel
+  DefaultDailyBattleLimit      (20, was 25 until 2026-10-05) free battles per
+                               window. The number next to the BATTLE energy
+                               icon now shows what is LEFT of this.
+  DefaultEnergyCostPerBattle   (25) PLACEHOLDER cost past the allowance. Must
+                               stay > 0: Peek treats cost <= 0 as "always
+                               allowed", which would make the cap infinite.
   WindowHours                  (24.0) length of the rolling window
 
   Both Default* values are only the Inspector defaults on
@@ -137,7 +140,7 @@ NOTES
     (there is no trustworthy way to interpret a backwards jump locally). Real
     enforcement needs a server timestamp; this is a deliberate, documented
     limitation of the offline implementation.
-  - The window is rolling from FIRST USE, not a calendar day. Playing 25
+  - The window is rolling from FIRST USE, not a calendar day. Playing 20
     battles at 22:00 means the refill lands at 22:00 the next day, not at
     midnight.
   - Energy is a stub on purpose. Until something calls AddEnergy, Peek can only

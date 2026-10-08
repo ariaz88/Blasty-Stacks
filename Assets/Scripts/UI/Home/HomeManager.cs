@@ -186,20 +186,15 @@ public class HomeManager : MonoBehaviour
         pager.BuildIfNeeded();
         InitializeStageCards();
 
-        // ---- Select target index (pending or current), clamped to highest unlocked ----
+        // ---- Select the player's LATEST UNLOCKED stage, every time Home opens ----
+        // Arash 2026-10-08: Home must always show the stage the player is up to.
+        // It used to show a queued stage only after a WIN; after a loss, leaving a
+        // stage, or a fresh app start the menu scene loaded with the pager at index
+        // 0, so Home always opened on stage 1. The frontier (highest unlocked) is
+        // right in every case - after a win it has already moved to the next stage.
         int highestUnlocked = SaveSystem.GetHighestUnlocked(levelId);
-        int targetIdx0;
-
-        if (PendingSelectStage1Based > 0)
-        {
-            targetIdx0 = Mathf.Clamp(PendingSelectStage1Based - 1, 0, Mathf.Max(0, highestUnlocked));
-            PendingSelectStage1Based = -1; // consume
-        }
-        else
-        {
-            // If nothing pending, keep current index but clamp to unlocked range
-            targetIdx0 = Mathf.Clamp(pager.CurrentIndex, 0, Mathf.Max(0, highestUnlocked));
-        }
+        int targetIdx0 = Mathf.Clamp(highestUnlocked, 0, Mathf.Max(0, stagesPerLevel - 1));
+        PendingSelectStage1Based = -1; // the win queue is superseded by the frontier
 
         // Jump without animation on (re)entering Home
         pager.JumpToIndex(targetIdx0, animate: false);

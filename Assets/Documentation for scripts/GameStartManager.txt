@@ -35,7 +35,9 @@ INSPECTOR FIELDS
                    (SaveSystem.WipeAllProgress), so the run boots as a new
                    player: stage 1, starting currency, tutorial plays again.
         UNTICKED (normal) -> nothing is wiped; progress saves automatically.
-        Lives on the GameStartManager object in StarterScene.
+        Lives on the GameStartManager object in StarterScene. It had been left
+        TICKED in the scene (so no progress ever survived a Play); UNTICKED on
+        2026-10-05 so save/load works across runs.
 
   Initial Unlocks (First Run Defaults)
     initiallyUnlockedUnitIds (int[], default {0})

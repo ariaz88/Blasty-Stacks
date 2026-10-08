@@ -25,6 +25,13 @@ INSPECTOR FIELDS
   bubbleSprite  (Sprite) optional 9-sliced rounded rect. Empty = sharp rectangle
   tailSprite    (Sprite) optional triangle. Empty = a small square
   bubbleColor / textColor / font / fontSize
+      font: 2026-10-08 set to Lilita One SDF (Arts/FONTS/LILITAONE-REGULAR SDF)
+      on TutorialOverlay.prefab - Arash: onboarding text must use the Units
+      menu's font. It was EMPTY, so the bubble fell back to TMP's default
+      LiberationSans. The prefab is linked in MenuScene, Level_1_Stage_6,
+      Tutorial_Board_01 and OnBoarding Test, none overriding it, so every bubble
+      uses it. Lilita's STATIC atlas (207 chars) covers all current tooltip
+      texts; check new characters against it before adding new tooltip text.
   maxWidth      (float) 760   wrap width before padding
   padding       (Vector2) 46 x 30
   gap           (float) 28    target edge -> tip of the tail

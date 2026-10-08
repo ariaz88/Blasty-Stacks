@@ -104,8 +104,11 @@ public struct TutorialTarget
 
             case Kind.ScreenPoint:
             {
-                screenPos = new Vector2(screenPoint01.x * Screen.width,
-                                        screenPoint01.y * Screen.height);
+                // 0..1 of the GAME FRAME, not the physical screen - on a device of
+                // another shape the game sits inside black bars (see GameFrame).
+                var frame = GameFrame.PixelRect;
+                screenPos = new Vector2(frame.x + screenPoint01.x * frame.width,
+                                        frame.y + screenPoint01.y * frame.height);
                 break;
             }
 

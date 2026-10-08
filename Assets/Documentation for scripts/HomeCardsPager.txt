@@ -141,12 +141,37 @@ CENTERING MATH
       Computes how far content must be shifted (negative X) so the card at
       'index' sits exactly centred in the viewport, by walking every card
       BEFORE it and summing (preferredWidth + spacing) to find that card's
-      left edge, then adding half its own width to find its centre. Clamps the
-      result between the content's natural leftmost scroll limit (viewport
-      width - total content width, or 0 if content is narrower than the
-      viewport) and 0 - so the FIRST and LAST cards cannot be centred past the
-      strip's actual edges, they simply centre as far as the available content
-      allows.
+      left edge, then adding half its own width to find its centre.
+      2026-10-07: NO LONGER CLAMPED. The old clamp to [viewport - total, 0]
+      only centred the first/last card on the Editor's screen shape (where
+      padding.left 350 makes the target exactly 0). On a wider device the
+      viewport grew, the target for card 0 turned positive, the clamp pinned it
+      to 0 and stage 1-1 sat left of START (device recording 0:00). Always
+      centring is identical on the reference screen.
+
+SWIPE  (2026-10-08, Arash: "swipe left/right as well as the green arrows")
+-----
+  Implements IBeginDragHandler / IDragHandler / IEndDragHandler. The component
+  sits on Content, so drags that start on a card bubble up to it; drags that
+  start in the gaps hit the Viewport (a SIBLING of Content), so BuildIfNeeded
+  adds a HomeCardsSwipeForwarder to the Viewport that forwards them here.
+  OnBeginDrag  ignored while a slide animates or if the drag is mostly vertical;
+               records content x + time.
+  OnDrag       content follows the finger (screen px / canvas.scaleFactor);
+               past the first/last stage it moves at edgeResistance (0.35).
+  OnEndDrag    finger LEFT -> Next(), RIGHT -> Prev() when the travel is
+               >= swipeDistance (110 canvas units) or a flick (>= flickDistance 35
+               within flickTime 0.25 s); otherwise slides back to the current
+               stage (AnimateToTargetX). Next/Prev animate from the dragged
+               position, so the hand-off is smooth.
+  The ScrollRect stays DISABLED on purpose - it let a drag settle between cards.
+  NOT verified on a device (Unity was closed when this was written).
+
+  LateUpdate()  (2026-10-07; skips while dragging)
+      Re-snaps content to the target whenever viewport.rect.width changes
+      (and no slide is running) - the canvas can resize after Start on device.
+      Also: GameFrame now locks the game to the design shape, so the viewport
+      width no longer varies by device in practice.
 
   GetPreferredWidthAt(i)
       Prefers a LayoutElement's preferredWidth if present and positive, else

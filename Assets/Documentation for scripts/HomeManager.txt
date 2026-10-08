@@ -71,10 +71,14 @@ LIFECYCLE
       Publishes SharedRewardConfig. Aborts with an error if pager/contentRoot
       are unassigned. Ensures the save record exists for this level
       (SaveSystem.EnsureLevel). Builds the card strip and initializes card
-      titles (InitializeStageCards). Resolves which stage index to select:
-      PREFERS PendingSelectStage1Based if one was queued (consuming it),
-      clamped to the currently unlocked range; otherwise keeps the pager's
-      current index, similarly clamped. Jumps the pager to that index WITHOUT
+      titles (InitializeStageCards). Selects the player's LATEST UNLOCKED stage
+      (SaveSystem.GetHighestUnlocked) EVERY time - 2026-10-08, Arash: "Home must
+      always show the stage I'm up to". Before that it preferred the
+      PendingSelectStage1Based queued by a WIN and otherwise kept the pager's
+      index, which is 0 on a freshly loaded MenuScene - so after a loss,
+      leaving a stage or an app restart Home always opened on stage 1. The
+      pending value is now just cleared (after a first-clear win the frontier
+      has already moved to that same next stage). Jumps the pager to that index WITHOUT
       animation (a fresh screen entry should not visibly scroll). Syncs the
       static CurrentLevelId/CurrentStage1Based. Re-wires
       pager.OnIndexChanged -> HandleSelectionChanged (unhooking first to avoid

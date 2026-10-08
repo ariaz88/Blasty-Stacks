@@ -102,6 +102,12 @@ public class AdBannerSlot : MonoBehaviour
     {
         if (placeholderVisual) placeholderVisual.SetActive(false);
 
+        // !! The strip's own grey Image is drawn ON TOP of the HUD (it sits late in
+        // the canvas order). Once the real native banner is up it has nothing left
+        // to show - and after a resize it painted over the boosters, BATTLE and the
+        // hero cards (stage 10 on device). Hide it while a real banner is showing.
+        SetStripVisible(false);
+
         if (matchRealBannerHeight && heightPixels > 0f)
             ApplyHeight(PixelsToCanvasUnits(heightPixels));
     }
@@ -111,19 +117,37 @@ public class AdBannerSlot : MonoBehaviour
         // No fill / no network: keep the placeholder and the authored height so
         // the layout does not jump around.
         if (placeholderVisual) placeholderVisual.SetActive(true);
+        SetStripVisible(true);
         ApplyHeight(FallbackHeight);
+    }
+
+    private void SetStripVisible(bool visible)
+    {
+        foreach (var g in GetComponents<UnityEngine.UI.Graphic>())
+            g.enabled = visible;
     }
 
     private void ApplyHeight(float canvasUnits)
     {
         if (!rect || canvasUnits <= 0f) return;
 
+        // Keep the BOTTOM edge where it was authored. The rect's pivot is centred,
+        // so a plain resize grew it half upward - straight into the HUD above it.
+        float bottomBefore = BottomEdge();
+
         // SetSizeWithCurrentAnchors, NOT sizeDelta. This panel is stretched
         // (anchorMin 0,0 -> anchorMax 1,1), and on a stretched rect sizeDelta.y
         // is an OFFSET FROM THE PARENT'S HEIGHT, not an absolute height -
         // assigning a height straight into it would blow the layout apart.
         rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, canvasUnits);
+
+        var p = rect.anchoredPosition;
+        p.y += bottomBefore - BottomEdge();
+        rect.anchoredPosition = p;
     }
+
+    /// <summary>The rect's bottom edge in its parent's space.</summary>
+    private float BottomEdge() => rect.localPosition.y + rect.rect.yMin;
 
     /// <summary>
     /// Screen pixels -> canvas units. With a CanvasScaler the canvas is scaled,

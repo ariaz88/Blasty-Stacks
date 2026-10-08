@@ -120,6 +120,10 @@ public class ComingSoonScreen : MonoBehaviour
 
         // Button.
         var btnImg = Img("HomeButton", _root, button, Color.white);
+        // Img() turns raycasts OFF for every decorative image. The button's own image
+        // is its hit area, so it MUST receive raycasts - with it off the button could
+        // never be pressed, in the Editor or on device.
+        btnImg.raycastTarget = true;
         Place(btnImg, new Vector2(0, -720), new Vector2(560, 190), preserve: true);
         var btn = btnImg.gameObject.AddComponent<Button>();
         btn.targetGraphic = btnImg;

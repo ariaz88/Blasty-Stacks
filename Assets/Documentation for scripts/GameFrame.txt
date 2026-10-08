@@ -1,0 +1,73 @@
+================================================================================
+  GameFrame.cs
+  Path : Assets/Scripts/Core/Display/GameFrame.cs
+  Type : MonoBehaviour (self-bootstrapping, DontDestroyOnLoad) + static API
+  Layer: Core / Display
+  Added: 2026-10-07
+================================================================================
+
+PURPOSE
+-------
+Locks the whole game to ONE screen shape - the 1125 x 2436 design shape every
+CanvasScaler uses and the Editor's Game view (1242x2688) shows - and fills the
+rest of a differently-shaped device with black bars. Result: every screen looks
+on device exactly as it does in the Editor, just scaled.
+
+WHY IT EXISTS
+-------------
+The first device recording (Assets/Arts/Reference videos/GamePlay Screenshots/
+ScreenRecorderProject532.mkv, ~9:15.7) showed menus "rearranged":
+  - Home: the stage card sat LEFT of its START button. The carousel Viewport is
+    anchored to the canvas's LEFT edge and authored 1125 wide; START is anchored
+    to the CENTRE. On a wider screen the canvas (match = height) becomes wider
+    than 1125 and the two separate.
+  - Battle: the booster/BATTLE row was shifted right and BATTLE ran off screen.
+Every UI canvas scales by HEIGHT, so ANY rect anchored to an edge drifts on a
+wider screen. Re-anchoring hundreds of hand-made rects was not realistic; giving
+every camera a viewport of the design shape fixes the whole class at once.
+
+  wider than design  -> pillarbox (bars left/right)
+  taller than design -> letterbox (thin bars top/bottom, ~2.5% each on 9:20)
+  within 1% of it    -> full screen (Editor default 1242x2688 is 0.05% off)
+
+FLOW
+----
+  Bootstrap()  [RuntimeInitializeOnLoadMethod BeforeSceneLoad]
+      Creates "[GameFrame]" (DontDestroyOnLoad).
+  Awake()
+      Adds the BARS camera: clears the whole screen black, cullingMask 0,
+      depth -100, disabled while the frame is full-screen.
+  LateUpdate() / sceneLoaded -> Apply(force)
+      Recomputes the rect when Screen size changes, then sets cam.rect on EVERY
+      camera that draws to the screen (targetTexture == null), except the bars
+      camera. Runs every frame so cameras created/enabled later are caught;
+      uses a reused Camera[] buffer (no per-frame garbage).
+
+STATIC API
+----------
+  ReferenceWidth/Height/Aspect   1125, 2436, 1125/2436
+  NormalizedRect                 the game area, 0..1 viewport rect
+  PixelRect                      the game area in screen pixels
+  ComputeNormalizedRect(w, h)    pure function behind both
+
+HOW IT CONNECTS
+---------------
+  - Screen Space - Camera canvases (LevelTemplate "Canvas ", MenuScene Canvas +
+    TopCanvas, MenuLoaderCanvas) size themselves from the camera viewport, so
+    they follow automatically. So does the 2D world.
+  - Input needs nothing: ScreenToWorldPoint / ScreenPointToRay / EventSystem
+    camera raycasts all respect the viewport.
+  - Screen Space - OVERLAY canvases always span the physical screen. Code that
+    lays such a canvas out against "the screen" must use PixelRect:
+    HeroCardRevealDirector (card size + clamp) and TutorialTarget (ScreenPoint).
+    TutorialOverlay and ComingSoonScreen are centre-anchored + height-matched,
+    so they already line up when pillarboxed.
+
+NOTES
+-----
+  - The native AdMob banner is drawn by the OS at the real screen bottom, not
+    inside the frame.
+  - To check a screen shape without a build: Tools/Blasty/Layout/... (see
+    GameViewAspectTool) and capture in Play mode.
+  - Verified 2026-10-07 in Play mode at 1080x1886 (Home, Units, Stage 1 board)
+    and 1080x2400 (Units). NOT checked on a real device.

@@ -1,0 +1,68 @@
+================================================================================
+  GameAudio.cs
+  Path : Assets/Scripts/Core/Audio/GameAudio.cs
+  Type : MonoBehaviour (self-bootstrapping, DontDestroyOnLoad) + static API
+  Layer: Core / Audio
+  Added: 2026-10-07
+================================================================================
+
+PURPOSE
+-------
+All of the game's sound: the gameplay music loop and the two hit sounds. Before
+2026-10-07 the project had NO audio at all (no clips, no AudioSource anywhere).
+
+MUSIC RULES (Arash, 2026-10-07)
+-----------
+  - Plays ONLY in stages: a scene containing a LevelGameManager
+    (Level_1_Stage_1..10). MenuScene, StarterScene, Tutorial_Board_01 and
+    ComingSoonScene have none, so they are silent.
+  - Same track for every stage. 2026-10-07 (Arash, second pass): starts from
+    the top when BATTLE is pressed (BattleStartController.OnAnyBattleStarted);
+    the board phase is SILENT. Loading a stage stops any music. A stage with no
+    BattleStartController would never fire that event, so it starts on load.
+  - Fades out (musicFadeOut, 1 s) when LevelGameManager reports Won or Lost -
+    i.e. as Level Complete / Lose appears. Comes back if the state returns to
+    Playing (revive path).
+  - Leaving a stage for a menu stops it quickly (0.15 s).
+
+HITS
+----
+  PlayHeroHit()   called by PlayerDamageCollider when a hero blow lands on an
+                  enemy body or the enemy base
+  PlayEnemyHit()  called by EnemyDamageCollider when an enemy blow lands on a
+                  hero body or the player base
+  Each kind is rate-limited (minHitInterval, 0.06 s) so a crowded melee does not
+  stack into one loud crack; pitch varies +/-6% and volume 90-100% per blow.
+  Round-robin over `hitVoices` (6) AudioSources so overlapping blows ring out.
+
+FLOW
+----
+  Bootstrap [BeforeSceneLoad] -> "[GameAudio]" (DontDestroyOnLoad)
+  Awake: loads GameAudioConfig, adds 1 music source (loop, priority 0) + N
+         voices; subscribes SceneManager.sceneLoaded and
+         LevelGameManager.OnGameStateChanged.
+  HandleSceneLoaded: no stage -> StopMusic(fast). New stage -> StopMusic(fast)
+         and wait for BATTLE (StartMusic only if the scene has no
+         BattleStartController). Decided by WHAT is loaded, not the load mode
+         (the tutorial preloads MenuScene additively).
+  HandleBattleStarted (BattleStartController.OnAnyBattleStarted) -> StartMusic.
+  HandleGameStateChanged: Won/Lost -> fade out; Playing again (revive) while
+         BattleIsRunning -> StartMusic.
+  Fades use unscaled time, so they run while the game is paused.
+
+HOW IT CONNECTS
+---------------
+  - GameAudioConfig (Resources/Audio/GameAudioConfig.asset) - clips + volumes.
+  - Music: Assets/Audio/Music/Trendy BOY_128k.mp3 (supplied by Arash). The
+    hit clips Assets/Audio/SFX/Hit_Hero.wav, Hit_Enemy.wav are ORIGINAL,
+    synthesized by Assets/Audio/make_audio.py.txt (python + numpy). The
+    synthesized Gameplay_Loop.wav was rejected and is unused.
+
+NOTES
+-----
+  - Import settings: music Streaming + Vorbis q0.6 (stereo); hits
+    DecompressOnLoad + PCM, mono.
+  - Every stage scene has an AudioListener (Main Camera); sources are 2D.
+  - Verified 2026-10-07 in Editor Play mode: menu silent; stage 4 music on at
+    0.35 through the battle; 27 hit sounds, max 3 concurrent. The end-of-stage
+    fade was NOT observed (runs were stopped/paused first). NOT heard on device.

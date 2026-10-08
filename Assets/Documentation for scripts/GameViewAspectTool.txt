@@ -1,0 +1,35 @@
+================================================================================
+  GameViewAspectTool.cs
+  Path : Assets/Scripts/Editor/GameViewAspectTool.cs
+  Type : static class (Editor only)
+  Added: 2026-10-07
+================================================================================
+
+PURPOSE
+-------
+Switches the Game view to device-shaped resolutions and saves Play-mode
+screenshots, so "looks right in the Editor, wrong on device" layout bugs can be
+reproduced without building.
+
+MENU  (Tools/Blasty/Layout/)
+----
+  Game View 1242x2688 (Editor default, 9:19.5)
+  Game View 1080x1920 (9:16)
+  Game View 1080x1886 (recorded device)      <- shape of the 2026-10-07 recording
+  Game View 1080x2400 (9:20)
+  Game View 1536x2048 (tablet 3:4)
+  Capture Screenshot (Play mode)  -> Temp/LayoutCaptures/
+
+API
+---
+  SetSize(w, h)        adds the fixed resolution to the current Game view group
+                       if missing, and selects it
+  Capture(fileName)    ScreenCapture.CaptureScreenshot into Temp/LayoutCaptures;
+                       Play mode only; returns the path
+
+NOTES
+-----
+  - Unity has no public Game view size API; this uses reflection on
+    UnityEditor.GameViewSizes / GameView. If a Unity upgrade renames those, the
+    menu items will throw - nothing in the game depends on this file.
+  - Remember to switch back to 1242x2688 after testing.

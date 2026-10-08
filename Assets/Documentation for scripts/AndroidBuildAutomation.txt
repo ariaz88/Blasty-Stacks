@@ -1,0 +1,104 @@
+================================================================================
+  AndroidBuildAutomation.cs
+  Path : Assets/Scripts/Editor/AndroidBuildAutomation.cs
+  Type : static class, [InitializeOnLoad], Editor-only (lives in an "Editor"
+         folder, so it is never compiled into a player build)
+  Layer: Editor
+  Scenes: none
+================================================================================
+
+PURPOSE
+-------
+Builds the Android TEST APK in one step, from the menu or from outside the
+editor via a request file. Added 2026-10-05 because tools that drive the editor
+remotely (Unity MCP RunCommand) refuse to call BuildPipeline directly - a build
+counts as a "user interaction" for them.
+
+FIELDS / CONSTANTS
+------------------
+  MenuPath   "Tools/Build/Build Android Test APK"
+  PackageId  "com.ariaz88.stackywarriors"  (chosen by the user 2026-10-05; the
+             Android applicationIdentifier had never been set before)
+  OutDir     <project>/Builds/Android
+  RequestFile  Builds/Android/build-request.txt   (input trigger, any content)
+  ResultFile   Builds/Android/build-result.txt    (output, rewritten each build)
+  ApkPath      Builds/Android/StackyWarriors.apk
+  nextPoll   editor time of the next request-file check (0.5 s throttle)
+
+FLOW
+----
+  static ctor      hooks PollForRequest onto EditorApplication.update.
+  PollForRequest() every 0.5 s, skipped while compiling or in/entering Play
+                   mode: if RequestFile exists, deletes it and queues
+                   Build(false) on EditorApplication.delayCall (so the long,
+                   blocking build does not run inside the update callback).
+  BuildFromMenu()  menu item -> Build(false).
+  BuildFromCommandLine() [public static]
+      Headless entry point (editor must be CLOSED - one Unity per project):
+        Unity.exe -batchmode -quit -projectPath <proj> -buildTarget Android
+                  -executeMethod AndroidBuildAutomation.BuildFromCommandLine
+                  -logFile <proj>/Logs/android-build.log
+      Runs Build(false), then EditorApplication.Exit(0 if the result file
+      starts with "Succeeded", else 1). PREFERRED path: batch mode shows no
+      modal dialogs, so it cannot deadlock (see NOTES).
+  Build(development) [public static]
+      1. ApplyTestSettings(development)
+      2. scenes = every ENABLED row in EditorBuildSettings (respects the
+         "ship stages 1-10 only" cut - 11..20 stay unticked)
+      3. BuildPipeline.BuildPlayer -> ApkPath (switches the active target to
+         Android if needed - first time triggers a full reimport)
+      4. writes ResultFile: first line
+           "<Succeeded|Failed> errors= warnings= seconds= apkMB= scenes="
+         then one "ERR: ..." line per error/exception message in the report.
+         Any exception -> "Failed EXCEPTION ...". Also Debug.Logs the text.
+  ApplyTestSettings(development)
+      IL2CPP, ARM64 only, debug signing (useCustomKeystore=false), APK not AAB,
+      minifyRelease=false (R8 fails on AdMob nextgen classes),
+      optimizedFramePacing=false (Swappy breaks the IL2CPP native build),
+      defaultInterfaceOrientation=Portrait, development flag, SaveAssets.
+
+HOW IT CONNECTS
+---------------
+  - Build Settings scene list (EditorBuildSettings) decides what ships.
+  - PlayerSettings / EditorUserBuildSettings are WRITTEN on every build - these
+    are persistent project settings, not temporary overrides.
+  - Matches the /build skill (§5 "Trigger a build in an already-open editor").
+
+NOTES
+-----
+  - apkMB is measured from the file; report.summary.totalSize is NOT the APK
+    size and must not be used.
+  - NOT a release build: no keystore, no AAB, test ad ids still in place (see
+    SESSIONS.md "Ads release blockers"). bundleVersion / versionCode are not
+    touched here.
+  - The trigger only works while the editor is open and not compiling/playing.
+  - DEADLOCK SEEN 2026-10-05: during an in-editor build, EDM4U (Google
+    Android Resolver, pulled in by AdMob) ran ResolveSync from
+    OnPostProcessScene and opened its IMGUI "Enable Android Auto-resolution?"
+    dialog. That dialog needs the main loop, which ResolveSync was holding ->
+    editor "Not Responding" for 1h+, unclickable. Fix: kill Unity, and
+    ProjectSettings/GvhProjectSettings.xml now pre-answers it
+    (AutoResolverEnabled=True, PromptBeforeAutoResolution=False,
+    AutoResolveOnBuild=True). Prefer BuildFromCommandLine anyway.
+  - 2026-10-07 IN-EDITOR REBUILD (Succeeded, 65.7 MB, 2962 s, 0 errors):
+      * The in-editor build opens a native dialog "Unsupported Input Handling on
+        Android" [Ignore / Cancel Build / Don't ask again for this session] and
+        WAITS on it. Batch mode never shows it. Answer IGNORE - input handling
+        stays "Both" on purpose (UI = new Input System, gameplay = legacy Input);
+        the 2026-10-05 APK shipped that way.
+      * The request-file trigger deleted build-request.txt but its delayCall never
+        ran the build (editor unfocused). What worked: run the menu item from a
+        one-shot EditorApplication.update callback
+        (EditorApplication.ExecuteMenuItem("Tools/Build/Build Android Test APK")).
+      * The build leaves the editor's ACTIVE target on Android (it was
+        StandaloneWindows64 before).
+      * !! THAT APK CRASHED AT LAUNCH ON EVERY DEVICE ("Missing application ID",
+        MobileAdsInitProvider). The AdMob plugin's ManifestProcessor is
+        #if UNITY_ANDROID - it does not exist when a build STARTS from a
+        Windows-target editor and switches mid-build, so the App ID was never
+        written. The 2026-10-05 APK had the same defect (never run on a device).
+        Fixes: (1) AdMobManifestGuard adds the ID to the generated Gradle
+        manifest on every build; (2) Build() now checks the launcher's merged
+        manifest and reports "Failed ... adMobAppId=MISSING" instead of
+        Succeeded; (3) build with batch mode + -buildTarget Android.
+      * Result line now ends with adMobAppId=OK|MISSING.
