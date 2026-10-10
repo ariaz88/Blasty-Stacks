@@ -46,7 +46,7 @@ public class TutorialTooltip : MonoBehaviour
     [SerializeField] private Sprite tailSprite;
 
     [SerializeField] private Color bubbleColor = Color.white;
-    [SerializeField] private Color textColor = new Color(0.10f, 0.10f, 0.13f, 1f);
+    [SerializeField] private Color textColor = Color.white;
 
     [Header("Gem holder art (Gameplay_Gem-holder_H3P) - replaces bubble + tail sprites")]
     [Tooltip("Left cap of the holder (columns 0-13). When ALL holder sprites are set, the " +
@@ -68,6 +68,9 @@ public class TutorialTooltip : MonoBehaviour
 
     [Tooltip("Font for the bubble. Empty = TMP's default.")]
     [SerializeField] private TMP_FontAsset font;
+
+    [Tooltip("TMP material for the bubble text, including its outline and shadow.")]
+    [SerializeField] private Material fontMaterial;
 
     [SerializeField] private float fontSize = 44f;
 
@@ -418,6 +421,7 @@ public class TutorialTooltip : MonoBehaviour
 
             var tmp = go.AddComponent<TextMeshProUGUI>();
             if (font) tmp.font = font;
+            if (fontMaterial) tmp.fontSharedMaterial = fontMaterial;
             tmp.fontSize = fontSize;
             tmp.color = UsesHolder ? holderTextColor : textColor;
             tmp.alignment = TextAlignmentOptions.Center;

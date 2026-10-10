@@ -157,7 +157,7 @@ MonoBehaviour:
   m_text: 
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 464870aefdffe1b4488c9984664ed088, type: 2}
-  m_sharedMaterial: {fileID: 2904455022614176239, guid: 464870aefdffe1b4488c9984664ed088, type: 2}
+  m_sharedMaterial: {fileID: 2100000, guid: 8280f6d964e00104981364c190209857, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -622,7 +622,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 0}
   tailSprite: {fileID: 0}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
-  textColor: {r: 0.1, g: 0.1, b: 0.13, a: 1}
+  textColor: {r: 1, g: 1, b: 1, a: 1}
   holderLeftCap: {fileID: 2961296238547953581, guid: 7629495be7c1ca546bfd616b26ba8fec, type: 3}
   holderStrip: {fileID: -9222016551870638108, guid: 7629495be7c1ca546bfd616b26ba8fec, type: 3}
   holderCenter: {fileID: -7729984087337245573, guid: 7629495be7c1ca546bfd616b26ba8fec, type: 3}
@@ -631,6 +631,7 @@ MonoBehaviour:
   holderTailPx: 17
   holderTextColor: {r: 1, g: 1, b: 1, a: 1}
   font: {fileID: 11400000, guid: 464870aefdffe1b4488c9984664ed088, type: 2}
+  fontMaterial: {fileID: 2100000, guid: 8280f6d964e00104981364c190209857, type: 2}
   fontSize: 44
   maxWidth: 760
   padding: {x: 60, y: 46}
