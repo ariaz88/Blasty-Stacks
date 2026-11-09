@@ -706,6 +706,13 @@ public class PlayerWaveManager : MonoBehaviour
 
     private void Awake()
     {
+        if (!GameStartManager.IsStageBootReady)
+        {
+            Debug.LogError("[PlayerWaveManager] Stage blocked: launch through StarterScene and GameStartManager.", this);
+            enabled = false;
+            return;
+        }
+
         // Resolved first: the early return below must not leave this null, or
         // CombatLive could never become true and heroes would freeze forever.
         if (!enemySpawner) enemySpawner = FindObjectOfType<EnemySpawner>(true);
@@ -797,6 +804,7 @@ public class PlayerWaveManager : MonoBehaviour
     private List<UnitDefinitionSO> GetDeployedUnitDefinitions()
     {
         var list = new List<UnitDefinitionSO>();
+        if (_gsm) _gsm.EnsurePlayerUnitsReady();
         if (PlayerUnits == null || _unitsDb == null) return list;
 
         foreach (var def in _unitsDb.Units)
@@ -840,6 +848,7 @@ public class PlayerWaveManager : MonoBehaviour
     // Call this to start the loop (e.g., at level start)
     public void BeginWaves()
     {
+        if (!GameStartManager.IsStageBootReady) return;
         if (running) return;
         running = true;
 

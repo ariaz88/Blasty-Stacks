@@ -101,13 +101,6 @@ public class BoardInputController : MonoBehaviour
         // stack mid-slide.
         TickSettle();
 
-        // No board input while the match-reward cards are on screen. A match is
-        // what triggers the deal, so without this the player can immediately drag
-        // another stack and start a second match underneath the cards, which both
-        // hides the reward and stacks two deals on top of each other. Input
-        // resumes the frame the fade finishes.
-        if (HeroCardRevealDirector.IsDealing) return;
-
 #if UNITY_EDITOR || UNITY_STANDALONE
         MouseUpdate();
 #else
@@ -330,7 +323,9 @@ public class BoardInputController : MonoBehaviour
         if (!TryPickPiece(screenPos, out var piece))
             return;
 
-        if (!piece /*|| piece.IsFrozen*/) return;
+        // A matched piece can still have a collider while its clear animation
+        // finishes, but it no longer belongs to the board.
+        if (!piece || !piece.IsPlaced) return;
 
         activePiece = piece;
         boardLocalZ = BoardLocalZ();
@@ -595,6 +590,52 @@ public class BoardInputController : MonoBehaviour
 
     // ------------------------ Release ------------------------
 
+    // Prefer the cell currently under the block. If a short drag still rounds
+    // to the pickup cell, advance one cell in the drag direction instead of
+    // snapping backwards to where the piece started.
+    private const float ReleaseIntentCells = 0.03f;
+
+    private static int ReleaseCell(float position, float travel, int pickupCell)
+    {
+        int currentCell = Mathf.FloorToInt(position + 0.5f);
+        if (currentCell != pickupCell || Mathf.Abs(travel) <= ReleaseIntentCells)
+            return currentCell;
+        if (travel > AnchorEpsilon) return Mathf.CeilToInt(position - AnchorEpsilon);
+        return Mathf.FloorToInt(position + AnchorEpsilon);
+    }
+
+    private Vector2Int ReleaseAnchor(PieceSimple piece)
+    {
+        Vector2 travel = freeAnchor - dragStartFree;
+        Vector2Int nearest = RoundAnchor(freeAnchor);
+        Vector2Int forward = new Vector2Int(
+            ReleaseCell(freeAnchor.x, travel.x, dragStartAnchor.x),
+            ReleaseCell(freeAnchor.y, travel.y, dragStartAnchor.y));
+
+        if (IsAnchorLegal(forward, piece)) return forward;
+
+        // When a diagonal destination is occupied, take the legal forward step
+        // on the stronger axis before falling back to the nearest free cell.
+        if (Mathf.Abs(travel.x) > AnchorEpsilon && Mathf.Abs(travel.y) > AnchorEpsilon)
+        {
+            Vector2Int alongX = new Vector2Int(forward.x, nearest.y);
+            Vector2Int alongY = new Vector2Int(nearest.x, forward.y);
+            bool xFirst = Mathf.Abs(travel.x) >= Mathf.Abs(travel.y);
+            if (xFirst)
+            {
+                if (IsAnchorLegal(alongX, piece)) return alongX;
+                if (IsAnchorLegal(alongY, piece)) return alongY;
+            }
+            else
+            {
+                if (IsAnchorLegal(alongY, piece)) return alongY;
+                if (IsAnchorLegal(alongX, piece)) return alongX;
+            }
+        }
+
+        return IsAnchorLegal(nearest, piece) ? nearest : dragStartAnchor;
+    }
+
     private void EndDrag()
     {
         if (!activePiece) return;
@@ -607,6 +648,8 @@ public class BoardInputController : MonoBehaviour
 
         if (restExactlyWhereReleased && TryRestInPlace(p)) return;
 
+        lastValidAnchor = ReleaseAnchor(p);
+
         // TryPlace updates occupancy and jumps the root to the cell center.
         // On failure fall back to where this drag STARTED, never to p.Anchor:
         // PieceSimple._anchor can hold a value that was never validated or occupied,
@@ -614,7 +657,10 @@ public class BoardInputController : MonoBehaviour
         // BoardBootstrapper calls that unconditionally. Trusting it can fling the
         // piece to the far side of the board.
         if (!p.TryPlace(lastValidAnchor))
+        {
             lastValidAnchor = dragStartAnchor;
+            p.TryPlace(lastValidAnchor);
+        }
 
         // A move only counts if the piece actually ended up on a different
         // cell. Tapping a piece and letting go, or a drag the board refused

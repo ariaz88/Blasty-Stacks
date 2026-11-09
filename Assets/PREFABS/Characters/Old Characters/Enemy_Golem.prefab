@@ -560,6 +560,7 @@ MonoBehaviour:
   trailHoldSeconds: 0.18
   trailDrainPerSecond: 0.9
   trailFadeSeconds: 0.12
+  keepConstantWorldSize: 1
   hideUntilBattleStarts: 1
 --- !u!1 &3312394351349276259
 GameObject:
@@ -1325,6 +1326,7 @@ GameObject:
   - component: {fileID: 7859290555292517071}
   - component: {fileID: 4664638066056863863}
   - component: {fileID: 4155443662044036273}
+  - component: {fileID: 5520259433256188121}
   m_Layer: 6
   m_Name: Enemy_Golem
   m_TagString: Enemy
@@ -1548,6 +1550,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 848dae37a10c6a1448df8fba6c340e13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &5520259433256188121
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5743877368873523975}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 606e74b7904ee694f866c91e24c2f61e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SpriteHitFlash
+  targets:
+  - {fileID: 914685477806707603}
+  - {fileID: 4069328784663187038}
+  - {fileID: 6727387199280033738}
+  - {fileID: 183794229061103060}
+  - {fileID: 6905612150302421847}
+  - {fileID: 7498886985753116362}
+  - {fileID: 953629082422830163}
+  - {fileID: 6755789900544633819}
+  - {fileID: 1538604417323401288}
+  - {fileID: 3196569417645232461}
+  flashColor: {r: 1, g: 1, b: 1, a: 1}
+  duration: 0.12
+  holdDuration: 0.025
+  intensity: 1
 --- !u!1 &6190387789709258397
 GameObject:
   m_ObjectHideFlags: 0

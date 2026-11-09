@@ -12,6 +12,8 @@ GameObject:
   - component: {fileID: 6244548336301862355}
   - component: {fileID: 7634034004502870453}
   - component: {fileID: 8011732445945001461}
+  - component: {fileID: 781396753415019859}
+  - component: {fileID: 9089988319018487373}
   m_Layer: 0
   m_Name: EnemyCastle
   m_TagString: EnemyGate
@@ -131,6 +133,7 @@ MonoBehaviour:
   stageLevel: 1
   cpWeights: {fileID: 0}
   cp: 0
+  xpValue: 1
   currentGateTarget: {fileID: 0}
   attackPlayerGate: 0
   enemyDamageCollider: {fileID: 0}
@@ -145,10 +148,48 @@ MonoBehaviour:
   rotationSpeed: 0
   faceCenterOnStart: 1
   playerIsInLeft: 0
+  behindTolerance: 0.35
+  retaliationMemory: 3
   reachedGate: 0
   gateStopPosition: {x: 0, y: 0}
   gateStopDistance: 0.6
   facingDeadZoneX: 0.05
+  actualMoveSpeed: 0
+  intendedMoveSpeed: 0
+  firstStrikeGrace: 3
+--- !u!114 &781396753415019859
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 678596361423573190}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 606e74b7904ee694f866c91e24c2f61e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SpriteHitFlash
+  targets:
+  - {fileID: 2126543098130790268}
+  flashColor: {r: 1, g: 1, b: 1, a: 1}
+  duration: 0.12
+  holdDuration: 0.025
+  intensity: 1
+--- !u!114 &9089988319018487373
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 678596361423573190}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ae48cca6fe4eac4aae3a02c52ea5964, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CastleHitReaction
+  duration: 0.3
+  squash: 0.045
+  shakeWidthFraction: 0.004
 --- !u!1 &976789862424070382
 GameObject:
   m_ObjectHideFlags: 0
@@ -215,6 +256,7 @@ Transform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &2126543098130790268
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -233,6 +275,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -254,9 +298,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: -1
+  m_MaskInteraction: 0
   m_Sprite: {fileID: -9040681854486852157, guid: 72d31d6e78784654f86aa2f584c5533b, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -266,7 +312,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!61 &6889957489513312746
 BoxCollider2D:

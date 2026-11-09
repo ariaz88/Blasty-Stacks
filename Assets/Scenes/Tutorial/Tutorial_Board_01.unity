@@ -795,8 +795,8 @@ MonoBehaviour:
   liftWhileDragging: -0.5
   maxSubStepCells: 0.25
   maxSubStepsPerFrame: 64
-  restExactlyWhereReleased: 1
-  settleDuration: 0.1
+  restExactlyWhereReleased: 0
+  settleDuration: 0
   gapAssistCells: 0.15
 --- !u!4 &559985861
 Transform:

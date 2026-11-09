@@ -9,6 +9,22 @@ public class GameStartManager : MonoBehaviour
 {
     public static GameStartManager Instance { get; private set; }
 
+    private bool servicesInitialized;
+
+    // Direct stage play remains available in the Editor. In a build, combat
+    // scenes may only run after StarterScene has initialized the shared roster.
+    public static bool IsStageBootReady
+    {
+        get
+        {
+#if UNITY_EDITOR
+            return true;
+#else
+            return Instance != null && Instance.servicesInitialized;
+#endif
+        }
+    }
+
     // A NEW PLAYER OWNS NOTHING (Arash, 2026-09-22).
     // Deliberately NOT read from CurrencyManager's inspector values: "a new
     // player starts at zero" is a game rule, and a rule that lives in a scene
@@ -91,7 +107,72 @@ public class GameStartManager : MonoBehaviour
     }
     private void OnEnable()
     {
+        if (!Instance) Instance = this;
         StartCoroutine(WaitForLevelManager());
+    }
+
+    /// <summary>Recover a roster lost during a scene reload or an older save migration.</summary>
+    public void EnsurePlayerUnitsReady()
+    {
+        if (!Instance) Instance = this;
+        if (!unitsDatabase) return;
+
+        bool rebuilt = PlayerUnits == null || !PlayerUnits.AllStates.Any();
+        if (rebuilt)
+        {
+            if (PlayerUnits == null) PlayerUnits = new PlayerUnitsModel();
+            PlayerUnits.InitializeFromDatabase(unitsDatabase, initiallyUnlockedUnitIds);
+            var savedRoster = SaveSystem.Data.units;
+            if (savedRoster != null && savedRoster.Count > 0)
+                PlayerUnits.MergeSavedStates(savedRoster.Select(u =>
+                    new PlayerUnitsModel.UnitState(u.unitId, u.unlocked, u.level, u.isDeployed)));
+        }
+
+        bool hasUsableDeployed = unitsDatabase.Units.Any(def =>
+            def && def.runtimePrefab && PlayerUnits.IsUnlocked(def.unitId) &&
+            PlayerUnits.IsDeployed(def.unitId));
+        if (hasUsableDeployed) return;
+
+        // A live model can be empty or have lost its deployed flags after a reload.
+        // Prefer the saved roster before falling back to authored defaults.
+        var saved = SaveSystem.Data.units;
+        if (saved != null && saved.Count > 0)
+        {
+            PlayerUnits.MergeSavedStates(saved.Select(u =>
+                new PlayerUnitsModel.UnitState(u.unitId, u.unlocked, u.level, u.isDeployed)));
+            hasUsableDeployed = unitsDatabase.Units.Any(def =>
+                def && def.runtimePrefab && PlayerUnits.IsUnlocked(def.unitId) &&
+                PlayerUnits.IsDeployed(def.unitId));
+            if (hasUsableDeployed) return;
+        }
+
+        // Old saves may predate the deployed flag, or hold IDs from an older database.
+        // Restore the authored starter roster so a stage can never enter battle empty.
+        int restored = 0;
+        foreach (var def in unitsDatabase.Units)
+        {
+            if (!def || !def.runtimePrefab || !def.startsDeployed) continue;
+            PlayerUnits.Unlock(def.unitId);
+            PlayerUnits.SetDeployed(def.unitId, true);
+            restored++;
+        }
+        if (restored == 0)
+        {
+            var first = unitsDatabase.Units.FirstOrDefault(def => def && def.runtimePrefab);
+            if (first)
+            {
+                PlayerUnits.Unlock(first.unitId);
+                PlayerUnits.SetDeployed(first.unitId, true);
+                restored = 1;
+            }
+        }
+        if (restored > 0)
+        {
+            SaveSystem.Data.units = PlayerUnits.ToSavedEntries();
+            SaveSystem.Save();
+            Debug.LogWarning($"[GameStartManager] Recovered {restored} deployed hero type(s) " +
+                             "from the units database so the stage can start.", this);
+        }
     }
 
     private IEnumerator WaitForLevelManager()
@@ -129,6 +210,7 @@ public class GameStartManager : MonoBehaviour
     /// 
     private void InitializeServices()
     {
+        servicesInitialized = false;
         // 1) Build runtime PlayerUnits from DB
         PlayerUnits = new PlayerUnitsModel();
         if (unitsDatabase != null)
@@ -153,7 +235,8 @@ public class GameStartManager : MonoBehaviour
                 .Select(u => new PlayerUnitsModel.UnitState(u.unitId, u.unlocked, u.level, u.isDeployed))
                 .ToList();
 
-            PlayerUnits.LoadFromSavedStates(modelStates);
+            PlayerUnits.MergeSavedStates(modelStates);
+            EnsurePlayerUnitsReady();
             Debug.Log($"[GameStartManager] Loaded {savedUnits.Count} saved unit states");
 
         }
@@ -251,6 +334,8 @@ public class GameStartManager : MonoBehaviour
             unitsDb: unitsDatabase,
             progressionCfg: progressionConfig
         );
+
+        servicesInitialized = true;
 
     }
 

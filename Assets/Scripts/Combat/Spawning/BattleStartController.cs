@@ -1,5 +1,6 @@
 // BattleStartController.cs
 using System;
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -28,6 +29,9 @@ public class BattleStartController : MonoBehaviour
     [Tooltip("Camera pan + board hide. Left empty = found in the scene at Awake. " +
              "If there is none, the battle starts immediately with no transition.")]
     [SerializeField] private BattlePhaseTransition transition;
+
+    private BoardGridXY puzzleBoard;
+    private bool autoStartPending;
 
     [Header("Optional UI")]
     [Tooltip("The cost label under the BATTLE icon (shows '25').")]
@@ -121,6 +125,7 @@ public class BattleStartController : MonoBehaviour
         if (!battleButton) battleButton = GetComponent<Button>();
         if (!enemySpawner) enemySpawner = FindObjectOfType<EnemySpawner>(true);
         if (!transition) transition = FindObjectOfType<BattlePhaseTransition>(true);
+        puzzleBoard = FindObjectOfType<BoardGridXY>(true);
 
         if (!battleButton)
             Debug.LogError("[BattleStartController] No BATTLE button assigned or found.", this);
@@ -139,8 +144,7 @@ public class BattleStartController : MonoBehaviour
         if (battleButton) battleButton.onClick.AddListener(OnBattleButtonPressed);
         BattleEnergyService.OnAllowanceChanged += RefreshUI;
 
-        if (requireMatchBeforeBattle && !MatchGateOpen)
-            MatchResolver.OnBlast += OnBoardBlast;
+        MatchResolver.OnBlast += OnBoardBlast;
 
         RefreshUI();
     }
@@ -153,24 +157,50 @@ public class BattleStartController : MonoBehaviour
         // OnBlast is a plain static delegate, never cleared by MatchResolver, so an
         // unsubscribe here is what stops a destroyed controller being called.
         MatchResolver.OnBlast -= OnBoardBlast;
+        autoStartPending = false;
     }
 
     /// <summary>
-    /// Every cleared match on the puzzle board. The gate opens on the Nth one and
-    /// then unsubscribes - later matches are none of this component's business.
+    /// Open the button gate after enough matches, and start the battle automatically
+    /// when the last match leaves the puzzle board empty.
     /// </summary>
     private void OnBoardBlast(int groups)
     {
-        if (MatchGateOpen) return;
+        if (BattleStarted || groups <= 0) return;
 
-        matchesCleared++;
-        if (matchesCleared < matchesRequiredToUnlock) return;
+        matchesCleared += groups;
+        if (!MatchGateOpen && matchesCleared >= matchesRequiredToUnlock)
+        {
+            MatchGateOpen = true;
+            ApplyGateToButton();
+            OnMatchGateOpened?.Invoke();
+        }
 
-        MatchGateOpen = true;
-        MatchResolver.OnBlast -= OnBoardBlast;
+        if (!autoStartPending && puzzleBoard && !puzzleBoard.HasAnyOccupiedCells())
+        {
+            autoStartPending = true;
+            StartCoroutine(AutoStartAfterLastMatch());
+        }
+    }
 
-        ApplyGateToButton();
-        OnMatchGateOpened?.Invoke();
+    private IEnumerator AutoStartAfterLastMatch()
+    {
+        // Let every OnBlast listener record the last match before SealForBattle.
+        yield return null;
+        autoStartPending = false;
+
+        if (BattleStarted || !puzzleBoard || puzzleBoard.HasAnyOccupiedCells()) yield break;
+
+        // An empty board is the completion condition even if a stage configured
+        // its button to require more matches than the board contained.
+        if (!MatchGateOpen)
+        {
+            MatchGateOpen = true;
+            ApplyGateToButton();
+            OnMatchGateOpened?.Invoke();
+        }
+
+        OnBattleButtonPressed();
     }
 
     /// <summary>
@@ -217,6 +247,7 @@ public class BattleStartController : MonoBehaviour
     /// </summary>
     public void OnBattleButtonPressed()
     {
+        if (!GameStartManager.IsStageBootReady) return;
         if (BattleStarted) return;
 
         // interactable=false already blocks the click, but this method is public and
@@ -251,6 +282,7 @@ public class BattleStartController : MonoBehaviour
     /// <summary>Releases the spawner. Bypasses the allowance - use for debug/revive flows.</summary>
     public void StartBattle()
     {
+        if (!GameStartManager.IsStageBootReady) return;
         if (BattleStarted) return;
         var playerWaves = FindObjectOfType<PlayerWaveManager>();
         if (playerWaves) playerWaves.SealForBattle();

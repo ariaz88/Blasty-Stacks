@@ -62,7 +62,9 @@ public sealed class MeleeContactRecovery : MonoBehaviour
             }
             body.bodyType = RigidbodyType2D.Dynamic;
             float speed = player ? player.CurrentMoveSpeed : enemyMotion.CurrentMoveSpeed;
-            body.MovePosition(Vector2.MoveTowards(body.position, destination, Mathf.Max(0.5f, speed) * Time.fixedDeltaTime));
+            Vector2 next = Vector2.MoveTowards(body.position, destination, Mathf.Max(0.5f, speed) * Time.fixedDeltaTime);
+            if (enemyMotion) next = enemyMotion.ClampMovementToGate(next, out _);
+            body.MovePosition(next);
             if (player) { player.SetAnimMoving(true); player.FaceLeft(target.transform.position.x < transform.position.x); }
             else { enemyMotion.SetAnimMoving(true); enemy.FaceLeft(target.transform.position.x < transform.position.x); }
             return;

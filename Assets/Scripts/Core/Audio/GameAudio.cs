@@ -120,7 +120,7 @@ public class GameAudio : MonoBehaviour
 
     private void StartMusic()
     {
-        if (!config || !config.gameplayMusic) return;
+        if (!config || !config.enableGameplayMusic || !config.gameplayMusic) return;
 
         music.clip = config.gameplayMusic;
         music.time = 0f;              // every stage starts the track from the top

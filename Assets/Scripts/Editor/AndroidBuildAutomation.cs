@@ -48,12 +48,16 @@ public static class AndroidBuildAutomation
         if (!File.Exists(RequestFile)) return;
 
         File.Delete(RequestFile);
-        // Leave the update callback before the long, blocking build starts.
-        EditorApplication.delayCall += () => Build(false);
+        // ExecuteMenuItem from update also works when the Editor is unfocused;
+        // delayCall previously consumed the request without starting the build.
+        EditorApplication.ExecuteMenuItem(MenuPath);
     }
 
     [MenuItem(MenuPath)]
-    private static void BuildFromMenu() => Build(false);
+    private static void BuildFromMenu() => BuildWithRetries(false);
+
+    [MenuItem("Tools/Build/Build Android APK (Automatic)")]
+    private static void BuildAutomaticFromMenu() => BuildWithRetries(false);
 
     /// <summary>
     /// Entry point for a headless build:
@@ -64,9 +68,28 @@ public static class AndroidBuildAutomation
     /// </summary>
     public static void BuildFromCommandLine()
     {
-        Build(false);
+        BuildWithRetries(false);
         bool ok = File.Exists(ResultFile) && File.ReadAllText(ResultFile).StartsWith("Succeeded");
         EditorApplication.Exit(ok ? 0 : 1);
+    }
+
+    private static void BuildWithRetries(bool development)
+    {
+        const int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            Debug.Log($"[AndroidBuildAutomation] Build attempt {attempt}/{maxAttempts}.");
+            Build(development);
+            string result = File.Exists(ResultFile) ? File.ReadAllText(ResultFile) : string.Empty;
+            if (result.StartsWith("Succeeded")) return;
+
+            // Retrying cannot repair source compilation or a missing AdMob ID.
+            if (attempt == maxAttempts || result.Contains("error CS") ||
+                result.Contains("Compilation failed") || result.Contains("adMobAppId=MISSING"))
+                return;
+
+            Debug.LogWarning("[AndroidBuildAutomation] Build failed; retrying the same settings.");
+        }
     }
 
     public static void Build(bool development)
@@ -125,8 +148,8 @@ public static class AndroidBuildAutomation
     }
 
     /// <summary>
-    /// True if a merged AndroidManifest written by THIS build (Gradle's launcher
-    /// output under Library/Bee/Android) contains the AdMob APPLICATION_ID.
+    /// Check this build's Android manifest. Incremental Gradle builds can reuse
+    /// an older merged-manifest file even when the new APK contains the App ID.
     /// </summary>
     private static bool MergedManifestHasAdMobAppId(System.DateTime buildStartedAtUtc)
     {
@@ -138,7 +161,15 @@ public static class AndroidBuildAutomation
             if (File.GetLastWriteTimeUtc(f) < buildStartedAtUtc) continue;   // stale, from an older build
             if (File.ReadAllText(f).Contains("com.google.android.gms.ads.APPLICATION_ID")) return true;
         }
-        return false;
+
+        // Unity regenerates this source manifest for each build, including when
+        // Gradle reuses its merged-manifest output. AdMobManifestGuard validates
+        // and fills the App ID here before Gradle packages the APK.
+        string generatedManifest = Path.Combine(root, "Prj", "IL2CPP", "Gradle",
+                                                "unityLibrary", "src", "main", "AndroidManifest.xml");
+        return File.Exists(generatedManifest) &&
+               File.GetLastWriteTimeUtc(generatedManifest) >= buildStartedAtUtc &&
+               File.ReadAllText(generatedManifest).Contains("com.google.android.gms.ads.APPLICATION_ID");
     }
 
     private static void ApplyTestSettings(bool development)

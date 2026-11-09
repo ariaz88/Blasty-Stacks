@@ -1,5 +1,6 @@
 // BattlePhaseTransition.cs
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
@@ -96,6 +97,9 @@ public class BattlePhaseTransition : MonoBehaviour
     public bool IsPlaying { get; private set; }
 
     private Sequence sequence;
+    private bool transitionFinished;
+    private readonly List<KeyValuePair<Transform, float>> moveDestinations =
+        new List<KeyValuePair<Transform, float>>();
 
     /// <summary>
     /// The fadeOutAndReturn entries that were actually live when BATTLE was pressed.
@@ -117,6 +121,12 @@ public class BattlePhaseTransition : MonoBehaviour
     public void Play(Action onComplete)
     {
         if (IsPlaying) return;
+        transitionFinished = false;
+        moveDestinations.Clear();
+
+        // The deadline begins with BATTLE, not with the end of the camera tween.
+        // Realtime keeps it independent of a stalled tween or timeScale.
+        StartCoroutine(EnsureBattleBegins(onComplete));
 
         SetActiveAll(showWhenBattleStarts, true);
 
@@ -154,10 +164,49 @@ public class BattlePhaseTransition : MonoBehaviour
         foreach (var t in moveUpTargets)
         {
             if (!t) continue;
-            sequence.Join(t.DOMoveY(t.position.y + TotalMoveUpDistance, duration).SetEase(ease));
+            float destinationY = t.position.y + TotalMoveUpDistance;
+            moveDestinations.Add(new KeyValuePair<Transform, float>(t, destinationY));
+            sequence.Join(t.DOMoveY(destinationY, duration).SetEase(ease));
         }
 
         sequence.OnComplete(() => Finish(onComplete));
+    }
+
+    // Hard deadline: one second beyond the authored camera duration. It runs
+    // even when OnComplete never fires or the normal spawn delay is still waiting.
+    private IEnumerator EnsureBattleBegins(Action onComplete)
+    {
+        yield return new WaitForSecondsRealtime(Mathf.Max(0f, duration) + 1f);
+        if (!LevelGameManager.IsBattleRunning) yield break;
+
+        if (!transitionFinished)
+        {
+            Debug.LogWarning("[BattlePhaseTransition] Camera tween missed the battle deadline; " +
+                             "completing the move now.", this);
+            if (sequence != null && sequence.IsActive()) sequence.Complete(true);
+            if (!transitionFinished)
+            {
+                foreach (var destination in moveDestinations)
+                    if (destination.Key)
+                    {
+                        var position = destination.Key.position;
+                        position.y = destination.Value;
+                        destination.Key.position = position;
+                    }
+                Finish(onComplete);
+            }
+        }
+
+        var spawner = FindObjectOfType<EnemySpawner>(true);
+        if (!spawner || spawner.HasSpawnedFirstEnemy) yield break;
+
+        Debug.LogWarning("[BattlePhaseTransition] No enemy at the battle deadline; " +
+                         "forcing the first wave.", this);
+        var hud = HudCurrencyView.Instance;
+        if (hud && hud.IsGameplayPaused) hud.ResumeGameplay();
+        if (GameplayPause.IsPaused || Time.timeScale <= 0f)
+            GameplayPause.SetPaused(false);
+        spawner.ForceStartFirstWave();
     }
 
     private void ApplyEndStateInstantly()
@@ -184,7 +233,12 @@ public class BattlePhaseTransition : MonoBehaviour
 
     private void Finish(Action onComplete)
     {
+        if (transitionFinished) return;
+        transitionFinished = true;
         IsPlaying = false;
+
+        // Gameplay must start even if activating or fading a HUD object fails.
+        onComplete?.Invoke();
 
         if (hideAfterCameraArrives)
             SetActiveAll(hideWhenBattleStarts, false);
@@ -197,7 +251,6 @@ public class BattlePhaseTransition : MonoBehaviour
         FadeInAndEnable(returningAfterMove, arriveFadeInDuration);
         returningAfterMove.Clear();
 
-        onComplete?.Invoke();
     }
 
     private static void SetActiveAll(GameObject[] objects, bool active)

@@ -55,6 +55,10 @@ public class EnemyLocoMotion : MonoBehaviour
 
     Animator anim;
     MeleeContactRecovery contactRecovery;
+    Collider2D bodyCollider;
+    EdgeCollider2D gateEdge;
+    ContactFilter2D gateContactFilter;
+    readonly RaycastHit2D[] gateHits = new RaycastHit2D[8];
 
     // Side of the target this enemy committed to, +1/-1 (0 = not chosen yet), and
     // the target that choice belongs to. Held so crossing the hero's centre line
@@ -69,6 +73,49 @@ public class EnemyLocoMotion : MonoBehaviour
         if (!enemyRigidbody2D) enemyRigidbody2D = GetComponent<Rigidbody2D>();
         anim = GetComponentInChildren<Animator>();
         contactRecovery = GetComponent<MeleeContactRecovery>();
+        bodyCollider = GetComponent<Collider2D>();
+        gateContactFilter = new ContactFilter2D { useTriggers = false };
+        gateContactFilter.SetLayerMask(1 << LayerMask.NameToLayer("PlayerCastle"));
+    }
+
+    private EdgeCollider2D GateEdge
+    {
+        get
+        {
+            if (!enemyManager || !enemyManager.currentGateTarget ||
+                enemyManager.currentGateTarget.isPlayerGateDestroyed) return null;
+            if (!gateEdge && enemyManager && enemyManager.currentGateTarget)
+                foreach (var edge in enemyManager.currentGateTarget.GetComponentsInChildren<EdgeCollider2D>(true))
+                    if (!edge.isTrigger) { gateEdge = edge; break; }
+            return gateEdge;
+        }
+    }
+
+    /// <summary>Stop the enemy's body at the actual sloped castle edge.</summary>
+    public Vector2 ClampMovementToGate(Vector2 desired, out bool touchedGate)
+    {
+        touchedGate = false;
+        var edge = GateEdge;
+        if (!edge || !edge.enabled || !bodyCollider || !bodyCollider.enabled || !enemyRigidbody2D)
+            return desired;
+
+        Vector2 from = enemyRigidbody2D.position;
+        Vector2 delta = desired - from;
+        float distance = delta.magnitude;
+        if (distance < 0.0001f) return desired;
+
+        Vector2 direction = delta / distance;
+        int count = bodyCollider.Cast(direction, gateContactFilter, gateHits, distance + 0.02f);
+        for (int i = 0; i < count; i++)
+        {
+            var hit = gateHits[i];
+            if (hit.collider != edge || hit.distance > distance + 0.005f) continue;
+            // A body already touching the edge may still move away or along it.
+            if (hit.distance < 0.001f && Vector2.Dot(direction, hit.normal) >= -0.001f) continue;
+            touchedGate = true;
+            return from + direction * Mathf.Max(0f, hit.distance - 0.005f);
+        }
+        return desired;
     }
 
     /// <summary>
@@ -195,8 +242,8 @@ public class EnemyLocoMotion : MonoBehaviour
                 if (Vector2.Distance(pos, stop) > 0.05f)
                 {
                     enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
-                    enemyRigidbody2D.MovePosition(
-                        Vector2.MoveTowards(pos, stop, CurrentMoveSpeed * Time.fixedDeltaTime));
+                    Vector2 returnStep = Vector2.MoveTowards(pos, stop, CurrentMoveSpeed * Time.fixedDeltaTime);
+                    enemyRigidbody2D.MovePosition(ClampMovementToGate(returnStep, out _));
                     SetAnimMoving(true);
                 }
                 else
@@ -236,6 +283,7 @@ public class EnemyLocoMotion : MonoBehaviour
             // stripping would leave exactly those fights deadlocked.
             Vector2 heroPos = currentTarget.transform.position;
             Vector2 step = Vector2.MoveTowards(pos, heroPos, CurrentMoveSpeed * Time.fixedDeltaTime);
+            step = ClampMovementToGate(step, out _);
 
             if (Vector2.Distance(step, enemyManager.gateStopPosition) <= baseApproachLeash)
             {
@@ -273,8 +321,12 @@ public class EnemyLocoMotion : MonoBehaviour
             // to chase one that has passed it. Rather than cancelling the whole step,
             // only the BACKWARD COMPONENT is removed: the lateral part survives, so
             // the enemy still slides across to a hero beside it, and a hero directly
-            // behind simply produces no movement at all.
-            next = StripBackwardMotion(pos, next);
+            // behind simply produces no movement at all. The only exception is
+            // a nearby hero at this enemy's own castle entrance.
+            if (enemyManager == null || !enemyManager.CanDefendOwnGate(currentTarget))
+                next = StripBackwardMotion(pos, next);
+
+            next = ClampMovementToGate(next, out _);
 
             if ((next - pos).sqrMagnitude <= 1e-8f)
             {
@@ -301,10 +353,9 @@ public class EnemyLocoMotion : MonoBehaviour
                 transform.position
             );
 
-            if (!enemyManager.reachedGate && gateDist <= enemyManager.gateStopDistance)
+            if (!enemyManager.reachedGate && !GateEdge && gateDist <= enemyManager.gateStopDistance)
             {
-                enemyManager.reachedGate = true;
-                enemyManager.gateStopPosition = enemyRigidbody2D.position;
+                enemyManager.ReachPlayerGate(enemyRigidbody2D.position);
 
                 enemyRigidbody2D.bodyType = RigidbodyType2D.Kinematic;
                 SetAnimMoving(false);
@@ -316,10 +367,17 @@ public class EnemyLocoMotion : MonoBehaviour
             {
                 Vector2 dir = -(Vector2)transform.up;
                 Vector2 next = pos + dir * CurrentMoveSpeed * Time.fixedDeltaTime;
+                next = ClampMovementToGate(next, out bool touchedGate);
+
+                if (touchedGate)
+                {
+                    enemyManager.ReachPlayerGate(next);
+                    SetAnimMoving(false);
+                }
+                else SetAnimMoving(true);
 
                 enemyRigidbody2D.bodyType = RigidbodyType2D.Dynamic;
                 enemyRigidbody2D.MovePosition(next);
-                SetAnimMoving(true);
                 return;
             }
 

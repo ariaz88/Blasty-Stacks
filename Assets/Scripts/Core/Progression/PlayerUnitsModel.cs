@@ -204,6 +204,17 @@ public class PlayerUnitsModel
             _byId[copy.unitId] = copy;
         }
     }
+    /// <summary>Restore saved progress while retaining definitions added after that save.</summary>
+    public void MergeSavedStates(IEnumerable<UnitState> saved)
+    {
+        if (saved == null) return;
+        foreach (var state in saved)
+        {
+            if (state == null || state.unitId < 0) continue;
+            _byId[state.unitId] = new UnitState(state.unitId, state.unlocked,
+                                              state.level, state.isDeployed && state.unlocked);
+        }
+    }
     // NEW: Export to serializable SaveData entries (public for access from GameStartManager)
     public List<SaveData.UnitStateEntry> ToSavedEntries()
     {

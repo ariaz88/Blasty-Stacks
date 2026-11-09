@@ -146,6 +146,7 @@ public class EnemyManager : MonoBehaviour
 
     RigidbodyType2D initialBodyType;
     EnemyLocoMotion enemyLocoMotion;
+    EnemySpawner ownGateSpawner;
     EnemyAnimatorManager enemyAnimationManager;
     PlayerStats playerStats;
     EnemyStats enemyStats;
@@ -210,6 +211,22 @@ public class EnemyManager : MonoBehaviour
         return Vector2.Dot(toTarget, MarchDirection) < -behindTolerance;
     }
 
+    // Only at the enemy castle entrance may an enemy turn back to intercept a
+    // hero. Both units must be in the short entrance band and within this
+    // enemy's normal engagement distance; the player-base rule stays untouched.
+    private bool IsNearOwnGate() =>
+        ownGateSpawner && Mathf.Abs(transform.position.y - ownGateSpawner.EntranceY) <= 2.5f;
+
+    public bool CanDefendOwnGate(PlayerStats hero)
+    {
+        if (!hero || !enemyLocoMotion || !IsNearOwnGate()) return false;
+        float entranceY = ownGateSpawner.EntranceY;
+        const float entranceBand = 2.5f;
+        return Mathf.Abs(hero.transform.position.y - entranceY) <= entranceBand &&
+               Vector2.Distance(transform.position, hero.transform.position) <=
+                   enemyLocoMotion.fairDistanceToPlayer;
+    }
+
     /// <summary>
     /// The one hero this enemy will turn round for: whoever last hit it. It still
     /// does not WALK backwards - see EnemyLocoMotion.HandleMoveToTarget, which strips
@@ -238,6 +255,41 @@ public class EnemyManager : MonoBehaviour
     public bool reachedGate = false;      // true after first contact with gate
     public Vector2 gateStopPosition;      // where THIS enemy stopped at the gate
     public float gateStopDistance = 0.6f; // tweak in Inspector
+    public bool IsAttackingGate => reachedGate && attackPlayerGate && currentGateTarget &&
+        (!enemyLocoMotion || !StillFightable(enemyLocoMotion.currentTarget));
+    SpriteRenderer[] gateDepthSprites;
+    int[] gateDepthOriginalOrders;
+    bool behindPlayerGate;
+
+    void SetBehindPlayerGate(bool behind)
+    {
+        if (behindPlayerGate == behind) return;
+        if (gateDepthSprites == null)
+        {
+            gateDepthSprites = GetComponentsInChildren<SpriteRenderer>(true);
+            gateDepthOriginalOrders = new int[gateDepthSprites.Length];
+            for (int i = 0; i < gateDepthSprites.Length; i++)
+                gateDepthOriginalOrders[i] = gateDepthSprites[i].sortingOrder;
+        }
+        behindPlayerGate = behind;
+        // The castle's SortingGroup is at -5; keep every body part below it,
+        // retaining the relative order within this enemy and its HP UI above it.
+        for (int i = 0; i < gateDepthSprites.Length; i++)
+            if (gateDepthSprites[i])
+                gateDepthSprites[i].sortingOrder = gateDepthOriginalOrders[i] - (behind ? 8 : 0);
+    }
+
+    public void ReachPlayerGate(Vector2 stopPosition)
+    {
+        if (!currentGateTarget || currentGateTarget.isPlayerGateDestroyed) return;
+        attackPlayerGate = true;
+        if (!reachedGate)
+        {
+            reachedGate = true;
+            gateStopPosition = stopPosition;
+            SetBehindPlayerGate(true);
+        }
+    }
 
     [SerializeField] private float facingDeadZoneX = 0.05f; // prevents micro jitter
     private bool facingLockedToPlayer;
@@ -283,6 +335,7 @@ public class EnemyManager : MonoBehaviour
     void Awake()
     {
         enemyLocoMotion = GetComponent<EnemyLocoMotion>();
+        ownGateSpawner = FindObjectOfType<EnemySpawner>();
         enemyAnimationManager = GetComponentInChildren<EnemyAnimatorManager>();
         playerStats = GameObject.FindObjectOfType<PlayerStats>();
         enemyStats = GetComponent<EnemyStats>();
@@ -542,7 +595,7 @@ public class EnemyManager : MonoBehaviour
 
 
     /// <summary>
-    /// Picks the hero this enemy fights - and then KEEPS IT.
+    /// Picks the hero this enemy fights and keeps it outside the enemy castle.
     ///
     /// THE BUG THIS FIXES (reported 2026-09-12, 4v4 and 5v5). This runs in Update, so
     /// it ran EVERY FRAME and every frame it overwrote currentTarget with whatever was
@@ -561,9 +614,9 @@ public class EnemyManager : MonoBehaviour
     /// to reach the one it locked onto. In this game's lane layout the two armies meet
     /// as a group, so that is rare; the alternative is the spinning.
     ///
-    /// The lock never blocks a re-acquire that matters: ResetAfterRevive clears
-    /// currentTarget before calling this, and a dead, despawned or undeployed hero
-    /// releases it below.
+    /// At the enemy castle entrance a clearly nearer hero may take priority,
+    /// including one slightly behind the enemy. ResetAfterRevive clears the lock;
+    /// a dead, despawned or undeployed hero releases it below.
     /// </summary>
     void DetectPlayerTargets()
     {
@@ -587,16 +640,27 @@ public class EnemyManager : MonoBehaviour
         // is still within attack reach (finish the fight you are already in) or when
         // it is the hero that just hit us (retaliation - handled in place, no walking).
         var locked = enemyLocoMotion.currentTarget;
-        if (StillFightable(locked))
+        bool lockedValid = StillFightable(locked);
+        bool defendingLocked = lockedValid && CanDefendOwnGate(locked);
+        bool compareNearest = IsNearOwnGate();
+        bool retainLocked = lockedValid;
+        if (lockedValid)
         {
             bool abandonedBehind =
                 IsBehind(locked.transform.position) &&
                 !IsRetaliationTarget(locked) &&
+                !defendingLocked &&
                 !enemyLocoMotion.IsInAttackPosition();
 
-            if (!abandonedBehind) return;
+            // At our own entrance, prefer a clearly nearer hero. Elsewhere keep
+            // the existing hard target lock so units do not spin between targets.
+            if (!abandonedBehind && !compareNearest) return;
 
-            enemyLocoMotion.currentTarget = null;   // fall through: re-acquire or march on
+            if (abandonedBehind)
+            {
+                enemyLocoMotion.currentTarget = null;
+                retainLocked = false;
+            }
         }
 
         float engage = enemyLocoMotion.fairDistanceToPlayer;
@@ -612,8 +676,9 @@ public class EnemyManager : MonoBehaviour
         // this is seen but not committed to, so the enemy keeps walking on the base.
         Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, engage, mask);
 
-        float bestDist = float.MaxValue;
-        PlayerStats best = null;
+        float bestDist = retainLocked ?
+            Vector2.Distance(locked.transform.position, transform.position) : float.MaxValue;
+        PlayerStats best = retainLocked ? locked : null;
 
         for (int i = 0; i < hits.Length; i++)
         {
@@ -623,10 +688,11 @@ public class EnemyManager : MonoBehaviour
             // Only heroes IN FRONT or TO EITHER SIDE are worth committing to. One that
             // has already passed this enemy is skipped, unless it is the hero that
             // just hit us - and even then the enemy fights it in place, never walks back.
-            if (IsBehind(ps.transform.position) && !IsRetaliationTarget(ps)) continue;
+            if (IsBehind(ps.transform.position) && !IsRetaliationTarget(ps) &&
+                !CanDefendOwnGate(ps)) continue;
 
             float d = Vector2.Distance(ps.transform.position, transform.position);
-            if (d <= engage && d < bestDist)
+            if (d <= engage && d < bestDist - (retainLocked ? 0.15f : 0f))
             {
                 bestDist = d;
                 best = ps;
@@ -848,6 +914,7 @@ public class EnemyManager : MonoBehaviour
         attackPlayerGate = false;
         currentGateTarget = null;
         reachedGate = false;
+        SetBehindPlayerGate(false);
 
         if (enemyLocoMotion != null)
             enemyLocoMotion.SetAnimMoving(false);
@@ -878,16 +945,18 @@ public class EnemyManager : MonoBehaviour
     void HandleGateTrigger(PlayerGateStats gate)
     {
         if (gate == null) return;
-
-        attackPlayerGate = true;
         currentGateTarget = gate;
+        if (enemyLocoMotion != null && enemyLocoMotion.enemyRigidbody2D != null)
+            ReachPlayerGate(enemyLocoMotion.enemyRigidbody2D.position);
+    }
+    void OnCollisionEnter2D(Collision2D collision) => HandleGateEdgeCollision(collision);
+    void OnCollisionStay2D(Collision2D collision) => HandleGateEdgeCollision(collision);
 
-        // First time we touch the gate: remember this position as stop threshold
-        if (!reachedGate && enemyLocoMotion != null && enemyLocoMotion.enemyRigidbody2D != null)
-        {
-            reachedGate = true;
-            gateStopPosition = enemyLocoMotion.enemyRigidbody2D.position;
-        }
+    void HandleGateEdgeCollision(Collision2D collision)
+    {
+        if (!(collision.collider is EdgeCollider2D)) return;
+        var gate = collision.collider.GetComponentInParent<PlayerGateStats>();
+        if (gate) HandleGateTrigger(gate);
     }
     void OnTriggerEnter2D(Collider2D collision)
     {
@@ -1018,6 +1087,7 @@ public class EnemyManager : MonoBehaviour
 
         attackPlayerGate = false;
         reachedGate = false;
+        SetBehindPlayerGate(false);
 
         // 1) Reconnect to the PlayerGate on revive
         //    (this is your "search for PlayerGate" on revive)

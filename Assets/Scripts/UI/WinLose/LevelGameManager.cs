@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 
 public class LevelGameManager : MonoBehaviour
@@ -101,6 +102,19 @@ public class LevelGameManager : MonoBehaviour
 
     // Unscaled timestamp before which the wipe check is skipped entirely.
     private float suppressStalemateUntil;
+    private bool leavingStage;
+
+    /// <summary>Abandon the current stage without recording a win or loss.</summary>
+    public void ReturnToHomeMenu()
+    {
+        if (leavingStage) return;
+        leavingStage = true;
+
+        if (HudCurrencyView.Instance && HudCurrencyView.Instance.IsGameplayPaused)
+            HudCurrencyView.Instance.ResumeGameplay();
+        GameplayPause.SetPaused(false);
+        SceneManager.LoadScene("MenuScene", LoadSceneMode.Single);
+    }
 
     private void Awake()
     {

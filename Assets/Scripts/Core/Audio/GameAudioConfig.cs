@@ -12,6 +12,8 @@ public class GameAudioConfig : ScriptableObject
     public const string ResourcePath = "Audio/GameAudioConfig";
 
     [Header("Gameplay music (stages only - never in menus)")]
+    [Tooltip("Enable the background music loop in every stage.")]
+    public bool enableGameplayMusic = false;
     public AudioClip gameplayMusic;
     [Range(0f, 1f)] public float musicVolume = 0.35f;
     [Min(0f)] public float musicFadeIn = 0.6f;

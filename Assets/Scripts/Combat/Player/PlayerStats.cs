@@ -5,6 +5,7 @@ public class PlayerStats : CharacterStats
     public PlayerManager PlayerManager;
     public HealthBar healthBar;
     public bool playerIsdead;
+    private SpriteHitFlash hitFlash;
 
     /// <summary>Live defence, so upgrades move this hero up the toughness band.</summary>
     protected override float Defense =>
@@ -12,6 +13,7 @@ public class PlayerStats : CharacterStats
     private void Awake()
     {
         PlayerManager = GetComponent<PlayerManager>();
+        hitFlash = SpriteHitFlash.GetOrAdd(gameObject);
     }
     void Start()
     {
@@ -32,6 +34,7 @@ public class PlayerStats : CharacterStats
     public void ApplyDamageToPlayer(float damageAmount, EnemyManager attacker = null)
     {
         damageAmount = ClampIncomingBlow(damageAmount, attacker);
+        if (damageAmount > 0f && currentHP > 0f && !playerIsdead) hitFlash.Play();
         CPBattleController.ReportBlow(this, damageAmount, attacker);   // observation only
         SetResolvedHealth(Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount)));
     }

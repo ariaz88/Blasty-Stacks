@@ -202,6 +202,7 @@ MonoBehaviour:
   trailHoldSeconds: 0.18
   trailDrainPerSecond: 0.9
   trailFadeSeconds: 0.12
+  keepConstantWorldSize: 1
   hideUntilBattleStarts: 1
 --- !u!1 &2554586023170806215
 GameObject:
@@ -467,6 +468,7 @@ GameObject:
   - component: {fileID: 5617061889932992670}
   - component: {fileID: 8233716972335303008}
   - component: {fileID: 434060991230778277}
+  - component: {fileID: 4190061203813855465}
   m_Layer: 6
   m_Name: Enemy_Goblin
   m_TagString: Enemy
@@ -662,6 +664,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 848dae37a10c6a1448df8fba6c340e13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &4190061203813855465
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4714412719170706292}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 606e74b7904ee694f866c91e24c2f61e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SpriteHitFlash
+  targets:
+  - {fileID: 6574443274990772411}
+  - {fileID: 6575249572306951889}
+  - {fileID: 6574355567125192111}
+  - {fileID: 6573689138876617939}
+  - {fileID: 6574191269771172843}
+  - {fileID: 6574304434441449407}
+  - {fileID: 6574174380362019665}
+  - {fileID: 6574598658027269789}
+  - {fileID: 6574319420018737423}
+  - {fileID: 6574508729080143899}
+  flashColor: {r: 1, g: 1, b: 1, a: 1}
+  duration: 0.12
+  holdDuration: 0.025
+  intensity: 1
 --- !u!1 &4842175931232832484
 GameObject:
   m_ObjectHideFlags: 0

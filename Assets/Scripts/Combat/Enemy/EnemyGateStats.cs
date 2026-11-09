@@ -10,6 +10,7 @@ public class EnemyGateStats : CharacterStats
     public EnemyManager enemyManager;
     public HealthBar healthBar;
     public bool isDestroyed;
+    private CastleHitReaction hitReaction;
 
     public Transform EnemyOffsetLeft;
     public Transform EnemyOffsetRight;
@@ -19,6 +20,7 @@ public class EnemyGateStats : CharacterStats
     private void Awake()
     {
         enemyManager = GetComponent<EnemyManager>();
+        hitReaction = CastleHitReaction.GetOrAdd(gameObject);
     }
 
     private void Start()
@@ -52,6 +54,7 @@ public class EnemyGateStats : CharacterStats
         if (isDestroyed)
             return;
 
+        if (damageAmount > 0f && currentHP > 0f) hitReaction.Play();
         currentHP = Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount));
         if (baseTxt) baseTxt.text = Mathf.FloorToInt(currentHP).ToString();
 

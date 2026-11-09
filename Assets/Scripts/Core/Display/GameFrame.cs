@@ -108,6 +108,11 @@ public class GameFrame : MonoBehaviour
 
     private void Awake()
     {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        // Keep the display awake throughout the app, including menus and pauses.
+        Screen.sleepTimeout = SleepTimeout.NeverSleep;
+#endif
+
         // The bars camera clears the WHOLE screen to black before the game's
         // cameras draw into their centred viewport. It renders no layers.
         barsCamera = gameObject.AddComponent<Camera>();
@@ -128,8 +133,25 @@ public class GameFrame : MonoBehaviour
 
     private void OnDestroy()
     {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        Screen.sleepTimeout = SleepTimeout.SystemSetting;
+#endif
         SceneManager.sceneLoaded -= HandleSceneLoaded;
         if (instance == this) instance = null;
+    }
+
+    private void OnApplicationPause(bool paused)
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        Screen.sleepTimeout = paused ? SleepTimeout.SystemSetting : SleepTimeout.NeverSleep;
+#endif
+    }
+
+    private void OnApplicationFocus(bool focused)
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        if (focused) Screen.sleepTimeout = SleepTimeout.NeverSleep;
+#endif
     }
 
     private void HandleSceneLoaded(Scene scene, LoadSceneMode mode) => Apply(force: true);

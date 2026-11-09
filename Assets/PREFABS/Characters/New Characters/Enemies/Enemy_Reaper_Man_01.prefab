@@ -719,6 +719,7 @@ GameObject:
   - component: {fileID: 415443907802284971}
   - component: {fileID: 5790015690467145779}
   - component: {fileID: 8260539330298790473}
+  - component: {fileID: 1057996939812655606}
   m_Layer: 6
   m_Name: Enemy_Reaper_Man_01
   m_TagString: Enemy
@@ -935,6 +936,33 @@ MonoBehaviour:
   replacedRenderers:
   - {fileID: 4405796425153008036}
   poolSize: 3
+--- !u!114 &1057996939812655606
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4367385366119628093}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 606e74b7904ee694f866c91e24c2f61e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SpriteHitFlash
+  targets:
+  - {fileID: 4958904995126037150}
+  - {fileID: 7458620950843869096}
+  - {fileID: 5390162489248126588}
+  - {fileID: 9077258484987959364}
+  - {fileID: 4206028289236743888}
+  - {fileID: 7570502014358110470}
+  - {fileID: 312887260442082531}
+  - {fileID: 5074995010743557555}
+  - {fileID: 7253142286674979765}
+  - {fileID: 8318214764822345477}
+  flashColor: {r: 1, g: 1, b: 1, a: 1}
+  duration: 0.12
+  holdDuration: 0.025
+  intensity: 1
 --- !u!1 &4906258336897589582
 GameObject:
   m_ObjectHideFlags: 0

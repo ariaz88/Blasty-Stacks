@@ -295,6 +295,7 @@ GameObject:
   - component: {fileID: 2235647850721164288}
   - component: {fileID: 791063420489333820}
   - component: {fileID: 8525318368817141909}
+  - component: {fileID: 7830518913199065629}
   m_Layer: 6
   m_Name: Enemy_Orc
   m_TagString: Enemy
@@ -491,6 +492,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 848dae37a10c6a1448df8fba6c340e13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &7830518913199065629
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3282131553736139674}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 606e74b7904ee694f866c91e24c2f61e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SpriteHitFlash
+  targets:
+  - {fileID: 794467949636320771}
+  - {fileID: 794510053878990755}
+  - {fileID: 794870490576629803}
+  - {fileID: 794494729604404661}
+  - {fileID: 794583508218128315}
+  - {fileID: 794410057391141109}
+  - {fileID: 793875152392380351}
+  - {fileID: 794569346680837221}
+  - {fileID: 794794550602519949}
+  - {fileID: 794473871416995871}
+  flashColor: {r: 1, g: 1, b: 1, a: 1}
+  duration: 0.12
+  holdDuration: 0.025
+  intensity: 1
 --- !u!1 &4187477987760487984
 GameObject:
   m_ObjectHideFlags: 0
@@ -1171,5 +1199,55 @@ MonoBehaviour:
 --- !u!4 &718948264133581001 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4236512666804958, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
+  m_PrefabInstance: {fileID: 717544273004182039}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &793875152392380351 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212042502543041960, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
+  m_PrefabInstance: {fileID: 717544273004182039}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &794410057391141109 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212642293558823650, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
+  m_PrefabInstance: {fileID: 717544273004182039}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &794467949636320771 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212723420805645332, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
+  m_PrefabInstance: {fileID: 717544273004182039}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &794473871416995871 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212710901942585864, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
+  m_PrefabInstance: {fileID: 717544273004182039}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &794494729604404661 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212696167869984674, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
+  m_PrefabInstance: {fileID: 717544273004182039}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &794510053878990755 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212672048037150132, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
+  m_PrefabInstance: {fileID: 717544273004182039}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &794569346680837221 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212753483576962674, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
+  m_PrefabInstance: {fileID: 717544273004182039}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &794583508218128315 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212750875515297196, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
+  m_PrefabInstance: {fileID: 717544273004182039}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &794794550602519949 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212399087030628250, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
+  m_PrefabInstance: {fileID: 717544273004182039}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &794870490576629803 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212452898561657404, guid: 29ccc20b07a6f28429cd155fe70916fd, type: 3}
   m_PrefabInstance: {fileID: 717544273004182039}
   m_PrefabAsset: {fileID: 0}

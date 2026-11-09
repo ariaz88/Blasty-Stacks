@@ -132,6 +132,7 @@ public class HeroDeploymentSequencer : MonoBehaviour
 
     private void HandleBattleStarted()
     {
+        if (!GameStartManager.IsStageBootReady) return;
         if (stopped) return;
 
         if (startRoutine != null) StopCoroutine(startRoutine);

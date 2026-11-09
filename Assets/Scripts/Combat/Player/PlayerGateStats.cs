@@ -9,6 +9,7 @@ public class PlayerGateStats : CharacterStats
     public PlayerManager playerManager;
     public HealthBar healthBar;
     public bool isPlayerGateDestroyed;
+    private CastleHitReaction hitReaction;
     [SerializeField] TextMeshProUGUI baseTxt;
 
    
@@ -16,6 +17,7 @@ public class PlayerGateStats : CharacterStats
     private void Awake()
     {
         playerManager = GetComponent<PlayerManager>();
+        hitReaction = CastleHitReaction.GetOrAdd(gameObject);
     }
     void Start()
     {
@@ -52,6 +54,7 @@ public class PlayerGateStats : CharacterStats
         {
             return;
         }
+        if (damageAmount > 0f && currentHP > 0f) hitReaction.Play();
         currentHP = Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount));
         if (baseTxt) baseTxt.text = Mathf.FloorToInt(currentHP).ToString();
         if (healthBar) healthBar.SetCurrentHealth(currentHP, maxHealth);

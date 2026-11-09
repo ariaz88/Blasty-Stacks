@@ -246,7 +246,7 @@ public class PieceHighlightDirector : MonoBehaviour
         for (int i = 0; i < all.Length; i++)
         {
             var p = all[i];
-            if (!p || p == held) continue;
+            if (!p || p == held || !p.IsPlaced) continue;
             if (p.ColorId != held.ColorId) continue;
             if (!MatchResolver.AreShapesMatchCompatible(p.ShapeId, held.ShapeId)) continue;
 

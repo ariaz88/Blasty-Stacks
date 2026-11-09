@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 679904d5bb5893f40bb909aeea731e34, type: 3}
   m_Name: GameAudioConfig
   m_EditorClassIdentifier: Assembly-CSharp::GameAudioConfig
+  enableGameplayMusic: 0
   gameplayMusic: {fileID: 8300000, guid: b9a96794c9db8554ab46bcc381fc83b3, type: 3}
   musicVolume: 0.15
   musicFadeIn: 0.6

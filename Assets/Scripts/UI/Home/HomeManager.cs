@@ -181,6 +181,7 @@ public class HomeManager : MonoBehaviour
 
         // Ensure save record for this level exists and is sized
         SaveSystem.EnsureLevel(levelId, stagesPerLevel);
+        RepairClaimedStageUnlock();
 
         // Build card strip if needed and initialize card labels/indexes
         pager.BuildIfNeeded();
@@ -403,11 +404,13 @@ public class HomeManager : MonoBehaviour
 
         int idx0 = Mathf.Max(0, stage1 - 1);
 
-        int stars = Hp01ToStars(hp01);   // ✅ CORRECT conversion
+        // Winning is worth at least one star, even if both gates reach zero
+        // during the same frame and the player's HP reads as zero here.
+        int stars = Mathf.Max(1, Hp01ToStars(hp01));
 
         // MUST be read before RecordStageResult - see LastWinWasFirstClear.
-        // A win always scores at least 1 star (the gate survived), so "no stars
-        // yet" is a reliable "never cleared before".
+        // A win always scores at least 1 star, so "no stars yet" is a reliable
+        // "never cleared before" check, including a same-frame gate trade.
         LastWinWasFirstClear = SaveSystem.GetStars(levelId, idx0) <= 0;
 
         SaveSystem.RecordStageResult(levelId, idx0, stars);
@@ -415,6 +418,20 @@ public class HomeManager : MonoBehaviour
 
         // queue the next stage to be selected on Home
         QueueSelectStage1Based(stage1 + 1);
+    }
+
+    private void RepairClaimedStageUnlock()
+    {
+        if (!LevelManager.Instance || LevelManager.CurrentLevelIndex != levelId) return;
+
+        int highestUnlocked = SaveSystem.GetHighestUnlocked(levelId);
+        // Claim advances LevelManager to the next stage. Older builds could
+        // record a zero-star win at zero HP, leaving SaveSystem one stage behind.
+        if (highestUnlocked >= stagesPerLevel - 1 ||
+            LevelManager.CurrentStageIndexInLevel != highestUnlocked + 2 ||
+            SaveSystem.GetStars(levelId, highestUnlocked) > 0) return;
+
+        SaveSystem.RecordStageResult(levelId, highestUnlocked, 1);
     }
 
 

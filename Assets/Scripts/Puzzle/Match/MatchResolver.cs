@@ -555,6 +555,7 @@ public class MatchResolver : MonoBehaviour
             yield return null; // one frame per step
         }
 
+        mover.ReleaseFromBoard();
         target.ReleaseFromBoard();
         OnBlast?.Invoke(1);
 

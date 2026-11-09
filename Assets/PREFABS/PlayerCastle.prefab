@@ -219,6 +219,7 @@ MonoBehaviour:
   trailHoldSeconds: 0.18
   trailDrainPerSecond: 0.9
   trailFadeSeconds: 0.12
+  keepConstantWorldSize: 1
   hideUntilBattleStarts: 0
 --- !u!1 &1154138065044739229
 GameObject:
@@ -995,6 +996,8 @@ GameObject:
   - component: {fileID: 6640926084429039380}
   - component: {fileID: 4486337266470592126}
   - component: {fileID: 8094160699036301628}
+  - component: {fileID: 1253229331706563391}
+  - component: {fileID: 5335374283658755385}
   m_Layer: 9
   m_Name: PlayerCastle
   m_TagString: PlayerGate
@@ -1134,13 +1137,11 @@ MonoBehaviour:
   moveSpeed: 0.5
   canMove: 0
   isUnlocked: 0
-  marchSpeedBoost: 1.3
   actualMoveSpeed: 0
   intendedMoveSpeed: 0
   forwardProgress: 0
   isFormationStepping: 0
   faceCenterOnStart: 1
-  retargetHysteresis: 0.2
   anchorSwitchHysteresis: 0.3
   facingDeadZoneX: 0.12
   enemyIsInLeft: 0
@@ -1180,6 +1181,40 @@ MonoBehaviour:
   unitsDatabase: {fileID: 11400000, guid: 1eead485eb9802f4c8d136eaf6de630f, type: 2}
   progressionConfig: {fileID: 11400000, guid: 3665f1da392e42549934aab9a641a619, type: 2}
   unitId: 0
+--- !u!114 &1253229331706563391
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5115576676685647400}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 606e74b7904ee694f866c91e24c2f61e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SpriteHitFlash
+  targets:
+  - {fileID: 8973796651068744015}
+  - {fileID: 1785755493889530387}
+  flashColor: {r: 1, g: 1, b: 1, a: 1}
+  duration: 0.12
+  holdDuration: 0.025
+  intensity: 1
+--- !u!114 &5335374283658755385
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5115576676685647400}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ae48cca6fe4eac4aae3a02c52ea5964, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CastleHitReaction
+  duration: 0.3
+  squash: 0.045
+  shakeWidthFraction: 0.004
 --- !u!1 &5749420216774823120
 GameObject:
   m_ObjectHideFlags: 0

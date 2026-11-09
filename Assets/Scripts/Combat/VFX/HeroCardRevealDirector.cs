@@ -20,21 +20,13 @@ using UnityEngine.UI;
 /// heroes anything gets - it renders whatever PlayerWaveManager.HeroesEarned hands
 /// it. Deployment of those heroes into the battle is a separate, later step.
 ///
-/// THE BEATS  (authored in seconds; Ref1 frame numbers in brackets)
-/// ---------------------------------------------------------------
-///   0.00-0.18  cards fly in from above and gather, FACE DOWN, at the left  [fr.1-3]
-///   0.18-0.34  each card flips to its real hero portrait (staggered)
-///   0.34-0.62  they fan out along a shallow arc to centre, face up         [fr.3-9]
-///   0.62-0.86  the fan holds - this is the beat the player actually reads
-///   0.86-1.00  cards collapse back into one stack at centre                [fr.9-11]
-///   1.00-1.06  white flash                                                 [fr.12]
-///   1.06-1.20  resolves to ONE teal-glowing card, back to "?"              [fr.13]
-///   1.20-1.55  the glow holds                                              [fr.15-22]
-///   1.55-1.80  fade out
+/// THE BEATS
+/// ---------
+///   Cards rise face down and gather at the left, then flip to their portraits.
+///   They fan out at centre, hold for reading, and collapse into one stack.
+///   The face-up stack fades out.
 ///
-/// Ref1 itself is 1.11s and ends holding the glow; the flip and the read-hold are
-/// additions this game needs, since unlike the reference these cards have to tell
-/// the player WHICH heroes were earned.
+/// The flip and read-hold let the player see which heroes were earned.
 ///
 /// SELF-BOOTSTRAPPING: like ShardBurst, there is nothing to wire in a scene. It
 /// installs itself after every scene load and subscribes to the static event.
@@ -48,8 +40,8 @@ public class HeroCardRevealDirector : MonoBehaviour
     /// is a multiple of it, so scaling it keeps the beats in proportion and keeps
     /// the absolute timestamp (THoldEnd) consistent with the durations.
     ///
-    /// 1.0 is the timing taken straight off Ref1 (a 1.80s single-card run). 1.0833
-    /// is where the 1.95s run asked for after the first play-test put it.
+    /// 1.0833 preserves the pace chosen after the first play-test. Removing
+    /// the final flash and glow shortens the total without retiming other beats.
     ///
     /// !! THE TOTAL RUN IS REPORTED, NOT PINNED. An earlier version derived Tempo
     /// from a target total, which meant shortening any ONE beat silently STRETCHED
@@ -66,12 +58,7 @@ public class HeroCardRevealDirector : MonoBehaviour
     private const float TFanDur = 0.28f * Tempo;
     private const float THoldEnd = 0.86f * Tempo;
     private const float TCollapseDur = 0.14f * Tempo;
-    private const float TFlashDur = 0.06f * Tempo;
-    private const float TGlowIn = 0.14f * Tempo;
-    private const float TGlowHold = 0.35f * Tempo;
-    // 30% shorter than the 0.25 taken off Ref1: the teal card's fade read as
-    // dragging against the pace of everything before it. Only this beat changed -
-    // every other duration is untouched, so the total simply gets shorter.
+    // Fade the face-up stack immediately after it gathers at centre.
     private const float TFadeOut = 0.175f * Tempo;
 
     // ---------------------------------------------------------------- layout
@@ -117,23 +104,13 @@ public class HeroCardRevealDirector : MonoBehaviour
     /// <summary>Portrait size as a fraction of the card. Under 1 to leave the frame visible.</summary>
     private const float PortraitFillFraction = 0.80f;
 
-    private static readonly Color TealGlow = new Color32(0x38, 0xE1, 0xF0, 0xFF);
-    private static readonly Color TealCard = new Color32(0x7C, 0xEC, 0xF7, 0xFF);
-
     private static HeroCardRevealDirector instance;
 
     /// <summary>
     /// True from the first card rising to the last frame of the fade.
     ///
-    /// BoardInputController checks this and refuses to pick up a piece while it is
-    /// true: a match is what triggers the deal, so without the gate the player can
-    /// immediately drag another stack and start a second match underneath the
-    /// cards - which both hides the reward and stacks two deals on top of each
-    /// other.
-    ///
-    /// Static because the board has no reason to hold a reference to a VFX object,
-    /// and it is set in a finally-equivalent path so an interrupted deal can never
-    /// leave the board permanently frozen.
+    /// Tracks the full reward queue while cards are being shown. Board movement
+    /// remains available; new rewards join the queue and play in order.
     /// </summary>
     public static bool IsDealing { get; private set; }
 
@@ -143,7 +120,6 @@ public class HeroCardRevealDirector : MonoBehaviour
     private RectTransform stage;
 
     private readonly List<CardView> pool = new();
-    private Image flash;
     private Coroutine playing;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -173,10 +149,7 @@ public class HeroCardRevealDirector : MonoBehaviour
         // receiving deals across scene loads.
         PlayerWaveManager.HeroesEarned -= HandleHeroesEarned;
 
-        // !! MANDATORY. IsDealing is static and gates board input. A deal
-        // interrupted here - scene change, level end, the object being destroyed
-        // mid-animation - would otherwise leave it true forever and the player
-        // could never touch the board again.
+        // Clear presentation state if a scene change interrupts a deal.
         playing = null;
         IsDealing = false;
 
@@ -220,10 +193,8 @@ public class HeroCardRevealDirector : MonoBehaviour
         // and the second award lands roughly 0.75s into the first deal - well
         // before it ends.
         //
-        // The board-input gate does not prevent this, because both matches came
-        // from a placement that had already resolved. Cancelling therefore threw
-        // away the first match's cards mid-animation and the player never saw
-        // what that match earned. Queueing shows every match's reward in order.
+        // New matches can also arrive while a deal is playing. Queueing shows
+        // every match's reward in order without cancelling an earlier reveal.
         dealQueue.Enqueue(new PendingDeal(heroes, anchorWorld));
 
         if (playing == null) playing = StartCoroutine(DrainDealQueue());
@@ -232,9 +203,7 @@ public class HeroCardRevealDirector : MonoBehaviour
     /// <summary>
     /// Plays every queued deal back to back.
     ///
-    /// IsDealing is held for the WHOLE queue rather than per deal, so the board
-    /// stays locked until the last reward has been shown - otherwise the player
-    /// could start a new match in the gap between two deals.
+    /// IsDealing covers the whole queue, including the gap between deals.
     /// </summary>
     private IEnumerator DrainDealQueue()
     {
@@ -277,7 +246,6 @@ public class HeroCardRevealDirector : MonoBehaviour
 
         group.alpha = 1f;
         stage.gameObject.SetActive(true);
-        SetFlash(0f, anchor, new Vector2(cardW, cardH));
 
         Vector2 gather = anchor + new Vector2(-cardW * 0.95f, 0f);
 
@@ -336,43 +304,23 @@ public class HeroCardRevealDirector : MonoBehaviour
         yield return new WaitForSecondsRealtime(THoldEnd - (TFanStart + TFanDur));
 
         // --- collapse back into one stack -------------------------------------
-        for (float t = 0f; t < TCollapseDur; t += Time.unscaledDeltaTime)
+        // Keep the stack at the highest card's height so gathering does not
+        // pull the cards downward just before they fade.
+        var stackPos = anchor;
+        for (int i = 0; i < n; i++) stackPos.y = Mathf.Max(stackPos.y, fanPos[i].y);
+
+        for (float t = 0f; t < TCollapseDur;)
         {
+            t = Mathf.Min(t + Time.unscaledDeltaTime, TCollapseDur);
             float k = EaseInCubic(t / TCollapseDur);
             for (int i = 0; i < n; i++)
-                cards[i].SetPose(Vector2.Lerp(fanPos[i], anchor, k),
+                cards[i].SetPose(Vector2.Lerp(fanPos[i], stackPos, k),
                                  Mathf.Lerp(fanRot[i], 0f, k),
                                  Mathf.Lerp(1f, 0.96f, k));
             yield return null;
         }
 
-        // --- white flash -------------------------------------------------------
-        for (float t = 0f; t < TFlashDur; t += Time.unscaledDeltaTime)
-        {
-            SetFlash(Mathf.Clamp01(t / (TFlashDur * 0.45f)), anchor, new Vector2(cardW, cardH));
-            yield return null;
-        }
-
-        // Under the flash: everything collapses to ONE card, face DOWN again -
-        // the "?" is the point of this beat, per the brief.
-        for (int i = 1; i < n; i++) cards[i].Hide();
-        var hero = cards[0];
-        hero.ShowFace(false);
-        hero.SetPose(anchor, 0f, 1f);
-
-        // --- resolve into the teal glow ---------------------------------------
-        for (float t = 0f; t < TGlowIn; t += Time.unscaledDeltaTime)
-        {
-            float k = Mathf.Clamp01(t / TGlowIn);
-            SetFlash(1f - k, anchor, new Vector2(cardW, cardH));
-            hero.SetGlow(k, TealGlow, TealCard);
-            hero.SetPose(anchor, 0f, Mathf.Lerp(1.12f, 1f, EaseOutCubic(k)));
-            yield return null;
-        }
-        SetFlash(0f, anchor, new Vector2(cardW, cardH));
-        hero.SetGlow(1f, TealGlow, TealCard);
-
-        yield return new WaitForSecondsRealtime(TGlowHold);
+        cards[0].Root.SetAsLastSibling();
 
         // --- fade out ----------------------------------------------------------
         for (float t = 0f; t < TFadeOut; t += Time.unscaledDeltaTime)
@@ -382,12 +330,10 @@ public class HeroCardRevealDirector : MonoBehaviour
         }
 
         group.alpha = 0f;
-        foreach (var c in cards) { c.SetGlow(0f, TealGlow, Color.white); c.Hide(); }
+        foreach (var c in cards) c.Hide();
         stage.gameObject.SetActive(false);
 
-        // NOT cleared here: DrainDealQueue may still have another match's reward
-        // to show, and releasing the board between two deals would let the player
-        // match again mid-sequence.
+        // DrainDealQueue clears the presentation state after the last reward.
     }
 
     /// <summary>
@@ -424,12 +370,11 @@ public class HeroCardRevealDirector : MonoBehaviour
         float flip = TFlipDur + TFlipStagger * Mathf.Max(0, cards - 1);
         float hold = THoldEnd - (TFanStart + TFanDur);
         float total = TFlyIn + flip + TFanDur + hold +
-                      TCollapseDur + TFlashDur + TGlowIn + TGlowHold + TFadeOut;
+                      TCollapseDur + TFadeOut;
 
         return $"cards={cards} tempo={Tempo:0.0000} TOTAL={total:0.000}s " +
                $"(rise {TFlyIn:0.000} / flip {flip:0.000} / fan {TFanDur:0.000} / " +
-               $"hold {hold:0.000} / collapse {TCollapseDur:0.000} / flash {TFlashDur:0.000} / " +
-               $"glow {TGlowIn:0.000}+{TGlowHold:0.000} / fade {TFadeOut:0.000})";
+               $"hold {hold:0.000} / collapse {TCollapseDur:0.000} / fade {TFadeOut:0.000})";
     }
 
     /// <summary>EDITOR ONLY. The live preview canvas, for screenshot tooling.</summary>
@@ -600,14 +545,6 @@ public class HeroCardRevealDirector : MonoBehaviour
         stage.anchorMin = stage.anchorMax = new Vector2(0.5f, 0.5f);
         stage.sizeDelta = Vector2.zero;
 
-        var flashGo = new GameObject("Flash", typeof(RectTransform), typeof(Image));
-        flash = flashGo.GetComponent<Image>();
-        flash.sprite = Load(CardSprites.Glow);
-        flash.raycastTarget = false;
-        flash.color = new Color(1f, 1f, 1f, 0f);
-        flash.rectTransform.SetParent(stage, false);
-        flash.rectTransform.anchorMin = flash.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-
         // MANDATORY. A canvas created this frame has not had a layout pass, so
         // canvasRect.rect is stale - it reported 1125 wide on the first deal and
         // 979 afterwards, which sized the cards differently every time and put the
@@ -643,16 +580,6 @@ public class HeroCardRevealDirector : MonoBehaviour
         return GameFrame.PixelRect.size / scale;
     }
 
-    private void SetFlash(float a, Vector2 anchor, Vector2 cardSize)
-    {
-        if (!flash) return;
-
-        flash.rectTransform.anchoredPosition = anchor;
-        flash.rectTransform.sizeDelta = cardSize * 1.9f;
-        flash.color = new Color(1f, 1f, 1f, Mathf.Clamp01(a));
-        flash.transform.SetAsLastSibling();
-    }
-
     private CardView Rent(int index)
     {
         while (pool.Count <= index) pool.Add(CardView.Build(stage));
@@ -670,7 +597,6 @@ public class HeroCardRevealDirector : MonoBehaviour
     {
         public const string Back = "Assets/Arts/VFX/HeroCardBack.png";
         public const string Face = "Assets/Arts/VFX/HeroCardFace.png";
-        public const string Glow = "Assets/Arts/VFX/HeroCardGlow.png";
     }
 
     private static readonly Dictionary<string, Sprite> spriteCache = new();
@@ -679,7 +605,7 @@ public class HeroCardRevealDirector : MonoBehaviour
     /// Loads a baked card sprite through HeroCardSpriteSet (a Resources asset that
     /// references the PNGs, which stay under Arts/). That is the ONLY route that
     /// works in a build: the old AssetDatabase lookup is Editor-only, so every
-    /// build drew white cards and a solid cyan glow. AssetDatabase is kept as an
+    /// build drew white cards. AssetDatabase is kept as an
     /// Editor fallback; the white 1x1 is a last resort that logs an error.
     /// </summary>
     private static Sprite Load(string path)
@@ -692,7 +618,6 @@ public class HeroCardRevealDirector : MonoBehaviour
         {
             if (path == CardSprites.Back) sp = set.back;
             else if (path == CardSprites.Face) sp = set.face;
-            else if (path == CardSprites.Glow) sp = set.glow;
         }
 #if UNITY_EDITOR
         if (!sp) sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
@@ -715,7 +640,6 @@ public class HeroCardRevealDirector : MonoBehaviour
         public RectTransform Root;
         private RectTransform face;
         private RectTransform back;
-        private Image glow;
         private Image faceImg;
         private Image backImg;
         private Image avatar;
@@ -733,9 +657,6 @@ public class HeroCardRevealDirector : MonoBehaviour
             v.Root = root.GetComponent<RectTransform>();
             v.Root.SetParent(parent, false);
             v.Root.anchorMin = v.Root.anchorMax = new Vector2(0.5f, 0.5f);
-
-            v.glow = NewImage("Glow", v.Root, Load(CardSprites.Glow));
-            v.glow.color = new Color(1f, 1f, 1f, 0f);
 
             v.faceImg = NewImage("Face", v.Root, Load(CardSprites.Face));
             v.face = v.faceImg.rectTransform;
@@ -781,11 +702,6 @@ public class HeroCardRevealDirector : MonoBehaviour
             face.sizeDelta = size;
             back.sizeDelta = size;
 
-            // The glow sprite is baked with padding around the card footprint, so
-            // it has to be scaled by the SAME ratio the baker used or the halo
-            // would sit at the wrong distance from the edge.
-            glow.rectTransform.sizeDelta = new Vector2(size.x * (400f / 256f), size.y * (502f / 358f));
-
             if (avatar)
             {
                 avatar.sprite = def ? def.portrait : null;
@@ -793,7 +709,6 @@ public class HeroCardRevealDirector : MonoBehaviour
                 avatar.rectTransform.sizeDelta = size * PortraitFillFraction;
             }
 
-            glow.color = new Color(1f, 1f, 1f, 0f);
             faceImg.color = Color.white;
             backImg.color = Color.white;
         }
@@ -825,18 +740,6 @@ public class HeroCardRevealDirector : MonoBehaviour
         {
             if (face) face.gameObject.SetActive(faceUp);
             if (back) back.gameObject.SetActive(!faceUp);
-        }
-
-        public void SetGlow(float k, Color glowColour, Color cardTint)
-        {
-            if (glow)
-            {
-                var c = glowColour;
-                c.a = k;
-                glow.color = c;
-            }
-
-            if (backImg) backImg.color = Color.Lerp(Color.white, cardTint, k);
         }
 
         public void Show() => Root.gameObject.SetActive(true);

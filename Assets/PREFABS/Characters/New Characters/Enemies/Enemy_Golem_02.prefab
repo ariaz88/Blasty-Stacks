@@ -90,6 +90,7 @@ GameObject:
   - component: {fileID: 7750609289912987366}
   - component: {fileID: 8151030937247548638}
   - component: {fileID: 1861411797568745960}
+  - component: {fileID: 395503316332322861}
   m_Layer: 6
   m_Name: Enemy_Golem_02
   m_TagString: Enemy
@@ -286,6 +287,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 848dae37a10c6a1448df8fba6c340e13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &395503316332322861
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 337096243683311022}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 606e74b7904ee694f866c91e24c2f61e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SpriteHitFlash
+  targets:
+  - {fileID: 8721987597804330672}
+  - {fileID: 8722041842615996514}
+  - {fileID: 8723281353962035910}
+  - {fileID: 8722542909725138918}
+  - {fileID: 8722597986667359474}
+  - {fileID: 8721974955671276560}
+  - {fileID: 8723307613564351312}
+  - {fileID: 8722564792795990516}
+  - {fileID: 8723380194440318896}
+  - {fileID: 8721891971327984448}
+  flashColor: {r: 1, g: 1, b: 1, a: 1}
+  duration: 0.12
+  holdDuration: 0.025
+  intensity: 1
 --- !u!1 &778185608731358137
 GameObject:
   m_ObjectHideFlags: 0
@@ -1088,6 +1116,56 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 1919825479655089713}
   m_SourcePrefab: {fileID: 100100000, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+--- !u!212 &8721891971327984448 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212957826491240398, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+  m_PrefabInstance: {fileID: 8934849784396663950}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &8721974955671276560 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212892426163159198, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+  m_PrefabInstance: {fileID: 8934849784396663950}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &8721987597804330672 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212881978541543998, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+  m_PrefabInstance: {fileID: 8934849784396663950}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &8722041842615996514 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212826222806703340, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+  m_PrefabInstance: {fileID: 8934849784396663950}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &8722542909725138918 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212306923795813224, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+  m_PrefabInstance: {fileID: 8934849784396663950}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &8722564792795990516 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212285996775982458, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+  m_PrefabInstance: {fileID: 8934849784396663950}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &8722597986667359474 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212252120440119420, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+  m_PrefabInstance: {fileID: 8934849784396663950}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &8723281353962035910 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212131691052029512, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+  m_PrefabInstance: {fileID: 8934849784396663950}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &8723307613564351312 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212122749094002654, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+  m_PrefabInstance: {fileID: 8934849784396663950}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &8723380194440318896 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212050282488218430, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}
+  m_PrefabInstance: {fileID: 8934849784396663950}
+  m_PrefabAsset: {fileID: 0}
 --- !u!95 &8839865889794737404 stripped
 Animator:
   m_CorrespondingSourceObject: {fileID: 95549461769390194, guid: 09957f3872205104ea84d3b3816c3b7b, type: 3}

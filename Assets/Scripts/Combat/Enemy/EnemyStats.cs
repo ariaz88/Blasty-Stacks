@@ -5,6 +5,7 @@ public class EnemyStats : CharacterStats
     public EnemyManager enemyManager;
     public HealthBar healthBar;
     public bool enemyIsdead;
+    private SpriteHitFlash hitFlash;
 
     public Transform EnemyOffsetLeft;   // enemy's left side (negative local X)
     public Transform EnemyOffsetRight;  // enemy's right side (positive local X)
@@ -16,6 +17,7 @@ public class EnemyStats : CharacterStats
     private void Awake()
     {
         enemyManager = GetComponent<EnemyManager>();
+        hitFlash = SpriteHitFlash.GetOrAdd(gameObject);
     }
     void Start()
     {
@@ -60,6 +62,7 @@ public class EnemyStats : CharacterStats
         if (enemyManager) enemyManager.NotifyAttackedBy(attacker);
 
         damageAmount = ClampIncomingBlow(damageAmount, attacker);
+        if (damageAmount > 0f && currentHP > 0f && !enemyIsdead) hitFlash.Play();
         CPBattleController.ReportBlow(this, damageAmount, attacker);   // observation only
         SetResolvedHealth(Mathf.Max(0f, currentHP - Mathf.Max(0f, damageAmount)));
     }

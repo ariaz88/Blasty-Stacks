@@ -17,8 +17,8 @@ public class LevelConfig : ScriptableObject
 
 public enum SpawnFormation
 {
-    AllTogetherGrid,  // interleaved types, laid out as a grid in the area
-    TwoRows           // row 0 (front) then row 1 (back) with optional delay
+    AllTogetherGrid,  // interleaved types along the enemy castle entrance
+    TwoRows           // group 0 then group 1 along the same entrance, with optional delay
 }
 public enum FrontRowAnchor { MinY, MaxY }   // front is at the bottom or the top?
 
@@ -41,7 +41,7 @@ public class Wave
     [Header("Formation")]
     public SpawnFormation formation = SpawnFormation.AllTogetherGrid;
 
-    [Tooltip("Spawn area rectangle (world space). x:[minX,maxX], y:[minY,maxY].")]
+    [Tooltip("Horizontal spawn range (world space). Y is set by the enemy castle entrance.")]
     public Vector2 spawnMin = new Vector2(1f, 2f);
     public Vector2 spawnMax = new Vector2(10f, 4f);
 

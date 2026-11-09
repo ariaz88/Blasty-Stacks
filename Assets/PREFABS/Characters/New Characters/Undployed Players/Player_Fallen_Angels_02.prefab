@@ -62,6 +62,7 @@ GameObject:
   - component: {fileID: 6438302499268617667}
   - component: {fileID: 7897075682745900965}
   - component: {fileID: 2317790899608510256}
+  - component: {fileID: 6308791871022163157}
   m_Layer: 7
   m_Name: Player_Fallen_Angels_02
   m_TagString: Player
@@ -290,7 +291,8 @@ MonoBehaviour:
   apexScale: 1.2
   scaleResponse: 1
   resetScaleOnLand: 1
-  landedScaleMultiplier: 0.9
+  stageScaleMultiplier: 1.1
+  landedScale: 1
   shadowApexScale: 0.7
   shadowScaleResponse: 0.8
   resetShadowOnLand: 1
@@ -356,6 +358,33 @@ MonoBehaviour:
   unitsDatabase: {fileID: 11400000, guid: 1eead485eb9802f4c8d136eaf6de630f, type: 2}
   progressionConfig: {fileID: 11400000, guid: 3665f1da392e42549934aab9a641a619, type: 2}
   unitId: 6
+--- !u!114 &6308791871022163157
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1837303420772731226}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 606e74b7904ee694f866c91e24c2f61e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SpriteHitFlash
+  targets:
+  - {fileID: 5698496718284853550}
+  - {fileID: 5697265970102974144}
+  - {fileID: 5698102825303874652}
+  - {fileID: 5697883871401020882}
+  - {fileID: 5698497868305326312}
+  - {fileID: 5698028666462944496}
+  - {fileID: 5698046396457344986}
+  - {fileID: 5698090782841878558}
+  - {fileID: 5698717551924769580}
+  - {fileID: 5698179092032414962}
+  flashColor: {r: 1, g: 1, b: 1, a: 1}
+  duration: 0.18
+  holdDuration: 0.06
+  intensity: 1
 --- !u!1 &2078490071642475393
 GameObject:
   m_ObjectHideFlags: 0
@@ -1559,5 +1588,55 @@ Transform:
 --- !u!4 &5616052028216611652 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4993678858427542, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  m_PrefabInstance: {fileID: 5611911926394916818}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &5697265970102974144 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212026657201240338, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  m_PrefabInstance: {fileID: 5611911926394916818}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &5697883871401020882 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212644555831706112, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  m_PrefabInstance: {fileID: 5611911926394916818}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &5698028666462944496 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212499073432302370, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  m_PrefabInstance: {fileID: 5611911926394916818}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &5698046396457344986 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212235619903262728, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  m_PrefabInstance: {fileID: 5611911926394916818}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &5698090782841878558 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212279726628911052, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  m_PrefabInstance: {fileID: 5611911926394916818}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &5698102825303874652 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212300841589085070, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  m_PrefabInstance: {fileID: 5611911926394916818}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &5698179092032414962 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212368026625534752, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  m_PrefabInstance: {fileID: 5611911926394916818}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &5698496718284853550 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212976206341283580, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  m_PrefabInstance: {fileID: 5611911926394916818}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &5698497868305326312 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212977289840095034, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
+  m_PrefabInstance: {fileID: 5611911926394916818}
+  m_PrefabAsset: {fileID: 0}
+--- !u!212 &5698717551924769580 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 212915214479162622, guid: 438423df18ba0f64ab984b82da4eefee, type: 3}
   m_PrefabInstance: {fileID: 5611911926394916818}
   m_PrefabAsset: {fileID: 0}

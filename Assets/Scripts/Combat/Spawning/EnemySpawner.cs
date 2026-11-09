@@ -17,24 +17,38 @@ public class EnemySpawner : MonoBehaviour
     [SerializeField] private bool waitForBattleStart = false;
 
     [Header("Spawn Area")]
-    [Tooltip("ON  = enemies spawn in a box measured FROM THE ENEMY GATE, using the " +
-             "offsets below. Survives moving the gate, and is per-scene so it does " +
-             "not disturb other stages that share the same LevelConfig asset.\n" +
-             "OFF = use each Wave's absolute spawnMin/spawnMax world coordinates.")]
+    [Tooltip("Controls the horizontal spawn range. Every wave now uses the enemy " +
+             "castle entrance for Y, regardless of this setting.")]
     [SerializeField] private bool spawnRelativeToEnemyGate = false;
 
-    [Tooltip("The enemy gate. Left empty = found by the 'EnemyGate' tag, else by name.")]
+    [Tooltip("EnemyCastle pivot. Left empty = found by name or EnemyGateStats.")]
     [SerializeField] private Transform enemyGateAnchor;
 
-    [Tooltip("Spawn box corner relative to the gate. Negative Y = below the gate, " +
-             "i.e. in front of it, facing the player.")]
+    [Tooltip("Horizontal offsets from the enemy castle. Their Y values are legacy " +
+             "data; all waves spawn at the entrance Y below.")]
     [SerializeField] private Vector2 gateRelativeMin = new Vector2(-3f, -4f);
     [SerializeField] private Vector2 gateRelativeMax = new Vector2(3f, -2f);
+
+    [Tooltip("Entrance height relative to EnemyCastle's pivot. The authored enemy " +
+             "spawner is at approximately this height in the stage template.")]
+    [SerializeField] private float gateEntranceOffsetY = -2.2f;
+
+    public float EntranceY
+    {
+        get
+        {
+            if (!enemyGateAnchor) enemyGateAnchor = FindEnemyGate();
+            return enemyGateAnchor ? enemyGateAnchor.position.y + gateEntranceOffsetY
+                                   : transform.position.y;
+        }
+    }
 
     // Track wave-alive count if you still want to wait for clear
     int _alive;
 
     bool _battleStarted;
+    bool forceFirstWave;
+    Coroutine battleRoutine;
     private CPBattleController cpBattle;
 
     /// <summary>
@@ -87,8 +101,8 @@ public class EnemySpawner : MonoBehaviour
     public static event System.Action OnAnyFirstEnemySpawned;
 
     /// <summary>
-    /// Resolves a wave's spawn box, either as authored absolute world coordinates
-    /// or as an offset box around the enemy gate.
+    /// Keep each wave's horizontal formation but put every enemy at the castle
+    /// entrance, including both rows of a TwoRows formation.
     /// </summary>
     void ResolveSpawnArea(Wave wave, out Vector2 min, out Vector2 max)
     {
@@ -96,27 +110,25 @@ public class EnemySpawner : MonoBehaviour
         {
             min = wave.spawnMin;
             max = wave.spawnMax;
-            return;
+        }
+        else
+        {
+            if (!enemyGateAnchor) enemyGateAnchor = FindEnemyGate();
+            float gateX = enemyGateAnchor ? enemyGateAnchor.position.x : transform.position.x;
+            min = new Vector2(gateX + gateRelativeMin.x, 0f);
+            max = new Vector2(gateX + gateRelativeMax.x, 0f);
         }
 
-        if (!enemyGateAnchor) enemyGateAnchor = FindEnemyGate();
-
-        Vector2 gate = enemyGateAnchor ? (Vector2)enemyGateAnchor.position : Vector2.zero;
-        if (!enemyGateAnchor)
-            Debug.LogWarning($"{name}: spawnRelativeToEnemyGate is ON but no gate was found - " +
-                             "spawning around the world origin.", this);
-
-        min = gate + gateRelativeMin;
-        max = gate + gateRelativeMax;
+        min.y = max.y = EntranceY;
     }
 
     Transform FindEnemyGate()
     {
-        var tagged = GameObject.FindGameObjectWithTag("EnemyGate");
-        if (tagged) return tagged.transform;
-
         var byName = GameObject.Find("EnemyCastle");
-        return byName ? byName.transform : null;
+        if (byName) return byName.transform;
+
+        var gate = FindObjectOfType<EnemyGateStats>();
+        return gate ? gate.transform : null;
     }
 
     /// <summary>
@@ -137,6 +149,13 @@ public class EnemySpawner : MonoBehaviour
     /// </summary>
     void Awake()
     {
+        if (!GameStartManager.IsStageBootReady)
+        {
+            Debug.LogError("[EnemySpawner] Stage blocked: launch through StarterScene and GameStartManager.", this);
+            enabled = false;
+            return;
+        }
+
         if (waitForBattleStart && levelConfig)
         {
             EnemiesHaveAppeared = false;
@@ -165,6 +184,7 @@ public class EnemySpawner : MonoBehaviour
     /// </summary>
     public void StartBattle()
     {
+        if (!GameStartManager.IsStageBootReady) return;
         if (_battleStarted) return;
 
         if (!levelConfig)
@@ -174,7 +194,40 @@ public class EnemySpawner : MonoBehaviour
         }
 
         _battleStarted = true;
-        StartCoroutine(StartPreparedBattle());
+        battleRoutine = StartCoroutine(StartPreparedBattle());
+        StartCoroutine(ReportIfFirstEnemyStalls());
+    }
+
+    /// <summary>Deadline fallback: start the battle and skip any remaining delay
+    /// before its first wave. Repeated calls cannot duplicate the wave loop.</summary>
+    public void ForceStartFirstWave()
+    {
+        if (!GameStartManager.IsStageBootReady) return;
+        if (HasSpawnedFirstEnemy) return;
+        forceFirstWave = true;
+        if (!_battleStarted)
+        {
+            StartBattle();
+            return;
+        }
+
+        // If preparation or an earlier wait stalled, restart before any enemy
+        // exists. Stopping the original coroutine prevents duplicate first waves.
+        if (battleRoutine != null) StopCoroutine(battleRoutine);
+        battleRoutine = StartCoroutine(StartPreparedBattle());
+    }
+
+    private IEnumerator ReportIfFirstEnemyStalls()
+    {
+        yield return new WaitForSecondsRealtime(5f);
+        if (HasSpawnedFirstEnemy || !this) yield break;
+
+        bool hudPaused = HudCurrencyView.Instance != null &&
+                         HudCurrencyView.Instance.IsGameplayPaused;
+        Debug.LogWarning($"[EnemySpawner] Battle started but no enemy appeared after 5 seconds. " +
+                         $"timeScale={Time.timeScale}, gameplayPause={GameplayPause.IsPaused}, " +
+                         $"hudPause={hudPaused}, spawnerEnabled={enabled}, " +
+                         $"config={(levelConfig ? levelConfig.name : "missing")}", this);
     }
 
     private IEnumerator StartPreparedBattle()
@@ -195,7 +248,8 @@ public class EnemySpawner : MonoBehaviour
         // arrive progressively through HeroDeploymentSequencer's timed loads, so an
         // empty roster at battle start is normal; late arrivals register themselves
         // through CPBattleController.RegisterHero.
-        cpBattle = gameObject.AddComponent<CPBattleController>();
+        if (!cpBattle) cpBattle = GetComponent<CPBattleController>();
+        if (!cpBattle) cpBattle = gameObject.AddComponent<CPBattleController>();
         cpBattle.Prepare(this, heroes);
 
         yield return RunLevel();
@@ -239,11 +293,11 @@ public class EnemySpawner : MonoBehaviour
     }
 
     // Wait for duration seconds, but don�t advance while the game is paused
-    IEnumerator WaitForSecondsGameplay(float duration)
+    IEnumerator WaitForSecondsGameplay(float duration, bool beforeFirstWave = false)
     {
         float elapsed = 0f;
 
-        while (elapsed < duration)
+        while (elapsed < duration && !(beforeFirstWave && forceFirstWave))
         {
             if (!IsGameplayPaused())
             {
@@ -325,7 +379,7 @@ public class EnemySpawner : MonoBehaviour
             AllWavesDispatched = true;
 
         // Initial delay before first wave (respects pause)
-        yield return WaitForSecondsGameplay(levelConfig.startDelay);
+        yield return WaitForSecondsGameplay(levelConfig.startDelay, beforeFirstWave: true);
 
         for (int i = 0; i < waveList.Count; i++)
         {
@@ -353,7 +407,7 @@ public class EnemySpawner : MonoBehaviour
             // Later waves get their delay folded into the capped gap below instead,
             // so the gap never exceeds MaxSecondsBetweenWaves.
             if (i == 0 && wave.delayBeforeWave > 0f)
-                yield return WaitForSecondsGameplay(wave.delayBeforeWave);
+                yield return WaitForSecondsGameplay(wave.delayBeforeWave, beforeFirstWave: true);
 
             switch (wave.formation)
             {
@@ -632,56 +686,38 @@ public class EnemySpawner : MonoBehaviour
 
         ResolveSpawnArea(wave, out var areaMin, out var areaMax);
 
-        var yMin = Mathf.Min(areaMin.y, areaMax.y);
-        var yMax = Mathf.Max(areaMin.y, areaMax.y);
-        float ySpan = Mathf.Max(0.01f, yMax - yMin);
-
-        float gap = Mathf.Abs(wave.rowYOffset) > 0f ? Mathf.Abs(wave.rowYOffset) : (ySpan * 0.5f);
-
-        float frontY, backY;
-        if (wave.frontAnchor == FrontRowAnchor.MinY)
-        {
-            // Front at lower Y (closer to camera in your case)
-            frontY = yMin;
-            backY = Mathf.Min(yMax, frontY + gap);  // push back row upward
-        }
-        else
-        {
-            // Front at higher Y
-            frontY = yMax;
-            backY = Mathf.Max(yMin, frontY - gap);  // push back row downward
-        }
-
-
-
         float xMin = Mathf.Min(areaMin.x, areaMax.x);
         float xMax = Mathf.Max(areaMin.x, areaMax.x);
 
-        // ---- FRONT ROW ----
+        // Both timed groups now share the entrance Y. Give each unit a distinct
+        // horizontal slot so collapsing the two rows cannot stack them together.
         int frontCount = 0; foreach (var e in front) frontCount += e.count;
+        int backCount = 0; foreach (var e in back) backCount += e.count;
+        if (frontCount + backCount == 0) yield break;
+        var xs = DistributeAlongX(xMin, xMax, frontCount + backCount);
+
+        // ---- FRONT ROW ----
         if (frontCount > 0)
         {
-            var xs = DistributeAlongX(xMin, xMax, frontCount);
             int idx = 0;
             foreach (var e in front)
                 for (int i = 0; i < e.count; i++)
-                    SpawnOne(e, new Vector3(xs[idx++], frontY, 0f), stageLevel);
+                    SpawnOne(e, new Vector3(xs[idx++], areaMin.y, 0f), stageLevel);
         }
 
         // optional delay between rows
         if (back.Count > 0 && wave.secondRowDelay > 0f)
-            yield return WaitForSecondsGameplay(wave.secondRowDelay);
+            yield return WaitForSecondsGameplay(wave.secondRowDelay,
+                                               beforeFirstWave: !HasSpawnedFirstEnemy);
 
 
         // ---- BACK ROW ----
-        int backCount = 0; foreach (var e in back) backCount += e.count;
         if (backCount > 0)
         {
-            var xs = DistributeAlongX(xMin, xMax, backCount);
-            int idx = 0;
+            int idx = frontCount;
             foreach (var e in back)
                 for (int i = 0; i < e.count; i++)
-                    SpawnOne(e, new Vector3(xs[idx++], backY, 0f), stageLevel);
+                    SpawnOne(e, new Vector3(xs[idx++], areaMin.y, 0f), stageLevel);
         }
 
         yield return null;
@@ -777,7 +813,8 @@ public class EnemySpawner : MonoBehaviour
 
         // Never ask for more columns than there are units - an empty trailing
         // column would push the row off centre.
-        int cols = (columns > 0) ? columns : Mathf.CeilToInt(Mathf.Sqrt(count));
+        int cols = Mathf.Approximately(yMin, yMax) ? count :
+                   (columns > 0) ? columns : Mathf.CeilToInt(Mathf.Sqrt(count));
         cols = Mathf.Clamp(cols, 1, count);
         int rows = Mathf.CeilToInt(count / (float)cols);
 

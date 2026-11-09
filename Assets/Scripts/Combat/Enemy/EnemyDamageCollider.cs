@@ -37,6 +37,7 @@ public class EnemyDamageCollider : MonoBehaviour
     private const float MaxAttackWindow = 0.35f;
 
     private bool wasEnabled;
+    private bool gateHitThisSwing;
     private float openedAt = -1f;
 
     private void LateUpdate()
@@ -44,7 +45,10 @@ public class EnemyDamageCollider : MonoBehaviour
         if (enemyDmgCollider == null) return;
 
         if (enemyDmgCollider.enabled && !wasEnabled)
+        {
             openedAt = Time.time;
+            gateHitThisSwing = false;
+        }
 
         if (enemyDmgCollider.enabled && openedAt >= 0f
             && Time.time - openedAt > MaxAttackWindow)
@@ -57,6 +61,7 @@ public class EnemyDamageCollider : MonoBehaviour
         }
 
         wasEnabled = enemyDmgCollider.enabled;
+        if (!wasEnabled) gateHitThisSwing = false;
     }
     private void OnTriggerEnter2D(Collider2D other)
     {
@@ -115,8 +120,9 @@ public class EnemyDamageCollider : MonoBehaviour
             if (gateStats == null)
                 return;
 
-            if (!isAttacking) return;
+            if (!isAttacking || !enemyManager.IsAttackingGate || gateHitThisSwing) return;
 
+            gateHitThisSwing = true;
             damageToPlayer = enemyManager.DamageApplying(gateStats.playerManager);
             gateStats.ApplyDamageToPlayerGate(damageToPlayer);
             GameAudio.PlayEnemyHit();
