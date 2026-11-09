@@ -579,6 +579,8 @@ public class RogueliteManager : MonoBehaviour
 
         if (skillSelectPanel != null) skillSelectPanel.SetActive(true);
         if (levelUpOverlay != null) levelUpOverlay.SetActive(true);
+        GameplayModalOrder.BringBackgroundToFront(levelUpOverlay);
+        GameplayModalOrder.BringToFront(skillSelectPanel);
 
         // A previous fade-out may have left the group transparent.
         var group = EnsureCanvasGroup(skillSelectPanel);

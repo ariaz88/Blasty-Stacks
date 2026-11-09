@@ -128,6 +128,7 @@ public class WinPanel : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+        GameplayModalOrder.BringToFront(gameObject);
         var entrance = GetComponent<ResultPanelEntrance>();
         if (entrance == null) entrance = gameObject.AddComponent<ResultPanelEntrance>();
         entrance.PlayWin(canvasGroup);

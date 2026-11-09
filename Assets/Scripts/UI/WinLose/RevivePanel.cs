@@ -173,6 +173,7 @@ public class RevivePanel : MonoBehaviour
         RefreshGemCostUI();
 
         revivePanel.SetActive(true);
+        GameplayModalOrder.BringToFront(revivePanel);
         isReviveButtonPressed = false;
         isReviveActive = true;
 
@@ -218,6 +219,7 @@ public class RevivePanel : MonoBehaviour
         RefreshGemCostUI();
 
         revivePanel.SetActive(true);
+        GameplayModalOrder.BringToFront(revivePanel);
         isReviveButtonPressed = false;
         isReviveActive = true;
 
@@ -531,6 +533,7 @@ public class RevivePanel : MonoBehaviour
         if (losePanel != null)
         {
             losePanel.SetActive(true);
+            GameplayModalOrder.BringToFront(losePanel);
             losePanel.transform.localScale = Vector3.zero;
             losePanel.transform.DOScale(Vector3.one, 0.8f)
                 .SetEase(Ease.OutBack)
@@ -546,6 +549,7 @@ public class RevivePanel : MonoBehaviour
             return;
 
         losePanel.SetActive(true);
+        GameplayModalOrder.BringToFront(losePanel);
 
         // Reset canvas group state
         if (loseCanvasGroup != null)
