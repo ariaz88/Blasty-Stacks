@@ -128,6 +128,9 @@ public class WinPanel : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+        var entrance = GetComponent<ResultPanelEntrance>();
+        if (entrance == null) entrance = gameObject.AddComponent<ResultPanelEntrance>();
+        entrance.PlayWin(canvasGroup);
 
     }
 

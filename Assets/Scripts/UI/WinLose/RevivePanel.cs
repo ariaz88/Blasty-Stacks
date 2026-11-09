@@ -563,6 +563,9 @@ public class RevivePanel : MonoBehaviour
             BGImage.color = c;
         }
 
+        var entrance = losePanel.GetComponent<ResultPanelEntrance>();
+        if (entrance == null) entrance = losePanel.AddComponent<ResultPanelEntrance>();
+        entrance.PlayLose(loseCanvasGroup);
         StartCoroutine(FadeInLosePanelRoutine());
     }
     private IEnumerator FadeInLosePanelRoutine()
