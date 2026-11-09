@@ -48,7 +48,7 @@ public class HeroStatsPanel : MonoBehaviour
 
     [Header("Refs (left empty = found in the scene)")]
     [Tooltip("PHASE 2. Present = the panel shows the DEPLOYMENT cards (portrait + " +
-             "'remaining/total' + a cyan load bar per type) instead of the alive/total " +
+             "'current/total' + a cyan load bar per type) instead of the alive/total " +
              "read-out. Left empty = found in the scene; absent from the scene = old behaviour.")]
     [SerializeField] private HeroDeploymentSequencer deploymentSequencer;
 

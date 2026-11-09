@@ -39,7 +39,7 @@ public class HeroDeploymentSequencer : MonoBehaviour
         /// <summary>How many of this type were earned - the "/total" on the card.</summary>
         public int Total { get; internal set; }
 
-        /// <summary>How many have NOT come out yet - the left number on the card.</summary>
+        /// <summary>How many have NOT come out yet. The card converts this to the current load number.</summary>
         public int Remaining { get; internal set; }
 
         /// <summary>Seconds one load takes.</summary>

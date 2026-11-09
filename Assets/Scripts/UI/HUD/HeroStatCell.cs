@@ -100,8 +100,8 @@ public class HeroStatCell : MonoBehaviour
     // ======================================================================
     //
     // In PHASE 2 this cell stops being a survival read-out ("2/3 still alive")
-    // and becomes a DEPLOYMENT SLOT: a portrait, "remaining/total" still to be
-    // released ("2/3"), and a load bar INSIDE "card  Button" that fills LEFT TO
+    // and becomes a DEPLOYMENT SLOT: a portrait, the number currently loading
+    // out of the total ("1/3", then "2/3"), and a load bar INSIDE "card  Button" that fills LEFT TO
     // RIGHT behind the count over that type's own load time - the look from
     // New GamePlay Assets/preview_Battle_Mana.png. Since 2026-09-27 every card
     // loads in parallel on its own timer. Once a type has run out the label
@@ -149,8 +149,8 @@ public class HeroStatCell : MonoBehaviour
     /// Builds this cell as a deployment slot for one hero type.
     ///
     /// <paramref name="total"/> is how many of that type the player earned this
-    /// stage. The label reads "remaining/total" and counts DOWN as each one is
-    /// released - see <see cref="SetDeployState"/>.
+    /// stage. The label shows the current hero's number and counts UP as each
+    /// one is released - see <see cref="SetDeployState"/>.
     ///
     /// SquadSize stays 0 on purpose: it is the alive/total mode's number, and the
     /// panel never runs that mode's Refresh on a deployment cell.
@@ -193,7 +193,7 @@ public class HeroStatCell : MonoBehaviour
 
     /// <summary>
     /// Draws one deployment card, matching New GamePlay Assets/preview_Battle_Mana.png:
-    ///   - while any are left: "remaining/total" in the count's own yellow, the dark
+    ///   - while any are left: "current/total" in the count's own yellow, the dark
     ///     track showing, and the loader filling left to right inside it;
     ///   - once the type has run out: the authored "DEPLOYED" text instead of the
     ///     count - never "0/total" - with track and loader hidden, so only the
@@ -203,8 +203,8 @@ public class HeroStatCell : MonoBehaviour
     /// </summary>
     public void SetDeployState(int remaining, int total, float fill)
     {
-        remaining = Mathf.Max(0, remaining);
         total = Mathf.Max(0, total);
+        remaining = Mathf.Clamp(remaining, 0, total);
 
         bool exhausted = remaining == 0;
 
@@ -237,7 +237,8 @@ public class HeroStatCell : MonoBehaviour
 
         shownRemaining = remaining;
         shownTotal = total;
-        if (countText) countText.text = $"{remaining}/{total}";
+        int currentHero = Mathf.Clamp(total - remaining + 1, 0, total);
+        if (countText) countText.text = $"{currentHero}/{total}";
     }
 
     private void Awake()
