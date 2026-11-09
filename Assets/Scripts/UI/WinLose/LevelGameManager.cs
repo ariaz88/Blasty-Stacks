@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -18,6 +19,11 @@ public class LevelGameManager : MonoBehaviour
     [Header("UI References")]
     [SerializeField] private WinPanel winPanel;
     [SerializeField] private RevivePanel revivePanel;
+
+    [Header("Result presentation")]
+    [SerializeField, Range(0.5f, 2.5f)] private float delayAfterBaseHides = 1.6f;
+    [SerializeField, Range(1f, 1.08f)] private float resultZoomOut = 1.06f;
+    [SerializeField, Range(0f, 3f)] private float resultCameraPullback = 1.5f;
 
     // =====================================================================
     // REVIVE DISABLED - 2026-09-06
@@ -103,6 +109,7 @@ public class LevelGameManager : MonoBehaviour
     // Unscaled timestamp before which the wipe check is skipped entirely.
     private float suppressStalemateUntil;
     private bool leavingStage;
+    public bool ResultPanelVisible { get; private set; }
 
     /// <summary>Abandon the current stage without recording a win or loss.</summary>
     public void ReturnToHomeMenu()
@@ -155,13 +162,7 @@ public class LevelGameManager : MonoBehaviour
             return;
 
         CurrentState = GameState.Won;
-
-        // IMPORTANT:
-        //  - DO NOT pause the whole game here.
-        //  - Player units already receive EnemyGateStats.OnGateDestroyed
-        //    and call PlayerManager.HandleGateDestroyed(), where they
-        //    stop moving and switch to GameComplete state.
-        //  - We want UI animations (coins/gems/XP) to keep running.
+        FreezeCharactersForResult(false);
 
         // 1) Compute player's HP percent for stage rewards
         float hpPercent = 1f;
@@ -173,20 +174,9 @@ public class LevelGameManager : MonoBehaviour
         // 2) Notify progression system
         HomeManager.NotifyStageWon(hpPercent);
 
-        // 3) Show WinPanel with the HP%
-        if (winPanel != null)
-        {
-            winPanel.gameObject.SetActive(true);
-            winPanel.Show(hpPercent);
-        }
-        else
-        {
-            Debug.LogWarning("[LevelGameManager] WinPanel reference is missing.");
-        }
-
-        // NOTE: NO GameplayPause.SetPaused(true) here.
-        // If you ever want to stop enemy AI on win, do that by
-        // stopping their movement, not by pausing the whole game.
+        StartCoroutine(ShowResultAfterBaseHides(enemyGate ? enemyGate.gameObject : null,
+                                               enemyGate ? enemyGate.healthBar : null,
+                                               true, hpPercent));
     }
 
     // ---------------------------------------------------------
@@ -206,35 +196,94 @@ public class LevelGameManager : MonoBehaviour
     /// straight to Lose. Callers are responsible for the "are we still Playing?" guard.
     ///
     /// [2026-09-06] With OfferRevive off, the first branch is the ONLY one taken -
-    /// every defeat lands on the Lose panel immediately. The else-branch is kept for
+    /// every defeat lands on the Lose panel after the base transition. The else-branch is kept for
     /// the day revive comes back.
     /// </summary>
     private void EnterDefeatFlow()
     {
-        // For Lose / Revive we DO pause gameplay.
-        GameplayPause.SetPaused(true);
-
         if (!OfferRevive || (allowSingleRevivePerStage && hasRevivedThisStage))
         {
-            // Revive disabled (or already spent): go straight to Lose
             CurrentState = GameState.Lost;
-
-            if (revivePanel != null)
-            {
-                // Make sure this method is public in RevivePanel
-                revivePanel.ShowLosePanel();
-            }
         }
         else
         {
-            // Offer revive
             CurrentState = GameState.ReviveOffer;
+        }
 
-            if (revivePanel != null)
+        FreezeCharactersForResult(true);
+        StartCoroutine(ShowResultAfterBaseHides(playerGate ? playerGate.gameObject : null,
+                                               playerGate ? playerGate.healthBar : null,
+                                               false, 0f));
+    }
+
+    private void FreezeCharactersForResult(bool pauseClock)
+    {
+        // Reuse the stage's existing pause path: it stops movement, physics and
+        // animators on both teams as soon as the base bar reaches zero.
+        if (HudCurrencyView.Instance)
+            HudCurrencyView.Instance.PauseGameplay();
+        else if (!pauseClock)
+            GameplayPause.SetPaused(true);
+
+        // Win keeps scaled time for the claim's resource flight. Lose already
+        // uses unscaled UI fades, so it can pause the game clock as before.
+        if (pauseClock) GameplayPause.SetPaused(true);
+    }
+
+    private IEnumerator ShowResultAfterBaseHides(GameObject baseRoot, HealthBar baseBar,
+                                                  bool won, float hpPercent)
+    {
+        // The base fill reaches zero on the hit frame. Wait for any authored
+        // bar transition before hiding the complete base hierarchy.
+        while (baseBar && !baseBar.DamageTrailFinished)
+            yield return null;
+
+        if (baseRoot) baseRoot.SetActive(false);
+
+        yield return ZoomOutBeforeResult();
+
+        if (won)
+        {
+            if (winPanel)
             {
-                // Make sure this method is public in RevivePanel
-                revivePanel.ShowRevivePanel();
+                winPanel.gameObject.SetActive(true);
+                winPanel.Show(hpPercent);
+                ResultPanelVisible = true;
             }
+            else
+                Debug.LogWarning("[LevelGameManager] WinPanel reference is missing.");
+        }
+        else if (revivePanel)
+        {
+            if (CurrentState == GameState.ReviveOffer)
+                revivePanel.ShowRevivePanel();
+            else
+                revivePanel.ShowLosePanel();
+            ResultPanelVisible = true;
+        }
+    }
+
+    private IEnumerator ZoomOutBeforeResult()
+    {
+        var camera = Camera.main;
+        float duration = Mathf.Clamp(delayAfterBaseHides, 0.5f, 2.5f);
+        float elapsed = 0f;
+        float start = camera ? (camera.orthographic ? camera.orthographicSize : camera.fieldOfView) : 0f;
+        float target = start * Mathf.Clamp(resultZoomOut, 1f, 1.08f);
+        Vector3 startPosition = camera ? camera.transform.position : Vector3.zero;
+        Vector3 targetPosition = startPosition + Vector3.back * Mathf.Clamp(resultCameraPullback, 0f, 3f);
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float k = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / duration));
+            if (camera)
+            {
+                if (camera.orthographic) camera.orthographicSize = Mathf.Lerp(start, target, k);
+                else camera.fieldOfView = Mathf.Lerp(start, target, k);
+                camera.transform.position = Vector3.Lerp(startPosition, targetPosition, k);
+            }
+            yield return null;
         }
     }
 
@@ -283,7 +332,10 @@ public class LevelGameManager : MonoBehaviour
         Debug.Log("[LevelGameManager] Mutual wipe - no heroes, no enemies and no waves " +
                   "left, with both gates standing. Treating the stage as a defeat.");
 
-        EnterDefeatFlow();
+        if (playerGate)
+            playerGate.CollapseAfterMutualWipe();
+        else
+            EnterDefeatFlow();
     }
 
     private bool IsMutualWipe()
@@ -358,6 +410,7 @@ public class LevelGameManager : MonoBehaviour
     public void ResetForNewStage()
     {
         CurrentState = GameState.Playing;
+        ResultPanelVisible = false;
         hasRevivedThisStage = false;
         stalemateTimer = 0f;
         suppressStalemateUntil = 0f;

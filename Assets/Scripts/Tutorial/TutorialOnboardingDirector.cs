@@ -4,11 +4,9 @@ using UnityEngine;
 /// <summary>
 /// Starts the onboarding chain the first time a particular stage is LOST.
 ///
-/// It listens on LevelGameManager.OnGameStateChanged rather than on the panel,
-/// because that event fires one line BEFORE revivePanel.ShowLosePanel()
-/// (LevelGameManager.cs:204 / :209) - we are already counting before the panel has
-/// even been switched on, so there is no frame in which REPLAY is reachable before
-/// the gate closes.
+/// It listens for the loss state, then waits for the result panel to become visible
+/// before starting its settle delay. The base's damage trail and camera move now
+/// happen between those two moments.
 ///
 /// The second half of the chain lives in MenuScene and is armed purely by this
 /// sequence's save flag, through TutorialTrigger.requiresTutorialId. Nothing is
@@ -34,7 +32,7 @@ public class TutorialOnboardingDirector : MonoBehaviour
              "written on a WIN only, so zero stars really does mean 'never beaten'.")]
     [SerializeField] private bool requireNeverCleared = true;
 
-    [Tooltip("Unscaled wait after the defeat, so RevivePanel's 0.35s fade-in has " +
+    [Tooltip("Unscaled wait after the Lose panel appears, so its 0.35s fade-in has " +
              "finished before a hand lands on a half-transparent button.")]
     [SerializeField] private float panelSettleDelay = 0.55f;
 
@@ -124,8 +122,10 @@ public class TutorialOnboardingDirector : MonoBehaviour
 
     private IEnumerator PlayAfterPanel()
     {
-        // WaitForSecondsRealtime, not WaitForSeconds: ShowLosePanel has already set
-        // Time.timeScale to 0, so a scaled wait would never finish.
+        while (LevelGameManager.Instance && !LevelGameManager.Instance.ResultPanelVisible)
+            yield return null;
+
+        // ShowLosePanel pauses time, so the settle wait must use real time.
         if (panelSettleDelay > 0f) yield return new WaitForSecondsRealtime(panelSettleDelay);
 
         if (!overlay) overlay = TutorialOverlay.FindInScene();

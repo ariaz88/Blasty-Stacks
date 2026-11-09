@@ -91,15 +91,8 @@ public class EnemyGateStats : CharacterStats
         var col = GetComponent<Collider2D>();
         if (col) col.enabled = false;
 
-        var sr = GetComponent<SpriteRenderer>();
-        if (sr) sr.enabled = false;
-
-
         OnGateDestroyed?.Invoke();
-
-
-        Destroy(gameObject, 0.1f);
-
+        // LevelGameManager hides the whole castle after its HP trail reaches zero.
     }
 
 

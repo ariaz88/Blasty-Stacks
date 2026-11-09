@@ -96,9 +96,15 @@ public class HealthBar : MonoBehaviour
     private float trailHoldTimer;
     private float trailFadeTimer;
     private bool trailSeeded;
+    private bool isBaseBar;
+
+    /// <summary>True once the yellow damage trail has caught up and faded away.</summary>
+    public bool DamageTrailFinished => !hitBar || !hitBar.enabled;
 
     void Awake()
     {
+        isBaseBar = GetComponentInParent<PlayerGateStats>() ||
+                    GetComponentInParent<EnemyGateStats>();
         ResolveBars();
 
         CaptureAuthoredSorting();
@@ -115,7 +121,7 @@ public class HealthBar : MonoBehaviour
 
         ConfigureAsHorizontalFill(healthBar);
 
-        if (!hitBar && autoCreateHitBar && hitSprite)
+        if (!isBaseBar && !hitBar && autoCreateHitBar && hitSprite)
             BuildHitBar();
 
         // The hit bar starts INVISIBLE - an undamaged unit must not show a sliver
@@ -424,6 +430,12 @@ public class HealthBar : MonoBehaviour
 
         float target = currentHealth / maxHealth;
         if (healthBar) healthBar.fillAmount = target;
+
+        if (isBaseBar)
+        {
+            HideHitBar();
+            return;
+        }
 
         if (!hitBar) return;
 

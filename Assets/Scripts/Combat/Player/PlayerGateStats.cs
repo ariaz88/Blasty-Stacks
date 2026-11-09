@@ -85,6 +85,16 @@ public class PlayerGateStats : CharacterStats
 
     }
 
+    /// <summary>Uses the same base ending when both armies wipe before a gate hit.</summary>
+    public void CollapseAfterMutualWipe()
+    {
+        if (isPlayerGateDestroyed) return;
+        currentHP = 0f;
+        if (baseTxt) baseTxt.text = "0";
+        if (healthBar) healthBar.SetCurrentHealth(0f, maxHealth);
+        DestroyGate();
+    }
+
     IEnumerator DeactivateGate()
     {
         yield return new WaitForSeconds(0.5f);

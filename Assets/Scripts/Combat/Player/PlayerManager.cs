@@ -223,6 +223,11 @@ public class PlayerManager : MonoBehaviour
 
     public bool attackPlayerGate;
 
+    private SpriteRenderer enemyGateBody;
+    private SpriteRenderer[] gateDepthSprites;
+    private int[] gateDepthOriginalOrders;
+    private bool behindEnemyGate;
+
     [Header("Links")]
     public Transform visualRoot;  // assign the 'Visual' child in the prefab
 
@@ -301,6 +306,54 @@ public class PlayerManager : MonoBehaviour
         enemyStats = FindAnyObjectByType<EnemyStats>();
 
         EnsureDepthSorter();
+
+        if (!CompareTag("PlayerGate"))
+        {
+            var gate = FindAnyObjectByType<EnemyGateStats>();
+            if (gate) enemyGateBody = gate.GetComponentInChildren<SpriteRenderer>(true);
+            gateDepthSprites = GetComponentsInChildren<SpriteRenderer>(true);
+            gateDepthOriginalOrders = new int[gateDepthSprites.Length];
+            for (int i = 0; i < gateDepthSprites.Length; i++)
+                gateDepthOriginalOrders[i] = gateDepthSprites[i].sortingOrder;
+        }
+    }
+
+    private void LateUpdate()
+    {
+        if (gateDepthSprites == null) return;
+
+        bool overlapsGate = false;
+        if (enemyGateBody && enemyGateBody.enabled && enemyGateBody.gameObject.activeInHierarchy)
+        {
+            Bounds gateBounds = enemyGateBody.bounds;
+            for (int i = 0; i < gateDepthSprites.Length; i++)
+            {
+                var sprite = gateDepthSprites[i];
+                if (!sprite || !sprite.enabled || !sprite.gameObject.activeInHierarchy) continue;
+
+                Bounds heroBounds = sprite.bounds;
+                if (heroBounds.min.x <= gateBounds.max.x && heroBounds.max.x >= gateBounds.min.x &&
+                    heroBounds.min.y <= gateBounds.max.y && heroBounds.max.y >= gateBounds.min.y)
+                {
+                    overlapsGate = true;
+                    break;
+                }
+            }
+        }
+
+        SetBehindEnemyGate(overlapsGate);
+    }
+
+    private void SetBehindEnemyGate(bool behind)
+    {
+        if (behindEnemyGate == behind) return;
+        behindEnemyGate = behind;
+
+        // Same offset used by enemies at the player base. Restore each sprite's
+        // authored order when this hero leaves the enemy base's visible area.
+        for (int i = 0; i < gateDepthSprites.Length; i++)
+            if (gateDepthSprites[i])
+                gateDepthSprites[i].sortingOrder = gateDepthOriginalOrders[i] - (behind ? 8 : 0);
     }
 
     /// <summary>
