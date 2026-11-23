@@ -162,6 +162,8 @@ public class LevelGameManager : MonoBehaviour
             return;
 
         CurrentState = GameState.Won;
+        if (enemyGate && enemyGate.healthBar)
+            enemyGate.healthBar.FinishDamageTrailWhilePaused();
         FreezeCharactersForResult(false);
 
         // 1) Compute player's HP percent for stage rewards
@@ -201,6 +203,9 @@ public class LevelGameManager : MonoBehaviour
     /// </summary>
     private void EnterDefeatFlow()
     {
+        if (playerGate && playerGate.healthBar)
+            playerGate.healthBar.FinishDamageTrailWhilePaused();
+
         if (!OfferRevive || (allowSingleRevivePerStage && hasRevivedThisStage))
         {
             CurrentState = GameState.Lost;

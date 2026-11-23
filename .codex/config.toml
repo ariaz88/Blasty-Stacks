@@ -17,3 +17,9 @@ args = ["mcp","--project-path","F:\\Projects\\unitypProjects\\Stacky  Warriors  
 
 [mcp_servers.unity.tools.get_scene_hierarchy]
 approval_mode = "approve"
+
+[mcp_servers.unity.tools.editor_status]
+approval_mode = "approve"
+
+[mcp_servers.unity.tools.eval]
+approval_mode = "approve"

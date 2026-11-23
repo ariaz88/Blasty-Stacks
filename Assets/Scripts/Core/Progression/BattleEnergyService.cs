@@ -6,27 +6,21 @@ using UnityEngine;
 /// <summary>
 /// Owns the rule for "may the player start another battle?".
 ///
-/// The player gets a free allowance of battles (default 20) inside a rolling
-/// 24-hour window. The window opens on the FIRST battle after a reset, not at
-/// midnight, so it does not depend on the device timezone. The allowance is
-/// global - it is shared by every scene and survives app restarts, because it
-/// lives in SaveData via SaveSystem rather than in scene state.
+/// A play session starts with 20 battles shared by every stage. The session
+/// balance survives scene loads and resets when the app starts a new session.
 ///
-/// Once the allowance is used up, each further battle costs `energyCost`
-/// energy instead.
-///
-/// ENERGY IS A PLACEHOLDER: nothing grants energy yet, so today the player is
-/// simply blocked until the window resets. When the real energy economy is
-/// written, feed it through AddEnergy / Energy below and everything else in
-/// this class keeps working unchanged.
+/// Once the allowance is used up, rewarded ads can add five more starts.
+/// Each subsequent battle costs one energy unit.
 /// </summary>
 public static class BattleEnergyService
 {
-    /// <summary>Free battles per 24h window. Overridable per-scene from the Inspector.</summary>
+    /// <summary>Initial battles per play session.</summary>
     public const int DefaultDailyBattleLimit = 20;
 
-    /// <summary>PLACEHOLDER cost shown under the BATTLE icon, charged past the free allowance.</summary>
-    public const int DefaultEnergyCostPerBattle = 25;
+    /// <summary>One energy unit buys one battle after the initial allowance.</summary>
+    public const int DefaultEnergyCostPerBattle = 1;
+
+    public const int RewardedAdBattles = 5;
 
     private const double WindowHours = 24.0;
 
@@ -41,18 +35,19 @@ public static class BattleEnergyService
     public static event Action OnAllowanceChanged;
 
     /// <summary>
-    /// TEST MODE. While true the allowance is held in memory only and is never
-    /// written to the save file, so every Play session starts with a full
-    /// allowance. Set from BattleStartController's inspector flag.
-    ///
-    /// This exists because GameStartManager - which wipes the save on every run
-    /// - is NOT in the gameplay scenes; it arrives via DontDestroyOnLoad from
-    /// the menu scene. Pressing Play directly on a stage would therefore
-    /// persist the count. TURN THIS OFF FOR RELEASE.
+    /// While true the allowance belongs to the current app session and is
+    /// held in memory across stage changes. Set by BattleStartController.
     /// </summary>
-    public static bool SessionOnly { get; set; }
+    public static bool SessionOnly { get; set; } = true;
 
     private static SaveData.BattleEnergyState _sessionState;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void BeginNewSession()
+    {
+        _sessionState = null;
+        SessionOnly = true;
+    }
 
     private static SaveData.BattleEnergyState State =>
         SessionOnly
@@ -79,20 +74,27 @@ public static class BattleEnergyService
 
     // ---------------- Queries ----------------
 
-    /// <summary>Battles started inside the current window (0 once the window expires).</summary>
+    /// <summary>Battles started in the current session.</summary>
     public static int BattlesUsed
     {
         get { RefreshWindow(); return State.battlesUsed; }
     }
 
-    /// <summary>Free battles left in the current window.</summary>
+    /// <summary>Initial session battles left before ad credits are used.</summary>
     public static int RemainingFree(int dailyLimit)
     {
         RefreshWindow();
         return Mathf.Max(0, dailyLimit - State.battlesUsed);
     }
 
-    /// <summary>PLACEHOLDER balance - no economy feeds this yet.</summary>
+    /// <summary>All starts currently available, including those earned from ads.</summary>
+    public static int RemainingBattles(int dailyLimit, int energyCost)
+    {
+        int cost = Mathf.Max(1, energyCost);
+        return RemainingFree(dailyLimit) + State.energy / cost;
+    }
+
+    /// <summary>Extra starts earned from rewarded ads.</summary>
     public static int Energy => State.energy;
 
     /// <summary>UTC instant the current window expires, or null when no window is open.</summary>
@@ -160,7 +162,7 @@ public static class BattleEnergyService
         return result;
     }
 
-    /// <summary>PLACEHOLDER granter - call this from the real energy economy later.</summary>
+    /// <summary>Credits energy after a rewarded ad grants its reward.</summary>
     public static void AddEnergy(int amount)
     {
         if (amount == 0) return;
@@ -181,6 +183,7 @@ public static class BattleEnergyService
     /// <summary>Clears the window once 24h have elapsed (or the saved timestamp is unusable).</summary>
     private static void RefreshWindow()
     {
+        if (SessionOnly) return;
         var state = State;
         if (state.battlesUsed <= 0 && string.IsNullOrEmpty(state.windowStartUtc))
             return; // nothing to expire

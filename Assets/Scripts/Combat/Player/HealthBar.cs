@@ -96,15 +96,16 @@ public class HealthBar : MonoBehaviour
     private float trailHoldTimer;
     private float trailFadeTimer;
     private bool trailSeeded;
-    private bool isBaseBar;
+    private bool useUnscaledTrailTime;
 
     /// <summary>True once the yellow damage trail has caught up and faded away.</summary>
     public bool DamageTrailFinished => !hitBar || !hitBar.enabled;
 
+    /// <summary>Keep a destroyed base's yellow trail moving after gameplay pauses.</summary>
+    public void FinishDamageTrailWhilePaused() => useUnscaledTrailTime = true;
+
     void Awake()
     {
-        isBaseBar = GetComponentInParent<PlayerGateStats>() ||
-                    GetComponentInParent<EnemyGateStats>();
         ResolveBars();
 
         CaptureAuthoredSorting();
@@ -121,7 +122,7 @@ public class HealthBar : MonoBehaviour
 
         ConfigureAsHorizontalFill(healthBar);
 
-        if (!isBaseBar && !hitBar && autoCreateHitBar && hitSprite)
+        if (!hitBar && autoCreateHitBar && hitSprite)
             BuildHitBar();
 
         // The hit bar starts INVISIBLE - an undamaged unit must not show a sliver
@@ -211,7 +212,7 @@ public class HealthBar : MonoBehaviour
         if (!hitBar || !hitBar.enabled) return;
 
         float target = healthBar ? healthBar.fillAmount : 0f;
-        float dt = Time.deltaTime;
+        float dt = useUnscaledTrailTime ? Time.unscaledDeltaTime : Time.deltaTime;
 
         if (trailHoldTimer > 0f)
         {
@@ -430,12 +431,6 @@ public class HealthBar : MonoBehaviour
 
         float target = currentHealth / maxHealth;
         if (healthBar) healthBar.fillAmount = target;
-
-        if (isBaseBar)
-        {
-            HideHitBar();
-            return;
-        }
 
         if (!hitBar) return;
 

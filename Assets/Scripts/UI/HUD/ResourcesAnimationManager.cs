@@ -22,6 +22,60 @@ public class ResourcesAnimationManager : MonoBehaviour
     Queue<GameObject> coinsQueue = new Queue<GameObject>();
     Queue<GameObject> gemsQueue = new Queue<GameObject>();
     Queue<GameObject> XPQueue = new Queue<GameObject>();
+    private CanvasSortSnapshot flightCanvas;
+    private CanvasSortSnapshot coinHudCanvas;
+    private CanvasSortSnapshot gemHudCanvas;
+    private CanvasSortSnapshot xpHudCanvas;
+    private bool claimPresentationActive;
+    private int activeFlights;
+
+    public bool HasActiveFlights => activeFlights > 0;
+
+    private struct CanvasSortSnapshot
+    {
+        public GameObject root;
+        public bool wasActive;
+        public Canvas canvas;
+        public bool created;
+        public bool enabled;
+        public bool overrideSorting;
+        public string sortingLayer;
+        public int sortingOrder;
+
+        public static CanvasSortSnapshot Raise(GameObject root, int order)
+        {
+            if (!root) return default;
+            var existing = root.GetComponent<Canvas>();
+            var snapshot = new CanvasSortSnapshot
+            {
+                root = root,
+                wasActive = root.activeSelf,
+                canvas = existing ? existing : root.AddComponent<Canvas>(),
+                created = !existing,
+                enabled = existing && existing.enabled,
+                overrideSorting = existing && existing.overrideSorting,
+                sortingLayer = existing ? existing.sortingLayerName : "Default",
+                sortingOrder = existing ? existing.sortingOrder : 0
+            };
+            root.SetActive(true);
+            snapshot.canvas.enabled = true;
+            snapshot.canvas.overrideSorting = true;
+            snapshot.canvas.sortingLayerName = GameplayModalOrder.ModalSortingLayer;
+            snapshot.canvas.sortingOrder = order;
+            return snapshot;
+        }
+
+        public void Restore()
+        {
+            if (!canvas) return;
+            canvas.overrideSorting = overrideSorting;
+            canvas.sortingLayerName = sortingLayer;
+            canvas.sortingOrder = sortingOrder;
+            if (created) Object.Destroy(canvas);
+            else canvas.enabled = enabled;
+            if (root) root.SetActive(wasActive);
+        }
+    }
 
     [SerializeField] Ease easeType;
     [SerializeField] float spread = 0.15f;
@@ -37,6 +91,34 @@ public class ResourcesAnimationManager : MonoBehaviour
         PrepareItems(animatedXPPrefab, XPQueue, MaxCoin); // Initialize gems queue with MaxCoin items
     }
 
+    public void BeginClaimPresentation(bool coins, bool gems, bool heroXp)
+    {
+        if (claimPresentationActive || (!coins && !gems && !heroXp)) return;
+        claimPresentationActive = true;
+        flightCanvas = CanvasSortSnapshot.Raise(gameObject, GameplayModalOrder.RewardFlightOrder);
+        // Both currency holders stay readable above the Win panel during Claim,
+        // including a replay that awards coins but no gems.
+        if (coins || gems)
+            coinHudCanvas = CanvasSortSnapshot.Raise(coinTargetUI ? coinTargetUI.gameObject : null,
+                                                     GameplayModalOrder.RewardHudOrder);
+        if (coins || gems)
+            gemHudCanvas = CanvasSortSnapshot.Raise(gemTargetUI ? gemTargetUI.gameObject : null,
+                                                    GameplayModalOrder.RewardHudOrder);
+        if (heroXp)
+            xpHudCanvas = CanvasSortSnapshot.Raise(XPTargetUI ? XPTargetUI.gameObject : null,
+                                                   GameplayModalOrder.RewardHudOrder);
+    }
+
+    public void EndClaimPresentation()
+    {
+        if (!claimPresentationActive) return;
+        claimPresentationActive = false;
+        flightCanvas.Restore();
+        coinHudCanvas.Restore();
+        gemHudCanvas.Restore();
+        xpHudCanvas.Restore();
+    }
+
     private void PrepareItems(GameObject prefab, Queue<GameObject> queue, int count)
     {
         for (int i = 0; i < count; i++)
@@ -50,7 +132,6 @@ public class ResourcesAnimationManager : MonoBehaviour
     private void Animate1(Vector3 collectedItemPosition, RectTransform targetUI, Queue<GameObject> itemQueue, int amount)
     {
         if (canvas == null) return;
-
         RectTransform canvasRect = canvas.GetComponent<RectTransform>();
 
         for (int i = 0; i < amount; i++)
@@ -84,9 +165,7 @@ public class ResourcesAnimationManager : MonoBehaviour
     }
     private void AnimateFromUI(RectTransform source,RectTransform targetUI,Queue<GameObject> itemQueue,int amount)
     {
-        if (canvas == null) return;
-
-        RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+        if (canvas == null || !source || !targetUI) return;
 
         for (int i = 0; i < amount; i++)
         {
@@ -96,9 +175,8 @@ public class ResourcesAnimationManager : MonoBehaviour
             GameObject item = itemQueue.Dequeue();
             item.SetActive(true);
 
-            // Parent under the canvas
-            item.transform.SetParent(canvasRect, worldPositionStays: false);
-            RectTransform rt = item.GetComponent<RectTransform>();
+            // Parent under the temporary canvas above the Win panel.
+            item.transform.SetParent(transform, worldPositionStays: false);
 
             // ***IMPORTANT***: use world position directly
             // CoinSpawnPos is already under the same canvas, so this is valid
@@ -109,14 +187,17 @@ public class ResourcesAnimationManager : MonoBehaviour
             item.transform.position = startWorld;
 
             float duration = Random.Range(minAnimDuration, maxAnimDuration);
+            activeFlights++;
 
             // Move to HUD target (also world position)
             item.transform.DOMove(targetUI.position, duration)
                 .SetEase(easeType)
+                .SetUpdate(true)
                 .OnComplete(() =>
                 {
                     item.SetActive(false);
                     itemQueue.Enqueue(item);
+                    activeFlights--;
                 });
         }
     }
@@ -148,7 +229,9 @@ public class ResourcesAnimationManager : MonoBehaviour
 
     public void AddGemsFromUI(RectTransform source, int amount)
     {
-        AnimateFromUI(source, gemTargetUI, gemsQueue, amount);
+        // Land on the visible gem icon, while the whole holder is raised above Win.
+        var icon = gemTargetUI ? gemTargetUI.Find("GemImage") as RectTransform : null;
+        AnimateFromUI(source, icon ? icon : gemTargetUI, gemsQueue, amount);
     }
 
     public void AddHeroXPFromUI(RectTransform source, int amount)

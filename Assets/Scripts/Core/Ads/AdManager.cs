@@ -222,7 +222,9 @@ public class AdManager : MonoBehaviour
             Debug.LogWarning($"[AdManager] Rewarded show failed: {error}", this);
             ClearRewarded();
             pendingReward = null;
+            var closed = pendingRewardedClosed;
             pendingRewardedClosed = null;
+            closed?.Invoke();
             LoadRewardedAd();
         };
     }

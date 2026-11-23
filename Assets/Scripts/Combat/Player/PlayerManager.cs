@@ -223,10 +223,14 @@ public class PlayerManager : MonoBehaviour
 
     public bool attackPlayerGate;
 
-    private SpriteRenderer enemyGateBody;
+    private SpriteRenderer ownGateBody;
     private SpriteRenderer[] gateDepthSprites;
     private int[] gateDepthOriginalOrders;
-    private bool behindEnemyGate;
+    private bool behindOwnGate;
+    private bool hasLandedFromStage;
+    private bool hasClearedOwnGate;
+    private FrogJumpTransformOnly gateJump;
+    private EnemySpawner battleSpawner;
 
     [Header("Links")]
     public Transform visualRoot;  // assign the 'Visual' child in the prefab
@@ -286,9 +290,12 @@ public class PlayerManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (gateJump) gateJump.Landed -= HandleGateJumpLanded;
         if (rosterUnitId >= 0)
             HeroRoster.Unregister(rosterUnitId, this);
     }
+
+    private void HandleGateJumpLanded() => hasLandedFromStage = true;
     private void Awake()
     {
         playerStatsApplier = GetComponent<PlayerStatsApplier>();
@@ -309,8 +316,15 @@ public class PlayerManager : MonoBehaviour
 
         if (!CompareTag("PlayerGate"))
         {
-            var gate = FindAnyObjectByType<EnemyGateStats>();
-            if (gate) enemyGateBody = gate.GetComponentInChildren<SpriteRenderer>(true);
+            gateJump = GetComponent<FrogJumpTransformOnly>();
+            if (gateJump) gateJump.Landed += HandleGateJumpLanded;
+            battleSpawner = FindAnyObjectByType<EnemySpawner>();
+            var gate = FindAnyObjectByType<PlayerGateStats>();
+            if (gate)
+            {
+                var body = gate.transform.Find("Base Roof");
+                if (body) ownGateBody = body.GetComponent<SpriteRenderer>();
+            }
             gateDepthSprites = GetComponentsInChildren<SpriteRenderer>(true);
             gateDepthOriginalOrders = new int[gateDepthSprites.Length];
             for (int i = 0; i < gateDepthSprites.Length; i++)
@@ -321,11 +335,16 @@ public class PlayerManager : MonoBehaviour
     private void LateUpdate()
     {
         if (gateDepthSprites == null) return;
+        if (!isUnlocked || !hasLandedFromStage || !battleSpawner || !battleSpawner.BattleStarted)
+        {
+            SetBehindOwnGate(false);
+            return;
+        }
 
         bool overlapsGate = false;
-        if (enemyGateBody && enemyGateBody.enabled && enemyGateBody.gameObject.activeInHierarchy)
+        if (ownGateBody && ownGateBody.enabled && ownGateBody.gameObject.activeInHierarchy)
         {
-            Bounds gateBounds = enemyGateBody.bounds;
+            Bounds gateBounds = ownGateBody.bounds;
             for (int i = 0; i < gateDepthSprites.Length; i++)
             {
                 var sprite = gateDepthSprites[i];
@@ -341,16 +360,17 @@ public class PlayerManager : MonoBehaviour
             }
         }
 
-        SetBehindEnemyGate(overlapsGate);
+        if (!overlapsGate) hasClearedOwnGate = true;
+        SetBehindOwnGate(hasClearedOwnGate && overlapsGate);
     }
 
-    private void SetBehindEnemyGate(bool behind)
+    private void SetBehindOwnGate(bool behind)
     {
-        if (behindEnemyGate == behind) return;
-        behindEnemyGate = behind;
+        if (behindOwnGate == behind) return;
+        behindOwnGate = behind;
 
         // Same offset used by enemies at the player base. Restore each sprite's
-        // authored order when this hero leaves the enemy base's visible area.
+        // authored order when this hero leaves its own base's visible area.
         for (int i = 0; i < gateDepthSprites.Length; i++)
             if (gateDepthSprites[i])
                 gateDepthSprites[i].sortingOrder = gateDepthOriginalOrders[i] - (behind ? 8 : 0);

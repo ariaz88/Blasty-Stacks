@@ -10,12 +10,11 @@ using UnityEngine.UI;
 ///
 /// New level flow: the stage opens in a puzzle-only phase - the EnemySpawner
 /// sits idle (its waitForBattleStart flag is ON) and nothing attacks. Pressing
-/// BATTLE charges the player's daily allowance through BattleEnergyService and,
+/// BATTLE charges the player's session allowance through BattleEnergyService and,
 /// if that succeeds, releases the spawner for the rest of the stage.
 ///
-/// The allowance is global (20 battles per rolling 24h by default), so it is
-/// NOT reset by reloading the scene or restarting the app. At 0 the button is
-/// non-interactable until the window refills.
+/// The allowance is shared by all stages. A rewarded ad grants five more
+/// starts after the counter reaches zero.
 /// </summary>
 public class BattleStartController : MonoBehaviour
 {
@@ -34,18 +33,22 @@ public class BattleStartController : MonoBehaviour
     private bool autoStartPending;
 
     [Header("Optional UI")]
-    [Tooltip("The cost label under the BATTLE icon (shows '25').")]
+    [Tooltip("Optional cost label under BATTLE (one unit per battle).")]
     [SerializeField] private TMP_Text energyCostText;
 
-    [Tooltip("'Battles left today' label - the number next to the energy icon " +
+    [Tooltip("'Battles left this session' label - the number next to the energy icon " +
              "(20, 19 ... 0). Safe to leave empty.")]
     [SerializeField] private TMP_Text remainingBattlesText;
 
-    [Header("Daily Allowance")]
-    [Tooltip("Free battles inside a rolling 24h window, shared across every stage.")]
+    private Button energyRefillButton;
+    private bool rewardedAdPending;
+    private float adUnavailableUntil;
+
+    [Header("Session Allowance")]
+    [Tooltip("Battles available at the start of a play session, shared across every stage.")]
     [SerializeField, Min(1)] private int dailyBattleLimit = BattleEnergyService.DefaultDailyBattleLimit;
 
-    [Tooltip("PLACEHOLDER: energy charged per battle once the free allowance is spent.")]
+    [Tooltip("Energy units charged per battle after the initial allowance is spent.")]
     [SerializeField, Min(0)] private int energyCostPerBattle = BattleEnergyService.DefaultEnergyCostPerBattle;
 
     [Header("Behaviour")]
@@ -71,10 +74,8 @@ public class BattleStartController : MonoBehaviour
     [SerializeField] private GameObject unlockedRoot;
 
     [Header("Testing")]
-    [Tooltip("TEST MODE (ON while developing): the daily allowance is kept in memory " +
-             "only and never written to the save file, so every Play session starts " +
-             "with a full allowance. TURN THIS OFF FOR RELEASE, otherwise the 24h cap " +
-             "resets every time the app restarts.")]
+    [Tooltip("Keep battle energy for this app session across stage changes. " +
+             "A new app session starts with the full allowance.")]
     [SerializeField] private bool doNotPersistAllowance = true;
 
     /// <summary>True once this stage's battle phase has been released.</summary>
@@ -123,6 +124,8 @@ public class BattleStartController : MonoBehaviour
         BattleEnergyService.SessionOnly = doNotPersistAllowance;
 
         if (!battleButton) battleButton = GetComponent<Button>();
+        if (remainingBattlesText)
+            energyRefillButton = remainingBattlesText.GetComponentInParent<Button>(true);
         if (!enemySpawner) enemySpawner = FindObjectOfType<EnemySpawner>(true);
         if (!transition) transition = FindObjectOfType<BattlePhaseTransition>(true);
         puzzleBoard = FindObjectOfType<BoardGridXY>(true);
@@ -142,6 +145,7 @@ public class BattleStartController : MonoBehaviour
     private void OnEnable()
     {
         if (battleButton) battleButton.onClick.AddListener(OnBattleButtonPressed);
+        if (energyRefillButton) energyRefillButton.onClick.AddListener(OnEnergyRefillPressed);
         BattleEnergyService.OnAllowanceChanged += RefreshUI;
 
         MatchResolver.OnBlast += OnBoardBlast;
@@ -152,6 +156,7 @@ public class BattleStartController : MonoBehaviour
     private void OnDisable()
     {
         if (battleButton) battleButton.onClick.RemoveListener(OnBattleButtonPressed);
+        if (energyRefillButton) energyRefillButton.onClick.RemoveListener(OnEnergyRefillPressed);
         BattleEnergyService.OnAllowanceChanged -= RefreshUI;
 
         // OnBlast is a plain static delegate, never cleared by MatchResolver, so an
@@ -220,7 +225,7 @@ public class BattleStartController : MonoBehaviour
         // Belt and braces: the live button is inside unlockedRoot, so this is
         // redundant while the roots are wired - but it is what keeps a scene that
         // uses ONLY a single always-visible button behaving correctly.
-        // No battles left today also locks it, until the 24h window refills.
+        // With no battles left, the energy strip offers a rewarded ad.
         if (battleButton) battleButton.interactable = MatchGateOpen && HasBattleLeft();
     }
 
@@ -228,17 +233,61 @@ public class BattleStartController : MonoBehaviour
         BattleEnergyService.Peek(dailyBattleLimit, energyCostPerBattle)
         != BattleEnergyService.StartCheck.BlockedNoEnergy;
 
+    private void OnEnergyRefillPressed()
+    {
+        if (rewardedAdPending ||
+            BattleEnergyService.RemainingBattles(dailyBattleLimit, energyCostPerBattle) > 0)
+            return;
+
+        var ads = AdManager.Instance;
+        if (!ads)
+        {
+            ShowAdUnavailable();
+            return;
+        }
+
+        rewardedAdPending = true;
+        RefreshUI();
+        ads.ShowRewardedAd(
+            () =>
+            {
+                BattleEnergyService.AddEnergy(BattleEnergyService.RewardedAdBattles * energyCostPerBattle);
+                rewardedAdPending = false;
+                if (this) RefreshUI();
+            },
+            () =>
+            {
+                rewardedAdPending = false;
+                if (this) ShowAdUnavailable();
+            },
+            () =>
+            {
+                rewardedAdPending = false;
+                if (this) RefreshUI();
+            });
+    }
+
+    private void ShowAdUnavailable()
+    {
+        adUnavailableUntil = Time.unscaledTime + 2f;
+        Debug.LogWarning("[BattleStartController] Rewarded ad is not available yet.", this);
+        RefreshUI();
+    }
+
     private float nextRefillCheck;
 
-    // While the allowance is spent, look once a second for the 24h window to
-    // expire, so the button and the count come back without leaving the stage.
+    // Refresh the button and temporary ad status at a low frequency.
     private void Update()
     {
         if (BattleStarted || Time.unscaledTime < nextRefillCheck) return;
         nextRefillCheck = Time.unscaledTime + 1f;
 
-        if (battleButton && !battleButton.interactable && MatchGateOpen && HasBattleLeft())
+        if ((battleButton && !battleButton.interactable && MatchGateOpen && HasBattleLeft()) ||
+            (adUnavailableUntil > 0f && Time.unscaledTime >= adUnavailableUntil))
+        {
+            adUnavailableUntil = 0f;
             RefreshUI();
+        }
     }
 
     /// <summary>
@@ -264,13 +313,10 @@ public class BattleStartController : MonoBehaviour
 
         if (result == BattleEnergyService.StartCheck.BlockedNoEnergy)
         {
-            var wait = BattleEnergyService.TimeUntilReset;
-            Debug.Log($"[BattleStartController] Battle refused: daily allowance " +
+            Debug.Log($"[BattleStartController] Battle refused: session allowance " +
                       $"({dailyBattleLimit}) spent and energy < {energyCostPerBattle}. " +
-                      $"Resets in {wait.Hours}h {wait.Minutes}m.");
+                      "Tap the energy counter for a rewarded ad.");
 
-            // TODO: show the "not enough energy" popup / rewarded-ad offer here
-            //       once the energy economy exists.
             OnBattleBlocked?.Invoke();
             RefreshUI();
             return;
@@ -326,7 +372,13 @@ public class BattleStartController : MonoBehaviour
             energyCostText.text = energyCostPerBattle.ToString();
 
         if (remainingBattlesText)
-            remainingBattlesText.text = BattleEnergyService.RemainingFree(dailyBattleLimit).ToString();
+        {
+            int remaining = BattleEnergyService.RemainingBattles(dailyBattleLimit, energyCostPerBattle);
+            remainingBattlesText.text = remaining > 0 ? remaining.ToString()
+                : rewardedAdPending ? "AD..."
+                : Time.unscaledTime < adUnavailableUntil ? "NO AD"
+                : "0 AD+5";
+        }
 
         ApplyGateToButton();
     }

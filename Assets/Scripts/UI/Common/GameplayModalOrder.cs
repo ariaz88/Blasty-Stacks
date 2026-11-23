@@ -4,8 +4,10 @@ using UnityEngine;
 public static class GameplayModalOrder
 {
     // Stats is the highest sorting layer in this project. Health bars use order 500.
-    private const string ModalSortingLayer = "Stats";
-    private const int ModalOrder = 30000;
+    public const string ModalSortingLayer = "Stats";
+    public const int ModalOrder = 30000;
+    public const int RewardHudOrder = ModalOrder + 1;
+    public const int RewardFlightOrder = ModalOrder + 2;
 
     public static void BringToFront(GameObject panel, int order = ModalOrder)
     {

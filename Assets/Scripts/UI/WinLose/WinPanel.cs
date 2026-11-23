@@ -366,6 +366,9 @@ public class WinPanel : MonoBehaviour
         var anim = ResourcesAnimationManager.instance;
         if (anim != null)
         {
+            anim.BeginClaimPresentation(totalGiven.coins > 0 && coinSpawnPoint,
+                                        totalGiven.gems > 0 && gemSpawnPoint,
+                                        totalGiven.heroXP > 0 && xpSpawnPoint);
             // Coins
             if (totalGiven.coins > 0 && coinSpawnPoint != null)
             {
@@ -385,8 +388,13 @@ public class WinPanel : MonoBehaviour
             }
         }
 
-        // Wait a bit so player sees the animation before we fade and load next scene
+        // Keep the temporary top-layer canvases until the last icon arrives.
         yield return new WaitForSecondsRealtime(resourceAnimDuration);
+        if (anim != null)
+        {
+            while (anim.HasActiveFlights) yield return null;
+            anim.EndClaimPresentation();
+        }
     }
 
     private void ApplyRewardsToPlayer()

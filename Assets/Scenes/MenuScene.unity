@@ -3129,6 +3129,7 @@ MonoBehaviour:
   starUpToastAnchor: {fileID: 555826890}
   skinToastAnchor: {fileID: 1258481831}
   visualRoot: {fileID: 425353782}
+  menuIdleCycleSeconds: 0.6
   portraitImage: {fileID: 651078900}
   nameText: {fileID: 1980248424}
   levelText: {fileID: 110733583}
@@ -16019,6 +16020,7 @@ MonoBehaviour:
   starUpToastAnchor: {fileID: 0}
   skinToastAnchor: {fileID: 0}
   visualRoot: {fileID: 0}
+  menuIdleCycleSeconds: 0.6
   portraitImage: {fileID: 641361395}
   nameText: {fileID: 282029624}
   levelText: {fileID: 1202175666}
@@ -16813,7 +16815,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &861550266
 RectTransform:
   m_ObjectHideFlags: 0
@@ -30169,6 +30171,10 @@ MonoBehaviour:
   toastAnchor: {fileID: 401766903}
   homeManager: {fileID: 8246496065170623138}
   slideDuration: 0.33
+  swipeDistance: 110
+  flickDistance: 35
+  flickTime: 0.25
+  edgeResistance: 0.35
 --- !u!1 &1478262527
 GameObject:
   m_ObjectHideFlags: 0
@@ -44330,6 +44336,10 @@ PrefabInstance:
       propertyPath: unitsDetailPanelRoot
       value: 
       objectReference: {fileID: 3067292707269088037}
+    - target: {fileID: 1913603619676867239, guid: b91e2587f1aebb04ba7dd6abe8bbfd32, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 57.9
+      objectReference: {fileID: 0}
     - target: {fileID: 2208090462799702085, guid: b91e2587f1aebb04ba7dd6abe8bbfd32, type: 3}
       propertyPath: m_AnchorMax.x
       value: 0.5
@@ -44340,7 +44350,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2208090462799702085, guid: b91e2587f1aebb04ba7dd6abe8bbfd32, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 107
+      value: 294
       objectReference: {fileID: 0}
     - target: {fileID: 2361327359679716419, guid: b91e2587f1aebb04ba7dd6abe8bbfd32, type: 3}
       propertyPath: m_AnchorMax.x
@@ -44366,13 +44376,25 @@ PrefabInstance:
       propertyPath: m_hasFontAssetChanged
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3714114380102169342, guid: b91e2587f1aebb04ba7dd6abe8bbfd32, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 3815103183511824946, guid: b91e2587f1aebb04ba7dd6abe8bbfd32, type: 3}
       propertyPath: m_AnchoredPosition.x
       value: -6.9000244
       objectReference: {fileID: 0}
+    - target: {fileID: 7802666576855822376, guid: b91e2587f1aebb04ba7dd6abe8bbfd32, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 8558100077824101508, guid: b91e2587f1aebb04ba7dd6abe8bbfd32, type: 3}
       propertyPath: m_Name
       value: HUD
+      objectReference: {fileID: 0}
+    - target: {fileID: 8558100077824101508, guid: b91e2587f1aebb04ba7dd6abe8bbfd32, type: 3}
+      propertyPath: m_IsActive
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -51129,6 +51151,7 @@ MonoBehaviour:
   starUpToastAnchor: {fileID: 0}
   skinToastAnchor: {fileID: 0}
   visualRoot: {fileID: 0}
+  menuIdleCycleSeconds: 0.6
   portraitImage: {fileID: 1362819644669815068}
   nameText: {fileID: 8411171018376172153}
   levelText: {fileID: 3486991521816233222}
@@ -53254,6 +53277,10 @@ MonoBehaviour:
   toastAnchor: {fileID: 401766903}
   homeManager: {fileID: 8246496065170623138}
   slideDuration: 0.33
+  swipeDistance: 110
+  flickDistance: 35
+  flickTime: 0.25
+  edgeResistance: 0.35
 --- !u!114 &3211058572910247278
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -53291,6 +53318,7 @@ MonoBehaviour:
   starUpToastAnchor: {fileID: 0}
   skinToastAnchor: {fileID: 0}
   visualRoot: {fileID: 0}
+  menuIdleCycleSeconds: 0.6
   portraitImage: {fileID: 4165377535878764518}
   nameText: {fileID: 6468386519819477841}
   levelText: {fileID: 7135385892315992966}
@@ -54695,6 +54723,7 @@ MonoBehaviour:
   starUpToastAnchor: {fileID: 1791834754}
   skinToastAnchor: {fileID: 1493526841}
   visualRoot: {fileID: 1722625686}
+  menuIdleCycleSeconds: 0.6
   portraitImage: {fileID: 2551288313891100736}
   nameText: {fileID: 4030339248935279064}
   levelText: {fileID: 1841212298645860246}
@@ -57453,6 +57482,7 @@ MonoBehaviour:
   starUpToastAnchor: {fileID: 1108071707}
   skinToastAnchor: {fileID: 1110607464}
   visualRoot: {fileID: 1354513879}
+  menuIdleCycleSeconds: 0.6
   portraitImage: {fileID: 990714935}
   nameText: {fileID: 1027178845}
   levelText: {fileID: 7254413}
